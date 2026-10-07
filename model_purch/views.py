@@ -669,17 +669,15 @@ def _export_scenario_to_sql(request, scenario):
 def copy_purch_from_scenario(request):
     """Копирует закупки и графики платежей из выбранного сценария в текущий"""
     if request.method == 'POST':
-        source_scenario_id = request.POST.get('source_scenario_id')
-        current_scenario, _ = get_current_scenario(request)
-
-        if not current_scenario or not source_scenario_id:
-            messages.error(request, 'Не выбран сценарий.')
-            return redirect('purch_list')
-
-        source_scenario = get_object_or_404(ScenarioModel, pk=source_scenario_id)
-        if source_scenario.id == current_scenario.id:
-            messages.warning(request, 'Источник и целевой сценарий совпадают.')
-            return redirect(f"{reverse('purch_list')}?scenario={current_scenario.id}")
+        form = PGGoodsCopyForm(request.POST)
+        if not form.is_valid():
+            for errors in form.errors.values():
+                for error in errors:
+                    messages.error(request, error)
+            target = form.cleaned_data.get('scenario')
+            return redirect(f"{reverse('purch_list')}?scenario={target.pk}" if target else reverse('purch_list'))
+        current_scenario = form.cleaned_data['scenario']
+        source_scenario = form.cleaned_data['source_scenario_id']
 
         source_purchs = Purch.objects.filter(scenario_plan=source_scenario).prefetch_related('purchpay_set')
         copied_count = 0
@@ -690,17 +688,19 @@ def copy_purch_from_scenario(request):
                 p, created = Purch.objects.get_or_create(
                     name=sp.name,
                     scenario_plan=current_scenario,
-                    defaults={'lag_income': sp.lag_income}
+                    defaults={'lag_income': sp.lag_income, 'lage_make': sp.lage_make}
                 )
-                # Обновляем lag_income на случай изменений в источнике
-                if p.lag_income != sp.lag_income:
+                # Обновляем параметры закупки на случай изменений в источнике
+                if p.lag_income != sp.lag_income or p.lage_make != sp.lage_make:
                     p.lag_income = sp.lag_income
+                    p.lage_make = sp.lage_make
                     p.save()
 
                 # Полностью заменяем платежи на те, что в источнике
                 p.purchpay_set.all().delete()
                 new_pays = [
-                    PurchPay(purch=p, name=pay.name, percent_pay=pay.percent_pay, lag_day_pay=pay.lag_day_pay)
+                    PurchPay(purch=p, name=pay.name, percent_pay=pay.percent_pay, lag_day_pay=pay.lag_day_pay,
+                             kind_lag_pay_id=pay.kind_lag_pay_id)
                     for pay in sp.purchpay_set.all()
                 ]
                 if new_pays:
@@ -1677,7 +1677,7 @@ def get_current_scenario(request):
     if scenario_id:
         try:
             current_scenario = ScenarioModel.objects.get(pk=scenario_id)
-        except ScenarioModel.DoesNotExist:
+        except (ScenarioModel.DoesNotExist, ValueError, TypeError):
             current_scenario = all_scenarios.first()
     else:
         current_scenario = all_scenarios.first()
@@ -1738,7 +1738,7 @@ def purch_edit(request, pk=None):
                 new_purch.scenario_plan = scenario
             new_purch.save()
             formset.save()
-            return redirect('purch_list')
+            return redirect(f"{reverse('purch_list')}?scenario={scenario.pk}" if scenario else reverse('purch_list'))
     else:
         form = PurchForm(instance=purch)
         formset = PurchPayFormSet(instance=purch)
@@ -1762,4 +1762,4 @@ def purch_delete(request, pk):
         name = purch.name
         purch.delete()
         messages.success(request, f'Закупка «{name}» удалена из сценария "{current_scenario.name}".')
-    return redirect('purch_list')
+    return redirect(f"{reverse('purch_list')}?scenario={current_scenario.pk}")
