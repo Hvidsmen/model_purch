@@ -24,19 +24,6 @@
     .percent-cell { position: relative; }
     .percent-cell .inline-input { padding-right: 20px; }
     .percent-cell::after { content: '%'; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #6c757d; font-size: 0.85rem; pointer-events: none; }
-    .scenario-selector {
-        max-width: 350px;
-    }
-    .scenario-selector .form-select {
-        font-size: 0.9rem;
-        border-color: #0d6efd;
-        background-color: #e7f1ff;
-    }
-    .scenario-info {
-        font-size: 0.8rem;
-        color: #6c757d;
-        margin-top: 4px;
-    }
 </style>
 {% endblock %}
 
@@ -165,41 +152,7 @@
 </style>
 
 
-<!-- Выбор сценария -->
-{% if scenarios %}
-    <div class="card shadow-sm mb-3">
-        <div class="card-body py-3">
-            <div class="row align-items-center">
-                <div class="col-md-6">
-                    <label for="scenario-select" class="form-label mb-1 fw-semibold">
-                        <i aria-hidden="true" class="bi bi-clipboard-data text-primary"></i> Сценарий планирования
-                    </label>
-                    <select id="scenario-select" class="form-select scenario-selector" onchange="changeScenario(this.value)">
-                        {% for scenario in scenarios %}
-                            <option value="{{ scenario.id }}"
-                                    {% if current_scenario and scenario.id == current_scenario.id %}selected{% endif %}>
-                                {{ scenario.name }}
-                                ({{ scenario.date_start_plan|date:"d.m.Y" }} — {{ scenario.date_end_plan|date:"d.m.Y" }})
-                            </option>
-                        {% endfor %}
-                    </select>
-                    {% if current_scenario %}
-                        <div class="scenario-info">
-                            <i aria-hidden="true" class="bi bi-info-circle"></i>
-                            Показаны товары для сценария: <strong>{{ current_scenario.name }}</strong>
-                        </div>
-                    {% endif %}
-                </div>
-                <div class="col-md-6 text-md-end mt-2 mt-md-0">
-                    <span class="badge bg-primary fs-6">
-                        <i aria-hidden="true" class="bi bi-collection"></i>
-                        Записей: {{ page_obj.paginator.count }}
-                    </span>
-                </div>
-            </div>
-        </div>
-    </div>
-{% else %}
+{% if not scenarios %}
     <div class="alert alert-warning">
         <i aria-hidden="true" class="bi bi-exclamation-triangle"></i>
         Нет доступных сценариев.
@@ -408,15 +361,6 @@
 
 {% block extra_js %}
 <script>
-    function changeScenario(scenarioId) {
-    if (scenarioId) {
-        // Собираем текущие параметры GET, заменяем scenario и переходим
-        const url = new URL(window.location.href);
-        url.searchParams.set('scenario', scenarioId);
-        url.searchParams.delete('page'); // Сбрасываем страницу при смене сценария
-        window.location.href = url.toString();
-    }
-}
 document.addEventListener('DOMContentLoaded', function () {
     const rows = document.querySelectorAll('tr[data-row-id]');
     const saveAllBtn = document.getElementById('saveAllBtn');
