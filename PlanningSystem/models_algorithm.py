@@ -126,7 +126,7 @@ class PercentSubdivisionHeader(models.Model):
 
 class PecentSubdivisionGoods(models.Model):
     id = models.AutoField(primary_key=True)
-    header = models.ForeignKey(PlanSalesByChanelHeader, on_delete=models.CASCADE)
+    header = models.ForeignKey(PercentSubdivisionHeader, on_delete=models.CASCADE)
     chanel = models.ForeignKey(ChanelRef, on_delete=models.CASCADE)
     subdivision = models.ForeignKey(SubdivisionRef, on_delete=models.CASCADE)
     goods = models.ForeignKey(GoodsRef, on_delete=models.CASCADE)

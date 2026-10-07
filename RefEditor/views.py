@@ -196,6 +196,7 @@ def _apply_filters_from_dict(data: dict) -> tuple:
     return qs, form
 
 def _build_base_context() -> dict:
+    reference = Reference.objects.filter(id=1).first()
     return {
         'forms_file': StoreGroupFileForm(),
         'forms_add': StoreGroupAddForm(),
@@ -204,7 +205,7 @@ def _build_base_context() -> dict:
         'subdivisions': Subdivision.objects.all(),
         'sub_group_ozps': SubGroupOZP.objects.all(),
         'group_ozps': GroupOZP.objects.all(),
-        'templates_file': Reference.objects.get(id=1).example_file,
+        'templates_file': reference.example_file if reference else None,
     }
 
 

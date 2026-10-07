@@ -10,6 +10,7 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
+import os
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -19,12 +20,17 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-4qn-1xzi$z)hg+^#icbrwsl!=fi3b*mtn9!74vil*33g6kc8jb'
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-local-development-only')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() in {'1', 'true', 'yes'}
 
-ALLOWED_HOSTS = ['localhost', '127.0.0.1', '192.168.221.178', '*']
+ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
+    'DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.221.178'
+).split(',') if host.strip()]
+
+if not DEBUG and SECRET_KEY == 'django-insecure-local-development-only':
+    raise RuntimeError('Set DJANGO_SECRET_KEY before disabling debug mode.')
 
 # Application definition
 
@@ -86,7 +92,7 @@ WSGI_APPLICATION = 'portal.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': os.environ.get('DJANGO_DB_PATH', BASE_DIR / 'db.sqlite3'),
     }
 }
 
@@ -154,3 +160,8 @@ STATICFILES_FINDERS = [
 
 ]
 
+
+# Optional runtime overrides; do not commit credentials.
+MS_SQL_CONN_STR = os.environ.get('MS_SQL_CONN_STR', MS_SQL_CONN_STR)
+DWH_SQL_CONN_STR = os.environ.get('DWH_SQL_CONN_STR')
+ENABLE_LEGACY_DASH = os.environ.get('ENABLE_LEGACY_DASH', 'false').lower() in {'1', 'true', 'yes'}

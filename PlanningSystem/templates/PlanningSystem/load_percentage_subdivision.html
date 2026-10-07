@@ -13,9 +13,11 @@
     </div>
     <div class="row">
         <div class="col">
+            {% if templates_file and templates_file.file %}
             <a href="{{ templates_file.file.url }}" download class="btn btn-secondary">
                 Скачать шаблон
             </a>
+            {% endif %}
         </div>
     </div>
     <div class="row">

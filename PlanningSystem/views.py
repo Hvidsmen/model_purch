@@ -41,43 +41,32 @@ def load_plan_by_chanel(request):
     )
 
 
+def _load_percentage(request, header_model, goods_model, template_id, template_name):
+    templates_file = TemplatesFile.objects.filter(id=template_id).first()
+    form = PercentageSubdivisionForm(
+        request.POST if request.method == 'POST' else None,
+        request.FILES if request.method == 'POST' else None,
+    )
+    if request.method == 'POST' and form.is_valid():
+        data = form.cleaned_data
+        from django.db import transaction
+
+        with transaction.atomic():
+            header_model.objects.filter(opition_plan=data['option']).delete()
+            header = header_model.objects.create(
+                opition_plan=data['option'], file=data['file'],
+                sheet_name=data['sheet_name'], period=data['period'], year=data['year'],
+            )
+            goods_model.create_by_file(header)
+    return render(request, template_name, {'form': form, 'templates_file': templates_file})
+
+
 def load_percentage_subdivision(request):
-    templates_file = TemplatesFile.objects.get(id=1)
-    if request.method == 'POST':
-        form = PercentageSubdivisionForm(request.POST, request.FILES)
-        sheet_name = request.POST['sheet_name']
-        file = request.FILES['file']
-        period_id = request.POST['period']
-        option_id = request.POST['option']
-        year = request.POST['year']
-
-        period_obj = PeriodPlanRef.objects.get(id=period_id)
-        option_obj = OptionPlanRef.objects.get(id=option_id)
-
-        if len(PercentSubdivisionHeader.objects.filter(opition_plan=option_obj)) != 0:
-            plan = PercentSubdivisionHeader.objects.get(opition_plan=option_obj)
-            plan.delete()
-
-        plan = PercentSubdivisionHeader.objects.create(
-            opition_plan=option_obj
-            , file=file
-            , sheet_name=sheet_name
-            , period=period_obj
-            , year=year
-        )
-        plan.save()
-        PecentSubdivisionGoods.create_by_file(plan)
-
-    form = PercentageSubdivisionForm()
-    return render(
-        request
-        , "PlanningSystem/load_percentage_subdivision.html", {
-            'form': form
-        , 'templates_file':templates_file
-    }
+    return _load_percentage(
+        request, PercentSubdivisionHeader, PecentSubdivisionGoods, 1,
+        'PlanningSystem/load_percentage_subdivision.html',
     )
 
-    # Create your views here.
 
 def split_model(request):
     if request.method == 'POST':
@@ -98,39 +87,8 @@ def split_model(request):
     )
 
 
-def load_percentage_subdivision(request):
-    templates_file = TemplatesFile.objects.get(id=2)
-    if request.method == 'POST':
-        form = PercentageSubdivisionForm(request.POST, request.FILES)
-        sheet_name = request.POST['sheet_name']
-        file = request.FILES['file']
-        period_id = request.POST['period']
-        option_id = request.POST['option']
-        year = request.POST['year']
-
-        period_obj = PeriodPlanRef.objects.get(id=period_id)
-        option_obj = OptionPlanRef.objects.get(id=option_id)
-
-        if len(PercentSubdivisionSeason.objects.filter(opition_plan=option_obj)) != 0:
-            plan = PercentSubdivisionSeason.objects.get(opition_plan=option_obj)
-            plan.delete()
-
-        plan = PercentSubdivisionSeason.objects.create(
-            opition_plan=option_obj
-            , file=file
-            , sheet_name=sheet_name
-            , period=period_obj
-            , year=year
-        )
-        plan.save()
-
-        PercentSubdivisionSeason.create_by_file(plan)
-
-    form = PercentageSubdivisionForm()
-    return render(
-        request
-        , "PlanningSystem/load_percentage_subdivision.html", {
-            'form': form
-        , 'templates_file':templates_file
-    }
+def load_percent_season(request):
+    return _load_percentage(
+        request, PercentSubdivisionSeason, PercentSubdivisionSeason, 2,
+        'PlanningSystem/load_percent_season.html',
     )

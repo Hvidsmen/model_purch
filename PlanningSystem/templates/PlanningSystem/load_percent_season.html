@@ -13,14 +13,16 @@
     </div>
     <div class="row">
         <div class="col">
+            {% if templates_file and templates_file.file %}
             <a href="{{ templates_file.file.url }}" download class="btn btn-secondary">
                 Скачать шаблон
             </a>
+            {% endif %}
         </div>
     </div>
     <div class="row">
         <div class="col">
-            <form action="{% url 'load_percentage_subdivision' %}" method="post" enctype="multipart/form-data">
+            <form action="{% url 'load_percent_season' %}" method="post" enctype="multipart/form-data">
                 {% csrf_token %}
                 {{ form|crispy }}
                 <input type="submit" value="Загрузить" class="btn btn-primary">

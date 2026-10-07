@@ -87,8 +87,8 @@ class ReferenceUpsertService:
         name = name.strip()
         if not name:
             raise ValueError('Название группы не может быть пустым')
-        GroupOZP.objects.filter(group_ozp_name=name).delete()
-        return GroupOZP.objects.create(group_ozp_name=name)
+        group, _ = GroupOZP.objects.get_or_create(group_ozp_name=name)
+        return group
 
     @staticmethod
     @transaction.atomic
@@ -96,8 +96,8 @@ class ReferenceUpsertService:
         name = name.strip()
         if not name:
             raise ValueError('Название подгруппы не может быть пустым')
-        SubGroupOZP.objects.filter(sub_group_ozp_name=name).delete()
-        return SubGroupOZP.objects.create(sub_group_ozp_name=name)
+        group, _ = SubGroupOZP.objects.get_or_create(sub_group_ozp_name=name)
+        return group
 
     @staticmethod
     @transaction.atomic

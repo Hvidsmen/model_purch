@@ -2,13 +2,6 @@ from django import forms
 from .models import *
 
 
-class StoreGroupFilterForm(forms.Form):
-    store_name = forms.CharField(max_length=255, required=False, label='Склад')
-    subdivision_id = forms.ModelChoiceField(queryset=Subdivision.objects.all(), label='Подразделение', required=False)
-    group_ozp_id = forms.ModelChoiceField(queryset=GroupOZP.objects.all(), label='Группа ОЗП', required=False)
-    sub_group_ozp_id = forms.ModelChoiceField(queryset=SubGroupOZP.objects.all(), label='Подгруппа ОЗП', required=False)
-
-
 class StoreGroupAddForm(forms.Form):
     store_name = forms.CharField(max_length=255, label='Склад')
     subdivision_id = forms.ModelChoiceField(queryset=Subdivision.objects.all(), label='Подразделение')
@@ -26,11 +19,6 @@ class GroupOZPCreateForm(forms.Form):
 
 class SubGroupOZPCreateForm(forms.Form):
     sub_group_ozp_name = forms.CharField(max_length=255, label='Подгруппа ОЗП')
-
-
-# forms.py
-from django import forms
-from .models import Subdivision, GroupOZP, SubGroupOZP
 
 
 class StoreGroupFilterForm(forms.Form):
