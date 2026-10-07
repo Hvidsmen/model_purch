@@ -1,4 +1,4 @@
-# Python 3.12. Keep compatible direct dependencies; let pip resolve platform dependencies.
+# Python 3.10–3.12. Keep compatible direct dependencies; let pip resolve platform dependencies.
 Django>=5.2,<5.3
 django-crispy-forms>=2.4,<3
 crispy-bootstrap5>=2025.4,<2027

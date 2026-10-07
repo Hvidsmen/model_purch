@@ -1,17 +1,18 @@
 # Портал планирования
 
-Python 3.12, Django 5.2. Приложения: `PlanningSystem` (планы продаж и сезонность),
+Python 3.10–3.12, Django 5.2. Приложения: `PlanningSystem` (планы продаж и сезонность),
 `model_purch` (сценарии закупок и расчёты), `admin_motivation` (коэффициенты мотивации),
 `RefEditor` (справочники). Интерфейс использует Bootstrap/CoreUI и Plotly.
 
 ## Запуск на Windows (PowerShell)
 
 Из корня репозитория. Если `.venv` уже существует, проверьте
-`.\.venv\Scripts\python.exe --version`: нужна версия 3.12. Среду от другой версии
-Python переименуйте в резервную папку и создайте заново через `py -3.12 -m venv .venv`.
+`.\.venv\Scripts\python.exe --version`: поддерживаются версии 3.10–3.12.
+Если версия вне этого диапазона, переименуйте `.venv` в резервную папку и создайте среду через
+`py -3.10 -m venv .venv`. Для установленного Python 3.10 обновление до 3.12 не требуется.
 
 ```powershell
-py -3.12 -m venv .venv
+py -3.10 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 New-Item -ItemType Directory -Force .local | Out-Null
 .\.venv\Scripts\python.exe manage.py migrate --settings=portal.settings_local
@@ -82,8 +83,8 @@ SQL-процедуры, представления и SQL Agent job `ModelPurch`
 ## Зависимости на Windows
 
 Основной `requirements.txt` содержит прямые зависимости приложения, совместимые с
-Python 3.12, и NumPy 2.2.6. Транзитивные зависимости выбирает pip для вашей платформы;
+Python 3.10–3.12, и NumPy 2.2.6. Транзитивные зависимости выбирает pip для вашей платформы;
 снимок всех пакетов облачной машины не используется как список требований Windows.
-Разрешение основного списка проверено для `win_amd64` / Python 3.12 с готовыми wheels.
+Разрешение основного списка проверено для `win_amd64` / Python 3.10 и 3.12 с готовыми wheels.
 Для необязательной интеграции старого Dash используйте `requirements-dash.txt`;
 обычный интерфейс, расчёты и тесты этого дополнения не требуют.
