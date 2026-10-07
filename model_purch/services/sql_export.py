@@ -154,7 +154,7 @@ def export_scenario(request, scenario, connection_string):
             cursor.execute("""
                 MERGE INTO portal.Scenario AS target
                 USING (
-                    SELECT 
+                    SELECT
                         ? AS id,
                         ? AS name,
                         CAST(? AS DATE) AS date_start_plan,
@@ -163,7 +163,7 @@ def export_scenario(request, scenario, connection_string):
                 ) AS source
                 ON target.id = source.id
                 WHEN MATCHED THEN
-                    UPDATE SET 
+                    UPDATE SET
                         name = source.name,
                         date_start_plan = source.date_start_plan,
                         date_end_plan = source.date_end_plan,
@@ -247,7 +247,7 @@ def export_scenario(request, scenario, connection_string):
                     export_additional_fields(cursor, 'Purch', purch, {'name', 'lag_income'}, {'id': purch_id})
                     # Удаляем старые платежи этой закупки в этом сценарии
                     cursor.execute("""
-                        DELETE FROM portal.PurchPay 
+                        DELETE FROM portal.PurchPay
                         WHERE purch_id = ?
                     """, purch_id)
 
@@ -275,7 +275,7 @@ def export_scenario(request, scenario, connection_string):
                 cursor.execute("""
                     MERGE INTO portal.PGGoods AS target
                     USING (
-                        SELECT 
+                        SELECT
                             ? AS planning_group,
                             ? AS planning_sales,
                             ? AS group_goods,
@@ -294,7 +294,7 @@ def export_scenario(request, scenario, connection_string):
                     ON target.planning_group_key = source.planning_group_key
                        AND target.scenario_name = source.scenario_name
                     WHEN MATCHED THEN
-                        UPDATE SET 
+                        UPDATE SET
                             planning_group = source.planning_group,
                             planning_sales = source.planning_sales,
                             group_goods = source.group_goods,
@@ -308,8 +308,8 @@ def export_scenario(request, scenario, connection_string):
                             percent_stock_end = source.percent_stock_end,
                             kind_purch = source.kind_purch
                     WHEN NOT MATCHED THEN
-                        INSERT (planning_group, planning_sales, group_goods, brand, purch, 
-                                volume, exw_usd, ddp_usd, kddp, stock_cnt_day, 
+                        INSERT (planning_group, planning_sales, group_goods, brand, purch,
+                                volume, exw_usd, ddp_usd, kddp, stock_cnt_day,
                                 percent_stock_end, scenario_name, kind_purch, planning_group_key)
                         VALUES (source.planning_group, source.planning_sales, source.group_goods,
                                 source.brand, source.purch, source.volume, source.exw_usd,
