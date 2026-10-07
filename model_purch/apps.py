@@ -10,4 +10,5 @@ class ModelPurchConfig(AppConfig):
 
         # The routed stock chart uses JSON + Plotly, not the legacy Dash app.
         if getattr(settings, 'ENABLE_LEGACY_DASH', False):
-            import model_purch.dash_apps  # noqa: F401
+            from .dash_apps import register_apps
+            register_apps()
