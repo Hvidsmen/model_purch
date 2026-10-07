@@ -13,6 +13,9 @@ from django.core.validators import MinValueValidator
 class AlgorithmRun(models.Model):
     """Сессия выполнения алгоритма (чтобы можно было запускать несколько раз)"""
     id = models.AutoField(primary_key=True)
+    scenario = models.ForeignKey('ScenarioModel', null=True, blank=True, on_delete=models.SET_NULL, related_name='algorithm_runs')
+    scenario_export = models.ForeignKey('ScenarioExport', null=True, blank=True, on_delete=models.SET_NULL)
+    parameters = models.JSONField(default=dict, blank=True)
     started_at = models.DateTimeField(auto_now_add=True, verbose_name='Начало выполнения')
     finished_at = models.DateTimeField(null=True, blank=True, verbose_name='Завершение')
     status = models.CharField(
@@ -243,3 +246,15 @@ class Freight(models.Model):
 
     def __str__(self):
         return f'Фрахт: {self.scenario}'
+
+
+class ScenarioExport(models.Model):
+    scenario = models.ForeignKey(ScenarioModel, on_delete=models.CASCADE, related_name='exports')
+    exported_at = models.DateTimeField(auto_now_add=True)
+    fingerprint = models.CharField(max_length=64)
+    parameters = models.JSONField()
+
+    class Meta:
+        ordering = ['-exported_at', '-pk']
+        verbose_name = 'Экспорт сценария'
+        verbose_name_plural = 'История экспорта сценариев'

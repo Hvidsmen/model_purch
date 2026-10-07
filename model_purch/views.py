@@ -48,59 +48,34 @@ logger = logging.getLogger(__name__)
 # ФУНКЦИИ ШАГОВ АЛГОРИТМА (ЗАГЛУШКИ)
 # ==============================================================================
 
-def step_1_start(run_id):
-    """Шаг 1: Начало алгоритма"""
-    time.sleep(1)
-    return {"message": "Алгоритм успешно запущен"}
-
-
 def execute_algorithm_sql(sql):
-    connection, cursor = connect_database('vm-dwh', 'ModelPurch')
-    try:
-        cursor.execute(sql)
-        # Consume every result set so errors in later statements are raised too.
-        while cursor.nextset():
-            pass
-        connection.commit()
-    except Exception:
-        connection.rollback()
-        raise
-    finally:
-        connection.close()
+    from .services.calculation import execute_sql
+    return execute_sql(sql, connect_database)
+
+
+def _run_algorithm_step(order, run_id):
+    from .services.calculation import run_step
+    return run_step(order, run_id, connect_database)
+
+
+def step_1_start(run_id):
+    return _run_algorithm_step(1, run_id)
 
 
 def step_2_prepare_data(run_id):
-    """Prepare corporate calculation data using the configured connection."""
-    execute_algorithm_sql("""
-        EXEC [ModelPurch].[dbo].[sp_ETLDataBase];
-        EXEC [ModelPurch].[dbo].[sp_CreateTableModel];
-    """)
-    return {"message": "Данные подготовлены"}
+    return _run_algorithm_step(2, run_id)
 
-from .calc_purch import  calc_purch
+
 def step_3_calculate_order(run_id):
-    """Шаг 3: Расчет заказа"""
-
-    calc_purch()
-    return {"message": "Заказ рассчитан"}
+    return _run_algorithm_step(3, run_id)
 
 
 def step_4_update_tables(run_id):
-    execute_algorithm_sql('EXEC [ModelPurch].[dbo].[sp_Date];')
-    return {"message": "Таблицы обновлены"}
-
-
-import subprocess
-import os
-import tempfile
-import logging
-
-logger = logging.getLogger(__name__)
+    return _run_algorithm_step(4, run_id)
 
 
 def step_5_olap_cube(run_id):
-    execute_algorithm_sql("EXEC msdb.dbo.sp_start_job 'ModelPurch';")
-    return {"message": "Куб отправлен на обсчет"}
+    return _run_algorithm_step(5, run_id)
 
 
 # Словарь с функциями шагов (порядок -> функция)
@@ -118,22 +93,52 @@ STEP_FUNCTIONS = {
 # ==============================================================================
 
 def results_page(request):
-    return render(request, 'model_purch/results.html')
+    from .services.preflight import calculation_readiness
+    scenario, _ = get_current_scenario(request)
+    errors, export, parameters = calculation_readiness(scenario) if scenario else (['Сначала создайте сценарий.'], None, {})
+    runs = AlgorithmRun.objects.filter(scenario=scenario).select_related('scenario_export').order_by('-started_at')[:5] if scenario else []
+    for run in runs:
+        run.parameters_display = json.dumps(run.parameters, ensure_ascii=False, indent=2)
+    return render(request, 'model_purch/results.html', {
+        'current_scenario': scenario, 'readiness_errors': errors, 'last_export': export,
+        'recent_runs': runs,
+        'active_runs': AlgorithmRun.objects.filter(status='running').select_related('scenario').order_by('-started_at'),
+    })
 
 
 # ==============================================================================
 # API: ЗАПУСК АЛГОРИТМА (создает все шаги со статусом "pending")
 # ==============================================================================
 
-@csrf_exempt
+@require_POST
 def start_algorithm_api(request):
     """Запускает новый алгоритм и создает все шаги"""
     if request.method != 'POST':
         return JsonResponse({'error': 'Метод не поддерживается'}, status=405)
 
     try:
-        # Создаем новую сессию алгоритма
-        run = AlgorithmRun.objects.create(status='running')
+        from .forms import FreightScenarioForm
+        from .services.preflight import calculation_readiness
+        try:
+            data = json.loads(request.body or '{}') if request.content_type == 'application/json' else request.POST
+        except (ValueError, UnicodeDecodeError):
+            return JsonResponse({'error': 'Некорректный запрос запуска расчёта.'}, status=400)
+        if not hasattr(data, 'get'):
+            return JsonResponse({'error': 'Некорректный запрос запуска расчёта.'}, status=400)
+        selection = FreightScenarioForm(data)
+        if not selection.is_valid():
+            return JsonResponse({'error': 'Выберите действующий сценарий расчёта.'}, status=400)
+        scenario = selection.cleaned_data['scenario']
+        with transaction.atomic():
+            errors, export, parameters = calculation_readiness(scenario)
+            if errors:
+                return JsonResponse({'error': '\n'.join(errors), 'validation_errors': errors}, status=400)
+            # Corporate preparation procedures and OLAP job operate on shared tables.
+            if AlgorithmRun.objects.filter(status='running').exists():
+                return JsonResponse({'error': 'Другой расчёт уже выполняется. Завершите или остановите его.'}, status=409)
+            from .services.scenarios import remember_scenario
+            remember_scenario(request, scenario)
+            run = AlgorithmRun.objects.create(status='running', scenario=scenario, scenario_export=export, parameters=parameters)
 
         # Создаем все шаги алгоритма
         steps_config = [
@@ -156,6 +161,8 @@ def start_algorithm_api(request):
         return JsonResponse({
             'success': True,
             'run_id': run.id,
+            'scenario_id': scenario.pk,
+            'scenario_name': scenario.name,
             'message': f'Алгоритм #{run.id} запущен'
         })
 
@@ -168,7 +175,7 @@ def start_algorithm_api(request):
 # API: ВЫПОЛНЕНИЕ СЛЕДУЮЩЕГО ШАГА
 # ==============================================================================
 
-@csrf_exempt
+@require_POST
 def execute_next_step_api(request, run_id):
     """Выполняет следующий ожидающий шаг алгоритма"""
     if request.method != 'POST':
@@ -176,6 +183,16 @@ def execute_next_step_api(request, run_id):
 
     try:
         run = get_object_or_404(AlgorithmRun, pk=run_id)
+
+        if run.status in {'failed', 'cancelled'}:
+            return JsonResponse({'error': 'Этот расчёт остановлен. Запустите новый расчёт.'}, status=409)
+        if run.scenario_id:
+            from .services.preflight import snapshot, fingerprint
+            if fingerprint(snapshot(run.scenario)) != fingerprint(run.parameters):
+                run.status = 'failed'
+                run.finished_at = timezone.now()
+                run.save(update_fields=['status', 'finished_at'])
+                return JsonResponse({'error': 'Параметры сценария изменились во время расчёта. Повторите экспорт и запуск.'}, status=409)
 
         # Находим следующий шаг со статусом "pending"
         next_step = AlgorithmStep.objects.filter(
@@ -276,6 +293,9 @@ def get_algorithm_status_api(request, run_id):
         return JsonResponse({
             'run_id': run.id,
             'status': run.status,
+            'scenario_id': run.scenario_id,
+            'parameters': run.parameters,
+            'exported_at': run.scenario_export.exported_at.isoformat() if run.scenario_export else None,
             'started_at': run.started_at.isoformat(),
             'finished_at': run.finished_at.isoformat() if run.finished_at else None,
             'steps': steps_data,
@@ -317,351 +337,10 @@ def bulk_export_scenarios(request):
 
 
 def _export_scenario_to_sql(request, scenario):
-    """
-    Экспортирует данные сценария в MS SQL Server (схема portal).
-    Автоматически создаёт таблицы, если они не существуют.
-    """
-
-    if not MS_SQL_CONN_STR:
-        messages.error(request, "Не настроено подключение к MS SQL Server")
-        return False
-
-    conn = None
-    succeeded = False
-    try:
-        conn = pyodbc.connect(MS_SQL_CONN_STR)
-        cursor = conn.cursor()
-
-        # 1. Создаём схему portal, если её нет
-        cursor.execute("""
-            IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = 'portal')
-                EXEC('CREATE SCHEMA portal')
-        """)
-        conn.commit()
-
-        # 2. Создаём таблицы, если их нет
-
-        # Таблица Scenario (основная информация о сценарии)
-        cursor.execute("""
-            IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'portal.Scenario') AND type = 'U')
-            CREATE TABLE portal.Scenario (
-                id INT PRIMARY KEY,
-                name NVARCHAR(255) NOT NULL,
-                date_start_plan DATE NULL,
-                date_end_plan DATE NULL,
-                overwrite_existing BIT NULL DEFAULT 0
-            )
-        """)
-
-        cursor.execute("""
-            IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'portal.Purch') AND type = 'U')
-            CREATE TABLE portal.Purch (
-                id INT IDENTITY(1,1) PRIMARY KEY,
-                name NVARCHAR(255) NOT NULL,
-                lag_income INT NULL,
-                scenario_name NVARCHAR(255) NULL,
-                CONSTRAINT UQ_Purch_name_scenario UNIQUE (name, scenario_name)
-            )
-        """)
-
-        cursor.execute("""
-            IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'portal.PurchPay') AND type = 'U')
-            CREATE TABLE portal.PurchPay (
-                id INT IDENTITY(1,1) PRIMARY KEY,
-                purch_id INT NOT NULL,
-                name NVARCHAR(255) NULL,
-                percent_pay DECIMAL(10,2) NULL,
-                lag_day_pay INT NULL,
-                CONSTRAINT FK_PurchPay_Purch FOREIGN KEY (purch_id) REFERENCES portal.Purch(id) ON DELETE CASCADE
-            )
-        """)
-
-        cursor.execute("""
-            IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'portal.PGGoods') AND type = 'U')
-            CREATE TABLE portal.PGGoods (
-                id INT IDENTITY(1,1) PRIMARY KEY,
-                planning_group NVARCHAR(255) NULL,
-                planning_sales NVARCHAR(255) NULL,
-                group_goods NVARCHAR(255) NULL,
-                brand NVARCHAR(255) NULL,
-                purch NVARCHAR(255) NULL,
-                volume DECIMAL(18,4) NULL,
-                exw_usd DECIMAL(18,2) NULL,
-                ddp_usd DECIMAL(18,2) NULL,
-                kddp DECIMAL(18,4) NULL,
-                stock_cnt_day INT NULL,
-                percent_stock_end DECIMAL(5,2) NULL,
-                scenario_name NVARCHAR(255) NULL,
-                kind_purch NVARCHAR(255) NULL,
-                planning_group_key CHAR(64) NOT NULL
-            )
-        """)
-
-        cursor.execute("""
-            IF NOT EXISTS (SELECT * FROM sys.objects WHERE object_id = OBJECT_ID(N'portal.ScenarioPlanSales') AND type = 'U')
-            CREATE TABLE portal.ScenarioPlanSales (
-                id INT IDENTITY(1,1) PRIMARY KEY,
-                name NVARCHAR(255) NULL,
-                scenario_name NVARCHAR(255) NULL,
-                flag_order_in_purch BIT NULL DEFAULT 0,
-                CONSTRAINT UQ_SPS_scenario UNIQUE (name, scenario_name)
-            )
-        """)
-        cursor.execute("""
-            IF OBJECT_ID(N'portal.KindLagPay', N'U') IS NULL
-                CREATE TABLE portal.KindLagPay (id INT PRIMARY KEY, name NVARCHAR(255) NOT NULL);
-        """)
-        cursor.execute("""
-            IF OBJECT_ID(N'portal.Freight', N'U') IS NULL
-                CREATE TABLE portal.Freight (
-                    scenario_id INT PRIMARY KEY REFERENCES portal.Scenario(id),
-                    scenario_name NVARCHAR(255) NOT NULL,
-                    price_per_container DECIMAL(18,2) NOT NULL,
-                    volume_per_container DECIMAL(12,3) NOT NULL
-                );
-        """)
-        for table, model, relations in [
-            ('Scenario', ScenarioModel, set()),
-            ('Freight', Freight, {'scenario'}),
-            ('ScenarioPlanSales', ScenarioPlanSales, {'scenario_model'}),
-            ('Purch', Purch, {'scenario_plan'}),
-            ('PurchPay', PurchPay, {'purch', 'kind_lag_pay'}),
-            ('PGGoods', PGGoods, {'scenario_plan', 'kind_purch'}),
-            ('KindLagPay', KindLagPay, set()),
-        ]:
-            ensure_model_columns(cursor, table, model, relations)
-        ensure_column(cursor, 'PurchPay', 'kind_lag_pay_id', 'INT')
-        ensure_column(cursor, 'PurchPay', 'kind_lag_pay', 'NVARCHAR(255)')
-        conn.commit()
-
-        exported_count = {'scenario': 0, 'purch': 0, 'purchpay': 0, 'pggoods': 0, 'plans': 0, 'freight': 0}
-
-        with transaction.atomic():
-            prepare_sql_goods(cursor)
-            # Reference IDs and labels must be available before payment export.
-            for lag_kind in KindLagPay.objects.all():
-                cursor.execute("""
-                    MERGE INTO portal.KindLagPay AS target
-                    USING (SELECT ? AS id, ? AS name) AS source
-                    ON target.id = source.id
-                    WHEN MATCHED THEN UPDATE SET name = source.name
-                    WHEN NOT MATCHED THEN INSERT (id, name) VALUES (source.id, source.name);
-                """, lag_kind.pk, lag_kind.name)
-                export_additional_fields(cursor, 'KindLagPay', lag_kind, {'name'}, {'id': lag_kind.pk})
-            # === ЭКСПОРТ ОСНОВНОЙ ИНФОРМАЦИИ О СЦЕНАРИИ ===
-            # Явно конвертируем типы для совместимости со старым ODBC драйвером
-            scenario_id = int(scenario.id)
-            scenario_name = str(scenario.name) if scenario.name else ''
-            date_start = scenario.date_start_plan.strftime('%Y-%m-%d') if scenario.date_start_plan else None
-            date_end = scenario.date_end_plan.strftime('%Y-%m-%d') if scenario.date_end_plan else None
-            overwrite_flag = 1 if scenario.overwrite_existing else 0
-
-            cursor.execute("""
-                MERGE INTO portal.Scenario AS target
-                USING (
-                    SELECT 
-                        ? AS id,
-                        ? AS name,
-                        CAST(? AS DATE) AS date_start_plan,
-                        CAST(? AS DATE) AS date_end_plan,
-                        CAST(? AS BIT) AS overwrite_existing
-                ) AS source
-                ON target.id = source.id
-                WHEN MATCHED THEN
-                    UPDATE SET 
-                        name = source.name,
-                        date_start_plan = source.date_start_plan,
-                        date_end_plan = source.date_end_plan,
-                        overwrite_existing = source.overwrite_existing
-                WHEN NOT MATCHED THEN
-                    INSERT (id, name, date_start_plan, date_end_plan, overwrite_existing)
-                    VALUES (source.id, source.name, source.date_start_plan, source.date_end_plan, source.overwrite_existing);
-            """,
-                           scenario_id,
-                           scenario_name,
-                           date_start,
-                           date_end,
-                           overwrite_flag
-                           )
-            export_additional_fields(cursor, 'Scenario', scenario,
-                                     {'name', 'date_start_plan', 'date_end_plan', 'overwrite_existing'}, {'id': scenario.pk})
-            exported_count['scenario'] += 1
-
-            freight = Freight.objects.filter(scenario=scenario).first()
-            if freight is not None:
-                cursor.execute("""
-                    MERGE INTO portal.Freight AS target
-                    USING (SELECT ? AS scenario_id, ? AS scenario_name,
-                           CAST(? AS DECIMAL(18,2)) AS price_per_container,
-                           CAST(? AS DECIMAL(12,3)) AS volume_per_container) AS source
-                    ON target.scenario_id = source.scenario_id
-                    WHEN MATCHED THEN UPDATE SET
-                        scenario_name = source.scenario_name,
-                        price_per_container = source.price_per_container,
-                        volume_per_container = source.volume_per_container
-                    WHEN NOT MATCHED THEN INSERT
-                        (scenario_id, scenario_name, price_per_container, volume_per_container)
-                        VALUES (source.scenario_id, source.scenario_name,
-                                source.price_per_container, source.volume_per_container);
-                """, scenario.pk, scenario.name, str(freight.price_per_container), str(freight.volume_per_container))
-                export_additional_fields(cursor, 'Freight', freight,
-                                         {'price_per_container', 'volume_per_container'}, {'scenario_id': scenario.pk})
-                exported_count['freight'] += 1
+    from .services.sql_export import export_scenario
+    return export_scenario(request, scenario, MS_SQL_CONN_STR)
 
 
-            # === ЭКСПОРТ ПЛАНОВ ПРОДАЖ ===
-            plans = ScenarioPlanSales.objects.filter(scenario_model=scenario)
-            for plan in plans:
-                cursor.execute("""
-                    MERGE INTO portal.ScenarioPlanSales AS target
-                    USING (SELECT ? AS name, ? AS scenario_name, ? AS flag_order) AS source
-                    ON target.name = source.name AND target.scenario_name = source.scenario_name
-                    WHEN MATCHED THEN
-                        UPDATE SET flag_order_in_purch = source.flag_order
-                    WHEN NOT MATCHED THEN
-                        INSERT (name, scenario_name, flag_order_in_purch)
-                        VALUES (source.name, source.scenario_name, source.flag_order);
-                """, plan.name, scenario.name, plan.flag_order_in_purch)
-                export_additional_fields(cursor, 'ScenarioPlanSales', plan, {'name', 'flag_order_in_purch'},
-                                         {'name': plan.name, 'scenario_name': scenario.name})
-                exported_count['plans'] += 1
-
-            # === ЭКСПОРТ ЗАКУПОК И ПЛАТЕЖЕЙ ===
-            purchs = Purch.objects.filter(scenario_plan=scenario).prefetch_related('purchpay_set__kind_lag_pay')
-
-            for purch in purchs:
-                # Вставляем/обновляем закупку
-                cursor.execute("""
-                    MERGE INTO portal.Purch AS target
-                    USING (SELECT ? AS name, ? AS lag_income, ? AS scenario_name) AS source
-                    ON target.name = source.name AND target.scenario_name = source.scenario_name
-                    WHEN MATCHED THEN
-                        UPDATE SET lag_income = source.lag_income
-                    WHEN NOT MATCHED THEN
-                        INSERT (name, lag_income, scenario_name)
-                        VALUES (source.name, source.lag_income, source.scenario_name)
-                    OUTPUT inserted.id;
-                """, purch.name, purch.lag_income, scenario.name)
-
-                row = cursor.fetchone()
-                purch_id = row[0] if row else None
-                if purch_id is None:
-                    raise RuntimeError('SQL Server не вернул ID экспортированной закупки.')
-
-                if purch_id is not None:
-                    export_additional_fields(cursor, 'Purch', purch, {'name', 'lag_income'}, {'id': purch_id})
-                    # Удаляем старые платежи этой закупки в этом сценарии
-                    cursor.execute("""
-                        DELETE FROM portal.PurchPay 
-                        WHERE purch_id = ?
-                    """, purch_id)
-
-                    # Вставляем новые платежи
-                    for pay in purch.purchpay_set.all():
-                        cursor.execute("""
-                            INSERT INTO portal.PurchPay (purch_id, name, percent_pay, lag_day_pay, kind_lag_pay_id, kind_lag_pay)
-                            OUTPUT inserted.id
-                            VALUES (?, ?, ?, ?, ?, ?)
-                        """, purch_id, pay.name, pay.percent_pay, pay.lag_day_pay,
-                                       pay.kind_lag_pay_id, pay.kind_lag_pay.name if pay.kind_lag_pay else None)
-                        pay_row = cursor.fetchone()
-                        if not pay_row:
-                            raise RuntimeError('SQL Server не вернул ID созданного платежа.')
-                        export_additional_fields(cursor, 'PurchPay', pay, {'name', 'percent_pay', 'lag_day_pay'},
-                                                 {'id': pay_row[0]})
-                        exported_count['purchpay'] += 1
-
-                    exported_count['purch'] += 1
-
-            # === ЭКСПОРТ ТОВАРОВ ===
-            pggoods_list = PGGoods.objects.filter(scenario_plan=scenario)
-
-            for pg in pggoods_list:
-                cursor.execute("""
-                    MERGE INTO portal.PGGoods AS target
-                    USING (
-                        SELECT 
-                            ? AS planning_group,
-                            ? AS planning_sales,
-                            ? AS group_goods,
-                            ? AS brand,
-                            ? AS purch,
-                            ? AS volume,
-                            ? AS exw_usd,
-                            ? AS ddp_usd,
-                            ? AS kddp,
-                            ? AS stock_cnt_day,
-                            ? AS percent_stock_end,
-                            ? AS scenario_name,
-                            ? AS kind_purch,
-                            ? AS planning_group_key
-                    ) AS source
-                    ON target.planning_group_key = source.planning_group_key
-                       AND target.scenario_name = source.scenario_name
-                    WHEN MATCHED THEN
-                        UPDATE SET 
-                            planning_group = source.planning_group,
-                            planning_sales = source.planning_sales,
-                            group_goods = source.group_goods,
-                            brand = source.brand,
-                            purch = source.purch,
-                            volume = source.volume,
-                            exw_usd = source.exw_usd,
-                            ddp_usd = source.ddp_usd,
-                            kddp = source.kddp,
-                            stock_cnt_day = source.stock_cnt_day,
-                            percent_stock_end = source.percent_stock_end,
-                            kind_purch = source.kind_purch
-                    WHEN NOT MATCHED THEN
-                        INSERT (planning_group, planning_sales, group_goods, brand, purch, 
-                                volume, exw_usd, ddp_usd, kddp, stock_cnt_day, 
-                                percent_stock_end, scenario_name, kind_purch, planning_group_key)
-                        VALUES (source.planning_group, source.planning_sales, source.group_goods,
-                                source.brand, source.purch, source.volume, source.exw_usd,
-                                source.ddp_usd, source.kddp, source.stock_cnt_day,
-                                source.percent_stock_end, source.scenario_name, source.kind_purch, source.planning_group_key);
-                """,
-                               pg.planning_group, pg.planning_sales, pg.group_goods,
-                               pg.brand, pg.purch, pg.volume, pg.exw_usd, pg.ddp_usd,
-                               pg.kddp, pg.stock_cnt_day, pg.percent_stock_end, scenario.name, pg.kind_purch.name, pg.planning_group_key
-                               )
-                export_additional_fields(cursor, 'PGGoods', pg, {
-                    'planning_group', 'planning_sales', 'group_goods', 'brand', 'purch', 'volume',
-                    'exw_usd', 'ddp_usd', 'kddp', 'stock_cnt_day', 'percent_stock_end', 'planning_group_key',
-                }, {'planning_group_key': pg.planning_group_key, 'scenario_name': scenario.name})
-                exported_count['pggoods'] += 1
-                # if pg.planning_group == 'ВЕНТ Канальная':
-                #     print('ВЕНТ Канальная')
-            conn.commit()
-
-        succeeded = True
-        total = sum(exported_count.values())
-        messages.success(
-            request,
-            f'✅ Сценарий "{scenario.name}" экспортирован в MS SQL! '
-            f'Сценарий: {exported_count["scenario"]}, '
-            f'Планов: {exported_count["plans"]}, '
-            f'Закупок: {exported_count["purch"]}, '
-            f'Платежей: {exported_count["purchpay"]}, '
-            f'Товаров: {exported_count["pggoods"]}, '
-            f'Фрахт: {exported_count["freight"]}'
-        )
-
-    except pyodbc.Error as e:
-        logger.error(f"Ошибка экспорта в MS SQL: {e}")
-        messages.error(request, f'Сценарий «{scenario.name}»: ошибка экспорта в MS SQL: {e}')
-        if conn:
-            conn.rollback()
-    except Exception as e:
-        logger.error(f"Ошибка при экспорте сценария: {e}")
-        messages.error(request, f'Сценарий «{scenario.name}»: ошибка при экспорте: {e}')
-        if conn:
-            conn.rollback()
-    finally:
-        if conn:
-            conn.close()
-
-    return succeeded
 # ==============================================================================
 # ФУНКЦИИ КОПИРОВАНИЯ ДАННЫХ МЕЖДУ СЦЕНАРИЯМИ
 # ==============================================================================
@@ -679,34 +358,8 @@ def copy_purch_from_scenario(request):
         current_scenario = form.cleaned_data['scenario']
         source_scenario = form.cleaned_data['source_scenario_id']
 
-        source_purchs = Purch.objects.filter(scenario_plan=source_scenario).prefetch_related('purchpay_set')
-        copied_count = 0
-
-        with transaction.atomic():
-            for sp in source_purchs:
-                # Ищем или создаем закупку с таким же именем в целевом сценарии
-                p, created = Purch.objects.get_or_create(
-                    name=sp.name,
-                    scenario_plan=current_scenario,
-                    defaults={'lag_income': sp.lag_income, 'lage_make': sp.lage_make}
-                )
-                # Обновляем параметры закупки на случай изменений в источнике
-                if p.lag_income != sp.lag_income or p.lage_make != sp.lage_make:
-                    p.lag_income = sp.lag_income
-                    p.lage_make = sp.lage_make
-                    p.save()
-
-                # Полностью заменяем платежи на те, что в источнике
-                p.purchpay_set.all().delete()
-                new_pays = [
-                    PurchPay(purch=p, name=pay.name, percent_pay=pay.percent_pay, lag_day_pay=pay.lag_day_pay,
-                             kind_lag_pay_id=pay.kind_lag_pay_id)
-                    for pay in sp.purchpay_set.all()
-                ]
-                if new_pays:
-                    PurchPay.objects.bulk_create(new_pays)
-
-                copied_count += 1
+        from .services.copying import copy_purchases
+        copied_count = copy_purchases(source_scenario, current_scenario)
 
         messages.success(request,
                          f'✅ Успешно скопировано/обновлено {copied_count} закупок из сценария "{source_scenario.name}".')
@@ -731,35 +384,8 @@ def copy_pggoods_from_scenario(request):
         current_scenario = form.cleaned_data['scenario']
         source_scenario = form.cleaned_data['source_scenario_id']
 
-        source_goods = PGGoods.objects.filter(scenario_plan=source_scenario).select_related('kind_purch')
-        created_count = 0
-        updated_count = 0
-
-        with transaction.atomic():
-            for sg in source_goods:
-                # update_or_create предотвращает дубликаты: если товар с такими же плановыми группами уже есть, он обновится
-                obj, created = PGGoods.objects.update_or_create(
-                    scenario_plan=current_scenario,
-                    planning_group_key=planning_group_key(sg.planning_group),
-                    defaults={
-                        'planning_group': sg.planning_group,
-                        'planning_sales': sg.planning_sales,
-                        'group_goods': sg.group_goods,
-                        'brand': sg.brand,
-                        'purch': sg.purch,
-                        'kind_purch': sg.kind_purch,
-                        'volume': sg.volume,
-                        'exw_usd': sg.exw_usd,
-                        'ddp_usd': sg.ddp_usd,
-                        'kddp': sg.kddp,
-                        'stock_cnt_day': sg.stock_cnt_day,
-                        'percent_stock_end': sg.percent_stock_end,
-                    }
-                )
-                if created:
-                    created_count += 1
-                else:
-                    updated_count += 1
+        from .services.copying import copy_goods
+        created_count, updated_count = copy_goods(source_scenario, current_scenario)
 
         messages.success(request,
                          f'✅ Обработано товаров из "{source_scenario.name}": создано {created_count}, обновлено {updated_count}.')
@@ -1672,16 +1298,8 @@ from .forms import PurchForm, PurchPayFormSet  # Убедитесь, что Purc
 
 
 def get_current_scenario(request):
-    all_scenarios = ScenarioModel.objects.all().order_by('-date_start_plan', '-id')
-    scenario_id = request.GET.get('scenario')
-    if scenario_id:
-        try:
-            current_scenario = ScenarioModel.objects.get(pk=scenario_id)
-        except (ScenarioModel.DoesNotExist, ValueError, TypeError):
-            current_scenario = all_scenarios.first()
-    else:
-        current_scenario = all_scenarios.first()
-    return current_scenario, all_scenarios
+    from .services.scenarios import current_scenario
+    return current_scenario(request)
 
 
 def purch_create(request):
@@ -1724,8 +1342,11 @@ def purch_edit(request, pk=None):
     purch = get_object_or_404(Purch, pk=pk) if pk else None
 
     # Получаем сценарий из URL-параметра
-    scenario_id = request.GET.get('scenario') or (purch.scenario_plan_id if purch else None)
+    scenario_id = request.POST.get('scenario') or request.GET.get('scenario') or (purch.scenario_plan_id if purch else None)
     scenario = get_object_or_404(ScenarioModel, pk=scenario_id) if scenario_id else None
+    if purch and purch.scenario_plan_id != (scenario.pk if scenario else None):
+        from django.http import Http404
+        raise Http404('Закупка не принадлежит выбранному сценарию.')
 
     if request.method == 'POST':
         form = PurchForm(request.POST, instance=purch)
@@ -1763,3 +1384,16 @@ def purch_delete(request, pk):
         purch.delete()
         messages.success(request, f'Закупка «{name}» удалена из сценария "{current_scenario.name}".')
     return redirect(f"{reverse('purch_list')}?scenario={current_scenario.pk}")
+
+
+@require_POST
+def cancel_algorithm_api(request, run_id):
+    with transaction.atomic():
+        run = get_object_or_404(AlgorithmRun, pk=run_id)
+        if run.steps.filter(status='running').exists():
+            return JsonResponse({'error': 'Шаг ещё выполняется. Дождитесь его окончания перед отменой.'}, status=409)
+        if run.status == 'running':
+            run.status = 'cancelled'
+            run.finished_at = timezone.now()
+            run.save(update_fields=['status', 'finished_at'])
+    return JsonResponse({'success': True, 'status': run.status})

@@ -103,6 +103,7 @@
         {% endif %}
 
         <form method="post" id="purchForm" novalidate>
+            <input type="hidden" name="scenario" value="{{ scenario.pk }}">
             {% csrf_token %}
             {{ formset.management_form }}
 

@@ -253,6 +253,28 @@
     </div>
 </div>
 
+<div class="card card-body mb-3">
+    <p>Сценарий расчёта: <strong>{{ current_scenario.name|default:"не выбран" }}</strong></p>
+    <p>Последний успешный экспорт: <strong>{{ last_export.exported_at|date:"d.m.Y H:i:s"|default:"не выполнялся" }}</strong></p>
+    <p class="text-muted">Заказ рассчитывается только для выбранного сценария. Подготовка данных, обновление таблиц и запуск OLAP выполняются общими SQL-процедурами. Фрахт экспортируется; его использование внешними процедурами требует их настройки.</p>
+    {% if readiness_errors %}<div class="alert alert-warning"><strong>До запуска исправьте:</strong><ul>{% for error in readiness_errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+    {% if active_runs %}
+        <div class="alert alert-info">
+            <p>Есть незавершённые расчёты. Перед новым запуском завершите их или отмените остановленные между шагами:</p>
+            {% for active_run in active_runs %}
+                <div class="mb-2">#{{ active_run.pk }} — {{ active_run.scenario.name|default:"старый запуск без сценария" }} — {{ active_run.started_at|date:"d.m.Y H:i:s" }}
+                    <button class="btn btn-outline-danger btn-sm" onclick="cancelRun({{ active_run.pk }})">Отменить остановленный расчёт</button>
+                </div>
+            {% endfor %}
+        </div>
+    {% endif %}
+    {% for run in recent_runs %}
+        <details class="mb-2"><summary>Расчёт #{{ run.pk }} — {{ run.started_at|date:"d.m.Y H:i:s" }} — {{ run.get_status_display }}</summary>
+            <p>Экспорт: {{ run.scenario_export.exported_at|date:"d.m.Y H:i:s"|default:"не зафиксирован" }}</p>
+            <pre class="small" style="max-height: 300px; overflow: auto">{{ run.parameters_display }}</pre>
+        </details>
+    {% endfor %}
+</div>
 <!-- Панель управления -->
 <div class="control-panel" id="controlPanel">
     <div id="startSection">
@@ -261,7 +283,7 @@
             Нажмите кнопку ниже, чтобы запустить алгоритм расчета.
             Все шаги будут выполнены последовательно с фиксацией их состояния.
         </p>
-        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()">
+        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors %}disabled{% endif %}>
             <i class="bi bi-play-fill"></i> Запустить
         </button>
     </div>
@@ -299,7 +321,7 @@
         <h5 class="mb-3 text-success">
             <i class="bi bi-check-circle-fill"></i> Алгоритм полностью выполнен!
         </h5>
-        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()">
+        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors %}disabled{% endif %}>
             <i class="bi bi-arrow-repeat"></i> Запустить заново
         </button>
     </div>
@@ -336,15 +358,24 @@
     // ===================================================================
     // ЗАПУСК НОВОГО АЛГОРИТМА
     // ===================================================================
+    async function cancelRun(runId) {
+        const response = await fetch(`/model_purch/api/algorithm/${runId}/cancel/`, {
+            method: 'POST', headers: {'X-CSRFToken': '{{ csrf_token }}'}
+        });
+        const data = await response.json();
+        if (!response.ok) { alert(data.error); return; }
+        location.reload();
+    }
+
     async function startAlgorithm() {
         try {
             const response = await fetch("{% url 'start_algorithm_api' %}", {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
+                body: JSON.stringify({scenario: '{{ current_scenario.pk }}'})
             });
-            if (!response.ok) throw new Error('Ошибка запуска');
-
             const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Ошибка запуска');
             currentRunId = data.run_id;
 
             document.getElementById('startSection').style.display = 'none';
@@ -380,7 +411,7 @@
                     `/model_purch/api/algorithm/${currentRunId}/execute-next/`,
                     {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' }
+                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
                     }
                 );
 
@@ -436,7 +467,7 @@
                 `/model_purch/api/algorithm/${currentRunId}/execute-next/`,
                 {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
+                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' }
                 }
             );
             const data = await response.json();

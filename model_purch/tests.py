@@ -88,3 +88,27 @@ class ConnectionConfigurationTests(SimpleTestCase):
         self.assertIs(core.get_current_scenario, views.get_current_scenario)
         self.assertIs(scenarios.scenario_create, views.scenario_create)
         self.assertIs(sync.export_scenario_to_sql, views.export_scenario_to_sql)
+
+
+class SelectedScenarioCalculationTests(SimpleTestCase):
+    def test_selected_calculation_never_truncates_other_scenarios(self):
+        connection, cursor = Mock(), Mock()
+        fixture = PurchaseCalculationTests().group_frames()
+        with patch('model_purch.calc_purch.connect_database', return_value=(connection, cursor)), patch(
+            'model_purch.calc_purch.pd.read_sql', side_effect=[pd.DataFrame({'СценарийМодели': ["Plan's"]}), *fixture],
+        ) as read:
+            calc_purch(scenario_name="Plan's")
+        self.assertEqual(read.call_args_list[0].kwargs['params'], ["Plan's"])
+        self.assertIn('WHERE СценарийМодели = ?', read.call_args_list[0].args[0])
+        cursor.execute.assert_called_once_with('DELETE FROM [dbo].[PlanIncome] WHERE [Scenario] = ?', "Plan's")
+        self.assertEqual(cursor.executemany.call_args.args[1][0][-1], "Plan's")
+        connection.commit.assert_called_once()
+
+    def test_missing_selected_sql_data_leaves_existing_results_untouched(self):
+        connection, cursor = Mock(), Mock()
+        with patch('model_purch.calc_purch.connect_database', return_value=(connection, cursor)), patch(
+            'model_purch.calc_purch.pd.read_sql', return_value=pd.DataFrame({'СценарийМодели': []}),
+        ), self.assertRaisesRegex(ValueError, 'Нет подготовленных'):
+            calc_purch(scenario_name='Missing')
+        cursor.execute.assert_not_called()
+        connection.rollback.assert_called_once()

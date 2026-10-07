@@ -1,0 +1,2 @@
+# Optional browser regression suite; application dependencies are in requirements.txt.
+playwright==1.63.0

@@ -1,13 +1,18 @@
 import pandas as pd
 from .conns import connect_database
 
-def calc_purch():
+def calc_purch(scenario_name=None):
     sql_scenarion = """SELECT DISTINCT СценарийМодели FROM ModelPurch.dbo.TableForCalcPlanIncomes"""
     con, cur = connect_database('vm-dwh', 'ModelPurch')
 
     try:
         result = {'PlanningGroupOZP': [], 'Date_': [], 'Qty': [], 'Scenario': []}
-        df_sc = pd.read_sql(sql_scenarion, con=con)
+        if scenario_name is None:
+            df_sc = pd.read_sql(sql_scenarion, con=con)
+        else:
+            df_sc = pd.read_sql(sql_scenarion + ' WHERE СценарийМодели = ?', con=con, params=[scenario_name])
+            if df_sc.empty:
+                raise ValueError(f'Нет подготовленных SQL-данных для сценария {scenario_name}')
         for i, row in df_sc.iterrows():
             sc= row['СценарийМодели']
             sql_pg_list = """SELECT DISTINCT PlanningGroupOZP FROM ModelPurch.dbo.TableForCalcPlanIncomes i
@@ -107,7 +112,10 @@ def calc_purch():
             )
             for row in df_result.to_numpy()
         ]
-        cur.execute("TRUNCATE TABLE [dbo].[PlanIncome]")
+        if scenario_name is None:
+            cur.execute("TRUNCATE TABLE [dbo].[PlanIncome]")
+        else:
+            cur.execute("DELETE FROM [dbo].[PlanIncome] WHERE [Scenario] = ?", scenario_name)
         # 4. Вставка БЕЗ fast_executemany (старый драйвер может глючить)
         if rows:
             cur.executemany(

@@ -2,13 +2,6 @@
 {% block content %}
 <h1>Фрахт</h1>
 {% if current_scenario %}
-<form method="get" class="mb-4">
-    <label for="freight-scenario" class="form-label">Сценарий</label>
-    <select id="freight-scenario" name="scenario" class="form-select" required>
-        {% for scenario in scenarios %}<option value="{{ scenario.pk }}" {% if scenario.pk == current_scenario.pk %}selected{% endif %}>{{ scenario.name }}</option>{% endfor %}
-    </select>
-    <button class="btn btn-outline-primary mt-2">Выбрать</button>
-</form>
 <div class="row g-4">
     <div class="col-md-6">
         <div class="card card-body">

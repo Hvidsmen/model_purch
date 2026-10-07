@@ -1,0 +1,138 @@
+"""Run with RUN_BROWSER_TESTS=1; see README for Chromium installation."""
+import importlib.util
+import os
+from concurrent.futures import ThreadPoolExecutor
+from unittest import skipUnless
+from unittest.mock import patch
+
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.urls import reverse
+from django.test import override_settings
+from .models import ScenarioModel, ScenarioExport, AlgorithmRun, Purch, PurchPay, KindLagPay, KindPurch, PGGoods, Freight
+from .services.preflight import snapshot, fingerprint
+
+BROWSER_ENABLED = os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright') is not None
+
+
+@skipUnless(BROWSER_ENABLED, 'Enable RUN_BROWSER_TESTS=1 and install requirements-test.txt to run Chromium checks.')
+class PurchaseBrowserTests(StaticLiveServerTestCase):
+    def setUp(self):
+        self.source = ScenarioModel.objects.create(name='Source', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
+        self.target = ScenarioModel.objects.create(name='Target', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        self.purchase = Purch.objects.create(scenario_plan=self.source, name='Supplier', lag_income=90, lage_make=35)
+        kind = KindLagPay.objects.create(name='Delivery')
+        PurchPay.objects.create(purch=self.purchase, name='Payment', percent_pay=100, lag_day_pay=10, kind_lag_pay=kind)
+        goods_kind = KindPurch.objects.create(name='Purchased')
+        self.good = PGGoods.objects.create(scenario_plan=self.source, planning_group='Group', planning_sales='Sales',
+            group_goods='Goods', kind_purch=goods_kind, volume=1, exw_usd=10, ddp_usd=15, kddp=1.5,
+            stock_cnt_day=30, percent_stock_end=20)
+        Freight.objects.create(scenario=self.source, price_per_container='1234.56', volume_per_container='67.890')
+
+        from playwright.sync_api import sync_playwright
+        self.playwright = sync_playwright().start()
+        self.addCleanup(self.playwright.stop)
+        executable = os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE')
+        self.browser = self.playwright.chromium.launch(executable_path=executable or None, headless=True)
+        self.addCleanup(self.browser.close)
+        self.page = self.browser.new_page()
+        self.errors = []
+        self.asset_events = []
+        self.page.on("response", lambda response: self.asset_events.append((response.status, response.url)) if "bootstrap.bundle" in response.url else None)
+        self.page.on("requestfailed", lambda request: self.asset_events.append((request.failure, request.url)))
+        self.page.on('pageerror', lambda error: self.errors.append(error.stack))
+        self.database_pool = ThreadPoolExecutor(max_workers=1)
+        self.addCleanup(self.database_pool.shutdown)
+
+    def db(self, operation):
+        # Playwright's sync driver owns a loop in this thread; Django ORM runs
+        # in a separate synchronous thread, never with async-safety disabled.
+        return self.database_pool.submit(operation).result()
+
+    def visit(self, name):
+        self.page.goto(self.live_server_url + reverse(name))
+
+    def select(self, scenario):
+        with self.page.expect_navigation():
+            self.page.locator('#workspace-scenario').select_option(str(scenario.pk))
+
+    def test_select_scenario_open_modal_choose_source_and_copy_purchases(self):
+        self.visit('purch_list')
+        self.select(self.target)
+        self.page.locator('[data-bs-target="#copyPurchModal"]').click()
+        modal = self.page.locator('#copyPurchModal')
+        modal.wait_for(state='visible')
+        button = modal.locator('button[type="submit"]')
+        self.assertTrue(button.is_enabled())
+        button.click()
+        self.assertFalse(self.db(lambda: Purch.objects.filter(scenario_plan=self.target).exists()))
+        modal.locator('select[name="source_scenario_id"]').select_option(str(self.source.pk))
+        with self.page.expect_navigation():
+            button.click()
+        copied = self.db(lambda: Purch.objects.get(scenario_plan=self.target, name='Supplier'))
+        self.assertEqual((copied.lag_income, copied.lage_make), (90, 35))
+        self.assertEqual(self.db(lambda: copied.purchpay_set.get().kind_lag_pay_id),
+                         self.db(lambda: self.purchase.purchpay_set.get().kind_lag_pay_id))
+        self.page.get_by_role('link', name='Фрахт', exact=True).click()
+        self.assertEqual(self.page.locator('#workspace-scenario').input_value(), str(self.target.pk))
+        self.assertEqual(self.errors, [], self.asset_events)
+
+    def test_copy_goods_through_modal_and_preserve_selected_scenario(self):
+        self.visit('pggoods_list')
+        self.select(self.target)
+        self.page.locator('[data-bs-target="#copyPggoodsModal"]').click()
+        modal = self.page.locator('#copyPggoodsModal')
+        modal.wait_for(state='visible')
+        modal.locator('select[name="source_scenario_id"]').select_option(str(self.source.pk))
+        with self.page.expect_navigation():
+            modal.locator('button[type="submit"]').click()
+        self.assertEqual(self.db(lambda: PGGoods.objects.get(scenario_plan=self.target).planning_group), 'Group')
+        self.assertEqual(self.page.locator('#workspace-scenario').input_value(), str(self.target.pk))
+        self.assertEqual(self.errors, [], self.asset_events)
+
+    def test_save_and_copy_freight_through_forms(self):
+        self.visit('freight')
+        self.select(self.target)
+        self.page.locator('[name="price_per_container"]').fill('2000.25')
+        self.page.locator('[name="volume_per_container"]').fill('76.500')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Сохранить', exact=True).click()
+        self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).price_per_container)), '2000.25')
+        self.page.locator('#freight-source').select_option(str(self.source.pk))
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Копировать', exact=True).click()
+        self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).price_per_container)), '1234.56')
+        self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).volume_per_container)), '67.890')
+        self.assertEqual(self.errors, [], self.asset_events)
+
+    def test_bulk_export_select_all_and_submit_selected_scenarios(self):
+        self.visit('scenario_list')
+        button = self.page.locator('#bulk-export-button')
+        self.assertFalse(button.is_enabled())
+        self.page.locator('#select-all-scenarios').check()
+        self.assertTrue(button.is_enabled())
+        with patch('model_purch.views.MS_SQL_CONN_STR', 'test'), patch(
+            'model_purch.views._export_scenario_to_sql', return_value=True,
+        ) as export:
+            with self.page.expect_navigation():
+                button.click()
+            self.assertEqual({call.args[1].pk for call in export.call_args_list}, {self.source.pk, self.target.pk})
+        self.assertIn('Успешно: 2 из 2', self.page.locator('#messagesContainer').inner_text())
+        self.assertEqual(self.errors, [], self.asset_events)
+
+    @override_settings(MS_SQL_CONN_STR='test')
+    def test_calculation_start_uses_selected_scenario_and_saved_export(self):
+        parameters = self.db(lambda: snapshot(self.source))
+        export = self.db(lambda: ScenarioExport.objects.create(scenario=self.source, parameters=parameters,
+                                                               fingerprint=fingerprint(parameters)))
+        self.visit('results_page')
+        self.select(self.source)
+        with patch('model_purch.views._run_algorithm_step', return_value={'message': 'Test step'}) as execute:
+            self.page.get_by_role('button', name='Запустить', exact=True).click()
+            self.page.locator('#completedSection').wait_for(state='visible')
+            self.assertEqual(execute.call_count, 5)
+        run = self.db(lambda: AlgorithmRun.objects.get())
+        self.assertEqual(run.scenario_id, self.source.pk)
+        self.assertEqual(run.scenario_export_id, export.pk)
+        self.assertEqual(run.status, 'completed')
+        self.assertEqual(run.parameters, parameters)
+        self.assertEqual(self.errors, [], self.asset_events)

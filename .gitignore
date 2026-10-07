@@ -10,3 +10,6 @@ venv/
 *.sqlite3-journal
 *.sqlite3-wal
 *.sqlite3-shm
+
+.idea/
+backups/

@@ -24,14 +24,8 @@ def freight_page(request):
             return freight_redirect()
         scenario = selection.cleaned_data['scenario']
     else:
-        if request.GET.get('scenario'):
-            selection = FreightScenarioForm(request.GET)
-            if not selection.is_valid():
-                messages.error(request, 'Выбранный сценарий не найден.')
-                return freight_redirect()
-            scenario = selection.cleaned_data['scenario']
-        else:
-            scenario = ScenarioModel.objects.order_by('-date_start_plan', '-pk').first()
+        from .services.scenarios import current_scenario
+        scenario, _ = current_scenario(request)
     freight = Freight.objects.filter(scenario=scenario).first() if scenario else None
     form = FreightForm(request.POST if request.method == 'POST' else None, instance=freight)
     if request.method == 'POST' and form.is_valid():

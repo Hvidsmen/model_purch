@@ -6,39 +6,96 @@ Python 3.10–3.12, Django 5.2. Приложения: `PlanningSystem` (план
 
 ## Запуск на Windows (PowerShell)
 
-Из корня репозитория. Если `.venv` уже существует, проверьте
-`.\.venv\Scripts\python.exe --version`: поддерживаются версии 3.10–3.12.
-Если версия вне этого диапазона, переименуйте `.venv` в резервную папку и создайте среду через
-`py -3.10 -m venv .venv`. Для установленного Python 3.10 обновление до 3.12 не требуется.
+Python 3.10 поддерживается. При первом запуске установите окружение:
 
 ```powershell
-py -3.10 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -r requirements.txt
-New-Item -ItemType Directory -Force .local | Out-Null
-.\.venv\Scripts\python.exe manage.py migrate --settings=portal.settings_local
-.\.venv\Scripts\python.exe manage.py check --settings=portal.settings_local
-.\.venv\Scripts\python.exe manage.py test --settings=portal.settings_local --noinput
-.\.venv\Scripts\python.exe manage.py runserver --settings=portal.settings_local
+py -3.10 -m venv .venv310
+.\.venv310\Scripts\python.exe -m pip install -r requirements.txt
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1
 ```
+
+Если окружение `.venv` уже существует, `start.ps1` использует его, когда нет
+`.venv310`. Активация окружения и права администратора не требуются. Параметр
+`-ExecutionPolicy Bypass` действует только для запускаемого процесса PowerShell.
+
+Скрипт проверяет целостность SQLite, выполняет проверки Django и миграции,
+создаёт резервную копию перед изменением существующей базы, печатает её путь
+и число сценариев. Если подготовка не удалась, сервер не запускается.
+Он запускает сервер на `127.0.0.1:8000` без дополнительного процесса autoreload.
+Для другого порта добавьте `-Port 8001`.
+
+По умолчанию и обычные настройки, и `portal.settings_local` используют
+`db.sqlite3` в корне проекта. Явно выбрать существующую базу можно так:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1 -Database .\db.sqlite3
+```
+
+Выбор сохраняется в `.local/config.json` и действует после закрытия PowerShell.
+`DJANGO_DB_PATH`, если задана, имеет приоритет над сохранённой настройкой;
+параметр `-Database` переопределяет выбор при запуске скрипта. Строки подключения
+к MS SQL в этот файл не сохраняются: перед запуском задайте `MS_SQL_CONN_STR`.
+Путь активной базы и выбранный сценарий видны на страницах модели закупок.
+Если нужные данные были в `.local/db.sqlite3`, передайте именно этот файл через
+`-Database`; скрипт не переносит и не объединяет базы автоматически.
+
+### Обновление, которое убирает рабочую базу из Git
+
+Рабочая SQLite-база и `.idea/` больше не отслеживаются Git. Перед **первым**
+обновлением на эту версию остановите сервер и сохраните резервную копию вне
+репозитория. Для вашей базы `db.sqlite3` и окружения `.venv310`:
+
+```powershell
+$dbBackup = Join-Path $env:USERPROFILE ("model-purch-before-update-" + (Get-Date -Format 'yyyyMMdd-HHmmss') + '.sqlite3')
+.\.venv310\Scripts\python.exe -c "import sqlite3,sys; source=sqlite3.connect('file:db.sqlite3?mode=ro',uri=True); target=sqlite3.connect(sys.argv[1]); source.backup(target); target.close(); source.close()" $dbBackup
+if ($LASTEXITCODE -ne 0) { throw 'Резервная копия не создана. Обновление остановлено.' }
+git stash push -m "Database before untracking" -- db.sqlite3
+git pull --ff-only origin main
+if ($LASTEXITCODE -ne 0) { throw 'Git pull не завершён. База сохранена в резервной копии.' }
+Copy-Item -LiteralPath $dbBackup -Destination .\db.sqlite3 -Force
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1 -Database .\db.sqlite3
+```
+
+Не выполняйте `git stash pop` для этой базы: после обновления она уже не
+отслеживается Git. Созданный stash оставлен как дополнительная страховка.
+Если есть другие незакоммиченные изменения кода, сначала сохраните их отдельно.
+После этого первого обновления обычный `git pull` больше не конфликтует с
+изменениями рабочей базы. Новый клон создаёт пустую базу; существующую рабочую
+базу нужно передать или восстановить из своей резервной копии.
+
+### Резервные копии
+
+`manage.py migrate` автоматически создаёт копию существующей SQLite-базы в
+`.local/backups/` перед применением миграций. При ошибке копирования миграции
+останавливаются. Режимы `migrate --plan` и `migrate --check` базу не копируют.
+Используется SQLite Backup API, поэтому копируются и зафиксированные изменения
+из WAL. Копии проверяются через `PRAGMA quick_check` и не удаляются автоматически.
+
+Для резервного копирования в любой момент:
+
+```powershell
+.\.venv310\Scripts\python.exe manage.py backup_database --settings=portal.settings_local
+```
+
+Перед восстановлением остановите все процессы приложения, сохраните текущее
+состояние отдельной копией и восстановите выбранную копию в отдельный файл.
+Передайте этот файл через `start.ps1 -Database`: исходная база останется сохранена.
+Резервные копии в `.local` не защищают от потери диска — копируйте их на отдельный носитель.
 
 ## Linux / облачная среда
 
 ```bash
-python3.12 -m venv .venv
+python3.10 -m venv .venv
 .venv/bin/python -m pip install -r requirements.txt
-mkdir -p .local
-.venv/bin/python manage.py migrate --settings=portal.settings_local
-.venv/bin/python manage.py check --settings=portal.settings_local
-.venv/bin/python manage.py test --settings=portal.settings_local --noinput
-.venv/bin/python manage.py runserver 127.0.0.1:8000 --settings=portal.settings_local
+.venv/bin/python scripts/prepare_local.py
+.venv/bin/python manage.py runserver 127.0.0.1:8000 --settings=portal.settings_local --noreload
 ```
 
-Локальные настройки создают отдельную БД `.local/db.sqlite3` и сохраняют загрузки в
-`.local/media`. Исходная `db.sqlite3` и бизнес-файлы Excel сохранены. Для работы с
-копией исходных данных можно задать `DJANGO_DB_PATH` на файл копии и выполнить миграции.
-Для пустой БД создайте администратора через `manage.py createsuperuser` и внесите
-справочники через `/admin/`. Примеры шаблонов загрузки (`TemplatesFile` с ID 1 для
-филиалов и ID 2 для сезонности) необязательны для открытия страниц.
+Для отдельной базы передайте `scripts/prepare_local.py --database /путь/к/существующей.sqlite3`.
+Настройка сохраняется в `.local/config.json`, как и на Windows. Загрузки сохраняются
+в `.local/media`. Для пустой БД создайте администратора через `manage.py createsuperuser`
+и внесите справочники через `/admin/`. Примеры шаблонов загрузки (`TemplatesFile` с ID 1
+для филиалов и ID 2 для сезонности) необязательны для открытия страниц.
 
 Основные страницы: `/`, `/model_purch/`, `/plannging_system/`, `/ref_editor/ref-store-group/`.
 Написание `plannging_system` сохранено для совместимости существующих адресов.
@@ -226,3 +283,62 @@ SQL-колонок могут сохраняться независимо от �
 Каждый сценарий экспортируется отдельно: ошибка откатывает его данные и не
 останавливает остальные сценарии. Страница показывает результат по каждому
 сценарию и общий итог. Не закрывайте страницу до завершения экспорта.
+
+
+## Надёжность сценариев и расчёта
+
+Общий выбор сценария сохраняется в сессии браузера при переходах между товарами,
+закупками, фрахтом и расчётом. Формы создания и копирования передают целевой
+сценарий явно, поэтому выбор в другой вкладке не перенаправляет сохранение.
+Удалённый сценарий исключается из выбора; ошибочный явный ID не заменяется
+последним сценарием.
+
+Перед расчётом проверяются даты, уникальность названия сценария, наличие товаров,
+конечные неотрицательные цены и коэффициенты, положительные объёмы, проценты
+от 0 до 100, неотрицательные лаги и сумма платежей по каждой закупке (100%,
+допуск 0,01 процентного пункта). Отрицательный лаг самого платежа допускается
+для предоплаты. Фрахт необязателен; заполненные параметры проверяются.
+
+Успешный экспорт записывает время, снимок всех параметров и SHA-256 в
+`ScenarioExport`. Страница расчёта показывает последний экспорт, ошибки подготовки
+и последние пять запусков со снимками параметров. Ранее выполненные экспорты
+не имеют снимков: после обновления повторите экспорт перед первым расчётом.
+После изменения параметров необходим повторный экспорт; изменение данных во
+время расчёта блокирует выполнение следующего шага. Расчёты выполняются по одному;
+остановленный между шагами запуск можно завершить на странице расчёта.
+
+Расчёт заказа фильтрует выбранный сценарий и заменяет только его строки в
+`dbo.PlanIncome`. Функция `calc_purch()` без аргумента сохраняет прежний режим
+расчёта всех сценариев для совместимости; веб-интерфейс вызывает её с именем
+сценария. Внешние `sp_ETLDataBase`, `sp_CreateTableModel`, `sp_Date` и OLAP job
+по-прежнему работают с общими таблицами: их исходников в репозитории нет.
+Статус последнего шага означает отправку задания OLAP, а не завершение пересчёта.
+
+Экспорт, копирование, выбор сценария, резервное копирование и проверки расчёта
+находятся в `model_purch/services/`. HTTP-обработчики используют эти сервисы.
+Bootstrap для форм и модальных окон хранится локально, чтобы копирование не зависело
+от доступности CDN. Иконки и Plotly используют прежние внешние ресурсы.
+
+## Проверки интерфейса в браузере
+
+Серверные проверки:
+
+```powershell
+.\.venv310\Scripts\python.exe manage.py test --settings=portal.settings_local --noinput
+```
+
+Опциональные проверки Chromium реально выбирают сценарий, открывают модальные
+окна, отправляют формы копирования товаров и закупок, сохраняют и копируют фрахт,
+выбирают строки массового экспорта. Они работают с отдельной тестовой базой;
+подключение к MS SQL заменено имитацией.
+
+```powershell
+.\.venv310\Scripts\python.exe -m pip install -r requirements-test.txt
+.\.venv310\Scripts\python.exe -m playwright install chromium
+$env:RUN_BROWSER_TESTS = '1'
+.\.venv310\Scripts\python.exe manage.py test --settings=portal.settings_local --noinput
+```
+
+Без `RUN_BROWSER_TESTS=1` браузерные проверки явно пропускаются. Можно использовать
+установленный Chromium, указав `PLAYWRIGHT_CHROMIUM_EXECUTABLE` с полным путём.
+В облаке проверки выполнены с системным `/usr/bin/chromium`.

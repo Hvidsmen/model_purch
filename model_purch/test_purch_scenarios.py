@@ -18,7 +18,7 @@ class PurchScenarioTests(TestCase):
 
     def test_selection_filters_list_and_preserves_action_targets(self):
         response = self.client.get(reverse('purch_list'), {'scenario': self.target.pk})
-        self.assertContains(response, 'id="purch-scenario"')
+        self.assertContains(response, 'id="workspace-scenario"')
         self.assertContains(response, f'value="{self.target.pk}" selected')
         self.assertContains(response, 'Target supplier')
         self.assertNotContains(response, 'Source supplier')

@@ -41,6 +41,7 @@ urlpatterns = [
 
     # API для пошагового алгоритма
     path('api/algorithm/start/', views.start_algorithm_api, name='start_algorithm_api'),
+    path('api/algorithm/<int:run_id>/cancel/', views.cancel_algorithm_api, name='cancel_algorithm_api'),
     path('api/algorithm/<int:run_id>/execute-next/', views.execute_next_step_api, name='execute_next_step_api'),
     path('api/algorithm/<int:run_id>/status/', views.get_algorithm_status_api, name='get_algorithm_statuэ'),
 

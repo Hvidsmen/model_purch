@@ -1,3 +1,4 @@
+from .local_config import database_path
 """
 Django settings for portal project.
 
@@ -78,6 +79,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'model_purch.context_processors.workspace',
 
             ],
         },
@@ -92,7 +94,7 @@ WSGI_APPLICATION = 'portal.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': os.environ.get('DJANGO_DB_PATH', BASE_DIR / 'db.sqlite3'),
+        'NAME': database_path(BASE_DIR),
     }
 }
 
