@@ -2,7 +2,7 @@ from django import forms
 from django.core.exceptions import ValidationError
 from django.utils.translation import gettext_lazy as _
 from django.forms import inlineformset_factory
-from .models import PGGoods, ScenarioModel, ScenarioPlanSales
+from .models import PGGoods, ScenarioModel, ScenarioPlanSales, Freight
 
 
 class PGGoodsCopyForm(forms.Form):
@@ -237,3 +237,20 @@ PurchPayFormSet = forms.inlineformset_factory(
     max_num=10,
     validate_max=True
 )
+
+class FreightForm(forms.ModelForm):
+    class Meta:
+        model = Freight
+        fields = ['price_per_container', 'volume_per_container']
+        widgets = {
+            'price_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
+            'volume_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0.001', 'step': '0.001'}),
+        }
+
+
+class FreightScenarioForm(forms.Form):
+    scenario = forms.ModelChoiceField(queryset=ScenarioModel.objects.all())
+
+
+class FreightCopyForm(PGGoodsCopyForm):
+    pass

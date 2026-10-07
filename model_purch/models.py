@@ -6,6 +6,8 @@ from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from .goods_identity import planning_group_key
+from decimal import Decimal
+from django.core.validators import MinValueValidator
 
 
 class AlgorithmRun(models.Model):
@@ -222,3 +224,22 @@ class PurchPay(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.percent_pay}%)"
+
+
+class Freight(models.Model):
+    scenario = models.OneToOneField(ScenarioModel, on_delete=models.CASCADE, related_name='freight', verbose_name='Сценарий')
+    price_per_container = models.DecimalField('Цена за контейнер', max_digits=18, decimal_places=2,
+                                              validators=[MinValueValidator(Decimal('0'))])
+    volume_per_container = models.DecimalField('Объём контейнера, м³', max_digits=12, decimal_places=3,
+                                               validators=[MinValueValidator(Decimal('0.001'))])
+
+    class Meta:
+        verbose_name = 'Фрахт'
+        verbose_name_plural = 'Фрахт по сценариям'
+        constraints = [
+            models.CheckConstraint(condition=models.Q(price_per_container__gte=0), name='freight_price_nonnegative'),
+            models.CheckConstraint(condition=models.Q(volume_per_container__gt=0), name='freight_volume_positive'),
+        ]
+
+    def __str__(self):
+        return f'Фрахт: {self.scenario}'

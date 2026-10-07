@@ -1,7 +1,9 @@
 from django.urls import path
-from . import views
+from . import views, views_freight
 from . import  views_graph
 urlpatterns = [
+    path("freight/", views_freight.freight_page, name="freight"),
+    path("freight/copy/", views_freight.copy_freight, name="copy_freight"),
     # ==============================================================================
     # PGGoods
     # ==============================================================================

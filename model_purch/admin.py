@@ -26,3 +26,8 @@ class PGGoodsDuplicateArchiveAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(Freight)
+class FreightAdmin(admin.ModelAdmin):
+    list_display = ("scenario", "price_per_container", "volume_per_container")

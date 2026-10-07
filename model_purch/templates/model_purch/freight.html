@@ -1,0 +1,44 @@
+{% extends 'model_purch/base.html' %}
+{% block content %}
+<h1>Фрахт</h1>
+{% if current_scenario %}
+<form method="get" class="mb-4">
+    <label for="freight-scenario" class="form-label">Сценарий</label>
+    <select id="freight-scenario" name="scenario" class="form-select" required>
+        {% for scenario in scenarios %}<option value="{{ scenario.pk }}" {% if scenario.pk == current_scenario.pk %}selected{% endif %}>{{ scenario.name }}</option>{% endfor %}
+    </select>
+    <button class="btn btn-outline-primary mt-2">Выбрать</button>
+</form>
+<div class="row g-4">
+    <div class="col-md-6">
+        <div class="card card-body">
+            <h2 class="h5">Параметры: {{ current_scenario.name }}</h2>
+            <form method="post">
+                {% csrf_token %}
+                <input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
+                {{ form.as_p }}
+                <button class="btn btn-primary">Сохранить</button>
+            </form>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card card-body">
+            <h2 class="h5">Копировать из сценария</h2>
+            <p>Цена и объём контейнера в текущем сценарии будут заменены значениями источника.</p>
+            <form method="post" action="{% url 'copy_freight' %}">
+                {% csrf_token %}
+                <input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
+                <label for="freight-source" class="form-label">Сценарий-источник</label>
+                <select id="freight-source" name="source_scenario_id" class="form-select mb-3" required>
+                    <option value="">Выберите сценарий</option>
+                    {% for scenario in source_scenarios %}<option value="{{ scenario.pk }}">{{ scenario.name }}</option>{% endfor %}
+                </select>
+                <button class="btn btn-outline-primary" {% if not source_scenarios %}disabled{% endif %}>Копировать</button>
+            </form>
+        </div>
+    </div>
+</div>
+{% else %}
+<p>Сначала <a href="{% url 'scenario_create' %}">создайте сценарий</a>, чтобы заполнить параметры фрахта.</p>
+{% endif %}
+{% endblock %}

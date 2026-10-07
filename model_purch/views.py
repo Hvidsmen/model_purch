@@ -1,3 +1,4 @@
+from .models import Freight
 import logging
 import json
 import pyodbc
@@ -385,8 +386,18 @@ def export_scenario_to_sql(request, pk):
             IF OBJECT_ID(N'portal.KindLagPay', N'U') IS NULL
                 CREATE TABLE portal.KindLagPay (id INT PRIMARY KEY, name NVARCHAR(255) NOT NULL);
         """)
+        cursor.execute("""
+            IF OBJECT_ID(N'portal.Freight', N'U') IS NULL
+                CREATE TABLE portal.Freight (
+                    scenario_id INT PRIMARY KEY REFERENCES portal.Scenario(id),
+                    scenario_name NVARCHAR(255) NOT NULL,
+                    price_per_container DECIMAL(18,2) NOT NULL,
+                    volume_per_container DECIMAL(12,3) NOT NULL
+                );
+        """)
         for table, model, relations in [
             ('Scenario', ScenarioModel, set()),
+            ('Freight', Freight, {'scenario'}),
             ('ScenarioPlanSales', ScenarioPlanSales, {'scenario_model'}),
             ('Purch', Purch, {'scenario_plan'}),
             ('PurchPay', PurchPay, {'purch', 'kind_lag_pay'}),
@@ -398,7 +409,7 @@ def export_scenario_to_sql(request, pk):
         ensure_column(cursor, 'PurchPay', 'kind_lag_pay', 'NVARCHAR(255)')
         conn.commit()
 
-        exported_count = {'scenario': 0, 'purch': 0, 'purchpay': 0, 'pggoods': 0, 'plans': 0}
+        exported_count = {'scenario': 0, 'purch': 0, 'purchpay': 0, 'pggoods': 0, 'plans': 0, 'freight': 0}
 
         with transaction.atomic():
             prepare_sql_goods(cursor)
@@ -450,6 +461,28 @@ def export_scenario_to_sql(request, pk):
             export_additional_fields(cursor, 'Scenario', scenario,
                                      {'name', 'date_start_plan', 'date_end_plan', 'overwrite_existing'}, {'id': scenario.pk})
             exported_count['scenario'] += 1
+
+            freight = Freight.objects.filter(scenario=scenario).first()
+            if freight is not None:
+                cursor.execute("""
+                    MERGE INTO portal.Freight AS target
+                    USING (SELECT ? AS scenario_id, ? AS scenario_name,
+                           CAST(? AS DECIMAL(18,2)) AS price_per_container,
+                           CAST(? AS DECIMAL(12,3)) AS volume_per_container) AS source
+                    ON target.scenario_id = source.scenario_id
+                    WHEN MATCHED THEN UPDATE SET
+                        scenario_name = source.scenario_name,
+                        price_per_container = source.price_per_container,
+                        volume_per_container = source.volume_per_container
+                    WHEN NOT MATCHED THEN INSERT
+                        (scenario_id, scenario_name, price_per_container, volume_per_container)
+                        VALUES (source.scenario_id, source.scenario_name,
+                                source.price_per_container, source.volume_per_container);
+                """, scenario.pk, scenario.name, str(freight.price_per_container), str(freight.volume_per_container))
+                export_additional_fields(cursor, 'Freight', freight,
+                                         {'price_per_container', 'volume_per_container'}, {'scenario_id': scenario.pk})
+                exported_count['freight'] += 1
+
 
             # === ЭКСПОРТ ПЛАНОВ ПРОДАЖ ===
             plans = ScenarioPlanSales.objects.filter(scenario_model=scenario)
@@ -584,7 +617,8 @@ def export_scenario_to_sql(request, pk):
             f'Планов: {exported_count["plans"]}, '
             f'Закупок: {exported_count["purch"]}, '
             f'Платежей: {exported_count["purchpay"]}, '
-            f'Товаров: {exported_count["pggoods"]}'
+            f'Товаров: {exported_count["pggoods"]}, '
+            f'Фрахт: {exported_count["freight"]}'
         )
 
     except pyodbc.Error as e:
