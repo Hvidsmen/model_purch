@@ -19,6 +19,7 @@ urlpatterns = [
     # ==============================================================================
     path('', views.scenario_list, name='scenario_list_base'),
     path('scenarios/', views.scenario_list, name='scenario_list'),
+    path('scenarios/export-sql/', views.bulk_export_scenarios, name='bulk_export_scenarios'),
     path('scenarios/create/', views.scenario_create, name='scenario_create'),
     path('scenarios/<int:pk>/edit/', views.scenario_edit, name='scenario_edit'),
     path('scenarios/<int:pk>/delete/', views.scenario_delete, name='scenario_delete'),

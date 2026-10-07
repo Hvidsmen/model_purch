@@ -235,10 +235,16 @@
 </div>
 
 {% if scenarios %}
+    <form id="bulk-export-form" method="post" action="{% url 'bulk_export_scenarios' %}" class="mb-3">
+        {% csrf_token %}
+        <button id="bulk-export-button" class="btn btn-success" type="submit">Экспортировать выбранные в MS SQL</button>
+        <span class="text-muted ms-2">Выберите сценарии галочками. Существующие данные будут обновлены.</span>
+    </form>
     <div class="table-responsive">
         <table class="table table-scenarios">
             <thead>
                 <tr>
+                    <th><input id="select-all-scenarios" type="checkbox" class="form-check-input" aria-label="Выбрать все сценарии"></th>
                     <th class="col-id">#</th>
                     <th>Название сценария</th>
                     <th class="col-date">Дата начала</th>
@@ -250,6 +256,7 @@
             <tbody>
                 {% for scenario in scenarios %}
                     <tr>
+                        <td><input type="checkbox" class="form-check-input scenario-export-checkbox" name="scenarios" value="{{ scenario.pk }}" form="bulk-export-form" aria-label="Выбрать сценарий {{ scenario.name }}"></td>
                         <td class="col-id">{{ scenario.id }}</td>
                         <td class="col-name">
                             {{ scenario.name }}
@@ -358,4 +365,31 @@
         </a>
     </div>
 {% endif %}
+{% endblock %}
+{% block extra_js %}
+<script>
+(() => {
+    const all = document.getElementById('select-all-scenarios');
+    const form = document.getElementById('bulk-export-form');
+    if (!all || !form) return;
+    const boxes = [...document.querySelectorAll('.scenario-export-checkbox')];
+    const button = document.getElementById('bulk-export-button');
+    function update() {
+        const count = boxes.filter(box => box.checked).length;
+        all.checked = count === boxes.length;
+        all.indeterminate = count > 0 && count < boxes.length;
+        button.disabled = count === 0;
+        button.textContent = `Экспортировать выбранные в MS SQL (${count})`;
+    }
+    all.addEventListener('change', () => { boxes.forEach(box => box.checked = all.checked); update(); });
+    boxes.forEach(box => box.addEventListener('change', update));
+    form.addEventListener('submit', event => {
+        if (!boxes.some(box => box.checked)) { event.preventDefault(); return; }
+        button.disabled = true;
+        button.textContent = 'Экспорт выполняется…';
+    });
+    window.addEventListener('pageshow', update);
+    update();
+})();
+</script>
 {% endblock %}

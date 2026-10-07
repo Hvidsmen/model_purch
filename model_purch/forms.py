@@ -254,3 +254,11 @@ class FreightScenarioForm(forms.Form):
 
 class FreightCopyForm(PGGoodsCopyForm):
     pass
+
+
+class ScenarioBulkExportForm(forms.Form):
+    scenarios = forms.ModelMultipleChoiceField(
+        queryset=ScenarioModel.objects.all(),
+        error_messages={'required': 'Выберите хотя бы один сценарий.',
+                        'invalid_choice': 'Один из выбранных сценариев не найден. Обновите страницу.'},
+    )

@@ -21,7 +21,7 @@ from .goods_identity import planning_group_key
 from .sql_goods import prepare_sql_goods
 from .sql_export_fields import ensure_model_columns, ensure_column, export_additional_fields
 from .conns import connect_database
-from .forms import PGGoodsCopyForm, PGGoodsEditForm, ScenarioModelForm, ScenarioPlanSalesFormSet
+from .forms import PGGoodsCopyForm, PGGoodsEditForm, ScenarioModelForm, ScenarioPlanSalesFormSet, ScenarioBulkExportForm
 
 logger = logging.getLogger(__name__)
 
@@ -292,17 +292,42 @@ def get_algorithm_status_api(request, run_id):
         return JsonResponse({'error': str(e)}, status=500)
 
 def export_scenario_to_sql(request, pk):
+    scenario = get_object_or_404(ScenarioModel, pk=pk)
+    _export_scenario_to_sql(request, scenario)
+    return redirect('scenario_list')
+
+
+@require_POST
+def bulk_export_scenarios(request):
+    form = ScenarioBulkExportForm(request.POST)
+    if not form.is_valid():
+        messages.error(request, ' '.join(str(error) for errors in form.errors.values() for error in errors))
+        return redirect('scenario_list')
+    if not MS_SQL_CONN_STR:
+        messages.error(request, 'Не настроено подключение к MS SQL Server')
+        return redirect('scenario_list')
+    scenarios = list(form.cleaned_data['scenarios'].order_by('pk'))
+    succeeded = sum(_export_scenario_to_sql(request, scenario) for scenario in scenarios)
+    summary = f'Массовый экспорт завершён. Успешно: {succeeded} из {len(scenarios)}. Ошибок: {len(scenarios) - succeeded}.'
+    if succeeded == len(scenarios):
+        messages.success(request, summary)
+    else:
+        messages.warning(request, summary)
+    return redirect('scenario_list')
+
+
+def _export_scenario_to_sql(request, scenario):
     """
     Экспортирует данные сценария в MS SQL Server (схема portal).
     Автоматически создаёт таблицы, если они не существуют.
     """
-    scenario = get_object_or_404(ScenarioModel, pk=pk)
 
     if not MS_SQL_CONN_STR:
         messages.error(request, "Не настроено подключение к MS SQL Server")
-        return redirect('scenario_list')
+        return False
 
     conn = None
+    succeeded = False
     try:
         conn = pyodbc.connect(MS_SQL_CONN_STR)
         cursor = conn.cursor()
@@ -609,6 +634,7 @@ def export_scenario_to_sql(request, pk):
                 #     print('ВЕНТ Канальная')
             conn.commit()
 
+        succeeded = True
         total = sum(exported_count.values())
         messages.success(
             request,
@@ -623,19 +649,19 @@ def export_scenario_to_sql(request, pk):
 
     except pyodbc.Error as e:
         logger.error(f"Ошибка экспорта в MS SQL: {e}")
-        messages.error(request, f'Ошибка экспорта в MS SQL: {e}')
+        messages.error(request, f'Сценарий «{scenario.name}»: ошибка экспорта в MS SQL: {e}')
         if conn:
             conn.rollback()
     except Exception as e:
         logger.error(f"Ошибка при экспорте сценария: {e}")
-        messages.error(request, f'❌ Ошибка при экспорте: {e}')
+        messages.error(request, f'Сценарий «{scenario.name}»: ошибка при экспорте: {e}')
         if conn:
             conn.rollback()
     finally:
         if conn:
             conn.close()
 
-    return redirect('scenario_list')
+    return succeeded
 # ==============================================================================
 # ФУНКЦИИ КОПИРОВАНИЯ ДАННЫХ МЕЖДУ СЦЕНАРИЯМИ
 # ==============================================================================
