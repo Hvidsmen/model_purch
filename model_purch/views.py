@@ -16,6 +16,8 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from .models import PGGoods, KindPurch, ScenarioModel, ScenarioPlanSales, Purch, PurchPay
+from .goods_identity import planning_group_key
+from .sql_goods import prepare_sql_goods
 from .forms import PGGoodsCopyForm, PGGoodsEditForm, ScenarioModelForm, ScenarioPlanSalesFormSet
 
 logger = logging.getLogger(__name__)
@@ -368,7 +370,7 @@ def export_scenario_to_sql(request, pk):
                 percent_stock_end DECIMAL(5,2) NULL,
                 scenario_name NVARCHAR(255) NULL,
                 kind_purch NVARCHAR(255) NULL,
-                CONSTRAINT UQ_PGGoods_scenario UNIQUE (planning_group, planning_sales, group_goods, scenario_name)
+                planning_group_key CHAR(64) NOT NULL
             )
         """)
 
@@ -387,6 +389,7 @@ def export_scenario_to_sql(request, pk):
         exported_count = {'scenario': 0, 'purch': 0, 'purchpay': 0, 'pggoods': 0, 'plans': 0}
 
         with transaction.atomic():
+            prepare_sql_goods(cursor)
             # === ЭКСПОРТ ОСНОВНОЙ ИНФОРМАЦИИ О СЦЕНАРИИ ===
             # Явно конвертируем типы для совместимости со старым ODBC драйвером
             scenario_id = int(scenario.id)
@@ -496,14 +499,16 @@ def export_scenario_to_sql(request, pk):
                             ? AS stock_cnt_day,
                             ? AS percent_stock_end,
                             ? AS scenario_name,
-                            ? kind_purch
+                            ? AS kind_purch,
+                            ? AS planning_group_key
                     ) AS source
-                    ON target.planning_group = source.planning_group 
-                       AND target.planning_sales = source.planning_sales
-                       AND target.group_goods = source.group_goods
+                    ON target.planning_group_key = source.planning_group_key
                        AND target.scenario_name = source.scenario_name
                     WHEN MATCHED THEN
                         UPDATE SET 
+                            planning_group = source.planning_group,
+                            planning_sales = source.planning_sales,
+                            group_goods = source.group_goods,
                             brand = source.brand,
                             purch = source.purch,
                             volume = source.volume,
@@ -516,15 +521,15 @@ def export_scenario_to_sql(request, pk):
                     WHEN NOT MATCHED THEN
                         INSERT (planning_group, planning_sales, group_goods, brand, purch, 
                                 volume, exw_usd, ddp_usd, kddp, stock_cnt_day, 
-                                percent_stock_end, scenario_name, kind_purch)
+                                percent_stock_end, scenario_name, kind_purch, planning_group_key)
                         VALUES (source.planning_group, source.planning_sales, source.group_goods,
                                 source.brand, source.purch, source.volume, source.exw_usd,
                                 source.ddp_usd, source.kddp, source.stock_cnt_day,
-                                source.percent_stock_end, source.scenario_name, source.kind_purch);
+                                source.percent_stock_end, source.scenario_name, source.kind_purch, source.planning_group_key);
                 """,
                                pg.planning_group, pg.planning_sales, pg.group_goods,
                                pg.brand, pg.purch, pg.volume, pg.exw_usd, pg.ddp_usd,
-                               pg.kddp, pg.stock_cnt_day, pg.percent_stock_end, scenario.name, pg.kind_purch.name
+                               pg.kddp, pg.stock_cnt_day, pg.percent_stock_end, scenario.name, pg.kind_purch.name, pg.planning_group_key
                                )
                 exported_count['pggoods'] += 1
                 # if pg.planning_group == 'ВЕНТ Канальная':
@@ -635,10 +640,11 @@ def copy_pggoods_from_scenario(request):
                 # update_or_create предотвращает дубликаты: если товар с такими же плановыми группами уже есть, он обновится
                 obj, created = PGGoods.objects.update_or_create(
                     scenario_plan=current_scenario,
-                    planning_group=sg.planning_group,
-                    planning_sales=sg.planning_sales,
-                    group_goods=sg.group_goods,
+                    planning_group_key=planning_group_key(sg.planning_group),
                     defaults={
+                        'planning_group': sg.planning_group,
+                        'planning_sales': sg.planning_sales,
+                        'group_goods': sg.group_goods,
                         'brand': sg.brand,
                         'purch': sg.purch,
                         'kind_purch': sg.kind_purch,
@@ -772,12 +778,9 @@ def sync_pggoods_data_for_scenario(scenario):
         raise ValueError("Не задана строка подключения MS_SQL_CONN_STR в settings.py")
 
     scenario_obj = ScenarioModel.objects.get(id=scenario.id)
-    print(scenario_obj)
     plans_obj = ScenarioPlanSales.objects.filter(scenario_model = scenario_obj)
-    print(scenario_obj)
 
     str_scenarios = ", ".join([f"'{p.name}'" for p in plans_obj])
-    print(str_scenarios)
     scenario_id = int(scenario.id)
     scenario_name = str(scenario.name) if scenario.name else ''
     date_start = scenario.date_start_plan.strftime('%Y-%m-%d') if scenario.date_start_plan else None
@@ -904,7 +907,6 @@ INNER JOIN (
 ) ddp ON p.PlanningGroupOZP = ddp.PlanningGroupOZPErp
 
     """
-    print(sql)
     conn = None
     try:
         conn = pyodbc.connect(MS_SQL_CONN_STR)
@@ -932,6 +934,7 @@ INNER JOIN (
                 kind_purch_obj, _ = KindPurch.objects.get_or_create(name=kind_purch_name)
 
                 defaults = {
+                    'planning_group': planning_group, 'planning_sales': planning_sales, 'group_goods': group_goods,
                     'brand': brand, 'purch': purch_name, 'kind_purch': kind_purch_obj,
                     'volume': volume, 'exw_usd': 0.0, 'ddp_usd': ddp_usd,
                     'kddp': 1.0 if ddp_usd > 0 else 0.0, 'stock_cnt_day': 0, 'percent_stock_end': 0.0,
@@ -941,8 +944,7 @@ INNER JOIN (
                     # РЕЖИМ ПЕРЕЗАПИСИ: update_or_create — обновляет существующие
                     # PGGoods.objects.filter(scenario_plan=scenario).delete()
                     pggoods, created = PGGoods.objects.update_or_create(
-                        scenario_plan=scenario, planning_group=planning_group,
-                        planning_sales=planning_sales, group_goods=group_goods,
+                        scenario_plan=scenario, planning_group_key=planning_group_key(planning_group),
                         defaults=defaults
                     )
                     if created:
@@ -952,8 +954,7 @@ INNER JOIN (
                 else:
                     # РЕЖИМ БЕЗ ПЕРЕЗАПИСИ: только создаём новые
                     pggoods, created = PGGoods.objects.get_or_create(
-                        scenario_plan=scenario, planning_group=planning_group,
-                        planning_sales=planning_sales, group_goods=group_goods,
+                        scenario_plan=scenario, planning_group_key=planning_group_key(planning_group),
                         defaults=defaults
                     )
                     if created:
@@ -1448,6 +1449,7 @@ def import_from_excel(request):
             wb = load_workbook(excel_file, read_only=True)
             ws = wb.active
             rows = list(ws.iter_rows(min_row=2, values_only=True))
+            wb.close()
 
             created_count = 0
             updated_count = 0
@@ -1471,47 +1473,55 @@ def import_from_excel(request):
                         if not planning_group and not planning_sales and not group_goods:
                             continue
 
+                        if not planning_group or not str(planning_group).strip():
+                            raise ValueError('Не заполнена плановая группа')
+                        group_name = str(planning_group).strip()
+                        identity = planning_group_key(group_name)
                         kind_purch = None
                         if kind_purch_name:
                             kind_purch, _ = KindPurch.objects.get_or_create(name=str(kind_purch_name).strip())
 
-                        if item_id:
-                            try:
-                                goods = PGGoods.objects.get(pk=int(item_id), scenario_plan=current_scenario)
-                                goods.planning_group = str(planning_group).strip() if planning_group else ''
-                                goods.planning_sales = str(planning_sales).strip() if planning_sales else ''
-                                goods.group_goods = str(group_goods).strip() if group_goods else ''
-                                goods.brand = str(brand).strip() if brand else None
-                                goods.purch = str(purch).strip() if purch else None
-                                goods.kind_purch = kind_purch
-                                goods.volume = float(volume) if volume else 0.0
-                                goods.exw_usd = float(exw_usd) if exw_usd else 0.0
-                                goods.ddp_usd = float(ddp_usd) if ddp_usd else 0.0
-                                goods.kddp = float(kddp) if kddp else 0.0
-                                goods.stock_cnt_day = int(stock_cnt_day) if stock_cnt_day else 0
-                                goods.percent_stock_end = float(percent_stock_end) if percent_stock_end else 0.0
+                        # A savepoint keeps one invalid row from breaking the entire workbook.
+                        with transaction.atomic():
+                            goods = None
+                            if item_id:
+                                goods = PGGoods.objects.filter(pk=int(item_id), scenario_plan=current_scenario).first()
+                            if goods and PGGoods.objects.filter(
+                                scenario_plan=current_scenario, planning_group_key=identity,
+                            ).exclude(pk=goods.pk).exists():
+                                raise ValueError('Плановая группа уже существует в этом сценарии с другим ID')
+                            if kind_purch is None:
+                                existing = goods or PGGoods.objects.filter(
+                                    scenario_plan=current_scenario, planning_group_key=identity,
+                                ).first()
+                                kind_purch = existing.kind_purch if existing else KindPurch.objects.get_or_create(name='Закупается')[0]
+                            defaults = {
+                                'planning_group': group_name,
+                                'planning_sales': str(planning_sales).strip() if planning_sales else '',
+                                'group_goods': str(group_goods).strip() if group_goods else '',
+                                'brand': str(brand).strip() if brand else None,
+                                'purch': str(purch).strip() if purch else None,
+                                'kind_purch': kind_purch,
+                                'volume': float(volume) if volume else 0.0,
+                                'exw_usd': float(exw_usd) if exw_usd else 0.0,
+                                'ddp_usd': float(ddp_usd) if ddp_usd else 0.0,
+                                'kddp': float(kddp) if kddp else 0.0,
+                                'stock_cnt_day': int(stock_cnt_day) if stock_cnt_day else 0,
+                                'percent_stock_end': float(percent_stock_end) if percent_stock_end else 0.0,
+                            }
+                            if goods:
+                                for key, value in defaults.items():
+                                    setattr(goods, key, value)
                                 goods.save()
+                                created = False
+                            else:
+                                goods, created = PGGoods.objects.update_or_create(
+                                    scenario_plan=current_scenario, planning_group_key=identity, defaults=defaults,
+                                )
+                            if created:
+                                created_count += 1
+                            else:
                                 updated_count += 1
-                                continue
-                            except PGGoods.DoesNotExist:
-                                pass
-
-                        PGGoods.objects.create(
-                            scenario_plan=current_scenario,
-                            planning_group=str(planning_group).strip() if planning_group else '',
-                            planning_sales=str(planning_sales).strip() if planning_sales else '',
-                            group_goods=str(group_goods).strip() if group_goods else '',
-                            brand=str(brand).strip() if brand else None,
-                            purch=str(purch).strip() if purch else None,
-                            kind_purch=kind_purch,
-                            volume=float(volume) if volume else 0.0,
-                            exw_usd=float(exw_usd) if exw_usd else 0.0,
-                            ddp_usd=float(ddp_usd) if ddp_usd else 0.0,
-                            kddp=float(kddp) if kddp else 0.0,
-                            stock_cnt_day=int(stock_cnt_day) if stock_cnt_day else 0,
-                            percent_stock_end=float(percent_stock_end) if percent_stock_end else 0.0,
-                        )
-                        created_count += 1
 
                     except Exception as e:
                         error_count += 1

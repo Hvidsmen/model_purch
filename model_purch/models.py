@@ -4,6 +4,8 @@ from django.db import models
 
 from django.db import models
 from django.utils import timezone
+from django.core.exceptions import ValidationError
+from .goods_identity import planning_group_key
 
 
 class AlgorithmRun(models.Model):
@@ -107,7 +109,29 @@ class KindPurch(models.Model):
     def __str__(self):
         return self.name
 
+class PGGoodsQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        if 'planning_group' in kwargs:
+            if not isinstance(kwargs['planning_group'], str):
+                raise ValueError('Update planning_group with a string or use instance.save().')
+            kwargs['planning_group_key'] = planning_group_key(kwargs['planning_group'])
+        return super().update(**kwargs)
+
+    def bulk_create(self, objs, *args, **kwargs):
+        objs = list(objs)
+        for obj in objs:
+            obj.planning_group_key = planning_group_key(obj.planning_group)
+        return super().bulk_create(objs, *args, **kwargs)
+
+    def bulk_update(self, objs, fields, *args, **kwargs):
+        if 'planning_group' in fields:
+            raise ValueError('Use instance.save() to change planning_group.')
+        return super().bulk_update(objs, fields, *args, **kwargs)
+
+
 class PGGoods(models.Model):
+    objects = PGGoodsQuerySet.as_manager()
+    planning_group_key = models.CharField(max_length=64, editable=False, default='')
     id = models.AutoField(primary_key = True)
     planning_group = models.CharField(max_length=255)
     planning_sales = models.CharField(max_length=255)
@@ -127,8 +151,42 @@ class PGGoods(models.Model):
 
     scenario_plan = models.ForeignKey(ScenarioModel, on_delete=models.CASCADE, null=True)
 
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['scenario_plan', 'planning_group_key'], name='unique_pg_scenario_group'),
+            models.UniqueConstraint(fields=['planning_group_key'], condition=models.Q(scenario_plan__isnull=True),
+                                    name='unique_pg_unassigned_group'),
+        ]
+
+    def clean(self):
+        super().clean()
+        self.planning_group_key = planning_group_key(self.planning_group)
+        duplicate = type(self).objects.filter(
+            scenario_plan_id=self.scenario_plan_id, planning_group_key=self.planning_group_key,
+        ).exclude(pk=self.pk).exists()
+        if duplicate:
+            raise ValidationError('В этом сценарии уже есть такая плановая группа (без учёта регистра).')
+
+    def save(self, *args, **kwargs):
+        self.planning_group_key = planning_group_key(self.planning_group)
+        if kwargs.get('update_fields') is not None and 'planning_group' in kwargs['update_fields']:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'planning_group_key'}
+        return super().save(*args, **kwargs)
+
     def __str__(self):
         return self.planning_group
+
+class PGGoodsDuplicateArchive(models.Model):
+    original_id = models.PositiveIntegerField()
+    scenario_id = models.PositiveIntegerField(null=True)
+    kept_id = models.PositiveIntegerField()
+    original_data = models.JSONField()
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Архив дублей PGGoods'
+        verbose_name_plural = 'Архив дублей PGGoods'
+
 
 class Purch(models.Model):
     id = models.AutoField(primary_key=True)

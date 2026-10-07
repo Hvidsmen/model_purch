@@ -12,3 +12,17 @@ admin.site.register(ResultCalc)
 
 
 admin.site.register(KindLagPay)
+
+@admin.register(PGGoodsDuplicateArchive)
+class PGGoodsDuplicateArchiveAdmin(admin.ModelAdmin):
+    list_display = ('original_id', 'scenario_id', 'kept_id', 'archived_at')
+    readonly_fields = ('original_id', 'scenario_id', 'kept_id', 'original_data', 'archived_at')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
