@@ -18,6 +18,7 @@ from openpyxl.utils import get_column_letter
 from .models import PGGoods, KindPurch, ScenarioModel, ScenarioPlanSales, Purch, PurchPay
 from .goods_identity import planning_group_key
 from .sql_goods import prepare_sql_goods
+from .conns import connect_database
 from .forms import PGGoodsCopyForm, PGGoodsEditForm, ScenarioModelForm, ScenarioPlanSalesFormSet
 
 logger = logging.getLogger(__name__)
@@ -51,17 +52,27 @@ def step_1_start(run_id):
     return {"message": "Алгоритм успешно запущен"}
 
 
+def execute_algorithm_sql(sql):
+    connection, cursor = connect_database('vm-dwh', 'ModelPurch')
+    try:
+        cursor.execute(sql)
+        # Consume every result set so errors in later statements are raised too.
+        while cursor.nextset():
+            pass
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+
+
 def step_2_prepare_data(run_id):
-    """Шаг 2: Подготовка данных"""
-     # Имитация загрузки данных
-    conn = pyodbc.connect(MS_SQL_CONN_STR)
-    cursor = conn.cursor()
-    conn.execute("""
-    exec [ModelPurch].[dbo].[sp_ETLDataBase]
-    EXEC ModelPurch.[dbo].[sp_CreateTableModel]
-        """)
-    cursor.commit()
-    # Здесь будет реальный код подготовки данных
+    """Prepare corporate calculation data using the configured connection."""
+    execute_algorithm_sql("""
+        EXEC [ModelPurch].[dbo].[sp_ETLDataBase];
+        EXEC [ModelPurch].[dbo].[sp_CreateTableModel];
+    """)
     return {"message": "Данные подготовлены"}
 
 from .calc_purch import  calc_purch
@@ -73,14 +84,7 @@ def step_3_calculate_order(run_id):
 
 
 def step_4_update_tables(run_id):
-    """Шаг 4: Обновление таблиц с учетом заказа"""
-    conn = pyodbc.connect(MS_SQL_CONN_STR)
-    cursor = conn.cursor()
-    conn.execute("""
-        exec [ModelPurch].[dbo].[sp_Date]
-        
-            """)
-    cursor.commit()
+    execute_algorithm_sql('EXEC [ModelPurch].[dbo].[sp_Date];')
     return {"message": "Таблицы обновлены"}
 
 
@@ -93,15 +97,7 @@ logger = logging.getLogger(__name__)
 
 
 def step_5_olap_cube(run_id):
-#     EXEC msdb.dbo.sp_start_job 'ModelPurch';
-
-    conn = pyodbc.connect(MS_SQL_CONN_STR)
-    cursor = conn.cursor()
-    conn.execute("""
-                EXEC msdb.dbo.sp_start_job 'ModelPurch';
-    
-                    """)
-    cursor.commit()
+    execute_algorithm_sql("EXEC msdb.dbo.sp_start_job 'ModelPurch';")
     return {"message": "Куб отправлен на обсчет"}
 
 
