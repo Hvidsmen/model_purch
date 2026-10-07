@@ -5,6 +5,27 @@ from django.forms import inlineformset_factory
 from .models import PGGoods, ScenarioModel, ScenarioPlanSales
 
 
+class PGGoodsCopyForm(forms.Form):
+    scenario = forms.ModelChoiceField(
+        queryset=ScenarioModel.objects.all(), label='Целевой сценарий',
+        error_messages={'required': 'Не выбран целевой сценарий.',
+                        'invalid_choice': 'Целевой сценарий не найден.'},
+    )
+    source_scenario_id = forms.ModelChoiceField(
+        queryset=ScenarioModel.objects.all(), label='Сценарий-источник',
+        error_messages={'required': 'Не выбран сценарий-источник.',
+                        'invalid_choice': 'Сценарий-источник не найден.'},
+    )
+
+    def clean(self):
+        data = super().clean()
+        target = data.get('scenario')
+        source = data.get('source_scenario_id')
+        if target and source and target.pk == source.pk:
+            raise ValidationError('Источник и целевой сценарий совпадают.')
+        return data
+
+
 class PGGoodsEditForm(forms.ModelForm):
     class Meta:
         model = PGGoods

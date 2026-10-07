@@ -16,7 +16,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from .models import PGGoods, KindPurch, ScenarioModel, ScenarioPlanSales, Purch, PurchPay
-from .forms import PGGoodsEditForm, ScenarioModelForm, ScenarioPlanSalesFormSet
+from .forms import PGGoodsCopyForm, PGGoodsEditForm, ScenarioModelForm, ScenarioPlanSalesFormSet
 
 logger = logging.getLogger(__name__)
 
@@ -611,19 +611,20 @@ def copy_purch_from_scenario(request):
 
 
 def copy_pggoods_from_scenario(request):
-    """Копирует товары (PGGoods) из выбранного сценария в текущий"""
+    """Copy goods into the target explicitly submitted by the copy form."""
     if request.method == 'POST':
-        source_scenario_id = request.POST.get('source_scenario_id')
-        current_scenario, _ = get_current_scenario(request)
-
-        if not current_scenario or not source_scenario_id:
-            messages.error(request, 'Не выбран сценарий.')
+        form = PGGoodsCopyForm(request.POST)
+        if not form.is_valid():
+            for errors in form.errors.values():
+                for error in errors:
+                    messages.error(request, error)
+            target = form.cleaned_data.get('scenario')
+            if target:
+                return redirect(f"{reverse('pggoods_list')}?scenario={target.pk}")
             return redirect('pggoods_list')
 
-        source_scenario = get_object_or_404(ScenarioModel, pk=source_scenario_id)
-        if source_scenario.id == current_scenario.id:
-            messages.warning(request, 'Источник и целевой сценарий совпадают.')
-            return redirect(f"{reverse('pggoods_list')}?scenario={current_scenario.id}")
+        current_scenario = form.cleaned_data['scenario']
+        source_scenario = form.cleaned_data['source_scenario_id']
 
         source_goods = PGGoods.objects.filter(scenario_plan=source_scenario).select_related('kind_purch')
         created_count = 0
