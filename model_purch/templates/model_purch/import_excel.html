@@ -1,0 +1,154 @@
+{% extends 'model_purch/base.html' %}
+{% load static %}
+
+{% block title %}Импорт из Excel{% endblock %}
+
+{% block extra_css %}
+<style>
+    .upload-card { max-width: 600px; margin: 20px auto; }
+    .file-input-wrapper { position: relative; overflow: hidden; display: inline-block; width: 100%; }
+    .file-input-wrapper input[type=file] { position: absolute; left: 0; top: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .file-input-label {
+        display: block;
+        padding: 40px 20px;
+        border: 2px dashed #0d6efd;
+        border-radius: 8px;
+        text-align: center;
+        background: #f8f9fa;
+        transition: all 0.3s ease;
+        cursor: pointer;
+    }
+    .file-input-label:hover { background: #e7f1ff; border-color: #0a58ca; }
+    .file-input-label i { font-size: 3rem; color: #0d6efd; margin-bottom: 10px; }
+    .file-name { margin-top: 10px; font-weight: 600; color: #0d6efd; }
+
+    .scenario-badge {
+        background-color: #e7f1ff;
+        color: #0d6efd;
+        padding: 10px 15px;
+        border-radius: 6px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 20px;
+        border: 1px solid #b6d4fe;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="upload-card">
+    <div class="card shadow-sm">
+        <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+            <h4 class="mb-0"><i class="bi bi-file-earmark-excel"></i> Импорт данных</h4>
+            {% if current_scenario %}
+                <span class="badge bg-light text-primary fs-6">Сценарий активен</span>
+            {% endif %}
+        </div>
+        <div class="card-body">
+
+            <!-- Индикатор текущего сценария -->
+            {% if current_scenario %}
+            <div class="scenario-badge">
+                <i class="bi bi-clipboard-data"></i>
+                <span>Данные будут импортированы в сценарий: <strong>{{ current_scenario.name }}</strong></span>
+            </div>
+            {% else %}
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle"></i> Сценарий не выбран. Импорт может не сработать.
+            </div>
+            {% endif %}
+
+            <div class="mb-4">
+                <h6 class="text-muted">Правила импорта:</h6>
+                <ul class="small text-muted mb-0">
+                    <li>Файл должен быть строго в формате <strong>.xlsx</strong></li>
+                    <li>Первая строка — заголовки колонок (как в экспорте)</li>
+                    <li>Если <strong>ID</strong> указан и существует <em>в текущем сценарии</em> — запись обновится</li>
+                    <li>Если ID пустой или не найден — создастся <strong>новая запись</strong></li>
+                </ul>
+            </div>
+
+            <form method="post" enctype="multipart/form-data" id="importForm" action="">
+                {% csrf_token %}
+                <!-- ГАРАНТИЯ: передаем ID сценария даже если он потеряется в URL -->
+                <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
+
+                <div class="file-input-wrapper mb-3">
+                    <label class="file-input-label" id="fileLabel">
+                        <i class="bi bi-cloud-arrow-up d-block"></i>
+                        <span>Нажмите или перетащите файл сюда</span>
+                        <div class="file-name" id="fileName"></div>
+                    </label>
+                    <input type="file" name="excel_file" accept=".xlsx" required id="fileInput">
+                </div>
+
+                <div class="d-flex gap-2">
+                    <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.id }}" class="btn btn-outline-secondary flex-grow-1">
+                        <i class="bi bi-arrow-left"></i> Назад к списку
+                    </a>
+                    <button type="submit" class="btn btn-success flex-grow-1" id="submitBtn" disabled>
+                        <i class="bi bi-upload"></i> Импортировать
+                    </button>
+                </div>
+            </form>
+
+            <div class="mt-4">
+                <a href="{% url 'export_pggoods' %}?scenario={{ current_scenario.id }}" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-download"></i> Скачать шаблон для импорта (с текущими данными)
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const fileInput = document.getElementById('fileInput');
+    const fileName = document.getElementById('fileName');
+    const submitBtn = document.getElementById('submitBtn');
+    const fileLabel = document.getElementById('fileLabel');
+
+    function handleFile(file) {
+        if (file && file.name.toLowerCase().endsWith('.xlsx')) {
+            fileName.textContent = file.name;
+            fileName.style.color = '#0d6efd';
+            submitBtn.disabled = false;
+            fileLabel.style.borderColor = '#198754';
+            fileLabel.style.background = '#d1e7dd';
+        } else {
+            fileName.textContent = 'Ошибка: разрешены только файлы .xlsx';
+            fileName.style.color = '#dc3545';
+            submitBtn.disabled = true;
+            fileLabel.style.borderColor = '#dc3545';
+            fileLabel.style.background = '#f8d7da';
+        }
+    }
+
+    fileInput.addEventListener('change', function(e) {
+        handleFile(e.target.files[0]);
+    });
+
+    fileLabel.addEventListener('dragover', e => {
+        e.preventDefault();
+        if (!submitBtn.disabled) fileLabel.style.background = '#e7f1ff';
+    });
+
+    fileLabel.addEventListener('dragleave', e => {
+        e.preventDefault();
+        fileLabel.style.background = '#f8f9fa';
+    });
+
+    fileLabel.addEventListener('drop', function(e) {
+        e.preventDefault();
+        fileLabel.style.background = '#f8f9fa';
+        const file = e.dataTransfer.files[0];
+        if (file) {
+            fileInput.files = e.dataTransfer.files;
+            handleFile(file);
+        }
+    });
+</script>
+{% endblock %}

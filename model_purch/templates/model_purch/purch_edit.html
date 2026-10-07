@@ -1,0 +1,455 @@
+{% extends 'model_purch/base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .formset-table th {
+        background: #f8f9fa;
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #495057;
+    }
+    .formset-table td { vertical-align: middle; }
+
+    .delete-row {
+        color: #dc3545;
+        cursor: pointer;
+        font-size: 1.2rem;
+        user-select: none;
+    }
+    .delete-row:hover { color: #a71d2a; }
+
+    .formset-row { transition: all 0.2s ease; }
+    .formset-row.marked-for-delete {
+        opacity: 0.5;
+        text-decoration: line-through;
+        background: #f8d7da !important;
+    }
+    .formset-row.new-row {
+        background: #f8fff8;
+    }
+
+    .percent-summary {
+        padding: 10px 15px;
+        border-radius: 6px;
+        font-weight: 600;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        transition: all 0.3s ease;
+    }
+    .percent-summary.valid {
+        background: #d1e7dd;
+        color: #0f5132;
+        border: 1px solid #badbcc;
+    }
+    .percent-summary.invalid {
+        background: #f8d7da;
+        color: #842029;
+        border: 1px solid #f5c2c7;
+        animation: shake 0.4s;
+    }
+    .percent-summary.warning {
+        background: #fff3cd;
+        color: #664d03;
+        border: 1px solid #ffe69c;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-4px); }
+        75% { transform: translateX(4px); }
+    }
+
+    .scenario-badge {
+        background-color: #e7f1ff;
+        color: #0d6efd;
+        padding: 8px 14px;
+        border-radius: 6px;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        border: 1px solid #b6d4fe;
+    }
+
+    .form-control:focus, .form-select:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-10">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h3 class="mb-0"><i class="bi bi-cart-check"></i> {{ title }}</h3>
+            <a href="{% url 'purch_list' %}{% if scenario %}?scenario={{ scenario.id }}{% endif %}"
+               class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left"></i> Назад к списку
+            </a>
+        </div>
+
+        {% if scenario %}
+        <div class="scenario-badge mb-3">
+            <i class="bi bi-clipboard-data"></i>
+            <span>Сценарий: <strong>{{ scenario.name }}</strong>
+                ({{ scenario.date_start_plan|date:"d.m.Y" }} — {{ scenario.date_end_plan|date:"d.m.Y" }})
+            </span>
+        </div>
+        {% endif %}
+
+        <form method="post" id="purchForm" novalidate>
+            {% csrf_token %}
+            {{ formset.management_form }}
+
+            <!-- Основная информация (БЕЗ поля Сценарий) -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-info-circle"></i> Основная информация</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <!-- Название (6 колонок) -->
+                        <div class="col-md-6">
+                            <label for="{{ form.name.id_for_label }}" class="form-label">
+                                {{ form.name.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.name }}
+                            {% if form.name.errors %}
+                                <div class="text-danger small mt-1">{{ form.name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Лаг доставки (3 колонки) -->
+                        <div class="col-md-3">
+                            <label for="{{ form.lag_income.id_for_label }}" class="form-label">
+                                {{ form.lag_income.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.lag_income }}
+                            {% if form.lag_income.errors %}
+                                <div class="text-danger small mt-1">{{ form.lag_income.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+
+                        <!-- Лаг производства (3 колонки) -->
+                        <div class="col-md-3">
+                            <label for="{{ form.lage_make.id_for_label }}" class="form-label">
+                                {{ form.lage_make.label }} <span class="text-danger">*</span>
+                            </label>
+                            {{ form.lage_make }}
+                            {% if form.lage_make.errors %}
+                                <div class="text-danger small mt-1">{{ form.lage_make.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Графики платежей -->
+            <div class="card mb-3">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <h5 class="mb-0">
+                        <i class="bi bi-cash-stack"></i> Графики платежей
+                        <span id="percentSummary" class="percent-summary warning ms-3" style="font-size: 0.9rem;">
+                            <i class="bi bi-calculator"></i> Итого: <span id="totalPercent">0</span>%
+                        </span>
+                    </h5>
+                    <button type="button" class="btn btn-light btn-sm" id="addRowBtn">
+                        <i class="bi bi-plus-lg"></i> Добавить платёж
+                    </button>
+                </div>
+                <div class="card-body p-0">
+                    <div class="table-responsive">
+                        <table class="table table-hover mb-0 formset-table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Название платежа</th>
+                                    <th style="width: 15%;">% оплаты</th>
+                                    <th style="width: 15%;">Лаг платежа (дней)</th>
+                                    <th style="width: 20%;">Вид лага платежа</th>
+                                    <th style="width: 20%; text-align: center;">Действия</th>
+                                </tr>
+                            </thead>
+                            <tbody id="formsetBody">
+                                {% for pay_form in formset %}
+                                    <tr class="formset-row {% if pay_form.instance.pk %}existing-row{% else %}new-row{% endif %}"
+                                        data-form-index="{{ forloop.counter0 }}">
+                                        {% for hidden in pay_form.hidden_fields %}{{ hidden }}{% endfor %}
+                                        <td>
+                                            {{ pay_form.name }}
+                                            {% if pay_form.name.errors %}
+                                                <div class="text-danger small">{{ pay_form.name.errors.0 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            <div class="input-group input-group-sm">
+                                                {{ pay_form.percent_pay }}
+                                                <span class="input-group-text">%</span>
+                                            </div>
+                                            {% if pay_form.percent_pay.errors %}
+                                                <div class="text-danger small">{{ pay_form.percent_pay.errors.0 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {{ pay_form.lag_day_pay }}
+                                            {% if pay_form.lag_day_pay.errors %}
+                                                <div class="text-danger small">{{ pay_form.lag_day_pay.errors.0 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {{ pay_form.kind_lag_pay }}
+                                            {% if pay_form.kind_lag_pay.errors %}
+                                                <div class="text-danger small">{{ pay_form.kind_lag_pay.errors.0 }}</div>
+                                            {% endif %}
+                                        </td>
+                                        <td class="text-center">
+                                            {% if pay_form.instance.pk %}
+                                                <label class="delete-row d-inline-flex align-items-center gap-1"
+                                                       title="Отметить на удаление">
+                                                    {{ pay_form.DELETE }}
+                                                    <i class="bi bi-trash"></i>
+                                                </label>
+                                            {% else %}
+                                                <button type="button" class="btn btn-sm btn-outline-danger remove-row"
+                                                        title="Убрать строку">
+                                                    <i class="bi bi-x-lg"></i>
+                                                </button>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                {% if formset.non_form_errors %}
+                    <div class="alert alert-danger m-3 mb-0">
+                        {{ formset.non_form_errors }}
+                    </div>
+                {% endif %}
+            </div>
+
+            <!-- Кнопки -->
+            <div class="d-flex justify-content-end gap-2">
+                <a href="{% url 'purch_list' %}{% if scenario %}?scenario={{ scenario.id }}{% endif %}"
+                   class="btn btn-outline-secondary">
+                    <i class="bi bi-x-lg"></i> Отмена
+                </a>
+                <button type="submit" class="btn btn-success" id="submitBtn">
+                    <i class="bi bi-check-lg"></i> Сохранить
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ШАБЛОН ПУСТОЙ СТРОКИ (скрыт, используется для клонирования) -->
+<template id="emptyRowTemplate">
+    <tr class="formset-row new-row" data-form-index="__INDEX__">
+        <td>
+            <input type="text" name="purchpay_set-__INDEX__-name" id="id_purchpay_set-__INDEX__-name" class="form-control form-control-sm" maxlength="255" placeholder="Название платежа">
+        </td>
+        <td>
+            <div class="input-group input-group-sm">
+                <input type="number" name="purchpay_set-__INDEX__-percent_pay" id="id_purchpay_set-__INDEX__-percent_pay" class="form-control form-control-sm" step="0.01" min="0" max="100">
+                <span class="input-group-text">%</span>
+            </div>
+        </td>
+        <td>
+            <input type="number" name="purchpay_set-__INDEX__-lag_day_pay" id="id_purchpay_set-__INDEX__-lag_day_pay" class="form-control form-control-sm" min="0">
+        </td>
+        <td>
+            <!-- Select будет заполнен опциями из существующих строк через JS -->
+            <select name="purchpay_set-__INDEX__-kind_lag_pay" id="id_purchpay_set-__INDEX__-kind_lag_pay" class="form-select form-select-sm">
+                <option value="">— Выберите вид —</option>
+            </select>
+        </td>
+        <td class="text-center">
+            <button type="button" class="btn btn-sm btn-outline-danger remove-row" title="Убрать строку">
+                <i class="bi bi-x-lg"></i>
+            </button>
+        </td>
+    </tr>
+</template>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const formsetBody = document.getElementById('formsetBody');
+    const addRowBtn = document.getElementById('addRowBtn');
+    const totalFormsInput = document.getElementById('id_purchpay_set-TOTAL_FORMS');
+    const totalPercentSpan = document.getElementById('totalPercent');
+    const percentSummary = document.getElementById('percentSummary');
+    const purchForm = document.getElementById('purchForm');
+    const emptyRowTemplate = document.getElementById('emptyRowTemplate');
+
+    const formsetPrefix = 'purchpay_set';
+
+    // ==================== ПОЛУЧЕНИЕ ОПЦИЙ SELECT "ВИД ЛАГА" ====================
+    // Берём опции из первого существующего select в таблице (Django их уже отрендерил)
+    function getKindLagPayOptions() {
+        const firstSelect = formsetBody.querySelector('select[name*="kind_lag_pay"]');
+        if (firstSelect) {
+            return firstSelect.innerHTML;
+        }
+        return '<option value="">— Выберите вид —</option>';
+    }
+
+    // ==================== ПЕРЕСЧЁТ СУММЫ ПРОЦЕНТОВ ====================
+    function recalcTotalPercent() {
+        let total = 0;
+        const rows = formsetBody.querySelectorAll('.formset-row');
+        rows.forEach(row => {
+            if (row.classList.contains('marked-for-delete')) return;
+
+            const percentInput = row.querySelector(`input[name*="${formsetPrefix}"][name*="percent_pay"]`);
+            if (percentInput && percentInput.value) {
+                const val = parseFloat(percentInput.value);
+                if (!isNaN(val)) total += val;
+            }
+        });
+
+        totalPercentSpan.textContent = total.toFixed(2);
+
+        percentSummary.classList.remove('valid', 'invalid', 'warning');
+        if (total === 100) {
+            percentSummary.classList.add('valid');
+            percentSummary.innerHTML = `<i class="bi bi-check-circle"></i> Итого: <span id="totalPercent">${total.toFixed(2)}</span>% ✓`;
+        } else if (total > 100) {
+            percentSummary.classList.add('invalid');
+            percentSummary.innerHTML = `<i class="bi bi-exclamation-triangle"></i> Итого: <span id="totalPercent">${total.toFixed(2)}</span>% (превышение!)`;
+        } else if (total > 0) {
+            percentSummary.classList.add('warning');
+            percentSummary.innerHTML = `<i class="bi bi-info-circle"></i> Итого: <span id="totalPercent">${total.toFixed(2)}</span>% (не хватает ${(100 - total).toFixed(2)}%)`;
+        } else {
+            percentSummary.classList.add('warning');
+            percentSummary.innerHTML = `<i class="bi bi-calculator"></i> Итого: <span id="totalPercent">0</span>%`;
+        }
+    }
+
+    // ==================== ПЕРЕНУМЕРАЦИЯ СТРОК ====================
+    function renumberRows() {
+        const rows = formsetBody.querySelectorAll('.formset-row');
+        rows.forEach((row, index) => {
+            row.dataset.formIndex = index;
+            row.querySelectorAll('input, select, textarea, label').forEach(el => {
+                const name = el.getAttribute('name');
+                const id = el.getAttribute('id');
+                const forAttr = el.getAttribute('for');
+
+                if (name) {
+                    el.setAttribute('name', name.replace(new RegExp(`${formsetPrefix}-\\d+`), `${formsetPrefix}-${index}`));
+                }
+                if (id) {
+                    el.setAttribute('id', id.replace(new RegExp(`${formsetPrefix}-\\d+`), `${formsetPrefix}-${index}`));
+                }
+                if (forAttr) {
+                    el.setAttribute('for', forAttr.replace(new RegExp(`${formsetPrefix}-\\d+`), `${formsetPrefix}-${index}`));
+                }
+            });
+        });
+        totalFormsInput.value = rows.length;
+        recalcTotalPercent();
+    }
+
+    // ==================== ДОБАВЛЕНИЕ НОВОЙ СТРОКИ ====================
+    addRowBtn.addEventListener('click', function() {
+        const rows = formsetBody.querySelectorAll('.formset-row');
+        const newIndex = rows.length;
+
+        let newRow;
+
+        if (rows.length > 0) {
+            const lastRow = rows[rows.length - 1];
+            newRow = lastRow.cloneNode(true);
+
+            // Очищаем значения полей
+            newRow.querySelectorAll('input, select, textarea').forEach(input => {
+                if (input.type === 'checkbox') {
+                    input.checked = false;
+                } else if (input.type !== 'hidden') {
+                    input.value = '';
+                }
+            });
+        } else {
+            // Если строк нет - используем шаблон
+            newRow = emptyRowTemplate.content.cloneNode(true).firstElementChild;
+            // Заполняем select опциями из существующих строк (или дефолтными)
+            const kindSelect = newRow.querySelector('select[name*="kind_lag_pay"]');
+            if (kindSelect) {
+                kindSelect.innerHTML = getKindLagPayOptions();
+            }
+        }
+
+        // Если клонировали существующую строку - нужно обновить select с опциями
+        const kindSelect = newRow.querySelector('select[name*="kind_lag_pay"]');
+        if (kindSelect && kindSelect.options.length <= 1) {
+            kindSelect.innerHTML = getKindLagPayOptions();
+        }
+
+        newRow.classList.remove('existing-row', 'marked-for-delete');
+        newRow.classList.add('new-row');
+        newRow.style.opacity = '1';
+        newRow.style.textDecoration = 'none';
+
+        const lastCell = newRow.querySelector('td:last-child');
+        lastCell.innerHTML = `<button type="button" class="btn btn-sm btn-outline-danger remove-row" title="Убрать строку"><i class="bi bi-x-lg"></i></button>`;
+
+        formsetBody.appendChild(newRow);
+        renumberRows();
+
+        const firstInput = newRow.querySelector('input:not([type="hidden"])');
+        if (firstInput) firstInput.focus();
+    });
+
+    // ==================== УДАЛЕНИЕ НОВОЙ СТРОКИ ====================
+    formsetBody.addEventListener('click', function(e) {
+        const removeBtn = e.target.closest('.remove-row');
+        if (removeBtn) {
+            const row = removeBtn.closest('tr');
+            row.remove();
+            renumberRows();
+        }
+    });
+
+    // ==================== ОТМЕТКА СУЩЕСТВУЮЩЕЙ СТРОКИ НА УДАЛЕНИЕ ====================
+    formsetBody.addEventListener('change', function(e) {
+        const deleteCheckbox = e.target.closest('.delete-row input[type="checkbox"]');
+        if (deleteCheckbox) {
+            const row = deleteCheckbox.closest('tr');
+            if (deleteCheckbox.checked) {
+                row.classList.add('marked-for-delete');
+            } else {
+                row.classList.remove('marked-for-delete');
+            }
+            recalcTotalPercent();
+        }
+    });
+
+    // ==================== ПЕРЕСЧЁТ ПРИ ИЗМЕНЕНИИ ПРОЦЕНТОВ ====================
+    formsetBody.addEventListener('input', function(e) {
+        if (e.target.name && e.target.name.includes('percent_pay')) {
+            recalcTotalPercent();
+        }
+    });
+
+    // ==================== ВАЛИДАЦИЯ ПЕРЕД ОТПРАВКОЙ ====================
+    purchForm.addEventListener('submit', function(e) {
+        const total = parseFloat(totalPercentSpan.textContent) || 0;
+        if (total !== 100 && total > 0) {
+            if (!confirm(`⚠️ Сумма процентов составляет ${total.toFixed(2)}% вместо 100%. Всё равно сохранить?`)) {
+                e.preventDefault();
+                return false;
+            }
+        }
+    });
+
+    recalcTotalPercent();
+});
+</script>
+{% endblock %}

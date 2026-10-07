@@ -1,0 +1,433 @@
+{% extends 'model_purch/base.html' %}
+{% load static %}
+
+{% block title %}Настройки закупок{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Стили для popover с графиком платежей */
+    .payment-popover .popover-body {
+        padding: 0;
+    }
+    .payment-popover .table {
+        margin: 0;
+        font-size: 0.85rem;
+    }
+    .payment-popover .table th {
+        background: #f8f9fa;
+        font-size: 0.8rem;
+        padding: 6px 8px;
+    }
+    .payment-popover .table td {
+        padding: 4px 8px;
+        vertical-align: middle;
+    }
+    .payment-popover .popover-header {
+        background: #198754;
+        color: white;
+        font-weight: 600;
+        padding: 8px 12px;
+    }
+
+    /* Индикатор суммы процентов */
+    .payment-count-badge {
+        cursor: pointer;
+        transition: all 0.2s ease;
+        position: relative;
+    }
+    .payment-count-badge:hover {
+        transform: scale(1.05);
+    }
+    .payment-count-badge.invalid {
+        background: #dc3545 !important;
+        animation: shake 0.5s;
+    }
+    .payment-count-badge.valid {
+        background: #198754 !important;
+    }
+    .payment-count-badge.warning {
+        background: #ffc107 !important;
+        color: #000 !important;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-3px); }
+        75% { transform: translateX(3px); }
+    }
+
+    /* Мини-превью платежей в ячейке */
+    .payment-preview {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 2px;
+    }
+    .payment-preview .badge {
+        font-size: 0.7rem;
+        margin-right: 2px;
+    }
+
+    /* Стили для селектора сценария */
+    .scenario-selector {
+        max-width: 350px;
+    }
+    .scenario-selector .form-select {
+        font-size: 0.9rem;
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+    }
+    .scenario-selector .form-select:focus {
+        border-color: #0d6efd;
+        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    }
+    .scenario-info {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Красивая шапка страницы -->
+<div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="page-title">
+            <h2 class="mb-1">
+                <i class="bi bi-gear-fill text-primary"></i>
+                Настройки закупок
+            </h2>
+            <p class="text-muted mb-0 small">
+                Управление закупками и графиками платежей
+            </p>
+        </div>
+
+        <div class="page-actions d-flex gap-2">
+            <a href="{% url 'purch_create' %}?scenario={{ current_scenario.id }}"
+               class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Создать закупку
+            </a>
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#copyPurchModal">
+                <i class="bi bi-files"></i> Копировать из сценария
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-left: 4px solid #0d6efd;
+}
+
+.page-title h2 {
+    font-weight: 600;
+    color: #212529;
+    font-size: 1.5rem;
+}
+
+.page-title h2 i {
+    margin-right: 8px;
+}
+
+.page-actions .btn {
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.page-actions .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.page-actions .btn-primary {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    border: none;
+}
+
+.page-actions .btn-outline-primary {
+    border: 2px solid #0d6efd;
+    color: #0d6efd;
+}
+
+.page-actions .btn-outline-primary:hover {
+    background: #0d6efd;
+    color: white;
+}
+</style>
+
+
+<style>
+.scenario-badge {
+    background: linear-gradient(135deg, #e7f1ff 0%, #f8f9fa 100%);
+    padding: 16px 20px;
+    border-radius: 10px;
+    border: 1px solid #b6d4fe;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.scenario-badge i {
+    font-size: 1.5rem;
+}
+</style>
+
+
+{% if current_scenario %}
+    <div class="card shadow-sm">
+        <!-- === ДОБАВЛЕНО: Шапка карточки с поиском === -->
+        <div class="card-header bg-white border-bottom py-3">
+            <div class="row align-items-center g-3">
+                <div class="col-md-6">
+                    <h5 class="mb-0 text-secondary">
+                        <i class="bi bi-list-ul"></i> Список поставщиков
+                    </h5>
+                </div>
+                <div class="col-md-6">
+                    <div class="input-group">
+                        <span class="input-group-text bg-light border-end-0">
+                            <i class="bi bi-search text-muted"></i>
+                        </span>
+                        <input type="text"
+                               id="purchSearchInput"
+                               class="form-control border-start-0"
+                               placeholder="Поиск по названию закупки..."
+                               onkeyup="filterPurchTable()"
+                               autocomplete="off">
+                        <button class="btn btn-outline-secondary border-start-0"
+                                type="button"
+                                onclick="clearPurchSearch()"
+                                title="Очистить поиск">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- === КОНЕЦ ДОБАВЛЕНИЯ === -->
+
+        <div class="table-responsive">
+            <!-- Добавлен id="purchTable" для удобства поиска -->
+            <table class="table table-hover mb-0" id="purchTable">
+                <thead>
+                    <tr>
+                        <th style="width: 50px;">#</th>
+                        <th>Название закупки</th>
+                        <th style="width: 150px;">Лаг доставки (дней)</th>
+                        <th style="width: 200px;">График платежей</th>
+                        <th style="width: 150px;" class="text-center">Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for purch in purch_list %}
+                        <tr>
+                            <td class="text-muted">{{ purch.id }}</td>
+                            <td><strong>{{ purch.name }}</strong></td>
+                            <td>
+                                <span class="badge bg-secondary">{{ purch.lag_income }}</span>
+                            </td>
+                            <td>
+                                {% with payments=purch.purchpay_set.all %}
+                                    {% if payments %}
+                                        <!-- Кликабельный бейдж с количеством -->
+                                        <span class="badge payment-count-badge
+                                                     {% if purch.total_percent == 100 %}valid
+                                                     {% elif purch.total_percent > 100 %}invalid
+                                                     {% else %}warning{% endif %}"
+                                              data-bs-toggle="popover"
+                                              data-bs-placement="right"
+                                              data-bs-html="true"
+                                              title="<i class='bi bi-cash-stack'></i> График платежей: {{ purch.name }}"
+                                              data-bs-content="
+                                                <table class='table table-sm mb-0'>
+                                                  <thead>
+                                                    <tr>
+                                                      <th>Платёж</th>
+                                                      <th class='text-end'>%</th>
+                                                      <th class='text-end'>Лаг</th>
+                                                    </tr>
+                                                  </thead>
+                                                  <tbody>
+                                                    {% for pay in payments %}
+                                                    <tr>
+                                                      <td>{{ pay.name }}</td>
+                                                      <td class='text-end'><strong>{{ pay.percent_pay }}%</strong></td>
+                                                      <td class='text-end'>{{ pay.lag_day_pay }} дн.</td>
+                                                    </tr>
+                                                    {% endfor %}
+                                                  </tbody>
+                                                  <tfoot>
+                                                    <tr class='table-light'>
+                                                      <td><strong>Итого:</strong></td>
+                                                      <td class='text-end'><strong>{{ purch.total_percent }}%</strong></td>
+                                                      <td></td>
+                                                    </tr>
+                                                  </tfoot>
+                                                </table>
+                                                {% if purch.total_percent != 100 %}
+                                                <div class='alert alert-warning py-1 mb-0 mt-2 small'>
+                                                  <i class='bi bi-exclamation-triangle'></i> Сумма ≠ 100%
+                                                </div>
+                                                {% endif %}
+                                              ">
+                                            <i class="bi bi-list-check"></i> {{ payments|length }} плат.
+                                        </span>
+
+                                        <!-- Мини-превью первых 3 платежей -->
+                                        <div class="payment-preview">
+                                            {% for pay in payments|slice:":3" %}
+                                                <span class="badge bg-light text-dark border">
+                                                    {{ pay.percent_pay }}%
+                                                </span>
+                                            {% endfor %}
+                                            {% if payments|length > 3 %}
+                                                <span class="badge bg-light text-muted">+{{ payments|length|add:"-3" }}</span>
+                                            {% endif %}
+                                        </div>
+                                    {% else %}
+                                        <span class="text-muted small">
+                                            <i class="bi bi-dash-circle"></i> Нет платежей
+                                        </span>
+                                    {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td class="text-center">
+    <a href="{% url 'purch_edit' purch.id %}?scenario={{ current_scenario.id }}"
+       class="btn btn-sm btn-outline-primary" title="Редактировать">
+        <i class="bi bi-pencil"></i>
+    </a>
+    <form method="post"
+          action="{% url 'purch_delete' purch.id %}?scenario={{ current_scenario.id }}"
+          class="d-inline"
+          onsubmit="return confirm('Удалить закупку «{{ purch.name }}»?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
+            <i class="bi bi-trash"></i>
+        </button>
+    </form>
+</td>
+                        </tr>
+                    {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center text-muted py-4">
+                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                Для сценария «{{ current_scenario.name }}» закупок ещё не создано.
+                                <br>
+                                <a href="{% url 'purch_create' %}?scenario={{ current_scenario.id }}" class="btn btn-sm btn-primary mt-2">
+                                    <i class="bi bi-plus-lg"></i> Создать первую закупку
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}
+
+<div class="modal fade" id="copyPurchModal" tabindex="-1" aria-labelledby="copyPurchModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'copy_purch_from_scenario' %}">
+                {% csrf_token %}
+                <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="copyPurchModalLabel"><i class="bi bi-files"></i> Копирование закупок</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Выберите сценарий, из которого нужно скопировать закупки и графики платежей в текущий сценарий
+                        "<strong>{{ current_scenario.name }}</strong>".
+                        <br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Существующие закупки с такими же именами будут обновлены.</span>
+                    </p>
+                    <label class="form-label fw-semibold">Сценарий-источник:</label>
+                    <select name="source_scenario_id" class="form-select" required>
+                        <option value="" disabled selected>Выберите сценарий...</option>
+                        {% for sc in scenarios %}
+                            {% if sc.id != current_scenario.id %}
+                                <option value="{{ sc.id }}">{{ sc.name }} ({{ sc.date_start_plan|date:"d.m.Y" }})</option>
+                            {% endif %}
+                        {% empty %}
+                            <option disabled>Других сценариев нет</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary" id="confirmCopyPurchBtn" disabled>
+                        <i class="bi bi-check-lg"></i> Скопировать
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Функция смены сценария
+function changeScenario(scenarioId) {
+    if (scenarioId) {
+        // Перезагружаем страницу с выбранным сценарием
+        window.location.href = '?scenario=' + scenarioId;
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Инициализация popover для всех бейджей с графиком платежей
+    const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
+    const popoverList = [...popoverTriggerList].map(popoverTriggerEl =>
+        new bootstrap.Popover(popoverTriggerEl, {
+            trigger: 'click',
+            container: 'body',
+            sanitize: false  // Разрешаем HTML в popover
+        })
+    );
+
+    // Закрываем popover при клике вне его
+    document.addEventListener('click', function(e) {
+        if (!e.target.closest('[data-bs-toggle="popover"]')) {
+            popoverList.forEach(popover => popover.hide());
+        }
+    });
+});
+    // Функция фильтрации таблицы
+function filterPurchTable() {
+    const input = document.getElementById('purchSearchInput');
+    const filter = input.value.toLowerCase().trim();
+    const table = document.getElementById('purchTable');
+    const tr = table.getElementsByTagName('tr');
+
+    // Начинаем с 1, чтобы пропустить строку заголовка (<thead>)
+    for (let i = 1; i < tr.length; i++) {
+
+        const tdName = tr[i].getElementsByTagName('td')[1]; // Индекс 1 = "Название закупки"
+
+        if (tdName) {
+            const txtValue = tdName.textContent || tdName.innerText;
+            if (txtValue.toLowerCase().indexOf(filter) > -1) {
+                tr[i].style.display = ""; // Показываем
+            } else {
+                tr[i].style.display = "none"; // Скрываем
+            }
+        }
+    }
+}
+
+// Функция очистки поиска
+function clearPurchSearch() {
+    const input = document.getElementById('purchSearchInput');
+    input.value = '';
+    filterPurchTable(); // Сбрасываем фильтр
+    input.focus();      // Возвращаем фокус в поле
+}
+</script>
+{% endblock %}

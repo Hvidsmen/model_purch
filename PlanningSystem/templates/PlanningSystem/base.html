@@ -1,0 +1,73 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <!-- this line add Bootstrap CSS -->
+    <link rel="stylesheet" href="{% static 'bootstrap-5.0.2-dist/css/bootstrap.min.css' %}">
+    <title>
+        {% block title %}
+        {% endblock title %}
+    </title>
+</head>
+<body>
+<br>
+<!--header-->
+<div class="container">
+    <div class="row">
+        <div class="col-1">
+            <button class="btn btn-light">
+                <a href="{% url 'index_base' %}">
+                    <img src="{% static 'img/home.png' %}" class="img-fluid" style="font-size: 0.9em">
+                </a>
+            </button>
+        </div>
+        <div class="col-2">
+            <button class="btn btn-light">
+                <a href="{% url 'load_plan_chanel' %}"
+                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
+                    Загрузка плана по каналам продаж
+                </a>
+            </button>
+        </div>
+        <div class="col-2">
+            <button class="btn btn-light">
+                <a href="{% url 'load_percentage_subdivision' %}"
+                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
+                    Загрузки процентов по филиалам
+                </a>
+            </button>
+        </div>
+        <div class="col-2">
+            <button class="btn btn-light">
+                <a href="{% url 'split_model' %}"
+                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
+                    Загрузки деления по моделям
+                </a>
+            </button>
+        </div>
+         <div class="col-2">
+            <button class="btn btn-light">
+                <a href="{% url 'load_percentage_subdivision' %}"
+                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
+                    Загрузки деления сезонности
+                </a>
+            </button>
+        </div>
+
+    </div>
+</div>
+
+{% block content %}
+{% endblock content %}
+
+<!-- these lines adds Bootstrap JS files to our Django project -->
+<script src="{% static 'jquery/jquery-3.7.1.min.js' %}"></script>
+
+<script src="{% static 'jquery/popper.min.js' %}"></script>
+<script src="{% static 'bootstrap-5.0.2-dist/js/bootstrap.min.js' %}"></script>
+</body>
+</html>

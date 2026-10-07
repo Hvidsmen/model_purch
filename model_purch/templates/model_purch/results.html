@@ -1,0 +1,567 @@
+{% extends 'model_purch/base.html' %}
+
+{% block title %}Расчет модели закупок{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-left: 4px solid #0d6efd;
+        margin-bottom: 24px;
+    }
+
+    .page-title h2 {
+        font-weight: 600;
+        color: #212529;
+        font-size: 1.5rem;
+        margin-bottom: 4px;
+    }
+
+    .page-title h2 i {
+        margin-right: 8px;
+    }
+
+    .page-title p {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
+    .step-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 16px;
+        border-left: 4px solid #dee2e6;
+        transition: all 0.3s ease;
+    }
+
+    .step-card.pending {
+        border-left-color: #6c757d;
+        opacity: 0.6;
+    }
+
+    .step-card.running {
+        border-left-color: #ffc107;
+        background: linear-gradient(135deg, #fff9e6 0%, #ffffff 100%);
+        animation: pulse-border 2s infinite;
+    }
+
+    .step-card.completed {
+        border-left-color: #198754;
+        background: #f8fff8;
+    }
+
+    .step-card.failed {
+        border-left-color: #dc3545;
+        background: #fff5f5;
+    }
+
+    @keyframes pulse-border {
+        0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+        50% { box-shadow: 0 4px 16px rgba(255, 193, 7, 0.3); }
+    }
+
+    .step-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 12px;
+    }
+
+    .step-number {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #e9ecef;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 1.2rem;
+        color: #6c757d;
+    }
+
+    .step-card.completed .step-number {
+        background: #198754;
+        color: white;
+    }
+
+    .step-card.running .step-number {
+        background: #ffc107;
+        color: #000;
+        animation: spin 2s linear infinite;
+    }
+
+    .step-card.failed .step-number {
+        background: #dc3545;
+        color: white;
+    }
+
+    @keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .step-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        color: #212529;
+        flex: 1;
+        margin-left: 16px;
+    }
+
+    .step-status {
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+
+    .step-status.pending {
+        background: #e9ecef;
+        color: #6c757d;
+    }
+
+    .step-status.running {
+        background: #fff3cd;
+        color: #856404;
+    }
+
+    .step-status.completed {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .step-status.failed {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .step-description {
+        color: #6c757d;
+        font-size: 0.9rem;
+        margin-bottom: 8px;
+    }
+
+    .step-result {
+        background: #f8f9fa;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 0.85rem;
+        margin-top: 12px;
+    }
+
+    .step-result.success {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .step-result.error {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .step-duration {
+        font-size: 0.85rem;
+        color: #6c757d;
+        margin-top: 8px;
+    }
+
+    .progress-container {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 24px;
+    }
+
+    .progress {
+        height: 12px;
+        border-radius: 6px;
+        background-color: #e9ecef;
+    }
+
+    .progress-bar {
+        background: linear-gradient(90deg, #0d6efd, #0dcaf0);
+        transition: width 0.5s ease;
+    }
+
+    .control-panel {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 24px;
+        text-align: center;
+    }
+
+    .btn-execute {
+        padding: 12px 32px;
+        font-size: 1.1rem;
+        font-weight: 600;
+        border-radius: 8px;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .empty-state i {
+        font-size: 48px;
+        color: #dee2e6;
+        margin-bottom: 16px;
+    }
+
+    .empty-state h5 {
+        color: #6c757d;
+        margin-bottom: 8px;
+    }
+
+    .empty-state p {
+        color: #adb5bd;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="page-title">
+            <h2 class="mb-1">
+                <i class="bi bi-gear-wide-connected text-primary"></i>
+                Расчет модели закупок
+            </h2>
+            <p class="text-muted mb-0 small">
+                Выполнение алгоритма с фиксацией состояния каждого шага
+            </p>
+        </div>
+        <div class="page-actions">
+            <button class="btn btn-outline-primary" onclick="location.reload()">
+                <i class="bi bi-arrow-clockwise"></i> Обновить
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Панель управления -->
+<div class="control-panel" id="controlPanel">
+    <div id="startSection">
+        <h5 class="mb-3">Запуск расчета</h5>
+        <p class="text-muted mb-4">
+            Нажмите кнопку ниже, чтобы запустить алгоритм расчета.
+            Все шаги будут выполнены последовательно с фиксацией их состояния.
+        </p>
+        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()">
+            <i class="bi bi-play-fill"></i> Запустить
+        </button>
+    </div>
+
+    <div id="executionSection" style="display: none;">
+        <h5 class="mb-3">
+            Выполнение алгоритма <span id="runId" class="badge bg-primary"></span>
+        </h5>
+        <p class="text-muted mb-3" id="autoStatusText">
+            <span class="spinner-border spinner-border-sm text-warning me-1"></span>
+            Шаги выполняются автоматически...
+        </p>
+        <div class="d-flex justify-content-center gap-3">
+            <button class="btn btn-success btn-execute" id="btnExecuteNext" onclick="executeNextStep()" disabled>
+                <i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг
+            </button>
+            <button class="btn btn-outline-danger btn-execute" id="btnStop" onclick="stopAutoExecute()" style="display: none;">
+                <i class="bi bi-stop-fill"></i> Остановить
+            </button>
+        </div>
+        <div class="mt-3">
+            <small class="text-muted">
+                Пауза между шагами:
+                <select class="form-select form-select-sm d-inline-block w-auto ms-1" onchange="autoSpeed = parseInt(this.value)">
+                    <option value="1500">1.5 сек</option>
+                    <option value="800" selected>0.8 сек</option>
+                    <option value="300">0.3 сек</option>
+                    <option value="0">Без паузы</option>
+                </select>
+            </small>
+        </div>
+    </div>
+
+    <div id="completedSection" style="display: none;">
+        <h5 class="mb-3 text-success">
+            <i class="bi bi-check-circle-fill"></i> Алгоритм полностью выполнен!
+        </h5>
+        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()">
+            <i class="bi bi-arrow-repeat"></i> Запустить заново
+        </button>
+    </div>
+</div>
+
+<!-- Прогресс-бар -->
+<div class="progress-container" id="progressContainer" style="display: none;">
+    <div class="d-flex justify-content-between mb-2">
+        <span class="fw-semibold">Прогресс выполнения</span>
+        <span class="text-muted" id="progressText">0 из 0 шагов</span>
+    </div>
+    <div class="progress">
+        <div class="progress-bar" id="progressBar" role="progressbar" style="width: 0%"></div>
+    </div>
+</div>
+
+<!-- Список шагов -->
+<div id="stepsContainer"></div>
+
+<!-- Пустое состояние -->
+<div class="empty-state" id="emptyState">
+    <i class="bi bi-diagram-3"></i>
+    <h5>Алгоритм не запущен</h5>
+    <p>Запустите алгоритм, чтобы увидеть пошаговое выполнение</p>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    let currentRunId = null;
+    let isAutoRunning = false;
+    let autoSpeed = 800;
+
+    // ===================================================================
+    // ЗАПУСК НОВОГО АЛГОРИТМА
+    // ===================================================================
+    async function startAlgorithm() {
+        try {
+            const response = await fetch("{% url 'start_algorithm_api' %}", {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            if (!response.ok) throw new Error('Ошибка запуска');
+
+            const data = await response.json();
+            currentRunId = data.run_id;
+
+            document.getElementById('startSection').style.display = 'none';
+            document.getElementById('executionSection').style.display = 'block';
+            document.getElementById('completedSection').style.display = 'none';
+            document.getElementById('runId').innerText = `#${currentRunId}`;
+            document.getElementById('progressContainer').style.display = 'block';
+            document.getElementById('emptyState').style.display = 'none';
+
+            await loadAlgorithmStatus();
+            autoExecuteAll();
+
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+        }
+    }
+
+    // ===================================================================
+    // АВТОМАТИЧЕСКОЕ ВЫПОЛНЕНИЕ ВСЕХ ШАГОВ ПОДРЯД
+    // ===================================================================
+    async function autoExecuteAll() {
+        isAutoRunning = true;
+
+        const btn = document.getElementById('btnExecuteNext');
+        const btnStop = document.getElementById('btnStop');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Автовыполнение...';
+        btnStop.style.display = 'inline-block';
+
+        while (isAutoRunning && currentRunId) {
+            try {
+                const response = await fetch(
+                    `/model_purch/api/algorithm/${currentRunId}/execute-next/`,
+                    {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' }
+                    }
+                );
+
+                const data = await response.json();
+                await loadAlgorithmStatus();
+
+                if (data.finished) {
+                    showCompleted();
+                    break;
+                }
+
+                if (!data.success) {
+                    showFailed(data.error);
+                    break;
+                }
+
+                await sleep(autoSpeed);
+
+            } catch (error) {
+                console.error('Ошибка автовыполнения:', error);
+                showFailed(error.message);
+                break;
+            }
+        }
+
+        isAutoRunning = false;
+    }
+
+    // ===================================================================
+    // ОСТАНОВКА АВТОВЫПОЛНЕНИЯ
+    // ===================================================================
+    function stopAutoExecute() {
+        isAutoRunning = false;
+        const btn = document.getElementById('btnExecuteNext');
+        const btnStop = document.getElementById('btnStop');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Продолжить вручную';
+        btnStop.style.display = 'none';
+    }
+
+    // ===================================================================
+    // РУЧНОЕ ВЫПОЛНЕНИЕ ОДНОГО ШАГА
+    // ===================================================================
+    async function executeNextStep() {
+        if (!currentRunId) return;
+
+        const btn = document.getElementById('btnExecuteNext');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Выполняется...';
+
+        try {
+            const response = await fetch(
+                `/model_purch/api/algorithm/${currentRunId}/execute-next/`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                }
+            );
+            const data = await response.json();
+            await loadAlgorithmStatus();
+
+            if (data.finished) {
+                showCompleted();
+            } else if (!data.success) {
+                showFailed(data.error);
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
+            }
+        } catch (error) {
+            alert('Ошибка: ' + error.message);
+            btn.disabled = false;
+            btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
+        }
+    }
+
+    // ===================================================================
+    // СОСТОЯНИЯ ИНТЕРФЕЙСА
+    // ===================================================================
+    function showCompleted() {
+        document.getElementById('executionSection').style.display = 'none';
+        document.getElementById('completedSection').style.display = 'block';
+    }
+
+    function showFailed(errorMsg) {
+        const btn = document.getElementById('btnExecuteNext');
+        btn.disabled = false;
+        btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
+        document.getElementById('btnStop').style.display = 'none';
+
+        const container = document.getElementById('stepsContainer');
+        const alertDiv = document.createElement('div');
+        alertDiv.className = 'alert alert-danger mt-3';
+        alertDiv.innerHTML = `
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <strong>Алгоритм остановлен из-за ошибки:</strong> ${escapeHtml(errorMsg)}
+        `;
+        container.prepend(alertDiv);
+    }
+
+    // ===================================================================
+    // ЗАГРУЗКА СОСТОЯНИЯ И ОТРИСОВКА
+    // ===================================================================
+    async function loadAlgorithmStatus() {
+        if (!currentRunId) return;
+        try {
+            const response = await fetch(`/model_purch/api/algorithm/${currentRunId}/status/`);
+            if (!response.ok) throw new Error('Ошибка загрузки статуса');
+            const data = await response.json();
+            renderSteps(data.steps);
+            updateProgress(data.progress);
+        } catch (error) {
+            console.error('Ошибка:', error);
+        }
+    }
+
+    function renderSteps(steps) {
+        const container = document.getElementById('stepsContainer');
+        container.innerHTML = '';
+
+        steps.forEach(step => {
+            const card = document.createElement('div');
+            card.className = `step-card ${step.status}`;
+
+            let statusText = '';
+            switch (step.status) {
+                case 'pending':   statusText = 'Ожидает'; break;
+                case 'running':   statusText = 'Выполняется...'; break;
+                case 'completed': statusText = 'Завершено'; break;
+                case 'failed':    statusText = 'Ошибка'; break;
+            }
+
+            let iconContent = step.order;
+            if (step.status === 'completed') iconContent = '✓';
+            if (step.status === 'failed')    iconContent = '✕';
+            if (step.status === 'running')   iconContent = '⟳';
+
+            let resultHtml = '';
+            if (step.result && step.status === 'completed') {
+                resultHtml = `<div class="step-result success"><strong>Результат:</strong> ${escapeHtml(step.result)}</div>`;
+            } else if (step.error_message && step.status === 'failed') {
+                resultHtml = `<div class="step-result error"><strong>Ошибка:</strong> ${escapeHtml(step.error_message)}</div>`;
+            }
+
+            let durationHtml = '';
+            if (step.duration_seconds) {
+                durationHtml = `<div class="step-duration"><i class="bi bi-clock"></i> Выполнено за ${step.duration_seconds.toFixed(2)} сек.</div>`;
+            }
+
+            card.innerHTML = `
+                <div class="step-header">
+                    <div class="step-number">${iconContent}</div>
+                    <div class="step-title">${escapeHtml(step.name)}</div>
+                    <div class="step-status ${step.status}">${statusText}</div>
+                </div>
+                <div class="step-description">${escapeHtml(step.description || '')}</div>
+                ${resultHtml}
+                ${durationHtml}
+            `;
+            container.appendChild(card);
+        });
+    }
+
+    function updateProgress(progress) {
+        const percent = progress.total > 0 ? (progress.completed / progress.total) * 100 : 0;
+        document.getElementById('progressBar').style.width = `${percent}%`;
+        document.getElementById('progressText').innerText = `${progress.completed} из ${progress.total} шагов`;
+    }
+
+    // ===================================================================
+    // УТИЛИТЫ
+    // ===================================================================
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function escapeHtml(text) {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+</script>
+{% endblock %}

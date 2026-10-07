@@ -1,0 +1,282 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="{% static 'bootstrap-5.0.2-dist/css/bootstrap.min.css' %}">
+    <link rel="stylesheet" href="{% static 'coreui-5.8.0-dist/css/coreui.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/main.css' %}">
+
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 0;
+            margin: 0;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 20px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            max-width: 1400px;
+            margin: 20px auto;
+        }
+
+        .header-brand {
+            font-size: 22px;
+            font-weight: 700;
+            color: #2d3748;
+            text-decoration: none;
+            transition: color 0.3s ease;
+        }
+
+        .header-brand:hover {
+            color: #667eea;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 8px;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            align-items: center;
+        }
+
+        .nav-item {
+            margin: 0;
+        }
+
+        .nav-link {
+            padding: 10px 20px;
+            color: #4a5568;
+            text-decoration: none;
+            font-size: 15px;
+            font-weight: 500;
+            border-radius: 8px;
+            transition: all 0.3s ease;
+            display: inline-block;
+            background: transparent;
+        }
+
+        .nav-link:hover {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white !important;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .content-wrapper {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 20px 40px 20px;
+        }
+
+        /* ================= КАСТОМНЫЙ DROPDOWN (без конфликтов с Bootstrap) ================= */
+
+        .custom-dropdown {
+            position: relative;
+        }
+
+        .custom-dropdown-toggle {
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .custom-dropdown-toggle svg {
+            transition: transform 0.3s ease;
+        }
+
+        .custom-dropdown:hover .custom-dropdown-toggle svg {
+            transform: rotate(180deg);
+        }
+
+        .custom-dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            margin-top: 12px;
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            border: 1px solid #e2e8f0;
+            min-width: 240px;
+            padding: 8px 0;
+            list-style: none;
+
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(10px);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 1000;
+        }
+
+        .custom-dropdown:hover .custom-dropdown-menu {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .custom-dropdown-item {
+            display: block;
+            padding: 10px 16px;
+            color: #4a5568;
+            font-size: 14px;
+            font-weight: 500;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            border-left: 3px solid transparent;
+        }
+
+        .custom-dropdown-item:hover {
+            background: #f7fafc;
+            color: #667eea;
+            border-left-color: #667eea;
+            padding-left: 20px;
+        }
+
+        .custom-dropdown-item.active-sub {
+            background: #ebf4ff;
+            color: #667eea;
+            border-left-color: #667eea;
+            font-weight: 600;
+        }
+
+        .custom-dropdown-divider {
+            border-top: 1px solid #e2e8f0;
+            margin: 6px 0;
+        }
+
+        .custom-dropdown-item.text-muted {
+            cursor: default;
+            padding-left: 16px;
+        }
+
+        .custom-dropdown-item.text-muted:hover {
+            background: transparent;
+            color: #a0aec0;
+            border-left-color: transparent;
+            padding-left: 16px;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                padding: 20px;
+                margin: 10px;
+            }
+
+            .header-brand {
+                font-size: 18px;
+                text-align: center;
+            }
+
+            .header-nav {
+                flex-direction: column;
+                width: 100%;
+                gap: 8px;
+            }
+
+            .nav-link {
+                width: 100%;
+                text-align: center;
+                padding: 12px;
+            }
+
+            .content-wrapper {
+                padding: 0 10px 20px 10px;
+            }
+        }
+    </style>
+
+    <title>
+        {% block title %}
+        {% endblock title %}
+    </title>
+</head>
+<body>
+<header class="header">
+    <a class="header-brand" href="#">Панель администрирования мотивации</a>
+    <ul class="header-nav">
+
+        <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.url_name == 'global_coeff_admin_motivation' or request.resolver_match.url_name == 'gb_act' %}active{% endif %}"
+               href="{% url 'global_coeff_admin_motivation' %}">
+                Глобальные коэффициенты
+            </a>
+        </li>
+
+        <!-- Кастомный выпадающий список подразделений -->
+        <li class="nav-item custom-dropdown">
+            <a class="nav-link custom-dropdown-toggle {% if 'coeff_subdivisions' in request.resolver_match.url_name or request.GET.subdivision or 'sub_act' in request.resolver_match.url_name %}active{% endif %}"
+               href="#" role="button">
+                Коэффициенты по подразделениям
+                <svg width="10" height="6" viewBox="0 0 10 6" fill="none"
+                     style="margin-left: 6px; vertical-align: middle;">
+                    <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                          stroke-linejoin="round"/>
+                </svg>
+            </a>
+            <ul class="custom-dropdown-menu">
+                <li>
+                    <a class="custom-dropdown-item" href="#">
+                        <strong>Подразделения</strong>
+                    </a>
+                </li>
+                <li>
+                    <hr class="custom-dropdown-divider">
+                </li>
+
+                {% for sub in subdivisions %}
+                <li>
+                    <a class="custom-dropdown-item {% if request.GET.subdivision == sub.id|stringformat:'s' %}active-sub{% endif %}"
+                       href="{% url 'coeff_subdivisions_admin_motivation' sub.id %}">
+                        {{ sub }}
+                    </a>
+                </li>
+                {% empty %}
+                <li>
+                    <span class="custom-dropdown-item text-muted" style="font-style: italic; font-size: 12px;">
+                        Подразделения не найдены
+                    </span>
+                </li>
+                {% endfor %}
+            </ul>
+        </li>
+         <li class="nav-item">
+            <a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}"
+               href="{% url 'loader_motive' %}">
+                Применить настройки к расчету
+            </a>
+        </li>
+    </ul>
+</header>
+
+<div class="content-wrapper">
+    {% block content %}
+    {% endblock content %}
+</div>
+
+<script src="{% static 'jquery/jquery-3.7.1.min.js' %}"></script>
+<script src="{% static 'jquery/popper.min.js' %}"></script>
+<script src="{% static 'bootstrap-5.0.2-dist/js/bootstrap.min.js' %}"></script>
+<script src="{% static 'coreui-5.8.0-dist/js/coreui.bundle.min.js' %}"></script>
+
+</body>
+</html>

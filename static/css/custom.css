@@ -1,0 +1,39 @@
+<style>
+    /* Заголовки таблицы */
+    .table thead th {
+        background: #f8f9fa;
+        white-space: nowrap;
+        vertical-align: middle;
+        font-size: 0.85rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: #495057;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    /* Ссылка сортировки */
+    .sort-link {
+        color: inherit;
+        transition: color 0.15s ease-in-out;
+        user-select: none;
+    }
+    .sort-link:hover {
+        color: #0d6efd !important;
+    }
+    .sort-link:hover i {
+        opacity: 1 !important;
+        color: #0d6efd !important;
+    }
+
+    /* Индикатор текущей сортировки */
+    .sort-link .bi-caret-up-fill,
+    .sort-link .bi-caret-down-fill {
+        font-size: 0.9rem;
+    }
+
+    /* Серая "призрачная" стрелка для неактивных колонок */
+    .sort-link .bi-caret-up:not(.active) {
+        font-size: 0.75rem;
+    }
+</style>

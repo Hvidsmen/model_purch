@@ -1,0 +1,29 @@
+{% extends 'base/base.html' %}
+
+{% load crispy_forms_tags %}
+{% block content %}
+
+<div class="container">
+    <div class="row">
+        <div class="col">
+            <button class="btn btn-light">
+                <a href="{% url 'index' %}"
+                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
+                    <h3>Система планирования</h3>
+                </a>
+            </button>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <button class="btn btn-light">
+                <a href="{% url 're_index' %}"
+                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
+                    <h3>Изменение таблиц DWH</h3>
+                </a>
+            </button>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

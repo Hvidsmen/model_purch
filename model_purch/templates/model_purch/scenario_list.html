@@ -1,0 +1,361 @@
+{% extends 'model_purch/base.html' %}
+
+{% block title %}Сценарии планирования{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* Стили шапки страницы */
+    .page-header {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-left: 4px solid #0d6efd;
+        margin-bottom: 24px;
+    }
+
+    .page-title h2 {
+        font-weight: 600;
+        color: #212529;
+        font-size: 1.5rem;
+        margin-bottom: 4px;
+    }
+
+    .page-title h2 i {
+        margin-right: 8px;
+    }
+
+    .page-title p {
+        color: #6c757d;
+        font-size: 0.875rem;
+        margin: 0;
+    }
+
+    .page-actions .btn {
+        font-weight: 500;
+        padding: 8px 16px;
+        border-radius: 8px;
+        transition: all 0.2s ease;
+    }
+
+    .page-actions .btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+
+    .page-actions .btn-primary {
+        background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+        border: none;
+    }
+
+    .page-actions .btn-primary:hover {
+        background: linear-gradient(135deg, #0a58ca 0%, #084298 100%);
+    }
+
+    /* Стили таблицы сценариев */
+    .table-scenarios {
+        font-size: 0.85rem;
+        background: white;
+        border-collapse: separate;
+        border-spacing: 0;
+        width: 100%;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .table-scenarios thead th {
+        background: #f8f9fa;
+        border-bottom: 2px solid #dee2e6;
+        border-top: 1px solid #dee2e6;
+        padding: 12px 8px;
+        font-weight: 600;
+        color: #495057;
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+
+    .table-scenarios tbody tr {
+        border-bottom: 1px solid #dee2e6;
+        transition: background-color 0.2s;
+    }
+
+    .table-scenarios tbody tr:hover {
+        background-color: #f8f9fa;
+    }
+
+    .table-scenarios tbody tr:nth-child(even) {
+        background-color: #fafbfc;
+    }
+
+    .table-scenarios tbody tr:nth-child(even):hover {
+        background-color: #f0f4f8;
+    }
+
+    .table-scenarios td {
+        padding: 10px 8px;
+        vertical-align: middle;
+        border: none;
+    }
+
+    .table-scenarios .col-id {
+        width: 60px;
+        text-align: center;
+        color: #6c757d;
+        font-weight: 500;
+    }
+
+    .table-scenarios .col-name {
+        font-weight: 500;
+        color: #212529;
+    }
+
+    .table-scenarios .col-date {
+        white-space: nowrap;
+        color: #495057;
+    }
+
+    .table-scenarios .col-count {
+        text-align: center;
+    }
+
+    .table-scenarios .col-actions {
+        width: 140px;
+        text-align: center;
+        white-space: nowrap;
+    }
+
+    .badge-scenario {
+        display: inline-block;
+        padding: 4px 10px;
+        background: #e9ecef;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #495057;
+    }
+
+    .btn-action {
+        padding: 4px 8px;
+        font-size: 0.85rem;
+        border-radius: 4px;
+        border: 1px solid;
+        transition: all 0.2s;
+        cursor: pointer;
+        background: white;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .btn-edit {
+        color: #0d6efd;
+        border-color: #0d6efd;
+        margin-right: 4px;
+    }
+
+    .btn-edit:hover {
+        background: #0d6efd;
+        color: white;
+    }
+
+    .btn-export {
+        color: #198754;
+        border-color: #198754;
+        margin-right: 4px;
+    }
+
+    .btn-export:hover {
+        background: #198754;
+        color: white;
+    }
+
+    .btn-delete {
+        color: #dc3545;
+        border-color: #dc3545;
+    }
+
+    .btn-delete:hover {
+        background: #dc3545;
+        color: white;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 60px 20px;
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    }
+
+    .empty-state i {
+        font-size: 48px;
+        color: #dee2e6;
+        margin-bottom: 16px;
+    }
+
+    .empty-state h5 {
+        color: #6c757d;
+        margin-bottom: 8px;
+    }
+
+    .empty-state p {
+        color: #adb5bd;
+        margin-bottom: 20px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Красивая шапка страницы -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="page-title">
+            <h2 class="mb-1">
+                <i class="bi bi-clipboard-data text-primary"></i>
+                Сценарии планирования
+            </h2>
+            <p class="text-muted mb-0 small">
+                Управление сценариями и планами продаж
+            </p>
+        </div>
+
+        <!-- ИЗМЕНЕНИЕ ЗДЕСЬ: добавлен d-flex gap-2 и кнопка "Рассчитать" -->
+        <div class="page-actions d-flex gap-2">
+            <a href="{% url 'results_page' %}" class="btn btn-success">
+                <i class="bi bi-calculator"></i> Рассчитать
+            </a>
+            <a href="{% url 'scenario_create' %}" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i> Создать сценарий
+            </a>
+        </div>
+    </div>
+</div>
+
+{% if scenarios %}
+    <div class="table-responsive">
+        <table class="table table-scenarios">
+            <thead>
+                <tr>
+                    <th class="col-id">#</th>
+                    <th>Название сценария</th>
+                    <th class="col-date">Дата начала</th>
+                    <th class="col-date">Дата окончания</th>
+                    <th class="col-count">Планов продаж</th>
+                    <th class="col-actions">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for scenario in scenarios %}
+                    <tr>
+                        <td class="col-id">{{ scenario.id }}</td>
+                        <td class="col-name">
+                            {{ scenario.name }}
+                        </td>
+                        <td class="col-date">
+                            <i class="bi bi-calendar3 text-muted me-1"></i>
+                            {{ scenario.date_start_plan|date:"d.m.Y" }}
+                        </td>
+                        <td class="col-date">
+                            <i class="bi bi-calendar3 text-muted me-1"></i>
+                            {{ scenario.date_end_plan|date:"d.m.Y" }}
+                        </td>
+                        <td class="col-count">
+                            <span class="badge-scenario">
+                                {{ scenario.scenarioplansales_set.count }}
+                            </span>
+                        </td>
+                        <td class="col-actions">
+                            <!-- Кнопка редактирования -->
+                            <a href="{% url 'scenario_edit' scenario.pk %}"
+                               class="btn-action btn-edit"
+                               title="Редактировать">
+                                <i class="bi bi-pencil-square"></i>
+                            </a>
+
+                            <!-- Кнопка экспорта в SQL (открывает модальное окно) -->
+                            <button type="button"
+                                    class="btn-action btn-export"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#exportSqlModal{{ scenario.pk }}"
+                                    title="Экспорт в SQL и расчет">
+                                <i class="bi bi-database"></i>
+                            </button>
+
+                            <!-- Кнопка удаления -->
+                            <a href="{% url 'scenario_delete' scenario.pk %}"
+                               class="btn-action btn-delete"
+                               title="Удалить">
+                                <i class="bi bi-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+
+                    <!-- Модальное окно экспорта в SQL -->
+                    <div class="modal fade" id="exportSqlModal{{ scenario.pk }}" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-dialog-centered">
+                            <div class="modal-content border-0 shadow">
+                                <div class="modal-header bg-success text-white">
+                                    <h5 class="modal-title">
+                                        <i class="bi bi-database"></i> Экспорт в MS SQL
+                                    </h5>
+                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body p-4">
+                                    <div class="alert alert-info d-flex align-items-start gap-2">
+                                        <i class="bi bi-info-circle-fill fs-5"></i>
+                                        <div class="small">
+                                            <strong>Сценарий:</strong> {{ scenario.name }}<br>
+                                            <strong>Период:</strong> {{ scenario.date_start_plan|date:"d.m.Y" }} — {{ scenario.date_end_plan|date:"d.m.Y" }}
+                                        </div>
+                                    </div>
+
+                                    <p class="mb-3">
+                                        Вы действительно хотите экспортировать этот сценарий в базу данных MS SQL Server (схема <code>portal</code>)?
+                                    </p>
+
+                                    <div class="card bg-light border-0 mb-3">
+                                        <div class="card-body py-2">
+                                            <h6 class="small fw-semibold mb-2">Будут экспортированы:</h6>
+                                            <ul class="small mb-0 ps-3">
+                                                <li>Закупки (Purch) и графики платежей</li>
+                                                <li>Товары (PGGoods) со всеми параметрами</li>
+                                                <li>Планы продаж</li>
+                                            </ul>
+                                        </div>
+                                    </div>
+
+                                    <div class="alert alert-warning small mb-0">
+                                        <i class="bi bi-exclamation-triangle"></i>
+                                        Существующие записи с такими же ключами будут обновлены
+                                    </div>
+                                </div>
+                                <div class="modal-footer bg-light">
+                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                        <i class="bi bi-x-lg"></i> Отмена
+                                    </button>
+                                    <a href="{% url 'export_scenario_to_sql' scenario.pk %}"
+                                       class="btn btn-success">
+                                        <i class="bi bi-check-lg"></i> Экспортировать
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="empty-state">
+        <i class="bi bi-clipboard-data"></i>
+        <h5>Сценарии не созданы</h5>
+        <p>Создайте первый сценарий планирования для начала работы</p>
+        <a href="{% url 'scenario_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg"></i> Создать сценарий
+        </a>
+    </div>
+{% endif %}
+{% endblock %}

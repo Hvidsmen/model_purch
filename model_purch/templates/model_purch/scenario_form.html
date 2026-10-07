@@ -1,0 +1,246 @@
+{% extends 'model_purch\base.html' %}
+
+{% block content %}
+<div class="container mt-4">
+    <div class="row">
+        <div class="col-12">
+            <h2>{{ title }}</h2>
+            <hr>
+        </div>
+    </div>
+
+    <form method="post" novalidate>
+        {% csrf_token %}
+
+        <!-- Основная информация -->
+        <div class="card mb-4">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Основная информация</h5>
+    </div>
+    <div class="card-body">
+        <div class="mb-3">
+            <label for="{{ scenario_form.name.id_for_label }}" class="form-label">
+                {{ scenario_form.name.label }} <span class="text-danger">*</span>
+            </label>
+            {{ scenario_form.name }}
+            {% if scenario_form.name.errors %}
+                <div class="text-danger small mt-1">{{ scenario_form.name.errors }}</div>
+            {% endif %}
+        </div>
+
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="{{ scenario_form.date_start_plan.id_for_label }}" class="form-label">
+                    {{ scenario_form.date_start_plan.label }} <span class="text-danger">*</span>
+                </label>
+                {{ scenario_form.date_start_plan }}
+                {% if scenario_form.date_start_plan.errors %}
+                    <div class="text-danger small mt-1">{{ scenario_form.date_start_plan.errors }}</div>
+                {% endif %}
+            </div>
+
+            <div class="col-md-6 mb-3">
+                <label for="{{ scenario_form.date_end_plan.id_for_label }}" class="form-label">
+                    {{ scenario_form.date_end_plan.label }} <span class="text-danger">*</span>
+                </label>
+                {{ scenario_form.date_end_plan }}
+                {% if scenario_form.date_end_plan.errors %}
+                    <div class="text-danger small mt-1">{{ scenario_form.date_end_plan.errors }}</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- НОВЫЙ БЛОК: Флаг перезаписи -->
+        <div class="border rounded p-3 mt-3" style="background: #f8f9fa;">
+            <div class="form-check form-switch">
+                {{ scenario_form.overwrite_existing }}
+                <label class="form-check-label fw-semibold" for="{{ scenario_form.overwrite_existing.id_for_label }}">
+                    <i class="bi bi-arrow-repeat"></i>
+                    {{ scenario_form.overwrite_existing.label }}
+                </label>
+            </div>
+            <div class="form-text mt-1 ms-4">
+                <i class="bi bi-info-circle text-primary"></i>
+                {{ scenario_form.overwrite_existing.help_text }}
+            </div>
+
+            <!-- Визуальные подсказки о режимах -->
+            <div class="mt-3 row g-2">
+                <div class="col-md-6">
+                    <div class="d-flex align-items-start gap-2 p-2 rounded"
+                         id="mode-create" style="background: #d1e7dd; border: 1px solid #badbcc;">
+                        <i class="bi bi-plus-circle-fill text-success fs-5"></i>
+                        <div class="small">
+                            <strong>Режим добавления</strong> (по умолчанию)<br>
+                            <span class="text-muted">Только новые закупки и товары будут добавлены. Существующие данные не изменятся.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="d-flex align-items-start gap-2 p-2 rounded"
+                         id="mode-overwrite" style="background: #fff3cd; border: 1px solid #ffe69c; display: none;">
+                        <i class="bi bi-arrow-clockwise text-warning fs-5"></i>
+                        <div class="small">
+                            <strong>Режим перезаписи</strong><br>
+                            <span class="text-muted">Все данные будут обновлены из MS SQL. Ручные правки будут потеряны!</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if scenario_form.non_field_errors %}
+            <div class="alert alert-danger mt-3">
+                {{ scenario_form.non_field_errors }}
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+        <!-- Планы продаж -->
+        <div class="card mb-4">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Планы продаж</h5>
+                <button type="button" class="btn btn-light btn-sm" id="add-plan-btn">
+                    <i class="fas fa-plus"></i> Добавить план
+                </button>
+            </div>
+            <div class="card-body">
+                {{ plan_formset.management_form }}
+
+                <div id="plan-forms-container">
+                    {% for form in plan_formset %}
+                        <div class="plan-form border rounded p-3 mb-3 {% if forloop.last %}last-form{% endif %}">
+                            <div class="row align-items-end">
+                                <div class="col-md-6 mb-2 mb-md-0">
+                                    <label class="form-label">Название плана</label>
+                                    {{ form.name }}
+                                    {% if form.name.errors %}
+                                        <div class="text-danger small">{{ form.name.errors }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="col-md-4 mb-2 mb-md-0">
+                                    <div class="form-check">
+                                        {{ form.flag_order_in_purch }}
+                                        <label class="form-check-label" for="{{ form.flag_order_in_purch.id_for_label }}">
+                                            Заказ в закупке
+                                        </label>
+                                    </div>
+                                    {% if form.flag_order_in_purch.errors %}
+                                        <div class="text-danger small">{{ form.flag_order_in_purch.errors }}</div>
+                                    {% endif %}
+                                </div>
+
+                                <div class="col-md-2 text-end">
+                                    {% if form.instance.pk %}
+                                        <div class="form-check">
+                                            {{ form.DELETE }}
+                                            <label class="form-check-label text-danger" for="{{ form.DELETE.id_for_label }}">
+                                                Удалить
+                                            </label>
+                                        </div>
+                                    {% endif %}
+                                    <button type="button" class="btn btn-outline-danger btn-sm remove-plan-btn d-none">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {{ form.id }}
+                        </div>
+                    {% empty %}
+                        <p class="text-muted">Нет планов продаж. Добавьте первый план.</p>
+                    {% endfor %}
+                </div>
+
+                {% if plan_formset.non_form_errors %}
+                    <div class="alert alert-danger">
+                        {{ plan_formset.non_form_errors }}
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Кнопки управления -->
+        <div class="mb-3">
+            <button type="submit" class="btn btn-primary btn-lg">
+                <i class="fas fa-save"></i> Сохранить
+            </button>
+            <a href="{% url 'scenario_list' %}" class="btn btn-secondary btn-lg">
+                <i class="fas fa-times"></i> Отмена
+            </a>
+        </div>
+    </form>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    let formCount = {{ plan_formset.total_form_count|default:0 }};
+    const container = document.getElementById('plan-forms-container');
+    const totalFormsInput = document.querySelector('#id_plans-TOTAL_FORMS');
+    const addBtn = document.getElementById('add-plan-btn');
+
+    // Функция обновления индексов в форме
+    function updateFormIndices(form, newIndex) {
+        const html = form.innerHTML;
+        form.innerHTML = html.replace(/-plans-\d+-/g, `-plans-${newIndex}-`)
+                            .replace(/_plans_\d+_/g, `_plans_${newIndex}_`);
+
+        // Обновляем id и name у всех полей
+        form.querySelectorAll('input, select, textarea, label').forEach(element => {
+            ['id', 'name', 'for'].forEach(attr => {
+                if (element.getAttribute(attr)) {
+                    const value = element.getAttribute(attr);
+                    element.setAttribute(attr, value.replace(/plans_\d+/, `plans_${newIndex}`));
+                }
+            });
+        });
+    }
+
+    // Добавление новой формы
+    addBtn.addEventListener('click', function() {
+        const lastForm = container.querySelector('.plan-form:last-child');
+        const newForm = lastForm.cloneNode(true);
+
+        // Очищаем поля
+        newForm.querySelectorAll('input[type="text"]').forEach(input => input.value = '');
+        newForm.querySelectorAll('input[type="checkbox"]').forEach(input => input.checked = false);
+        newForm.querySelectorAll('.text-danger').forEach(error => error.remove());
+
+        // Обновляем индексы
+        updateFormIndices(newForm, formCount);
+
+        // Добавляем кнопку удаления
+        const removeBtn = newForm.querySelector('.remove-plan-btn');
+        removeBtn.classList.remove('d-none');
+        removeBtn.addEventListener('click', function() {
+            newForm.remove();
+            // Здесь можно добавить пересчёт индексов если нужно
+        });
+
+        container.appendChild(newForm);
+        formCount++;
+        if (totalFormsInput) {
+            totalFormsInput.value = formCount;
+        }
+    });
+
+    // Добавляем обработчики удаления для существующих форм
+    container.querySelectorAll('.remove-plan-btn').forEach(btn => {
+        btn.classList.remove('d-none');
+        btn.addEventListener('click', function() {
+            this.closest('.plan-form').remove();
+        });
+    });
+});
+</script>
+
+<style>
+.plan-form {
+    transition: all 0.3s ease;
+}
+.plan-form:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+</style>
+{% endblock %}

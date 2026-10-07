@@ -1,0 +1,552 @@
+{% extends 'model_purch/base.html' %}
+{% load custom_filters %}
+
+{% block title %}Список PGGoods{% endblock %}
+
+{% block extra_css %}
+<style>
+    .table thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa; white-space: nowrap; border-bottom: 2px solid #dee2e6; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
+    .table-responsive { max-height: calc(100vh - 280px); overflow-y: auto; }
+    .inline-input { border: 1px solid transparent; background: transparent; width: 100%; padding: 4px 6px; border-radius: 4px; transition: all 0.15s ease; }
+    .inline-input:focus { outline: none; border-color: #0d6efd; background: #fff; box-shadow: 0 0 0 2px rgba(13,110,253,0.15); }
+    .inline-input.changed { background: #fff9c4 !important; border-color: #f0ad4e; }
+    .inline-input.text-end { text-align: right; }
+    tr.has-changes { background: #fffef5 !important; }
+    .action-btn { opacity: 0.6; transition: opacity 0.15s ease; }
+    .action-btn:hover { opacity: 1; }
+    .hint-text { font-size: 0.75rem; color: #6c757d; }
+    .filters-card { border-left: 4px solid #0d6efd; }
+    #saveAllBtn { transition: all 0.2s ease; }
+    #saveAllBtn:not(:disabled):hover { transform: scale(1.02); box-shadow: 0 2px 6px rgba(25,135,84,0.3); }
+    #saveAllBtn:disabled { opacity: 0.5; }
+    @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(25,135,84,0.4); } 70% { box-shadow: 0 0 0 6px rgba(25,135,84,0); } 100% { box-shadow: 0 0 0 0 rgba(25,135,84,0); } }
+    #saveAllBtn.has-changes { animation: pulse-green 2s infinite; }
+    .percent-cell { position: relative; }
+    .percent-cell .inline-input { padding-right: 20px; }
+    .percent-cell::after { content: '%'; position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #6c757d; font-size: 0.85rem; pointer-events: none; }
+    .scenario-selector {
+        max-width: 350px;
+    }
+    .scenario-selector .form-select {
+        font-size: 0.9rem;
+        border-color: #0d6efd;
+        background-color: #e7f1ff;
+    }
+    .scenario-info {
+        font-size: 0.8rem;
+        color: #6c757d;
+        margin-top: 4px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Красивая шапка страницы -->
+<div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="page-title">
+            <h2 class="mb-1">
+                <i class="bi bi-box-seam-fill text-primary"></i>
+                Справочник товаров
+            </h2>
+            <p class="text-muted mb-0 small">
+                Управление товарами в группах планирования
+            </p>
+        </div>
+
+        <div class="page-actions d-flex gap-2 align-items-center">
+            <span class="badge bg-secondary fs-6 me-2">
+                <i class="bi bi-collection"></i> Всего: {{ page_obj.paginator.count }}
+            </span>
+
+            <button type="button" class="btn btn-success" id="saveAllBtn" disabled>
+                <i class="bi bi-check-lg"></i>
+                <span id="saveAllText">Сохранить все (0)</span>
+            </button>
+
+            <a href="{% url 'export_pggoods' %}?scenario={{ current_scenario.id }}&{{ query_string }}"
+               class="btn btn-outline-success">
+                <i class="bi bi-file-earmark-excel"></i> Экспорт в Excel
+            </a>
+
+            <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.id }}"
+               class="btn btn-outline-info">
+                <i class="bi bi-upload"></i> Импорт из Excel
+            </a>
+
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#copyPggoodsModal">
+                <i class="bi bi-files"></i> Копировать из сценария
+            </button>
+        </div>
+    </div>
+</div>
+
+<style>
+.page-header {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+    border-left: 4px solid #0d6efd;
+}
+
+.page-title h2 {
+    font-weight: 600;
+    color: #212529;
+    font-size: 1.5rem;
+}
+
+.page-title h2 i {
+    margin-right: 8px;
+}
+
+.page-actions .btn {
+    font-weight: 500;
+    padding: 8px 16px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.page-actions .btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.page-actions .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.page-actions .btn-success {
+    background: linear-gradient(135deg, #198754 0%, #146c43 100%);
+    border: none;
+    color: white;
+}
+
+.page-actions .btn-success:hover:not(:disabled) {
+    background: linear-gradient(135deg, #146c43 0%, #0f5132 100%);
+}
+
+.page-actions .btn-outline-success {
+    border: 2px solid #198754;
+    color: #198754;
+}
+
+.page-actions .btn-outline-success:hover {
+    background: #198754;
+    color: white;
+}
+
+.page-actions .btn-outline-info {
+    border: 2px solid #0dcaf0;
+    color: #0dcaf0;
+}
+
+.page-actions .btn-outline-info:hover {
+    background: #0dcaf0;
+    color: white;
+}
+
+.page-actions .btn-outline-primary {
+    border: 2px solid #0d6efd;
+    color: #0d6efd;
+}
+
+.page-actions .btn-outline-primary:hover {
+    background: #0d6efd;
+    color: white;
+}
+
+.page-actions .badge {
+    padding: 8px 12px;
+    font-weight: 600;
+}
+</style>
+
+
+<!-- Выбор сценария -->
+{% if scenarios %}
+    <div class="card shadow-sm mb-3">
+        <div class="card-body py-3">
+            <div class="row align-items-center">
+                <div class="col-md-6">
+                    <label for="scenario-select" class="form-label mb-1 fw-semibold">
+                        <i class="bi bi-clipboard-data text-primary"></i> Сценарий планирования
+                    </label>
+                    <select id="scenario-select" class="form-select scenario-selector" onchange="changeScenario(this.value)">
+                        {% for scenario in scenarios %}
+                            <option value="{{ scenario.id }}"
+                                    {% if current_scenario and scenario.id == current_scenario.id %}selected{% endif %}>
+                                {{ scenario.name }}
+                                ({{ scenario.date_start_plan|date:"d.m.Y" }} — {{ scenario.date_end_plan|date:"d.m.Y" }})
+                            </option>
+                        {% endfor %}
+                    </select>
+                    {% if current_scenario %}
+                        <div class="scenario-info">
+                            <i class="bi bi-info-circle"></i>
+                            Показаны товары для сценария: <strong>{{ current_scenario.name }}</strong>
+                        </div>
+                    {% endif %}
+                </div>
+                <div class="col-md-6 text-md-end mt-2 mt-md-0">
+                    <span class="badge bg-primary fs-6">
+                        <i class="bi bi-collection"></i>
+                        Записей: {{ page_obj.paginator.count }}
+                    </span>
+                </div>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle"></i>
+        Нет доступных сценариев.
+        <a href="{% url 'scenario_create' %}" class="alert-link">Создайте первый сценарий</a>,
+        чтобы данные были синхронизированы.
+    </div>
+{% endif %}
+{% if current_scenario %}
+<!-- Фильтры -->
+<div class="card filters-card mb-3 shadow-sm">
+    <div class="card-body py-3">
+        <form method="get" class="row g-2 align-items-end">
+            <!-- Скрытое поле сценария -->
+    <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
+            <div class="col-12 col-md-6 col-lg-4 mb-2 mb-lg-0">
+                <label class="form-label small text-muted mb-1">🔍 Текстовый поиск</label>
+                <input type="text" name="search" class="form-control form-control-sm" placeholder="Любое совпадение..." value="{{ search }}">
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <label class="form-label small text-muted mb-1">План. продажи</label>
+                <select name="planning_sales" class="form-select form-select-sm">
+                    <option value="">— Все —</option>
+                    {% for val in planning_sales_list %}<option value="{{ val }}" {% if val == planning_sales %}selected{% endif %}>{{ val }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <label class="form-label small text-muted mb-1">План. группа</label>
+                <select name="planning_group" class="form-select form-select-sm">
+                    <option value="">— Все —</option>
+                    {% for val in planning_groups_list %}<option value="{{ val }}" {% if val == planning_group %}selected{% endif %}>{{ val }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <label class="form-label small text-muted mb-1">Вид закупки</label>
+                <select name="kind_purch" class="form-select form-select-sm">
+                    <option value="">— Все —</option>
+                    {% for kp in kind_purch_list %}<option value="{{ kp.id }}" {% if kp.id|stringformat:'s' == kind_purch_id %}selected{% endif %}>{{ kp }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <label class="form-label small text-muted mb-1">Группа товаров</label>
+                <select name="group_goods" class="form-select form-select-sm">
+                    <option value="">— Все —</option>
+                    {% for val in group_goods_list %}<option value="{{ val }}" {% if val == group_goods %}selected{% endif %}>{{ val }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <label class="form-label small text-muted mb-1">Бренд</label>
+                <select name="brand" class="form-select form-select-sm">
+                    <option value="">— Все —</option>
+                    {% for val in brand_list %}<option value="{{ val }}" {% if val == brand %}selected{% endif %}>{{ val }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-6 col-md-4 col-lg-2">
+                <label class="form-label small text-muted mb-1">Закупка</label>
+                <select name="purch" class="form-select form-select-sm">
+                    <option value="">— Все —</option>
+                    {% for val in purch_list %}<option value="{{ val }}" {% if val == purch %}selected{% endif %}>{{ val }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="col-12 col-lg-4 d-flex gap-2 mt-2 mt-lg-0">
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel"></i> Применить</button>
+                <a href="{% url 'pggoods_list' %}" class="btn btn-outline-secondary btn-sm" title="Сбросить"><i class="bi bi-x-lg"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="hint-text mb-2"><i class="bi bi-info-circle"></i> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
+
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th style="width: 50px;">#</th>
+                    <th style="width: 350px;">План. группа</th>
+                    <th>План. продажи</th>
+                    <th>Группа товаров</th>
+                    <th>Бренд</th>
+                    <th>Закупка</th>
+                    <th>Вид закупки</th>
+                    <th style="width: 110px;" class="text-end">Объём</th>
+                    <th style="width: 110px;" class="text-end">EXW USD</th>
+                    <th style="width: 110px;" class="text-end">DDP USD</th>
+                    <th style="width: 100px;" class="text-end">KDDP</th>
+                    <th style="width: 100px;" class="text-end">Запас (дни)</th>
+                    <th style="width: 100px;" class="text-end">% остаток</th>
+                    <th class="text-center" style="width: 120px;">Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in page_obj %}
+                    <tr data-row-id="{{ item.id }}">
+                        <form method="post" action="{% url 'pggoods_list' %}" class="inline-form m-0 d-none">
+                            {% csrf_token %}
+                                <input type="hidden" name="record_id" value="{{ item.id }}">
+    <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
+    <input type="hidden" name="query_string" value="{{ clean_query_string }}">
+                        </form>
+                        <td class="text-muted">{{ item.id }}</td>
+                        <td><input type="text" class="inline-input" value="{{ item.planning_group }}" readonly></td>
+                        <td><input type="text" class="inline-input" value="{{ item.planning_sales }}" readonly></td>
+                        <td><input type="text" class="inline-input editable-field" value="{{ item.group_goods }}" name="group_goods" data-original="{{ item.group_goods }}"></td>
+                        <td><input type="text" class="inline-input editable-field" value="{{ item.brand|default:'' }}" name="brand" data-original="{{ item.brand|default:'' }}"></td>
+                        <td><input type="text" class="inline-input editable-field" value="{{ item.purch|default:'' }}" name="purch" data-original="{{ item.purch|default:'' }}"></td>
+                        <td>
+                            <select class="inline-input editable-field" name="kind_purch" data-original="{{ item.kind_purch.id|default:'' }}">
+                                <option value="">— Не выбран —</option>
+                                {% for kp in kind_purch_list %}
+                                    <option value="{{ kp.id }}" {% if item.kind_purch and kp.id == item.kind_purch.id %}selected{% endif %}>{{ kp }}</option>
+                                {% endfor %}
+                            </select>
+                        </td>
+                        <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.volume|format_money:2 }}" name="volume" data-original="{{ item.volume }}"></td>
+                        <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.exw_usd|format_money:2 }}" name="exw_usd" data-original="{{ item.exw_usd }}"></td>
+                        <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.ddp_usd|format_money:2 }}" name="ddp_usd" data-original="{{ item.ddp_usd }}"></td>
+                        <td><input type="number" step="0.0001" min="0" class="inline-input text-end" value="{{ item.kddp|format_money:4 }}" name="kddp" readonly title="Рассчитывается автоматически"></td>
+                        <td><input type="number" step="1" min="0" class="inline-input text-end editable-field" value="{{ item.stock_cnt_day|format_integer }}" name="stock_cnt_day" data-original="{{ item.stock_cnt_day }}"></td>
+                        <td class="percent-cell">
+                            <input type="number" step="0.01" min="0" max="100" class="inline-input text-end editable-field" value="{{ item.percent_stock_end|format_percent }}" name="percent_stock_end" data-original="{{ item.percent_stock_end }}" title="{{ item.percent_stock_end|format_percent_display }}">
+                        </td>
+                        <td class="text-center text-nowrap">
+                            <form method="post"
+      action="{% url 'delete_pggoods' item.id %}?scenario={{ current_scenario.id }}"
+      class="d-inline"
+      onsubmit="return confirm('Удалить запись?');">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
+        <i class="bi bi-trash"></i>
+    </button>
+</form>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr><td colspan="14" class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Записи не найдены.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-3">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if clean_query_string %}&{{ clean_query_string }}{% endif %}">&laquo; Назад</a></li>
+        {% else %}
+            <li class="page-item disabled"><span class="page-link">&laquo; Назад</span></li>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+                <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+                <li class="page-item"><a class="page-link" href="?page={{ num }}{% if clean_query_string %}&{{ clean_query_string }}{% endif %}">{{ num }}</a></li>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+            <li class="page-item"><a class="page-link" href="?page={{ page_obj.next_page_number }}{% if clean_query_string %}&{{ clean_query_string }}{% endif %}">Вперед &raquo;</a></li>
+        {% else %}
+            <li class="page-item disabled"><span class="page-link">Вперед &raquo;</span></li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endif %}
+
+<div class="modal fade" id="copyPggoodsModal" tabindex="-1" aria-labelledby="copyPggoodsModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post" action="{% url 'copy_pggoods_from_scenario' %}">
+                {% csrf_token %}
+                <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
+                <div class="modal-header bg-primary text-white">
+                    <h5 class="modal-title" id="copyPggoodsModalLabel"><i class="bi bi-files"></i> Копирование товаров (PGGoods)</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Скопирует все товары из выбранного сценария в "<strong>{{ current_scenario.name }}</strong>".
+                        <br><span class="text-info"><i class="bi bi-info-circle"></i> Если товар с такими же плановыми группами уже существует, его данные будут <strong>обновлены</strong> (дубликаты не создаются).</span>
+                    </p>
+                    <label class="form-label fw-semibold">Сценарий-источник:</label>
+                    <select name="source_scenario_id" class="form-select" required>
+                        <option value="" disabled selected>Выберите сценарий...</option>
+                        {% for sc in scenarios %}
+                            {% if sc.id != current_scenario.id %}
+                                <option value="{{ sc.id }}">{{ sc.name }} ({{ sc.date_start_plan|date:"d.m.Y" }})</option>
+                            {% endif %}
+                        {% empty %}
+                            <option disabled>Других сценариев нет</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+                    <button type="submit" class="btn btn-primary" id="confirmCopyPggoodsBtn" disabled>
+                        <i class="bi bi-check-lg"></i> Скопировать
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    function changeScenario(scenarioId) {
+    if (scenarioId) {
+        // Собираем текущие параметры GET, заменяем scenario и переходим
+        const url = new URL(window.location.href);
+        url.searchParams.set('scenario', scenarioId);
+        url.searchParams.delete('page'); // Сбрасываем страницу при смене сценария
+        window.location.href = url.toString();
+    }
+}
+document.addEventListener('DOMContentLoaded', function () {
+    const rows = document.querySelectorAll('tr[data-row-id]');
+    const saveAllBtn = document.getElementById('saveAllBtn');
+    const saveAllText = document.getElementById('saveAllText');
+    const changes = {};
+
+    function getCsrfToken() {
+        const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
+        return csrfInput ? csrfInput.value : '';
+    }
+
+    function updateSaveButton() {
+        const count = Object.keys(changes).length;
+        if (count > 0) {
+            saveAllBtn.disabled = false;
+            saveAllText.textContent = `Сохранить все (${count})`;
+            saveAllBtn.classList.add('has-changes');
+        } else {
+            saveAllBtn.disabled = true;
+            saveAllText.textContent = 'Сохранить все (0)';
+            saveAllBtn.classList.remove('has-changes');
+        }
+    }
+
+    function trackChange(rowId, fieldName, value, originalValue) {
+        if (!changes[rowId]) changes[rowId] = { id: parseInt(rowId) };
+        if (value !== originalValue) {
+            changes[rowId][fieldName] = value;
+        } else {
+            delete changes[rowId][fieldName];
+            if (Object.keys(changes[rowId]).length <= 1) delete changes[rowId];
+        }
+        updateSaveButton();
+    }
+
+    rows.forEach(row => {
+        const rowId = row.dataset.rowId;
+        const inputs = row.querySelectorAll('.editable-field');
+        const kddpInput = row.querySelector('input[name="kddp"]');
+        const exwInput = row.querySelector('input[name="exw_usd"]');
+        const ddpInput = row.querySelector('input[name="ddp_usd"]');
+
+        function checkChanges() {
+            let hasChanges = false;
+            inputs.forEach(input => {
+                if (input.value !== input.dataset.original) {
+                    input.classList.add('changed');
+                    hasChanges = true;
+                    trackChange(rowId, input.name, input.value, input.dataset.original);
+                } else {
+                    input.classList.remove('changed');
+                    trackChange(rowId, input.name, input.value, input.dataset.original);
+                }
+            });
+            row.classList.toggle('has-changes', hasChanges);
+        }
+
+        function recalcKddp() {
+            const exw = parseFloat(exwInput.value);
+            const ddp = parseFloat(ddpInput.value);
+            if (!isNaN(exw) && !isNaN(ddp) && exw > 0) {
+                kddpInput.value = (ddp / exw).toFixed(4);
+            } else {
+                kddpInput.value = '';
+            }
+        }
+
+        inputs.forEach(input => {
+            input.addEventListener('input', () => {
+                checkChanges();
+                if (input.name === 'exw_usd' || input.name === 'ddp_usd') recalcKddp();
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    inputs.forEach(inp => {
+                        inp.value = inp.dataset.original;
+                        inp.classList.remove('changed');
+                    });
+                    row.classList.remove('has-changes');
+                    recalcKddp();
+                    checkChanges();
+                    input.blur();
+                }
+            });
+        });
+    });
+
+    saveAllBtn.addEventListener('click', async function() {
+        const updates = Object.values(changes);
+        if (updates.length === 0) return;
+
+        saveAllBtn.disabled = true;
+        saveAllText.textContent = '⏳ Сохранение...';
+
+        try {
+        // Добавляем параметр scenario в URL
+const scenarioId = document.querySelector('input[name="scenario"]')?.value ||
+                   new URLSearchParams(window.location.search).get('scenario');
+            const response = await fetch(`{% url 'bulk_update_pggoods' %}?scenario=${scenarioId}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+    body: JSON.stringify({ updates: updates })
+});
+            const result = await response.json();
+
+            if (result.success) {
+                // Показываем сообщение (можно использовать showAlert из base, но здесь упростим через alert или перезагрузку)
+                alert(result.message);
+                Object.keys(changes).forEach(rowId => {
+                    const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
+                    if (row) {
+                        row.querySelectorAll('.editable-field').forEach(input => {
+                            input.dataset.original = input.value;
+                            input.classList.remove('changed');
+                        });
+                        row.classList.remove('has-changes');
+                    }
+                });
+                for (const key in changes) delete changes[key];
+                updateSaveButton();
+            } else {
+                throw new Error(result.message || 'Ошибка сохранения');
+            }
+        } catch (error) {
+            alert(`❌ Ошибка: ${error.message}`);
+            saveAllBtn.disabled = false;
+            updateSaveButton();
+        }
+    });
+});
+</script>
+{% endblock %}

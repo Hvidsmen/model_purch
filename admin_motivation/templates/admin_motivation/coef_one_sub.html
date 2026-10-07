@@ -1,0 +1,1038 @@
+{% extends 'admin_motivation/base.html' %}
+
+{% load crispy_forms_tags %}
+
+{% block content %}
+
+<style>
+    .content {
+        background: white;
+        border-radius: 16px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+        padding: 30px;
+        margin-top: 40px;
+        max-width: 1400px;
+    }
+
+    .content h1 {
+        color: #2d3748;
+        font-size: 26px;
+        margin-bottom: 25px;
+        font-weight: 700;
+    }
+
+    .subdivision-badge {
+        display: inline-block;
+        padding: 6px 14px;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        border-radius: 20px;
+        font-size: 14px;
+        font-weight: 600;
+        margin-left: 12px;
+        vertical-align: middle;
+    }
+
+    .actions {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 25px;
+        flex-wrap: wrap;
+        align-items: center;
+    }
+
+    .actions .btn {
+        padding: 10px 20px;
+        border: none;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+    }
+
+    .actions .btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .actions .btn:active {
+        transform: translateY(0);
+    }
+
+    .btn-add {
+        background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+    }
+    .btn-add:hover {
+        box-shadow: 0 6px 12px rgba(72, 187, 120, 0.4);
+    }
+
+    .btn-warning {
+        background: linear-gradient(135deg, #ed8936 0%, #dd6b20 100%);
+    }
+    .btn-warning:hover {
+        box-shadow: 0 6px 12px rgba(237, 137, 54, 0.4);
+    }
+
+    /* --- Стили для загрузки файла --- */
+    #fileInput {
+        display: none;
+    }
+
+    .file-input-label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 20px;
+        background: #f8fafc;
+        color: #4a5568;
+        border: 2px dashed #cbd5e0;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        user-select: none;
+    }
+
+    .file-input-label:hover {
+        border-color: #667eea;
+        background: #f0f4ff;
+        color: #667eea;
+    }
+
+    .file-input-label:active {
+        transform: scale(0.98);
+    }
+
+    .file-input-label.has-file {
+        border-color: #48bb78;
+        background: #f0fff4;
+        color: #38a169;
+    }
+
+    .file-icon {
+        font-size: 18px;
+    }
+
+    .file-name {
+        max-width: 200px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    .file-upload-wrapper {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+    }
+    /* -------------------------------- */
+
+    .table-wrapper {
+        overflow: auto;
+        border-radius: 12px;
+        border: 1px solid #e2e8f0;
+        width: 100%;
+        max-height: 70vh;
+    }
+
+    .table-wrapper::-webkit-scrollbar {
+        height: 6px;
+        width: 6px;
+    }
+
+    .table-wrapper::-webkit-scrollbar-track {
+        background: #f1f1f1;
+        border-radius: 4px;
+    }
+
+    .table-wrapper::-webkit-scrollbar-thumb {
+        background: #5a67d8;
+        border-radius: 4px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    th {
+        padding: 10px 4px;
+        text-align: center;
+        font-weight: 600;
+        font-size: 10px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        color: white;
+        border-right: 1px solid rgba(255, 255, 255, 0.15);
+        white-space: nowrap;
+        position: sticky;
+        z-index: 10;
+    }
+
+    th:last-child {
+        border-right: none;
+    }
+
+    thead tr:first-child th {
+        padding: 12px 4px;
+        font-size: 11px;
+        top: 0;
+        z-index: 11;
+    }
+
+    thead tr:nth-child(2) th {
+        top: 42px;
+        z-index: 10;
+    }
+
+    .header-base {
+        background: #312e81;
+    }
+
+    .header-policies {
+        background: #4338ca;
+    }
+
+    .header-sales {
+        background: #7c3aed;
+    }
+
+    thead tr:first-child th:first-child {
+        border-top-left-radius: 12px;
+    }
+
+    thead tr:first-child th:last-child {
+        border-top-right-radius: 12px;
+    }
+
+    td {
+        padding: 6px 2px;
+        border-bottom: 1px solid #e2e8f0;
+        color: #4a5568;
+        font-size: 12px;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    .add-product-row {
+        background-color: #f0f4f8;
+    }
+    .add-product-row td {
+        padding: 12px 4px !important;
+    }
+
+    .brand-cell {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .brand-cell .coeff-input,
+    .brand-cell .select-var-calc-add {
+        width: 100%;
+        max-width: 130px;
+    }
+
+    .select-var-calc-add {
+        width: 100%;
+        max-width: 130px;
+        padding: 5px 24px 5px 8px;
+        border: 2px solid #e2e8f0;
+        border-radius: 5px;
+        font-size: 10px;
+        font-weight: 500;
+        color: #4a5568;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%23667eea' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 6px center;
+    }
+
+    .select-var-calc-add:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+    }
+
+    .select-var-calc-add:hover {
+        border-color: #cbd5e0;
+    }
+
+    .select-var-calc-add:invalid {
+        color: #a0aec0;
+    }
+
+    .group-header {
+        font-weight: 700;
+        color: #2d3748;
+        background: #f7fafc;
+        text-align: left;
+    }
+
+    .group-header td {
+        padding: 10px 8px;
+        font-size: 13px;
+    }
+
+    .brand {
+        color: #5a67d8;
+        font-weight: 600;
+        white-space: nowrap;
+        font-size: 12px;
+    }
+
+    .coeff-input {
+        width: 95%;
+        padding: 5px 4px;
+        border: 2px solid #e2e8f0;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 500;
+        text-align: center;
+        transition: all 0.2s ease;
+        background: white;
+        color: #2d3748;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    }
+
+    .coeff-input:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+    }
+
+    .coeff-input:hover {
+        border-color: #cbd5e0;
+    }
+
+    .coeff-input.policy-input {
+        color: #2563eb;
+    }
+
+    .coeff-input.policy-input:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+    }
+
+    .coeff-input.sales-input {
+        color: #7c3aed;
+    }
+
+    .coeff-input.sales-input:focus {
+        border-color: #7c3aed;
+        box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.1);
+    }
+
+    .coeff-input::placeholder {
+        color: #a0aec0;
+        font-weight: 400;
+        font-size: 10px;
+        font-style: italic;
+    }
+
+    .coeff-input.invalid,
+    .select-var-calc-add.invalid {
+        border-color: #e53e3e !important;
+        background-color: #fff5f5;
+        box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.1);
+    }
+
+    .coeff-input.invalid:focus,
+    .select-var-calc-add.invalid:focus {
+        border-color: #e53e3e !important;
+        box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.2);
+    }
+
+    .coeff-input.valid,
+    .select-var-calc-add.valid {
+        border-color: #48bb78 !important;
+    }
+
+    .validation-tooltip {
+        position: relative;
+    }
+
+    .validation-tooltip::after {
+        content: attr(data-error);
+        position: absolute;
+        bottom: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        background: #e53e3e;
+        color: white;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 10px;
+        white-space: nowrap;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 0.2s ease;
+        z-index: 100;
+        margin-bottom: 4px;
+    }
+
+    .validation-tooltip:hover::after {
+        opacity: 1;
+    }
+
+    @keyframes shake {
+        0%, 100% { transform: translateX(0); }
+        25% { transform: translateX(-4px); }
+        75% { transform: translateX(4px); }
+    }
+
+    .coeff-input.shake,
+    .select-var-calc-add.shake {
+        animation: shake 0.3s ease-in-out;
+    }
+
+    .cell-select {
+        text-align: center;
+    }
+
+    .cell-delete {
+        text-align: center;
+    }
+
+    .select-var-calc {
+        width: auto;
+        min-width: 100px;
+        max-width: 140px;
+        padding: 5px 28px 5px 8px;
+        border: 2px solid #e2e8f0;
+        border-radius: 5px;
+        font-size: 11px;
+        font-weight: 500;
+        color: #4a5568;
+        background: white;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        appearance: none;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 12 12'%3E%3Cpath fill='%23667eea' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+        background-repeat: no-repeat;
+        background-position: right 6px center;
+    }
+
+    .select-var-calc:focus {
+        outline: none;
+        border-color: #667eea;
+        box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.1);
+    }
+
+    .select-var-calc:hover {
+        border-color: #cbd5e0;
+    }
+
+    .checkbox-wrapper {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        white-space: nowrap;
+        justify-content: center;
+    }
+
+    .danger-checkbox {
+        position: relative;
+        width: 16px;
+        height: 16px;
+        cursor: pointer;
+        display: inline-block;
+    }
+
+    .danger-checkbox input[type="checkbox"] {
+        position: absolute;
+        opacity: 0;
+        cursor: pointer;
+        width: 100%;
+        height: 100%;
+        z-index: 2;
+    }
+
+    .danger-checkbox .checkmark {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border: 2px solid #fc8181;
+        border-radius: 3px;
+        transition: all 0.3s ease;
+    }
+
+    .danger-checkbox input[type="checkbox"]:checked ~ .checkmark {
+        background: linear-gradient(135deg, #f56565 0%, #e53e3e 100%);
+        border-color: #e53e3e;
+        box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.2);
+    }
+
+    .danger-checkbox .checkmark:after {
+        content: "";
+        position: absolute;
+        display: none;
+        left: 4px;
+        top: 1px;
+        width: 3px;
+        height: 7px;
+        border: solid white;
+        border-width: 0 1px 1px 0;
+        transform: rotate(45deg);
+    }
+
+    .danger-checkbox input[type="checkbox"]:checked ~ .checkmark:after {
+        display: block;
+    }
+
+    .danger-checkbox:hover .checkmark {
+        border-color: #f56565;
+        box-shadow: 0 0 0 2px rgba(245, 101, 101, 0.1);
+    }
+
+    .danger-checkbox input[type="checkbox"]:checked:hover ~ .checkmark {
+        box-shadow: 0 0 0 2px rgba(229, 62, 62, 0.3);
+    }
+
+    .danger-label {
+        font-size: 10px;
+        color: #e53e3e;
+        font-weight: 600;
+        cursor: pointer;
+        user-select: none;
+        transition: all 0.3s ease;
+        display: inline-block;
+    }
+
+    .danger-checkbox input[type="checkbox"]:checked ~ .danger-label,
+    .danger-label:hover {
+        color: #c53030;
+        font-weight: 700;
+    }
+
+    tbody tr.row-delete {
+        background: #fff5f5;
+    }
+
+    tbody tr.row-delete .brand {
+        color: #e53e3e;
+    }
+
+    td.sales-start {
+        border-left: 3px solid #e2e8f0;
+    }
+
+    tbody tr:hover {
+        background: #f7fafc;
+    }
+
+    tbody tr.row-delete:hover {
+        background: #fed7d7;
+    }
+
+    .required-mark {
+        color: #fc8181;
+        font-weight: 700;
+        margin-left: 2px;
+    }
+
+    .info-banner {
+        background: linear-gradient(135deg, #ebf4ff 0%, #f0e7ff 100%);
+        border-left: 4px solid #667eea;
+        padding: 12px 16px;
+        border-radius: 8px;
+        margin-bottom: 20px;
+        font-size: 13px;
+        color: #4a5568;
+    }
+
+    .info-banner strong {
+        color: #2d3748;
+    }
+
+    @media (max-width: 768px) {
+        .content {
+            padding: 15px;
+            max-width: 100%;
+        }
+
+        .content h1 {
+            font-size: 20px;
+        }
+
+        .actions {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .actions .btn, .file-upload-wrapper {
+            width: 100%;
+        }
+
+        .file-upload-wrapper {
+            flex-direction: column;
+            align-items: stretch;
+        }
+
+        .file-input-label {
+            justify-content: center;
+        }
+
+        table {
+            font-size: 10px;
+        }
+
+        th {
+            font-size: 9px;
+            padding: 8px 2px;
+        }
+
+        thead tr:nth-child(2) th {
+            top: 36px;
+        }
+
+        td {
+            padding: 5px 2px;
+            font-size: 10px;
+        }
+
+        .coeff-input, .select-var-calc-add {
+            padding: 4px 2px;
+            font-size: 9px;
+        }
+
+        .select-var-calc {
+            min-width: 85px;
+            padding: 4px 24px 4px 6px;
+            font-size: 10px;
+        }
+
+        .danger-checkbox {
+            width: 14px;
+            height: 14px;
+        }
+
+        .danger-checkbox .checkmark {
+            width: 14px;
+            height: 14px;
+        }
+
+        .danger-label {
+            font-size: 9px;
+        }
+    }
+    .btn-download {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+}
+
+.btn-download:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+    color: white;
+}
+
+.btn-download:active {
+    transform: translateY(0);
+}
+
+.btn-download .icon {
+    font-size: 16px;
+}
+</style>
+
+<!-- ================= Коэф руководителя ================= -->
+<div class="container-fluid content">
+    <div class="row">
+        <div class="col-12">
+            <h1>Коэффициенты руководителя <span class="subdivision-badge">{{ sub }}</span></h1>
+        </div>
+    </div>
+    <div class="row">
+        <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            <div class="col-12">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                        <tr>
+                            {% for kind in kinds_mc %}
+                            <th class="header-base" style="width: 12%;">{{ kind.name }}</th>
+                            {% endfor %}
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <tr>
+                            {% for scm in sub_coef_meneger %}
+                             <td>
+                                <input type="text" class="coeff-input policy-input coeff-validate"
+                                       name="kind_coeff={{ scm.kind.id }}" data-value="{{ scm.coeff }}" required
+                                       value="{{ scm.coeff }}" maxlength="10" data-type="percent">
+                            </td>
+                            {% endfor %}
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+                 <div class="actions" style="justify-content: flex-end; margin-top: 20px; margin-bottom: 0;">
+                    <button type="submit" class="btn btn-add" name="action_button" value="update_motive_coeff">
+                        Изменить
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- ================= ТАБЛИЦА КОЭФФИЦИЕНТОВ ПОДРАЗДЕЛЕНИЯ ================= -->
+<div class="container-fluid content">
+    <div class="row">
+        <div class="col-12">
+            <h1>Коэффициенты подразделения <span class="subdivision-badge">{{ sub }}</span></h1>
+        </div>
+    </div>
+    <div class="row">
+        <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
+            {% csrf_token %}
+            <div class="col-12">
+                <div class="actions">
+                    <button type="submit" class="btn btn-primary" name="action_button" value="save_coeff">Сохранить изменения</button>
+                    <button type="submit" class="btn btn-warning" name="action_button" value="copy_from_global">Копировать из глобальных</button>
+
+                    <div class="file-upload-wrapper">
+                        <label class="file-input-label" id="fileLabel" for="fileInput">
+                            <input type="file" name="myfile" id="fileInput" accept=".xlsx,.xls,.csv">
+                            <span class="file-icon">📁</span>
+                            <span class="file-name" id="fileName">Выбрать файл</span>
+                        </label>
+                        <button type="submit" class="btn btn-primary" name="action_button" value="file_load">Загрузить из файла</button>
+                        <a href="{{ templates_file.url }}" download class="btn-download">
+                            <span class="icon">📥</span>
+                            Скачать шаблон
+                        </a>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th rowspan="2" class="header-base" style="width: 12%;">Группа планов продаж</th>
+                            <th rowspan="2" class="header-base" style="width: 12%;">Группа</th>
+                            <th rowspan="2" class="header-base" style="width: 10%;">Марка</th>
+                            <th colspan="{{ segments|length }}" class="header-policies" style="width: 33%;">Политики</th>
+                            <th colspan="{{ segments|length }}" class="header-sales" style="width: 33%;">Продажи</th>
+                        </tr>
+                        <tr>
+                            {% for segment in segments %}
+                            <th scope="col" class="header-policies">{{ segment }}</th>
+                            {% endfor %}
+                            {% for segment in segments %}
+                            <th scope="col" class="header-sales">{{ segment }}</th>
+                            {% endfor %}
+                        </tr>
+                        </thead>
+                        <tbody>
+                        {% for pg_sales, br_d in goods.items %}
+                        <tr class="group-header">
+                            <td colspan="{{ 3|add:segments|length|add:segments|length }}"><strong>{{ pg_sales }}</strong></td>
+                        </tr>
+
+                        {% for gp, goods in br_d.items %}
+                        <tr>
+                            <td colspan="{{ 3|add:segments|length|add:segments|length }}">{{ pg_sales }}</td>
+                            <td style="text-align: left; padding-left: 10px;">{{ gp }}</td>
+                            <td></td>
+                            {% for segment in segments %}
+                            <td></td>
+                            {% endfor %}
+                            {% for segment in segments %}
+                            <td></td>
+                            {% endfor %}
+                        </tr>
+
+                        {% for good, gb_coefs in goods.items %}
+                        <tr>
+                            <td class="cell-select">
+                                <select name="select_var_calc={{ good.id }}" class="select-var-calc" title="Уровень мотивации для данной марки">
+                                    {% for vc in var_calcs %}
+                                    <option value="{{ vc.id }}" {% if vc.id == gb_coefs.0.0.variation_calculate.id %}selected{% endif %}>{{ vc }}</option>
+                                    {% endfor %}
+                                </select>
+                            </td>
+                            <td class="cell-delete"></td>
+                            <td class="brand">{{ good.brand }}</td>
+                            {% for sgb in gb_coefs %}
+                                {% if forloop.counter0 == 0 %}
+                                    {% for gb in sgb %}
+                                    <td>
+                                        <input type="text" class="coeff-input policy-input coeff-validate"
+                                               name="sub_coeff={{ gb.id }}" data-value="{{ gb.motivation_coeff }}" required
+                                               value="{{ gb.motivation_coeff }}" maxlength="10" data-type="percent">
+                                    </td>
+                                    {% endfor %}
+                                {% else %}
+                                    {% for gb in sgb %}
+                                    <td {% if forloop.first %} class="sales-start"{% endif %}>
+                                        <input type="text" class="coeff-input sales-input coeff-validate"
+                                               name="sub_coeff={{ gb.id }}" data-value="{{ gb.motivation_coeff }}" required
+                                               value="{{ gb.motivation_coeff }}" maxlength="10" data-type="percent">
+                                    </td>
+                                    {% endfor %}
+                                {% endif %}
+                            {% endfor %}
+                        </tr>
+                        {% endfor %}
+                        {% endfor %}
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function toggleRowDelete(checkbox) {
+        const row = checkbox.closest('tr');
+        if (checkbox.checked) {
+            row.classList.add('row-delete');
+        } else {
+            row.classList.remove('row-delete');
+        }
+    }
+
+    function formatAsPercent(value) {
+        if (!value || value === '') return '';
+        const num = parseFloat(value);
+        if (isNaN(num)) return value;
+        return (num * 100).toFixed(2) + '%';
+    }
+
+    function parsePercent(percentStr) {
+        if (!percentStr || percentStr === '') return '';
+        const num = parseFloat(percentStr.replace('%', ''));
+        if (isNaN(num)) return percentStr;
+        return (num / 100).toFixed(4);
+    }
+
+    function filterInput(value) {
+        value = value.replace(',', '.');
+        value = value.replace(/[^0-9.\-]/g, '');
+        const parts = value.split('.');
+        if (parts.length > 2) {
+            value = parts[0] + '.' + parts.slice(1).join('');
+        }
+        if (value.indexOf('-') > 0) {
+            value = value.replace(/-/g, '');
+        }
+        return value;
+    }
+
+    function isValidCoeff(value) {
+        if (!value || value === '') return true;
+        let checkValue = value;
+        if (checkValue.includes('%')) {
+            checkValue = parsePercent(checkValue);
+        }
+        const num = parseFloat(checkValue);
+        if (isNaN(num)) return false;
+        if (num < -1 || num > 1) return false;
+        if (checkValue.includes('.')) {
+            const decimals = checkValue.split('.')[1];
+            if (decimals.length > 6) return false;
+        }
+        return true;
+    }
+
+    function getErrorMessage(value) {
+        if (!value || value === '') return '';
+        let checkValue = value;
+        if (checkValue.includes('%')) {
+            checkValue = parsePercent(checkValue);
+        }
+        const num = parseFloat(checkValue);
+        if (isNaN(num)) return 'Некорректное число';
+        if (num < -1 || num > 1) return 'Диапазон: от -1 до 1';
+        if (checkValue.includes('.')) {
+            const decimals = checkValue.split('.')[1];
+            if (decimals.length > 6) return 'Макс. 6 знаков после точки';
+        }
+        return '';
+    }
+
+    function applyValidation(input) {
+        const value = input.value;
+        const isValid = isValidCoeff(value);
+        const errorMsg = getErrorMessage(value);
+
+        input.classList.remove('invalid', 'valid', 'validation-tooltip', 'shake');
+        input.removeAttribute('data-error');
+
+        if (value === '') {
+            return;
+        }
+
+        if (isValid) {
+            input.classList.add('valid');
+        } else {
+            input.classList.add('invalid', 'validation-tooltip');
+            input.setAttribute('data-error', errorMsg);
+        }
+    }
+
+    document.querySelectorAll('.coeff-input').forEach(input => {
+        input.addEventListener('input', function() {
+            if (this.classList.contains('coeff-validate')) {
+                const cursorPos = this.selectionStart;
+                const oldValue = this.value;
+                const filtered = filterInput(this.value);
+
+                if (filtered !== oldValue) {
+                    this.value = filtered;
+                    const newPos = Math.min(cursorPos, filtered.length);
+                    this.setSelectionRange(newPos, newPos);
+                }
+
+                this.setAttribute('data-value', this.value);
+                applyValidation(this);
+            } else {
+                if (this.value.trim() !== '') {
+                    this.classList.remove('invalid', 'shake', 'validation-tooltip');
+                    this.removeAttribute('data-error');
+                }
+            }
+        });
+
+        input.addEventListener('focus', function() {
+            if (this.classList.contains('coeff-validate')) {
+                const value = this.value;
+                if (value && value.includes('%')) {
+                    const decimalValue = parsePercent(value);
+                    this.value = decimalValue;
+                    this.setAttribute('data-value', decimalValue);
+                } else if (this.hasAttribute('data-value')) {
+                    this.value = this.getAttribute('data-value');
+                }
+                this.classList.remove('invalid', 'valid', 'validation-tooltip', 'shake');
+                this.removeAttribute('data-error');
+            }
+        });
+
+        input.addEventListener('blur', function() {
+            if (this.classList.contains('coeff-validate')) {
+                const value = this.value;
+                if (value && !value.includes('%')) {
+                    const percentValue = formatAsPercent(value);
+                    this.value = percentValue;
+                    this.setAttribute('data-value', value);
+                }
+                applyValidation(this);
+            }
+        });
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('.coeff-input.coeff-validate').forEach(input => {
+            const value = input.value;
+            if (value && !value.includes('%')) {
+                input.setAttribute('data-value', value);
+                input.value = formatAsPercent(value);
+            }
+        });
+    });
+
+    document.querySelectorAll('.required-field').forEach(input => {
+        input.addEventListener('input', function() {
+            if (this.value.trim() !== '') {
+                this.classList.remove('invalid', 'shake', 'validation-tooltip');
+                this.removeAttribute('data-error');
+            }
+        });
+    });
+
+    document.querySelectorAll('form').forEach(form => {
+        form.addEventListener('submit', function(e) {
+            let hasErrors = false;
+            let firstError = null;
+            const inputs = this.querySelectorAll('.required-field');
+
+            inputs.forEach(input => {
+                const value = input.value.trim();
+                if (value === '') {
+                    hasErrors = true;
+                    input.classList.add('invalid', 'shake', 'validation-tooltip');
+                    input.setAttribute('data-error', 'Обязательное поле');
+                    if (!firstError) firstError = input;
+                    setTimeout(() => input.classList.remove('shake'), 300);
+                    return;
+                }
+
+                if (input.classList.contains('coeff-validate')) {
+                    if (!isValidCoeff(input.value) && input.value !== '') {
+                        hasErrors = true;
+                        applyValidation(input);
+                        if (!firstError) firstError = input;
+                    }
+                    if (input.value.includes('%')) {
+                        input.value = parsePercent(input.value);
+                    }
+                }
+            });
+
+            if (hasErrors) {
+                e.preventDefault();
+                alert('Пожалуйста, заполните все обязательные поля и исправьте ошибки (выделены красным)');
+                if (firstError) {
+                    firstError.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => firstError.focus(), 300);
+                }
+            }
+        });
+    });
+
+    const fileInput = document.getElementById('fileInput');
+    if (fileInput) {
+        fileInput.addEventListener('change', function(e) {
+            const fileName = e.target.files[0]?.name || 'Выбрать файл';
+            document.getElementById('fileName').textContent = fileName;
+            const label = document.getElementById('fileLabel');
+            if (e.target.files[0]) {
+                label.classList.add('has-file');
+            } else {
+                label.classList.remove('has-file');
+            }
+        });
+    }
+</script>
+
+{% endblock content %}

@@ -1,0 +1,23 @@
+{% extends 'PlanningSystem/base.html' %}
+
+{% load crispy_forms_tags %}
+{% block content %}
+
+<div class="container">
+    <div class="row">
+        <div class="col">
+            <h1>Загрузка деления по моделям</h1>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <form action="{% url 'load_plan_chanel' %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                {{ form|crispy }}
+                <input type="submit" value="Загрузить" class="btn btn-primary">
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}

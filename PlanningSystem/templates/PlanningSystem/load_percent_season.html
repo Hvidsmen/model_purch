@@ -1,0 +1,33 @@
+{% extends 'PlanningSystem/base.html' %}
+
+{% load crispy_forms_tags %}
+{% block content %}
+
+<div class="container">
+
+
+    <div class="row">
+        <div class="col">
+            <h1>Загрузка деления сезонности подразделения, %</h1>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <a href="{{ templates_file.file.url }}" download class="btn btn-secondary">
+                Скачать шаблон
+            </a>
+        </div>
+    </div>
+    <div class="row">
+        <div class="col">
+            <form action="{% url 'load_percentage_subdivision' %}" method="post" enctype="multipart/form-data">
+                {% csrf_token %}
+                {{ form|crispy }}
+                <input type="submit" value="Загрузить" class="btn btn-primary">
+            </form>
+        </div>
+    </div>
+
+</div>
+
+{% endblock content %}

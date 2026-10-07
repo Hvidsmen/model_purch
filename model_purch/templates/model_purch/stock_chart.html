@@ -1,0 +1,367 @@
+{% extends 'model_purch/base.html' %}
+{% load static %}
+
+{% block title %}График остатков и поступлений{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        background: white;
+        padding: 24px;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        border-left: 4px solid #0d6efd;
+        margin-bottom: 24px;
+    }
+    .page-title h2 {
+        font-weight: 600;
+        color: #212529;
+        font-size: 1.5rem;
+        margin-bottom: 4px;
+    }
+    .page-title h2 i { margin-right: 8px; }
+    .page-title p { color: #6c757d; font-size: 0.875rem; margin: 0; }
+
+    .filters-card, .chart-card {
+        background: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
+    .chart-container {
+        position: relative;
+        height: 500px;
+        width: 100%;
+    }
+
+    .stats-card {
+        background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+        border-radius: 12px;
+        padding: 16px;
+        border: 1px solid #e9ecef;
+        text-align: center;
+        height: 100%;
+    }
+    .stats-card .value {
+        font-size: 1.5rem;
+        font-weight: 700;
+    }
+    .stats-card .label {
+        font-size: 0.85rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .stats-stock .value { color: #0d6efd; }
+    .stats-incomes .value { color: #198754; }
+
+    .loading-overlay {
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(255,255,255,0.85);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 10;
+        border-radius: 12px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Шапка страницы -->
+<div class="page-header">
+    <div class="d-flex justify-content-between align-items-center">
+        <div class="page-title">
+            <h2 class="mb-1">
+                <i class="bi bi-graph-up text-primary"></i>
+                График остатков и поступлений
+            </h2>
+            <p class="text-muted mb-0 small">
+                Сравнение динамики: Остатки (vStockOnDatePlan) vs Поступления (vIncomesPlan)
+            </p>
+        </div>
+        <div class="page-actions">
+            <a href="{% url 'scenario_list' %}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left"></i> К сценариям
+            </a>
+        </div>
+    </div>
+</div>
+
+<!-- Фильтры -->
+<div class="filters-card">
+    <div class="row g-3 align-items-end">
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">
+                <i class="bi bi-box-seam text-primary"></i> Группа товаров
+            </label>
+            <select id="filterGroupGoods" class="form-select">
+                <option value="">— Все —</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <label class="form-label fw-semibold">
+                <i class="bi bi-tag text-primary"></i> План продаж
+            </label>
+            <select id="filterPlanningSales" class="form-select">
+                <option value="">— Все —</option>
+            </select>
+        </div>
+        <div class="col-md-4">
+            <button class="btn btn-primary w-100" onclick="loadChartData()">
+                <i class="bi bi-funnel"></i> Применить фильтры
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика: Остатки -->
+<h6 class="text-muted mb-2"><i class="bi bi-database text-primary"></i> Остатки (vStockOnDatePlan)</h6>
+<div class="row g-3 mb-3" id="statsRowStock" style="display: none;">
+    <div class="col-md-3">
+        <div class="stats-card stats-stock">
+            <div class="label">Всего Qty</div>
+            <div class="value" id="statStockQty">0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-stock">
+            <div class="label">Всего Volume</div>
+            <div class="value" id="statStockVolume">0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-stock">
+            <div class="label">EXW USD</div>
+            <div class="value" id="statStockExw">$0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-stock">
+            <div class="label">DDP USD</div>
+            <div class="value" id="statStockDdp">$0</div>
+        </div>
+    </div>
+</div>
+
+<!-- Статистика: Поступления -->
+<h6 class="text-muted mb-2"><i class="bi bi-truck text-success"></i> Поступления (vIncomesPlan)</h6>
+<div class="row g-3 mb-3" id="statsRowIncomes" style="display: none;">
+    <div class="col-md-3">
+        <div class="stats-card stats-incomes">
+            <div class="label">Всего Qty</div>
+            <div class="value" id="statIncomesQty">0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-incomes">
+            <div class="label">Всего Volume</div>
+            <div class="value" id="statIncomesVolume">0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-incomes">
+            <div class="label">EXW USD</div>
+            <div class="value" id="statIncomesExw">$0</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="stats-card stats-incomes">
+            <div class="label">DDP USD</div>
+            <div class="value" id="statIncomesDdp">$0</div>
+        </div>
+    </div>
+</div>
+
+<!-- График -->
+<div class="chart-card">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="mb-0">
+            <i class="bi bi-bar-chart-line text-primary"></i> Динамика Qty по датам
+        </h5>
+    </div>
+    <div class="chart-container" style="position: relative;">
+        <div id="plotlyChart" style="width: 100%; height: 100%;"></div>
+        <div class="loading-overlay" id="chartLoading" style="display: none;">
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status"></div>
+                <p class="mt-2 text-muted">Загрузка данных...</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Подключаем Plotly.js -->
+<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+
+<script>
+    let chartDataStock = [];
+    let chartDataIncomes = [];
+
+    document.addEventListener('DOMContentLoaded', loadChartData);
+
+    async function loadChartData() {
+        const loading = document.getElementById('chartLoading');
+        loading.style.display = 'flex';
+
+        const params = new URLSearchParams({
+            group_goods: document.getElementById('filterGroupGoods').value,
+            planning_sales: document.getElementById('filterPlanningSales').value
+        });
+
+        try {
+            const response = await fetch(`{% url 'stock_chart_data_api' %}?${params.toString()}`);
+            const result = await response.json();
+
+            if (result.error) {
+                alert('Ошибка: ' + result.error);
+                return;
+            }
+
+            chartDataStock = result.data_stock;
+            chartDataIncomes = result.data_incomes;
+
+            // Заполняем фильтры при первой загрузке
+            if (document.getElementById('filterGroupGoods').options.length === 1) {
+                fillSelect('filterGroupGoods', result.filters.group_goods);
+                fillSelect('filterPlanningSales', result.filters.planning_sales);
+            }
+
+            drawChart();
+            updateStats(result.stats_stock, result.stats_incomes);
+            document.getElementById('statsRowStock').style.display = 'flex';
+            document.getElementById('statsRowIncomes').style.display = 'flex';
+
+        } catch (error) {
+            alert('Не удалось загрузить данные: ' + error.message);
+        } finally {
+            loading.style.display = 'none';
+        }
+    }
+
+    function fillSelect(id, values) {
+        const select = document.getElementById(id);
+        const currentValue = select.value;
+        while (select.options.length > 1) select.remove(1);
+
+        values.forEach(val => {
+            const opt = document.createElement('option');
+            opt.value = opt.textContent = val;
+            select.appendChild(opt);
+        });
+
+        if (currentValue) select.value = currentValue;
+    }
+
+    function drawChart() {
+        // Группируем данные по дате для остатков
+        const groupedStock = {};
+        chartDataStock.forEach(row => {
+            const date = row.Date_;
+            if (!groupedStock[date]) groupedStock[date] = 0;
+            groupedStock[date] += (row.TotalQty || 0);
+        });
+
+        // Группируем данные по дате для поступлений
+        const groupedIncomes = {};
+        chartDataIncomes.forEach(row => {
+            const date = row.Date_;
+            if (!groupedIncomes[date]) groupedIncomes[date] = 0;
+            groupedIncomes[date] += (row.TotalQty || 0);
+        });
+
+        // Получаем все уникальные даты и сортируем
+        const allDates = [...new Set([...Object.keys(groupedStock), ...Object.keys(groupedIncomes)])].sort();
+
+        const qtyStock = allDates.map(d => groupedStock[d] || 0);
+        const qtyIncomes = allDates.map(d => groupedIncomes[d] || 0);
+
+        // === ТРЕЙС 1: ОСТАТКИ (Столбцы) ===
+        const traceStock = {
+            x: allDates,
+            y: qtyStock,
+            type: 'bar',
+            name: 'Остатки (vStockOnDatePlan)',
+            marker: {
+                color: 'rgba(13, 110, 253, 0.6)',
+                line: { color: '#0d6efd', width: 1 }
+            },
+            hovertemplate: '<b>%{x}</b><br>Остатки: %{y:,.0f}<extra></extra>'
+        };
+
+        // === ТРЕЙС 2: ПОСТУПЛЕНИЯ (Линия) ===
+        const traceIncomes = {
+            x: allDates,
+            y: qtyIncomes,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Поступления (vIncomesPlan)',
+            line: {
+                color: '#198754',
+                width: 3,
+                shape: 'spline'
+            },
+            marker: { size: 6, color: '#198754' },
+            hovertemplate: '<b>%{x}</b><br>Поступления: %{y:,.0f}<extra></extra>'
+        };
+
+        const layout = {
+            margin: { l: 60, r: 20, t: 20, b: 60 },
+            xaxis: {
+                title: 'Дата',
+                tickformat: '%d.%m.%Y',
+                gridcolor: '#f0f0f0',
+                tickangle: -45
+            },
+            yaxis: {
+                title: 'Qty',
+                gridcolor: '#f0f0f0',
+                tickformat: ',.0f'
+            },
+            paper_bgcolor: 'white',
+            plot_bgcolor: 'white',
+            hovermode: 'x unified',
+            showlegend: true,
+            barmode: 'overlay',
+            legend: {
+                orientation: 'h',
+                yanchor: 'bottom',
+                y: 1.02,
+                xanchor: 'right',
+                x: 1
+            }
+        };
+
+        Plotly.newPlot('plotlyChart', [traceStock, traceIncomes], layout, {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['lasso2d', 'select2d']
+        });
+    }
+
+    function updateStats(statsStock, statsIncomes) {
+        const fmt = (v, prefix='', decimals=0) => {
+            return prefix + v.toLocaleString('ru-RU', {
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals
+            });
+        };
+
+        // Остатки
+        document.getElementById('statStockQty').textContent = fmt(statsStock.total_qty);
+        document.getElementById('statStockVolume').textContent = fmt(statsStock.total_volume, '', 2);
+        document.getElementById('statStockExw').textContent = fmt(statsStock.total_exw, '$', 2);
+        document.getElementById('statStockDdp').textContent = fmt(statsStock.total_ddp, '$', 2);
+
+        // Поступления
+        document.getElementById('statIncomesQty').textContent = fmt(statsIncomes.total_qty);
+        document.getElementById('statIncomesVolume').textContent = fmt(statsIncomes.total_volume, '', 2);
+        document.getElementById('statIncomesExw').textContent = fmt(statsIncomes.total_exw, '$', 2);
+        document.getElementById('statIncomesDdp').textContent = fmt(statsIncomes.total_ddp, '$', 2);
+    }
+</script>
+{% endblock %}

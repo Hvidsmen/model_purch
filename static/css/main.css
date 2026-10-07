@@ -1,0 +1,352 @@
+ * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .header {
+            max-width: 1200px;
+            margin: 0 auto 40px auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 24px 40px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .header-nav {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .header-nav a {
+            text-decoration: none;
+            color: #4a5568;
+            font-size: 15px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            position: relative;
+            padding: 4px 0;
+        }
+
+        .header-nav a::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 0;
+            height: 2px;
+            background: #5a67d8;
+            transition: width 0.3s ease;
+        }
+
+        .header-nav a:hover {
+            color: #5a67d8;
+        }
+
+        .header-nav a:hover::after {
+            width: 100%;
+        }
+
+        .header-nav a.active {
+            color: #5a67d8;
+            font-weight: 600;
+        }
+
+        .header-nav a.active::after {
+            width: 100%;
+        }
+
+        .content {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+            padding: 40px;
+            overflow: hidden;
+        }
+
+        .content h1 {
+            color: #2d3748;
+            font-size: 28px;
+            margin-bottom: 30px;
+            font-weight: 700;
+        }
+
+        .actions {
+            display: flex;
+            gap: 16px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #edf2f7;
+            color: #4a5568;
+        }
+
+        .btn-secondary:hover {
+            background: #e2e8f0;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #48bb78 0%, #38a169 100%);
+            color: white;
+        }
+
+        .btn-success:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(72, 187, 120, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .table-wrapper::-webkit-scrollbar {
+            height: 8px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        .table-wrapper::-webkit-scrollbar-thumb {
+            background: #5a67d8;
+            border-radius: 4px;
+        }
+
+        table {
+            width: 100%;
+            min-width: 1000px;
+            border-collapse: collapse;
+        }
+
+        th {
+            padding: 14px 12px;
+            text-align: center;
+            font-weight: 600;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: white;
+            border-right: 1px solid rgba(255, 255, 255, 0.15);
+        }
+
+        th:last-child {
+            border-right: none;
+        }
+
+        thead tr:first-child th {
+            padding: 16px 12px;
+            font-size: 13px;
+        }
+
+        .header-policies {
+            background: #4338ca;
+        }
+
+        .header-sales {
+            background: #7c3aed;
+        }
+
+        .header-policies.group-divider,
+        th.group-divider {
+            border-right: 3px solid white !important;
+        }
+
+        .sub-policies {
+            background: #4f46e5;
+        }
+
+        .sub-sales {
+            background: #8b5cf6;
+        }
+
+        .sub-divider {
+            border-right: 3px solid white !important;
+        }
+
+        .header-base {
+            background: #312e81;
+        }
+
+        thead tr:first-child th:first-child {
+            border-top-left-radius: 12px;
+        }
+
+        thead tr:first-child th:last-child {
+            border-top-right-radius: 12px;
+        }
+
+        td {
+            padding: 12px 8px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #4a5568;
+            font-size: 14px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .group-header {
+            font-weight: 700;
+            color: #2d3748;
+            background: #f7fafc;
+            text-align: left;
+        }
+
+        .brand {
+            color: #5a67d8;
+            font-weight: 600;
+        }
+
+        /* Стили для полей ввода */
+        .coeff-input {
+            width: 100%;
+            min-width: 80px;
+            padding: 8px 10px;
+            border: 2px solid #e2e8f0;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: white;
+            color: #2d3748;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .coeff-input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .coeff-input:hover {
+            border-color: #cbd5e0;
+        }
+
+        .coeff-input.policy-input {
+            color: #2563eb;
+        }
+
+        .coeff-input.policy-input:focus {
+            border-color: #2563eb;
+            box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+        }
+
+        .coeff-input.sales-input {
+            color: #7c3aed;
+        }
+
+        .coeff-input.sales-input:focus {
+            border-color: #7c3aed;
+            box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+        }
+
+        .coeff-input::placeholder {
+            color: #a0aec0;
+            font-weight: 400;
+        }
+
+        td.sales-start {
+            border-left: 3px solid #e2e8f0;
+        }
+
+        tbody tr:hover {
+            background: #f7fafc;
+        }
+
+        @media (max-width: 768px) {
+            body {
+                padding: 20px 10px;
+            }
+
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                padding: 20px;
+                text-align: center;
+                margin-bottom: 20px;
+            }
+
+            .header-nav {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .header-title {
+                font-size: 18px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .content h1 {
+                font-size: 22px;
+            }
+
+            .actions {
+                flex-direction: column;
+            }
+
+            .btn {
+                width: 100%;
+            }
+
+            .coeff-input {
+                min-width: 60px;
+                padding: 6px 8px;
+                font-size: 12px;
+            }
+        }

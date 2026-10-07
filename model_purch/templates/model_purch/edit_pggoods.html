@@ -1,0 +1,104 @@
+{% extends 'model_purch/base.html' %}
+{% load static %}
+
+{% block title %}{{ title }}{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card shadow-sm">
+            <div class="card-header bg-primary text-white">
+                <h4 class="mb-1">{{ title }}</h4>
+                <small>ID записи: {{ goods.id }}</small>
+            </div>
+            <div class="card-body">
+                <form method="post" novalidate>
+                    {% csrf_token %}
+                    <div class="row g-3 mb-4 pb-3 border-bottom">
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small">{{ form.planning_group_display.label }}</label>
+                            {{ form.planning_group_display }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small">{{ form.group_goods_display.label }}</label>
+                            {{ form.group_goods_display }}
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label text-muted small">{{ form.kind_purch_display.label }}</label>
+                            {{ form.kind_purch_display }}
+                        </div>
+                    </div>
+
+                    {% if form.non_field_errors %}
+                        <div class="alert alert-danger">{% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}</div>
+                    {% endif %}
+
+                    <h6 class="text-muted mb-3">Объёмы и цены</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.volume.id_for_label }}" class="form-label">{{ form.volume.label }}</label>
+                            {{ form.volume }}
+                            {% if form.volume.errors %}<div class="text-danger small mt-1">{{ form.volume.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.exw_usd.id_for_label }}" class="form-label">{{ form.exw_usd.label }}</label>
+                            {{ form.exw_usd }}
+                            {% if form.exw_usd.errors %}<div class="text-danger small mt-1">{{ form.exw_usd.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.ddp_usd.id_for_label }}" class="form-label">{{ form.ddp_usd.label }}</label>
+                            {{ form.ddp_usd }}
+                            {% if form.ddp_usd.errors %}<div class="text-danger small mt-1">{{ form.ddp_usd.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.kddp.id_for_label }}" class="form-label">{{ form.kddp.label }} <small class="text-muted">(автоматически)</small></label>
+                            {{ form.kddp }}
+                            {% if form.kddp.errors %}<div class="text-danger small mt-1">{{ form.kddp.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <h6 class="text-muted mb-3">Запасы</h6>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.stock_cnt_day.id_for_label }}" class="form-label">{{ form.stock_cnt_day.label }}</label>
+                            {{ form.stock_cnt_day }}
+                            {% if form.stock_cnt_day.errors %}<div class="text-danger small mt-1">{{ form.stock_cnt_day.errors.0 }}</div>{% endif %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.percent_stock_end.id_for_label }}" class="form-label">{{ form.percent_stock_end.label }}</label>
+                            {{ form.percent_stock_end }}
+                            {% if form.percent_stock_end.errors %}<div class="text-danger small mt-1">{{ form.percent_stock_end.errors.0 }}</div>{% endif %}
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 pt-3 border-top">
+                        <a href="{% url 'pggoods_list' %}" class="btn btn-outline-secondary">Отмена</a>
+                        <button type="submit" class="btn btn-success">💾 Сохранить изменения</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    const exw = document.getElementById('{{ form.exw_usd.id_for_label }}');
+    const ddp = document.getElementById('{{ form.ddp_usd.id_for_label }}');
+    const kddp = document.getElementById('{{ form.kddp.id_for_label }}');
+    function recalc() {
+        const exwVal = parseFloat(exw.value);
+        const ddpVal = parseFloat(ddp.value);
+        if (!isNaN(exwVal) && !isNaN(ddpVal) && exwVal > 0) {
+            kddp.value = (ddpVal / exwVal).toFixed(4);
+        } else {
+            kddp.value = '';
+        }
+    }
+    exw.addEventListener('input', recalc);
+    ddp.addEventListener('input', recalc);
+});
+</script>
+{% endblock %}
