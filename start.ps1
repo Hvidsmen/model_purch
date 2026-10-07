@@ -11,6 +11,20 @@ if (-not (Test-Path -LiteralPath $pythonExecutable)) {
 if (-not (Test-Path -LiteralPath $pythonExecutable)) {
     throw 'Не найден Python окружения. Выполните: py -3.10 -m venv .venv310; затем .\.venv310\Scripts\python.exe -m pip install -r requirements.txt'
 }
+# Existing terminal sessions do not refresh environment variables saved to Windows.
+# Preserve explicit process overrides, otherwise read the saved user/machine value.
+foreach ($connectionVariable in @('MS_SQL_CONN_STR', 'DWH_SQL_CONN_STR')) {
+    $connectionValue = [Environment]::GetEnvironmentVariable($connectionVariable, 'Process')
+    if ([string]::IsNullOrWhiteSpace($connectionValue)) {
+        $connectionValue = [Environment]::GetEnvironmentVariable($connectionVariable, 'User')
+        if ([string]::IsNullOrWhiteSpace($connectionValue)) {
+            $connectionValue = [Environment]::GetEnvironmentVariable($connectionVariable, 'Machine')
+        }
+        if (-not [string]::IsNullOrWhiteSpace($connectionValue)) {
+            [Environment]::SetEnvironmentVariable($connectionVariable, $connectionValue, 'Process')
+        }
+    }
+}
 $prepareArguments = @('scripts/prepare_local.py')
 if ($Database) { $prepareArguments += @('--database', $Database) }
 & $pythonExecutable @prepareArguments

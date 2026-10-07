@@ -36,6 +36,9 @@ def main():
     from model_purch.models import ScenarioModel
     print(f'Активная база: {selected}')
     print(f'Сценариев: {ScenarioModel.objects.count()}')
+    from django.conf import settings
+    configured = bool(getattr(settings, 'MS_SQL_CONN_STR', None))
+    print('MS SQL: строка подключения загружена' if configured else 'MS SQL: строка подключения не задана; экспорт и расчёт недоступны')
     config_file = ROOT / '.local' / 'config.json'
     config_file.parent.mkdir(parents=True, exist_ok=True)
     temporary = config_file.with_suffix('.tmp')
