@@ -46,7 +46,7 @@
     <div class="d-flex justify-content-between align-items-center">
         <div class="page-title">
             <h2 class="mb-1">
-                <i class="bi bi-box-seam-fill text-primary"></i>
+                <i aria-hidden="true" class="bi bi-box-seam-fill text-primary"></i>
                 Справочник товаров
             </h2>
             <p class="text-muted mb-0 small">
@@ -56,26 +56,26 @@
 
         <div class="page-actions d-flex gap-2 align-items-center">
             <span class="badge bg-secondary fs-6 me-2">
-                <i class="bi bi-collection"></i> Всего: {{ page_obj.paginator.count }}
+                <i aria-hidden="true" class="bi bi-collection"></i> Всего: {{ page_obj.paginator.count }}
             </span>
 
             <button type="button" class="btn btn-success" id="saveAllBtn" disabled>
-                <i class="bi bi-check-lg"></i>
+                <i aria-hidden="true" class="bi bi-check-lg"></i>
                 <span id="saveAllText">Сохранить все (0)</span>
             </button>
 
             <a href="{% url 'export_pggoods' %}?scenario={{ current_scenario.id }}&{{ query_string }}"
                class="btn btn-outline-success">
-                <i class="bi bi-file-earmark-excel"></i> Экспорт в Excel
+                <i aria-hidden="true" class="bi bi-file-earmark-excel"></i> Экспорт в Excel
             </a>
 
             <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.id }}"
                class="btn btn-outline-info">
-                <i class="bi bi-upload"></i> Импорт из Excel
+                <i aria-hidden="true" class="bi bi-upload"></i> Импорт из Excel
             </a>
 
-            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#copyPggoodsModal">
-                <i class="bi bi-files"></i> Копировать из сценария
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#copyPggoodsModal" {% if scenarios|length < 2 %}disabled title="Создайте второй сценарий для копирования"{% endif %}>
+                <i aria-hidden="true" class="bi bi-files"></i> Копировать из сценария
             </button>
         </div>
     </div>
@@ -172,7 +172,7 @@
             <div class="row align-items-center">
                 <div class="col-md-6">
                     <label for="scenario-select" class="form-label mb-1 fw-semibold">
-                        <i class="bi bi-clipboard-data text-primary"></i> Сценарий планирования
+                        <i aria-hidden="true" class="bi bi-clipboard-data text-primary"></i> Сценарий планирования
                     </label>
                     <select id="scenario-select" class="form-select scenario-selector" onchange="changeScenario(this.value)">
                         {% for scenario in scenarios %}
@@ -185,14 +185,14 @@
                     </select>
                     {% if current_scenario %}
                         <div class="scenario-info">
-                            <i class="bi bi-info-circle"></i>
+                            <i aria-hidden="true" class="bi bi-info-circle"></i>
                             Показаны товары для сценария: <strong>{{ current_scenario.name }}</strong>
                         </div>
                     {% endif %}
                 </div>
                 <div class="col-md-6 text-md-end mt-2 mt-md-0">
                     <span class="badge bg-primary fs-6">
-                        <i class="bi bi-collection"></i>
+                        <i aria-hidden="true" class="bi bi-collection"></i>
                         Записей: {{ page_obj.paginator.count }}
                     </span>
                 </div>
@@ -201,7 +201,7 @@
     </div>
 {% else %}
     <div class="alert alert-warning">
-        <i class="bi bi-exclamation-triangle"></i>
+        <i aria-hidden="true" class="bi bi-exclamation-triangle"></i>
         Нет доступных сценариев.
         <a href="{% url 'scenario_create' %}" class="alert-link">Создайте первый сценарий</a>,
         чтобы данные были синхронизированы.
@@ -261,14 +261,14 @@
                 </select>
             </div>
             <div class="col-12 col-lg-4 d-flex gap-2 mt-2 mt-lg-0">
-                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i class="bi bi-funnel"></i> Применить</button>
-                <a href="{% url 'pggoods_list' %}" class="btn btn-outline-secondary btn-sm" title="Сбросить"><i class="bi bi-x-lg"></i></a>
+                <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i aria-hidden="true" class="bi bi-funnel"></i> Применить</button>
+                <a href="{% url 'pggoods_list' %}" class="btn btn-outline-secondary btn-sm" title="Сбросить"><i aria-hidden="true" class="bi bi-x-lg"></i></a>
             </div>
         </form>
     </div>
 </div>
 
-<div class="hint-text mb-2"><i class="bi bi-info-circle"></i> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
+<div class="hint-text mb-2"><i aria-hidden="true" class="bi bi-info-circle"></i> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
 
 <div class="card shadow-sm">
     <div class="table-responsive">
@@ -329,13 +329,13 @@
       onsubmit="return confirm('Удалить запись?');">
     {% csrf_token %}
     <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
-        <i class="bi bi-trash"></i>
+        <i aria-hidden="true" class="bi bi-trash"></i>
     </button>
 </form>
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="14" class="text-center text-muted py-4"><i class="bi bi-inbox fs-3 d-block mb-2"></i>Записи не найдены.</td></tr>
+                    <tr><td colspan="14" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -370,17 +370,17 @@
 <div class="modal fade" id="copyPggoodsModal" tabindex="-1" aria-labelledby="copyPggoodsModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form method="post" action="{% url 'copy_pggoods_from_scenario' %}">
+            <form method="post" action="{% url 'copy_pggoods_from_scenario' %}" data-copy-target="{{ current_scenario.name }}">
                 {% csrf_token %}
                 <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="copyPggoodsModalLabel"><i class="bi bi-files"></i> Копирование товаров (PGGoods)</h5>
+                    <h5 class="modal-title" id="copyPggoodsModalLabel"><i aria-hidden="true" class="bi bi-files"></i> Копирование товаров</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Скопирует все товары из выбранного сценария в "<strong>{{ current_scenario.name }}</strong>".
-                        <br><span class="text-info"><i class="bi bi-info-circle"></i> Если товар с такой плановой группой уже существует (без учёта регистра), его данные будут <strong>обновлены</strong> (дубликаты не создаются).</span>
+                        <br><span class="text-info"><i aria-hidden="true" class="bi bi-info-circle"></i> Если товар с такой плановой группой уже существует (без учёта регистра), его данные будут <strong>обновлены</strong> (дубликаты не создаются).</span>
                     </p>
                     <label class="form-label fw-semibold">Сценарий-источник:</label>
                     <select name="source_scenario_id" class="form-select" required>
@@ -396,8 +396,8 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="submit" class="btn btn-primary" id="confirmCopyPggoodsBtn">
-                        <i class="bi bi-check-lg"></i> Скопировать
+                    <button type="submit" class="btn btn-primary" id="confirmCopyPggoodsBtn" {% if scenarios|length < 2 %}disabled{% endif %}>
+                        <i aria-hidden="true" class="bi bi-check-lg"></i> Скопировать
                     </button>
                 </div>
             </form>

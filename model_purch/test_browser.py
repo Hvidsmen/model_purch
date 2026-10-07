@@ -66,6 +66,8 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         button.click()
         self.assertFalse(self.db(lambda: Purch.objects.filter(scenario_plan=self.target).exists()))
         modal.locator('select[name="source_scenario_id"]').select_option(str(self.source.pk))
+        self.assertIn('Из: Source', modal.locator('.copy-direction').inner_text())
+        self.assertIn('В: Target', modal.locator('.copy-direction').inner_text())
         with self.page.expect_navigation():
             button.click()
         copied = self.db(lambda: Purch.objects.get(scenario_plan=self.target, name='Supplier'))
@@ -83,6 +85,8 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         modal = self.page.locator('#copyPggoodsModal')
         modal.wait_for(state='visible')
         modal.locator('select[name="source_scenario_id"]').select_option(str(self.source.pk))
+        self.assertIn('Из: Source', modal.locator('.copy-direction').inner_text())
+        self.assertIn('В: Target', modal.locator('.copy-direction').inner_text())
         with self.page.expect_navigation():
             modal.locator('button[type="submit"]').click()
         self.assertEqual(self.db(lambda: PGGoods.objects.get(scenario_plan=self.target).planning_group), 'Group')
@@ -135,4 +139,30 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(run.scenario_export_id, export.pk)
         self.assertEqual(run.status, 'completed')
         self.assertEqual(run.parameters, parameters)
+        self.assertEqual(self.errors, [], self.asset_events)
+
+    def test_payment_conditions_filter_and_empty_search_are_readable(self):
+        def create_invalid_purchase():
+            purchase = Purch.objects.create(scenario_plan=self.source, name='Needs review', lag_income=10, lage_make=0)
+            PurchPay.objects.create(purch=purchase, name='Advance', percent_pay=30, lag_day_pay=-10)
+            return purchase.pk
+        invalid_id = self.db(create_invalid_purchase)
+        self.visit('purch_list')
+        self.select(self.source)
+        self.assertIn('100% · Payment', self.page.locator(f'#purchase-{self.purchase.pk}').inner_text())
+        self.page.locator('#purchPaymentFilter').select_option('invalid')
+        self.assertTrue(self.page.locator(f'#purchase-{invalid_id}').is_visible())
+        self.assertFalse(self.page.locator(f'#purchase-{self.purchase.pk}').is_visible())
+        self.assertIn('требуется 100%', self.page.locator(f'#purchase-{invalid_id}').inner_text())
+        self.page.locator('#purchSearchInput').fill('missing supplier')
+        self.page.locator('#purchSearchInput').press('End')
+        self.assertTrue(self.page.locator('#purch-search-empty').is_visible())
+        self.assertEqual(self.errors, [], self.asset_events)
+
+    def test_mobile_freight_layout_does_not_overflow_viewport(self):
+        self.page.set_viewport_size({'width': 390, 'height': 844})
+        self.visit('freight')
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 390)
+        self.assertTrue(self.page.locator('#workspace-scenario').is_visible())
+        self.assertTrue(self.page.locator('[name="price_per_container"]').is_visible())
         self.assertEqual(self.errors, [], self.asset_events)

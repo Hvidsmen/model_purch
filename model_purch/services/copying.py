@@ -5,7 +5,7 @@ from ..goods_identity import planning_group_key
 
 def copy_purchases(source, target):
     source_purchs = Purch.objects.filter(scenario_plan=source).prefetch_related('purchpay_set')
-    copied_count = 0
+    created_count = updated_count = 0
 
     with transaction.atomic():
         for sp in source_purchs:
@@ -31,9 +31,12 @@ def copy_purchases(source, target):
             if new_pays:
                 PurchPay.objects.bulk_create(new_pays)
 
-            copied_count += 1
+            if created:
+                created_count += 1
+            else:
+                updated_count += 1
 
-    return copied_count
+    return created_count, updated_count
 
 
 def copy_goods(source, target):

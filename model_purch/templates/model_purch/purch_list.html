@@ -94,7 +94,7 @@
     <div class="d-flex justify-content-between align-items-center">
         <div class="page-title">
             <h2 class="mb-1">
-                <i class="bi bi-gear-fill text-primary"></i>
+                <i aria-hidden="true" class="bi bi-gear-fill text-primary"></i>
                 Настройки закупок
             </h2>
             <p class="text-muted mb-0 small">
@@ -105,10 +105,10 @@
         <div class="page-actions d-flex gap-2">
             <a href="{% url 'purch_create' %}?scenario={{ current_scenario.id }}"
                class="btn btn-primary">
-                <i class="bi bi-plus-lg"></i> Создать закупку
+                <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать закупку
             </a>
-            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#copyPurchModal">
-                <i class="bi bi-files"></i> Копировать из сценария
+            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#copyPurchModal" {% if scenarios|length < 2 %}disabled title="Создайте второй сценарий для копирования"{% endif %}>
+                <i aria-hidden="true" class="bi bi-files"></i> Копировать из сценария
             </button>
         </div>
     </div>
@@ -186,13 +186,17 @@
             <div class="row align-items-center g-3">
                 <div class="col-md-6">
                     <h5 class="mb-0 text-secondary">
-                        <i class="bi bi-list-ul"></i> Список поставщиков
+                        <i aria-hidden="true" class="bi bi-list-ul"></i> Список поставщиков
                     </h5>
                 </div>
                 <div class="col-md-6">
-                    <div class="input-group">
+                    <div class="d-flex gap-2 flex-wrap">
+                    <select id="purchPaymentFilter" class="form-select" style="max-width: 190px" aria-label="Фильтр платежей" onchange="filterPurchTable()">
+                        <option value="all">Все платежи</option><option value="invalid">Требуют проверки</option><option value="valid">Корректные платежи</option>
+                    </select>
+                    <div class="input-group" style="flex: 1; min-width: 200px">
                         <span class="input-group-text bg-light border-end-0">
-                            <i class="bi bi-search text-muted"></i>
+                            <i aria-hidden="true" class="bi bi-search text-muted"></i>
                         </span>
                         <input type="text"
                                id="purchSearchInput"
@@ -204,12 +208,13 @@
                                 type="button"
                                 onclick="clearPurchSearch()"
                                 title="Очистить поиск">
-                            <i class="bi bi-x-lg"></i>
+                            <i aria-hidden="true" class="bi bi-x-lg"></i>
                         </button>
-                    </div>
+                    </div></div>
                 </div>
             </div>
         </div>
+        <p id="purch-search-empty" class="text-muted px-3 pt-3" hidden>Поиск не дал результатов. Измените название или фильтр платежей.</p>
         <!-- === КОНЕЦ ДОБАВЛЕНИЯ === -->
 
         <div class="table-responsive">
@@ -220,87 +225,37 @@
                         <th style="width: 50px;">#</th>
                         <th>Название закупки</th>
                         <th style="width: 150px;">Лаг доставки (дней)</th>
-                        <th style="width: 200px;">График платежей</th>
+                        <th style="width: 46%;">График платежей</th>
                         <th style="width: 150px;" class="text-center">Действия</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for purch in purch_list %}
-                        <tr>
+                        <tr id="purchase-{{ purch.pk }}" data-payment-valid="{% if purch.payment_valid %}true{% else %}false{% endif %}">
                             <td class="text-muted">{{ purch.id }}</td>
                             <td><strong>{{ purch.name }}</strong></td>
                             <td>
                                 <span class="badge bg-secondary">{{ purch.lag_income }}</span>
                             </td>
                             <td>
-                                {% with payments=purch.purchpay_set.all %}
-                                    {% if payments %}
-                                        <!-- Кликабельный бейдж с количеством -->
-                                        <span class="badge payment-count-badge
-                                                     {% if purch.total_percent == 100 %}valid
-                                                     {% elif purch.total_percent > 100 %}invalid
-                                                     {% else %}warning{% endif %}"
-                                              data-bs-toggle="popover"
-                                              data-bs-placement="right"
-                                              data-bs-html="true"
-                                              title="<i class='bi bi-cash-stack'></i> График платежей: {{ purch.name }}"
-                                              data-bs-content="
-                                                <table class='table table-sm mb-0'>
-                                                  <thead>
-                                                    <tr>
-                                                      <th>Платёж</th>
-                                                      <th class='text-end'>%</th>
-                                                      <th class='text-end'>Лаг</th>
-                                                    </tr>
-                                                  </thead>
-                                                  <tbody>
-                                                    {% for pay in payments %}
-                                                    <tr>
-                                                      <td>{{ pay.name }}</td>
-                                                      <td class='text-end'><strong>{{ pay.percent_pay }}%</strong></td>
-                                                      <td class='text-end'>{{ pay.lag_day_pay }} дн.</td>
-                                                    </tr>
-                                                    {% endfor %}
-                                                  </tbody>
-                                                  <tfoot>
-                                                    <tr class='table-light'>
-                                                      <td><strong>Итого:</strong></td>
-                                                      <td class='text-end'><strong>{{ purch.total_percent }}%</strong></td>
-                                                      <td></td>
-                                                    </tr>
-                                                  </tfoot>
-                                                </table>
-                                                {% if purch.total_percent != 100 %}
-                                                <div class='alert alert-warning py-1 mb-0 mt-2 small'>
-                                                  <i class='bi bi-exclamation-triangle'></i> Сумма ≠ 100%
-                                                </div>
-                                                {% endif %}
-                                              ">
-                                            <i class="bi bi-list-check"></i> {{ payments|length }} плат.
-                                        </span>
-
-                                        <!-- Мини-превью первых 3 платежей -->
-                                        <div class="payment-preview">
-                                            {% for pay in payments|slice:":3" %}
-                                                <span class="badge bg-light text-dark border">
-                                                    {{ pay.percent_pay }}%
-                                                </span>
+                                {% if purch.payment_schedule %}
+                                    <details>
+                                        <summary class="payment-summary">{% for pay in purch.payment_schedule %}{{ pay.percent_pay|floatformat:"-2" }}% · {{ pay.name|truncatechars:24 }}{% if not forloop.last %} / {% endif %}{% endfor %}</summary>
+                                        <ul class="payment-details">
+                                            {% for pay in purch.payment_schedule %}
+                                                <li>{{ pay.percent_pay|floatformat:"-2" }}% — {{ pay.name }}; лаг {{ pay.lag_day_pay }} дн.; {{ pay.kind_lag_pay.name|default:"точка отсчёта не указана" }}</li>
                                             {% endfor %}
-                                            {% if payments|length > 3 %}
-                                                <span class="badge bg-light text-muted">+{{ payments|length|add:"-3" }}</span>
-                                            {% endif %}
-                                        </div>
-                                    {% else %}
-                                        <span class="text-muted small">
-                                            <i class="bi bi-dash-circle"></i> Нет платежей
-                                        </span>
-                                    {% endif %}
-                                {% endwith %}
+                                        </ul>
+                                    </details>
+                                    {% if not purch.payment_valid %}<div class="payment-warning">Сумма: {{ purch.payment_total|floatformat:"-2" }}% — требуется 100%. <a href="{% url 'purch_edit' purch.pk %}?scenario={{ current_scenario.pk }}">Исправить</a></div>{% endif %}
+                                {% else %}
+                                    <span class="payment-warning">Нет графика платежей. <a href="{% url 'purch_edit' purch.pk %}?scenario={{ current_scenario.pk }}">Добавить</a></span>
+                                {% endif %}
                             </td>
                             <td class="text-center">
     <a href="{% url 'purch_edit' purch.id %}?scenario={{ current_scenario.id }}"
        class="btn btn-sm btn-outline-primary" title="Редактировать">
-        <i class="bi bi-pencil"></i>
+        <i aria-hidden="true" class="bi bi-pencil"></i>
     </a>
     <form method="post"
           action="{% url 'purch_delete' purch.id %}?scenario={{ current_scenario.id }}"
@@ -308,7 +263,7 @@
           onsubmit="return confirm('Удалить закупку «{{ purch.name }}»?');">
         {% csrf_token %}
         <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
-            <i class="bi bi-trash"></i>
+            <i aria-hidden="true" class="bi bi-trash"></i>
         </button>
     </form>
 </td>
@@ -316,11 +271,11 @@
                     {% empty %}
                         <tr>
                             <td colspan="5" class="text-center text-muted py-4">
-                                <i class="bi bi-inbox fs-3 d-block mb-2"></i>
-                                Для сценария «{{ current_scenario.name }}» закупок ещё не создано.
+                                <i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>
+                                Для сценария «{{ current_scenario.name }}» закупок ещё не создано. Создайте закупку или скопируйте поставщиков и платежи из другого сценария.
                                 <br>
                                 <a href="{% url 'purch_create' %}?scenario={{ current_scenario.id }}" class="btn btn-sm btn-primary mt-2">
-                                    <i class="bi bi-plus-lg"></i> Создать первую закупку
+                                    <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать первую закупку
                                 </a>
                             </td>
                         </tr>
@@ -329,23 +284,23 @@
             </table>
         </div>
     </div>
-{% endif %}
+{% else %}<div class="card card-body text-center empty-guidance"><h3 class="h5">Сначала нужен сценарий</h3><p>Создайте сценарий, затем добавьте поставщиков и условия оплаты. Если данные уже были, проверьте активную базу в панели выше.</p><a href="{% url 'scenario_create' %}" class="btn btn-primary">Создать сценарий</a></div>{% endif %}
 
 <div class="modal fade" id="copyPurchModal" tabindex="-1" aria-labelledby="copyPurchModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <form method="post" action="{% url 'copy_purch_from_scenario' %}">
+            <form method="post" action="{% url 'copy_purch_from_scenario' %}" data-copy-target="{{ current_scenario.name }}">
                 {% csrf_token %}
                 <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="copyPurchModalLabel"><i class="bi bi-files"></i> Копирование закупок</h5>
+                    <h5 class="modal-title" id="copyPurchModalLabel"><i aria-hidden="true" class="bi bi-files"></i> Копирование закупок</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Выберите сценарий, из которого нужно скопировать закупки и графики платежей в текущий сценарий
                         "<strong>{{ current_scenario.name }}</strong>".
-                        <br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Существующие закупки с такими же именами будут обновлены.</span>
+                        <br><span class="text-warning"><i aria-hidden="true" class="bi bi-exclamation-triangle"></i> Существующие закупки с такими же именами будут обновлены.</span>
                     </p>
                     <label for="copy-purch-source" class="form-label fw-semibold">Сценарий-источник:</label>
                     <select id="copy-purch-source" name="source_scenario_id" class="form-select" required>
@@ -361,8 +316,8 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="submit" class="btn btn-primary" id="confirmCopyPurchBtn">
-                        <i class="bi bi-check-lg"></i> Скопировать
+                    <button type="submit" class="btn btn-primary" id="confirmCopyPurchBtn" {% if scenarios|length < 2 %}disabled{% endif %}>
+                        <i aria-hidden="true" class="bi bi-check-lg"></i> Скопировать
                     </button>
                 </div>
             </form>
@@ -381,45 +336,20 @@ function changeScenario(scenarioId) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-    // Инициализация popover для всех бейджей с графиком платежей
-    const popoverTriggerList = document.querySelectorAll('[data-bs-toggle="popover"]');
-    const popoverList = [...popoverTriggerList].map(popoverTriggerEl =>
-        new bootstrap.Popover(popoverTriggerEl, {
-            trigger: 'click',
-            container: 'body',
-            sanitize: false  // Разрешаем HTML в popover
-        })
-    );
-
-    // Закрываем popover при клике вне его
-    document.addEventListener('click', function(e) {
-        if (!e.target.closest('[data-bs-toggle="popover"]')) {
-            popoverList.forEach(popover => popover.hide());
-        }
-    });
-});
     // Функция фильтрации таблицы
 function filterPurchTable() {
-    const input = document.getElementById('purchSearchInput');
-    const filter = input.value.toLowerCase().trim();
-    const table = document.getElementById('purchTable');
-    const tr = table.getElementsByTagName('tr');
-
-    // Начинаем с 1, чтобы пропустить строку заголовка (<thead>)
-    for (let i = 1; i < tr.length; i++) {
-
-        const tdName = tr[i].getElementsByTagName('td')[1]; // Индекс 1 = "Название закупки"
-
-        if (tdName) {
-            const txtValue = tdName.textContent || tdName.innerText;
-            if (txtValue.toLowerCase().indexOf(filter) > -1) {
-                tr[i].style.display = ""; // Показываем
-            } else {
-                tr[i].style.display = "none"; // Скрываем
-            }
-        }
-    }
+    const filter = document.getElementById('purchSearchInput').value.toLowerCase().trim();
+    const paymentFilter = document.getElementById('purchPaymentFilter').value;
+    const rows = [...document.querySelectorAll('#purchTable tbody tr[data-payment-valid]')];
+    let visible = 0;
+    rows.forEach(row => {
+        const name = row.cells[1].textContent.toLowerCase();
+        const statusMatches = paymentFilter === 'all' || (row.dataset.paymentValid === 'true') === (paymentFilter === 'valid');
+        const show = name.includes(filter) && statusMatches;
+        row.hidden = !show;
+        if (show) visible++;
+    });
+    document.getElementById('purch-search-empty').hidden = rows.length === 0 || visible > 0;
 }
 
 // Функция очистки поиска

@@ -18,7 +18,7 @@
         <div class="card card-body">
             <h2 class="h5">Копировать из сценария</h2>
             <p>Цена и объём контейнера в текущем сценарии будут заменены значениями источника.</p>
-            <form method="post" action="{% url 'copy_freight' %}">
+            <form method="post" action="{% url 'copy_freight' %}" data-copy-target="{{ current_scenario.name }}">
                 {% csrf_token %}
                 <input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
                 <label for="freight-source" class="form-label">Сценарий-источник</label>
@@ -26,12 +26,12 @@
                     <option value="">Выберите сценарий</option>
                     {% for scenario in source_scenarios %}<option value="{{ scenario.pk }}">{{ scenario.name }}</option>{% endfor %}
                 </select>
-                <button class="btn btn-outline-primary" {% if not source_scenarios %}disabled{% endif %}>Копировать</button>
+                <button type="submit" class="btn btn-outline-primary" {% if not source_scenarios %}disabled{% endif %}>Копировать</button>
             </form>
         </div>
     </div>
 </div>
 {% else %}
-<p>Сначала <a href="{% url 'scenario_create' %}">создайте сценарий</a>, чтобы заполнить параметры фрахта.</p>
+<p>Сначала <a href="{% url 'scenario_create' %}">создайте сценарий</a>, чтобы заполнить параметры фрахта. Если сценарии уже были, проверьте активную базу в панели выше.</p>
 {% endif %}
 {% endblock %}

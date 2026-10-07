@@ -214,7 +214,7 @@
     <div class="d-flex justify-content-between align-items-center">
         <div class="page-title">
             <h2 class="mb-1">
-                <i class="bi bi-clipboard-data text-primary"></i>
+                <i aria-hidden="true" class="bi bi-clipboard-data text-primary"></i>
                 Сценарии планирования
             </h2>
             <p class="text-muted mb-0 small">
@@ -225,10 +225,10 @@
         <!-- ИЗМЕНЕНИЕ ЗДЕСЬ: добавлен d-flex gap-2 и кнопка "Рассчитать" -->
         <div class="page-actions d-flex gap-2">
             <a href="{% url 'results_page' %}" class="btn btn-success">
-                <i class="bi bi-calculator"></i> Рассчитать
+                <i aria-hidden="true" class="bi bi-calculator"></i> Рассчитать
             </a>
             <a href="{% url 'scenario_create' %}" class="btn btn-primary">
-                <i class="bi bi-plus-lg"></i> Создать сценарий
+                <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать сценарий
             </a>
         </div>
     </div>
@@ -262,11 +262,11 @@
                             {{ scenario.name }}
                         </td>
                         <td class="col-date">
-                            <i class="bi bi-calendar3 text-muted me-1"></i>
+                            <i aria-hidden="true" class="bi bi-calendar3 text-muted me-1"></i>
                             {{ scenario.date_start_plan|date:"d.m.Y" }}
                         </td>
                         <td class="col-date">
-                            <i class="bi bi-calendar3 text-muted me-1"></i>
+                            <i aria-hidden="true" class="bi bi-calendar3 text-muted me-1"></i>
                             {{ scenario.date_end_plan|date:"d.m.Y" }}
                         </td>
                         <td class="col-count">
@@ -279,7 +279,7 @@
                             <a href="{% url 'scenario_edit' scenario.pk %}"
                                class="btn-action btn-edit"
                                title="Редактировать">
-                                <i class="bi bi-pencil-square"></i>
+                                <i aria-hidden="true" class="bi bi-pencil-square"></i>
                             </a>
 
                             <!-- Кнопка экспорта в SQL (открывает модальное окно) -->
@@ -288,14 +288,14 @@
                                     data-bs-toggle="modal"
                                     data-bs-target="#exportSqlModal{{ scenario.pk }}"
                                     title="Экспорт в SQL и расчет">
-                                <i class="bi bi-database"></i>
+                                <i aria-hidden="true" class="bi bi-database"></i>
                             </button>
 
                             <!-- Кнопка удаления -->
                             <a href="{% url 'scenario_delete' scenario.pk %}"
                                class="btn-action btn-delete"
                                title="Удалить">
-                                <i class="bi bi-trash"></i>
+                                <i aria-hidden="true" class="bi bi-trash"></i>
                             </a>
                         </td>
                     </tr>
@@ -306,13 +306,13 @@
                             <div class="modal-content border-0 shadow">
                                 <div class="modal-header bg-success text-white">
                                     <h5 class="modal-title">
-                                        <i class="bi bi-database"></i> Экспорт в MS SQL
+                                        <i aria-hidden="true" class="bi bi-database"></i> Экспорт в MS SQL
                                     </h5>
                                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                                 </div>
                                 <div class="modal-body p-4">
                                     <div class="alert alert-info d-flex align-items-start gap-2">
-                                        <i class="bi bi-info-circle-fill fs-5"></i>
+                                        <i aria-hidden="true" class="bi bi-info-circle-fill fs-5"></i>
                                         <div class="small">
                                             <strong>Сценарий:</strong> {{ scenario.name }}<br>
                                             <strong>Период:</strong> {{ scenario.date_start_plan|date:"d.m.Y" }} — {{ scenario.date_end_plan|date:"d.m.Y" }}
@@ -335,17 +335,17 @@
                                     </div>
 
                                     <div class="alert alert-warning small mb-0">
-                                        <i class="bi bi-exclamation-triangle"></i>
+                                        <i aria-hidden="true" class="bi bi-exclamation-triangle"></i>
                                         Существующие записи с такими же ключами будут обновлены
                                     </div>
                                 </div>
                                 <div class="modal-footer bg-light">
                                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                        <i class="bi bi-x-lg"></i> Отмена
+                                        <i aria-hidden="true" class="bi bi-x-lg"></i> Отмена
                                     </button>
                                     <a href="{% url 'export_scenario_to_sql' scenario.pk %}"
                                        class="btn btn-success">
-                                        <i class="bi bi-check-lg"></i> Экспортировать
+                                        <i aria-hidden="true" class="bi bi-check-lg"></i> Экспортировать
                                     </a>
                                 </div>
                             </div>
@@ -357,11 +357,11 @@
     </div>
 {% else %}
     <div class="empty-state">
-        <i class="bi bi-clipboard-data"></i>
+        <i aria-hidden="true" class="bi bi-clipboard-data"></i>
         <h5>Сценарии не созданы</h5>
-        <p>Создайте первый сценарий планирования для начала работы</p>
+        <p>Создайте первый сценарий планирования, затем заполните товары, закупки и фрахт. Если ваши сценарии уже существовали, проверьте путь в разделе «Активная база» выше.</p>
         <a href="{% url 'scenario_create' %}" class="btn btn-primary">
-            <i class="bi bi-plus-lg"></i> Создать сценарий
+            <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать сценарий
         </a>
     </div>
 {% endif %}

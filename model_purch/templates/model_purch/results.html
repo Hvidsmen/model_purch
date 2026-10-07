@@ -238,7 +238,7 @@
     <div class="d-flex justify-content-between align-items-center">
         <div class="page-title">
             <h2 class="mb-1">
-                <i class="bi bi-gear-wide-connected text-primary"></i>
+                <i aria-hidden="true" class="bi bi-gear-wide-connected text-primary"></i>
                 Расчет модели закупок
             </h2>
             <p class="text-muted mb-0 small">
@@ -247,17 +247,23 @@
         </div>
         <div class="page-actions">
             <button class="btn btn-outline-primary" onclick="location.reload()">
-                <i class="bi bi-arrow-clockwise"></i> Обновить
+                <i aria-hidden="true" class="bi bi-arrow-clockwise"></i> Обновить
             </button>
         </div>
     </div>
 </div>
 
+<ol class="checklist" aria-label="Подготовка к расчёту">
+    <li class="{% if data_ready %}done{% else %}needs-action{% endif %}"><strong>1. Данные</strong><span class="d-block small">{% if data_ready %}Товары заполнены{% else %}Добавьте товары{% endif %}</span><a href="{% url 'pggoods_list' %}">Открыть товары</a></li>
+    <li class="{% if validation_ready %}done{% else %}needs-action{% endif %}"><strong>2. Проверки</strong><span class="d-block small">{% if validation_ready %}Параметры корректны{% else %}Исправьте ошибки ниже{% endif %}</span><a href="{% url 'purch_list' %}">Открыть закупки</a></li>
+    <li class="{% if export_ready %}done{% else %}needs-action{% endif %}"><strong>3. Экспорт</strong><span class="d-block small">{% if export_ready %}Данные актуальны{% else %}Экспортируйте сценарий{% endif %}</span><a href="{% url 'scenario_list' %}">Открыть экспорт</a></li>
+    <li class="{% if not readiness_errors and not active_runs %}done{% else %}needs-action{% endif %}"><strong>4. Расчёт</strong><span class="d-block small">{% if active_runs %}Другой запуск не завершён{% elif not readiness_errors %}Можно запускать{% else %}Завершите подготовку{% endif %}</span><a href="#controlPanel">Перейти к запуску</a></li>
+</ol>
 <div class="card card-body mb-3">
     <p>Сценарий расчёта: <strong>{{ current_scenario.name|default:"не выбран" }}</strong></p>
     <p>Последний успешный экспорт: <strong>{{ last_export.exported_at|date:"d.m.Y H:i:s"|default:"не выполнялся" }}</strong></p>
-    <p class="text-muted">Заказ рассчитывается только для выбранного сценария. Подготовка данных, обновление таблиц и запуск OLAP выполняются общими SQL-процедурами. Фрахт экспортируется; его использование внешними процедурами требует их настройки.</p>
-    {% if readiness_errors %}<div class="alert alert-warning"><strong>До запуска исправьте:</strong><ul>{% for error in readiness_errors %}<li>{{ error }}</li>{% endfor %}</ul></div>{% endif %}
+    <details class="text-muted small mb-3"><summary>Как выполняется расчёт</summary><p>Заказ рассчитывается только для выбранного сценария. Подготовка данных, обновление таблиц и запуск OLAP выполняются общими SQL-процедурами. Фрахт экспортируется; его использование внешними процедурами требует их настройки.</p></details>
+    {% if readiness_errors %}<div class="alert alert-warning"><strong>До запуска исправьте:</strong><ul>{% for issue in readiness_issues %}<li>{{ issue.message }} {% if issue.url %}<a href="{{ issue.url }}">Открыть данные</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
     {% if active_runs %}
         <div class="alert alert-info">
             <p>Есть незавершённые расчёты. Перед новым запуском завершите их или отмените остановленные между шагами:</p>
@@ -283,8 +289,8 @@
             Нажмите кнопку ниже, чтобы запустить алгоритм расчета.
             Все шаги будут выполнены последовательно с фиксацией их состояния.
         </p>
-        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors %}disabled{% endif %}>
-            <i class="bi bi-play-fill"></i> Запустить
+        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors or active_runs %}disabled{% endif %}>
+            <i aria-hidden="true" class="bi bi-play-fill"></i> Запустить
         </button>
     </div>
 
@@ -298,10 +304,10 @@
         </p>
         <div class="d-flex justify-content-center gap-3">
             <button class="btn btn-success btn-execute" id="btnExecuteNext" onclick="executeNextStep()" disabled>
-                <i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг
+                <i aria-hidden="true" class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг
             </button>
             <button class="btn btn-outline-danger btn-execute" id="btnStop" onclick="stopAutoExecute()" style="display: none;">
-                <i class="bi bi-stop-fill"></i> Остановить
+                <i aria-hidden="true" class="bi bi-stop-fill"></i> Остановить
             </button>
         </div>
         <div class="mt-3">
@@ -319,10 +325,10 @@
 
     <div id="completedSection" style="display: none;">
         <h5 class="mb-3 text-success">
-            <i class="bi bi-check-circle-fill"></i> Алгоритм полностью выполнен!
+            <i aria-hidden="true" class="bi bi-check-circle-fill"></i> Алгоритм полностью выполнен!
         </h5>
-        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors %}disabled{% endif %}>
-            <i class="bi bi-arrow-repeat"></i> Запустить заново
+        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors or active_runs %}disabled{% endif %}>
+            <i aria-hidden="true" class="bi bi-arrow-repeat"></i> Запустить заново
         </button>
     </div>
 </div>
@@ -343,7 +349,7 @@
 
 <!-- Пустое состояние -->
 <div class="empty-state" id="emptyState">
-    <i class="bi bi-diagram-3"></i>
+    <i aria-hidden="true" class="bi bi-diagram-3"></i>
     <h5>Алгоритм не запущен</h5>
     <p>Запустите алгоритм, чтобы увидеть пошаговое выполнение</p>
 </div>
@@ -448,7 +454,7 @@
         const btn = document.getElementById('btnExecuteNext');
         const btnStop = document.getElementById('btnStop');
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Продолжить вручную';
+        btn.innerHTML = '<i aria-hidden="true" class="bi bi-arrow-right-circle"></i> Продолжить вручную';
         btnStop.style.display = 'none';
     }
 
@@ -479,12 +485,12 @@
                 showFailed(data.error);
             } else {
                 btn.disabled = false;
-                btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
+                btn.innerHTML = '<i aria-hidden="true" class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
             }
         } catch (error) {
             alert('Ошибка: ' + error.message);
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
+            btn.innerHTML = '<i aria-hidden="true" class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
         }
     }
 
@@ -499,14 +505,14 @@
     function showFailed(errorMsg) {
         const btn = document.getElementById('btnExecuteNext');
         btn.disabled = false;
-        btn.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
+        btn.innerHTML = '<i aria-hidden="true" class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг';
         document.getElementById('btnStop').style.display = 'none';
 
         const container = document.getElementById('stepsContainer');
         const alertDiv = document.createElement('div');
         alertDiv.className = 'alert alert-danger mt-3';
         alertDiv.innerHTML = `
-            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            <i aria-hidden="true" class="bi bi-exclamation-triangle-fill me-2"></i>
             <strong>Алгоритм остановлен из-за ошибки:</strong> ${escapeHtml(errorMsg)}
         `;
         container.prepend(alertDiv);
@@ -558,7 +564,7 @@
 
             let durationHtml = '';
             if (step.duration_seconds) {
-                durationHtml = `<div class="step-duration"><i class="bi bi-clock"></i> Выполнено за ${step.duration_seconds.toFixed(2)} сек.</div>`;
+                durationHtml = `<div class="step-duration"><i aria-hidden="true" class="bi bi-clock"></i> Выполнено за ${step.duration_seconds.toFixed(2)} сек.</div>`;
             }
 
             card.innerHTML = `

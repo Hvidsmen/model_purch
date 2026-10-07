@@ -99,8 +99,39 @@ def results_page(request):
     runs = AlgorithmRun.objects.filter(scenario=scenario).select_related('scenario_export').order_by('-started_at')[:5] if scenario else []
     for run in runs:
         run.parameters_display = json.dumps(run.parameters, ensure_ascii=False, indent=2)
+    issues = []
+    issue_purchases = list(Purch.objects.filter(scenario_plan=scenario)) if scenario else []
+    issue_goods = list(PGGoods.objects.filter(scenario_plan=scenario)) if scenario else []
+    for error in errors:
+        url = reverse('scenario_list')
+        if scenario:
+            url = f"{reverse('pggoods_list')}?scenario={scenario.pk}"
+            for purchase in issue_purchases:
+                if error.startswith(purchase.name + ':'):
+                    url = f"{reverse('purch_edit', args=[purchase.pk])}?scenario={scenario.pk}"
+                    break
+            for good in issue_goods:
+                if error.startswith(good.planning_group + ':'):
+                    url = f"{reverse('edit_pggoods', args=[good.pk])}?scenario={scenario.pk}"
+                    break
+            if error.startswith('Фрахт:'):
+                url = f"{reverse('freight')}?scenario={scenario.pk}"
+            elif 'экспорт' in error.lower():
+                url = reverse('scenario_list')
+            elif error.startswith(('Дата', 'Название', 'Повторяются')):
+                url = f"{reverse('scenario_edit', args=[scenario.pk])}?scenario={scenario.pk}"
+            elif 'MS_SQL_CONN_STR' in error:
+                url = None
+        issues.append({'message': error, 'url': url})
+    data_ready = bool(parameters.get('goods'))
+    validation_ready = not errors
+    if scenario:
+        from .services.preflight import validation_errors
+        validation_ready = not validation_errors(scenario)
     return render(request, 'model_purch/results.html', {
-        'current_scenario': scenario, 'readiness_errors': errors, 'last_export': export,
+        'current_scenario': scenario, 'readiness_errors': errors, 'readiness_issues': issues, 'last_export': export,
+        'data_ready': data_ready, 'validation_ready': validation_ready,
+        'export_ready': bool(export) and not any('экспорт' in error.lower() for error in errors),
         'recent_runs': runs,
         'active_runs': AlgorithmRun.objects.filter(status='running').select_related('scenario').order_by('-started_at'),
     })
@@ -359,10 +390,10 @@ def copy_purch_from_scenario(request):
         source_scenario = form.cleaned_data['source_scenario_id']
 
         from .services.copying import copy_purchases
-        copied_count = copy_purchases(source_scenario, current_scenario)
+        created_count, updated_count = copy_purchases(source_scenario, current_scenario)
 
         messages.success(request,
-                         f'✅ Успешно скопировано/обновлено {copied_count} закупок из сценария "{source_scenario.name}".')
+                         f'Закупки скопированы из «{source_scenario.name}» в «{current_scenario.name}». Создано: {created_count}, обновлено: {updated_count}.')
         return redirect(f"{reverse('purch_list')}?scenario={current_scenario.id}")
 
     return redirect('purch_list')
@@ -1284,13 +1315,19 @@ def purch_list(request):
     current_scenario, all_scenarios = get_current_scenario(request)
 
     if current_scenario:
-        purch_queryset = Purch.objects.filter(scenario_plan=current_scenario).order_by('name')
+        purch_queryset = Purch.objects.filter(scenario_plan=current_scenario).prefetch_related('purchpay_set__kind_lag_pay').order_by('name')
     else:
         purch_queryset = Purch.objects.none()
 
+    for purchase in purch_queryset:
+        payments = list(purchase.purchpay_set.all())
+        purchase.payment_schedule = payments
+        purchase.payment_total = sum(pay.percent_pay for pay in payments)
+        purchase.payment_valid = bool(payments) and abs(purchase.payment_total - 100) <= 0.01 and all(0 <= pay.percent_pay <= 100 for pay in payments)
     return render(request, 'model_purch/purch_list.html', {
         'purch_list': purch_queryset, 'scenarios': all_scenarios,
-        'current_scenario': current_scenario, 'title': 'Настройки закупок (Purch)'
+        'current_scenario': current_scenario, 'title': 'Закупки',
+        'source_scenarios': all_scenarios.exclude(pk=current_scenario.pk) if current_scenario else all_scenarios.none()
     })
 
 

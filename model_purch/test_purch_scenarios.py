@@ -1,3 +1,4 @@
+from django.contrib.messages import get_messages
 from html.parser import HTMLParser
 
 from django.test import TestCase
@@ -73,3 +74,10 @@ class PurchScenarioTests(TestCase):
         })
         self.assertRedirects(response, reverse('purch_list') + f'?scenario={self.target.pk}')
         self.assertTrue(Purch.objects.filter(scenario_plan=self.target, name=self.purchase.name).exists())
+
+    def test_copy_reports_created_and_updated_separately(self):
+        data = {'scenario': self.target.pk, 'source_scenario_id': self.source.pk}
+        first = self.client.post(reverse('copy_purch_from_scenario'), data)
+        self.assertIn('Создано: 1, обновлено: 0', ' '.join(str(message) for message in get_messages(first.wsgi_request)))
+        second = self.client.post(reverse('copy_purch_from_scenario'), data)
+        self.assertIn('Создано: 0, обновлено: 1', ' '.join(str(message) for message in get_messages(second.wsgi_request)))
