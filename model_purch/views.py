@@ -15,9 +15,10 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-from .models import PGGoods, KindPurch, ScenarioModel, ScenarioPlanSales, Purch, PurchPay
+from .models import PGGoods, KindPurch, ScenarioModel, ScenarioPlanSales, Purch, PurchPay, KindLagPay
 from .goods_identity import planning_group_key
 from .sql_goods import prepare_sql_goods
+from .sql_export_fields import ensure_model_columns, ensure_column, export_additional_fields
 from .conns import connect_database
 from .forms import PGGoodsCopyForm, PGGoodsEditForm, ScenarioModelForm, ScenarioPlanSalesFormSet
 
@@ -380,12 +381,37 @@ def export_scenario_to_sql(request, pk):
                 CONSTRAINT UQ_SPS_scenario UNIQUE (name, scenario_name)
             )
         """)
+        cursor.execute("""
+            IF OBJECT_ID(N'portal.KindLagPay', N'U') IS NULL
+                CREATE TABLE portal.KindLagPay (id INT PRIMARY KEY, name NVARCHAR(255) NOT NULL);
+        """)
+        for table, model, relations in [
+            ('Scenario', ScenarioModel, set()),
+            ('ScenarioPlanSales', ScenarioPlanSales, {'scenario_model'}),
+            ('Purch', Purch, {'scenario_plan'}),
+            ('PurchPay', PurchPay, {'purch', 'kind_lag_pay'}),
+            ('PGGoods', PGGoods, {'scenario_plan', 'kind_purch'}),
+            ('KindLagPay', KindLagPay, set()),
+        ]:
+            ensure_model_columns(cursor, table, model, relations)
+        ensure_column(cursor, 'PurchPay', 'kind_lag_pay_id', 'INT')
+        ensure_column(cursor, 'PurchPay', 'kind_lag_pay', 'NVARCHAR(255)')
         conn.commit()
 
         exported_count = {'scenario': 0, 'purch': 0, 'purchpay': 0, 'pggoods': 0, 'plans': 0}
 
         with transaction.atomic():
             prepare_sql_goods(cursor)
+            # Reference IDs and labels must be available before payment export.
+            for lag_kind in KindLagPay.objects.all():
+                cursor.execute("""
+                    MERGE INTO portal.KindLagPay AS target
+                    USING (SELECT ? AS id, ? AS name) AS source
+                    ON target.id = source.id
+                    WHEN MATCHED THEN UPDATE SET name = source.name
+                    WHEN NOT MATCHED THEN INSERT (id, name) VALUES (source.id, source.name);
+                """, lag_kind.pk, lag_kind.name)
+                export_additional_fields(cursor, 'KindLagPay', lag_kind, {'name'}, {'id': lag_kind.pk})
             # === ЭКСПОРТ ОСНОВНОЙ ИНФОРМАЦИИ О СЦЕНАРИИ ===
             # Явно конвертируем типы для совместимости со старым ODBC драйвером
             scenario_id = int(scenario.id)
@@ -421,6 +447,8 @@ def export_scenario_to_sql(request, pk):
                            date_end,
                            overwrite_flag
                            )
+            export_additional_fields(cursor, 'Scenario', scenario,
+                                     {'name', 'date_start_plan', 'date_end_plan', 'overwrite_existing'}, {'id': scenario.pk})
             exported_count['scenario'] += 1
 
             # === ЭКСПОРТ ПЛАНОВ ПРОДАЖ ===
@@ -436,10 +464,12 @@ def export_scenario_to_sql(request, pk):
                         INSERT (name, scenario_name, flag_order_in_purch)
                         VALUES (source.name, source.scenario_name, source.flag_order);
                 """, plan.name, scenario.name, plan.flag_order_in_purch)
+                export_additional_fields(cursor, 'ScenarioPlanSales', plan, {'name', 'flag_order_in_purch'},
+                                         {'name': plan.name, 'scenario_name': scenario.name})
                 exported_count['plans'] += 1
 
             # === ЭКСПОРТ ЗАКУПОК И ПЛАТЕЖЕЙ ===
-            purchs = Purch.objects.filter(scenario_plan=scenario).prefetch_related('purchpay_set')
+            purchs = Purch.objects.filter(scenario_plan=scenario).prefetch_related('purchpay_set__kind_lag_pay')
 
             for purch in purchs:
                 # Вставляем/обновляем закупку
@@ -457,8 +487,11 @@ def export_scenario_to_sql(request, pk):
 
                 row = cursor.fetchone()
                 purch_id = row[0] if row else None
+                if purch_id is None:
+                    raise RuntimeError('SQL Server не вернул ID экспортированной закупки.')
 
-                if purch_id:
+                if purch_id is not None:
+                    export_additional_fields(cursor, 'Purch', purch, {'name', 'lag_income'}, {'id': purch_id})
                     # Удаляем старые платежи этой закупки в этом сценарии
                     cursor.execute("""
                         DELETE FROM portal.PurchPay 
@@ -468,9 +501,16 @@ def export_scenario_to_sql(request, pk):
                     # Вставляем новые платежи
                     for pay in purch.purchpay_set.all():
                         cursor.execute("""
-                            INSERT INTO portal.PurchPay (purch_id, name, percent_pay, lag_day_pay)
-                            VALUES (?, ?, ?, ?)
-                        """, purch_id, pay.name, pay.percent_pay, pay.lag_day_pay)
+                            INSERT INTO portal.PurchPay (purch_id, name, percent_pay, lag_day_pay, kind_lag_pay_id, kind_lag_pay)
+                            OUTPUT inserted.id
+                            VALUES (?, ?, ?, ?, ?, ?)
+                        """, purch_id, pay.name, pay.percent_pay, pay.lag_day_pay,
+                                       pay.kind_lag_pay_id, pay.kind_lag_pay.name if pay.kind_lag_pay else None)
+                        pay_row = cursor.fetchone()
+                        if not pay_row:
+                            raise RuntimeError('SQL Server не вернул ID созданного платежа.')
+                        export_additional_fields(cursor, 'PurchPay', pay, {'name', 'percent_pay', 'lag_day_pay'},
+                                                 {'id': pay_row[0]})
                         exported_count['purchpay'] += 1
 
                     exported_count['purch'] += 1
@@ -527,6 +567,10 @@ def export_scenario_to_sql(request, pk):
                                pg.brand, pg.purch, pg.volume, pg.exw_usd, pg.ddp_usd,
                                pg.kddp, pg.stock_cnt_day, pg.percent_stock_end, scenario.name, pg.kind_purch.name, pg.planning_group_key
                                )
+                export_additional_fields(cursor, 'PGGoods', pg, {
+                    'planning_group', 'planning_sales', 'group_goods', 'brand', 'purch', 'volume',
+                    'exw_usd', 'ddp_usd', 'kddp', 'stock_cnt_day', 'percent_stock_end', 'planning_group_key',
+                }, {'planning_group_key': pg.planning_group_key, 'scenario_name': scenario.name})
                 exported_count['pggoods'] += 1
                 # if pg.planning_group == 'ВЕНТ Канальная':
                 #     print('ВЕНТ Канальная')
