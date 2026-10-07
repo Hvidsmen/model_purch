@@ -1,3 +1,5 @@
+from html.parser import HTMLParser
+
 from django.test import TestCase
 from django.urls import reverse
 
@@ -45,3 +47,29 @@ class PurchScenarioTests(TestCase):
         response = self.client.post(reverse('purch_delete', args=[self.target_purchase.pk]) + f'?scenario={self.target.pk}')
         self.assertRedirects(response, reverse('purch_list') + f'?scenario={self.target.pk}')
         self.assertTrue(Purch.objects.filter(pk=self.purchase.pk).exists())
+
+    def test_copy_form_button_enabled_and_source_required(self):
+        class Parser(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.elements = []
+
+            def handle_starttag(self, tag, attrs):
+                self.elements.append((tag, dict(attrs)))
+
+        response = self.client.get(reverse('purch_list'), {'scenario': self.target.pk})
+        parser = Parser()
+        parser.feed(response.content.decode())
+        button = next(attrs for tag, attrs in parser.elements
+                      if tag == 'button' and attrs.get('id') == 'confirmCopyPurchBtn')
+        self.assertEqual(button['type'], 'submit')
+        self.assertNotIn('disabled', button)
+        source = next(attrs for tag, attrs in parser.elements
+                      if tag == 'select' and attrs.get('name') == 'source_scenario_id')
+        self.assertIn('required', source)
+        self.assertEqual(source['id'], 'copy-purch-source')
+        response = self.client.post(reverse('copy_purch_from_scenario'), {
+            'scenario': self.target.pk, 'source_scenario_id': self.source.pk,
+        })
+        self.assertRedirects(response, reverse('purch_list') + f'?scenario={self.target.pk}')
+        self.assertTrue(Purch.objects.filter(scenario_plan=self.target, name=self.purchase.name).exists())

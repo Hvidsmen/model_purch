@@ -358,8 +358,8 @@
                         "<strong>{{ current_scenario.name }}</strong>".
                         <br><span class="text-warning"><i class="bi bi-exclamation-triangle"></i> Существующие закупки с такими же именами будут обновлены.</span>
                     </p>
-                    <label class="form-label fw-semibold">Сценарий-источник:</label>
-                    <select name="source_scenario_id" class="form-select" required>
+                    <label for="copy-purch-source" class="form-label fw-semibold">Сценарий-источник:</label>
+                    <select id="copy-purch-source" name="source_scenario_id" class="form-select" required>
                         <option value="" disabled selected>Выберите сценарий...</option>
                         {% for sc in scenarios %}
                             {% if sc.id != current_scenario.id %}
@@ -372,7 +372,7 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="submit" class="btn btn-primary" id="confirmCopyPurchBtn" disabled>
+                    <button type="submit" class="btn btn-primary" id="confirmCopyPurchBtn">
                         <i class="bi bi-check-lg"></i> Скопировать
                     </button>
                 </div>
