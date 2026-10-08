@@ -962,7 +962,7 @@ def edit_pggoods(request, pk):
                 with transaction.atomic():
                     form.save()
                 messages.success(request, f'Данные для «{goods.group_goods}» обновлены.')
-                return redirect(f"{request.META.get('HTTP_REFERER', 'pggoods_list')}")
+                return redirect(f"{reverse('pggoods_list')}?scenario={current_scenario.pk}")
             except Exception as e:
                 logger.error(f"Ошибка сохранения PGGoods ID={pk}: {e}")
                 messages.error(request, f'Ошибка при сохранении: {e}')

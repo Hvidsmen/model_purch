@@ -55,6 +55,27 @@ class PGGoodsEditForm(forms.ModelForm):
             'purch': forms.TextInput(attrs={'class': 'form-control'}),
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # These model fields accept NULL; the editor must allow unassigned values.
+        for name in ['brand', 'purch']:
+            self.fields[name].required = False
+        # The coefficient is derived server-side, never trusted from browser input.
+        self.fields['kddp'].disabled = True
+        self.fields['kddp'].required = False
+        for name in ['volume', 'exw_usd', 'ddp_usd']:
+            self.fields[name].widget.attrs['step'] = 'any'
+
+    def clean_brand(self):
+        if self.is_bound and self.add_prefix('brand') not in self.data:
+            return self.instance.brand
+        return self.cleaned_data.get('brand')
+
+    def clean_purch(self):
+        if self.is_bound and self.add_prefix('purch') not in self.data:
+            return self.instance.purch
+        return self.cleaned_data.get('purch')
+
     def clean_volume(self):
         v = self.cleaned_data.get('volume')
         if v is not None and v <= 0:

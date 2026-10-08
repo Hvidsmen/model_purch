@@ -14,24 +14,43 @@
             <div class="card-body">
                 <form method="post" novalidate>
                     {% csrf_token %}
+                    <input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
+                    {% if form.errors %}
+                        <div class="alert alert-danger" role="alert">
+                            <strong>Изменения не сохранены:</strong>
+                            <ul class="mb-0">
+                                {% for field in form %}{% for error in field.errors %}<li><a href="#{{ field.id_for_label }}">{{ field.label }}</a>: {{ error }}</li>{% endfor %}{% endfor %}
+                                {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
+                            </ul>
+                        </div>
+                    {% endif %}
                     <div class="row g-3 mb-4 pb-3 border-bottom">
                         <div class="col-md-4">
-                            <label class="form-label text-muted small">{{ form.planning_group_display.label }}</label>
-                            {{ form.planning_group_display }}
+                            <label class="form-label text-muted small">Плановая группа</label>
+                            <div class="fw-semibold">{{ goods.planning_group }}</div>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label text-muted small">{{ form.group_goods_display.label }}</label>
-                            {{ form.group_goods_display }}
+                            <label class="form-label text-muted small">Группа товаров</label>
+                            <div class="fw-semibold">{{ goods.group_goods }}</div>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label text-muted small">{{ form.kind_purch_display.label }}</label>
-                            {{ form.kind_purch_display }}
+                            <label class="form-label text-muted small">Тип закупки</label>
+                            <div class="fw-semibold">{{ goods.kind_purch.name }}</div>
                         </div>
                     </div>
 
-                    {% if form.non_field_errors %}
-                        <div class="alert alert-danger">{% for error in form.non_field_errors %}<div>{{ error }}</div>{% endfor %}</div>
-                    {% endif %}
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-6">
+                            <label for="{{ form.brand.id_for_label }}" class="form-label">{{ form.brand.label }}</label>
+                            {{ form.brand }}
+                            {% for error in form.brand.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                        <div class="col-md-6">
+                            <label for="{{ form.purch.id_for_label }}" class="form-label">{{ form.purch.label }}</label>
+                            {{ form.purch }}
+                            {% for error in form.purch.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+                        </div>
+                    </div>
 
                     <h6 class="text-muted mb-3">Объёмы и цены</h6>
                     <div class="row g-3 mb-4">
@@ -53,6 +72,7 @@
                         <div class="col-md-6">
                             <label for="{{ form.kddp.id_for_label }}" class="form-label">{{ form.kddp.label }} <small class="text-muted">(автоматически)</small></label>
                             {{ form.kddp }}
+                            <div class="text-muted small">При EXW больше нуля: DDP / EXW. При EXW = 0 сохраняется текущий коэффициент.</div>
                             {% if form.kddp.errors %}<div class="text-danger small mt-1">{{ form.kddp.errors.0 }}</div>{% endif %}
                         </div>
                     </div>
@@ -72,7 +92,7 @@
                     </div>
 
                     <div class="d-flex justify-content-end gap-2 pt-3 border-top">
-                        <a href="{% url 'pggoods_list' %}" class="btn btn-outline-secondary">Отмена</a>
+                        <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}" class="btn btn-outline-secondary">Отмена</a>
                         <button type="submit" class="btn btn-success">💾 Сохранить изменения</button>
                     </div>
                 </form>
@@ -94,7 +114,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!isNaN(exwVal) && !isNaN(ddpVal) && exwVal > 0) {
             kddp.value = (ddpVal / exwVal).toFixed(4);
         } else {
-            kddp.value = '';
+            kddp.value = kddp.defaultValue;
         }
     }
     exw.addEventListener('input', recalc);
