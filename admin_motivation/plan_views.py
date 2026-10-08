@@ -2,8 +2,6 @@ import csv
 import logging
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.core.paginator import Paginator
-from django.db.models import Sum
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -11,6 +9,7 @@ from .forms import SalesPlanScenarioForm
 from .models import SalesPlanScenario, Subdivision
 from .services.sales_plans import load_plan, calculate_plan, source_versions
 from .services.plan_operations import operation_response, scenario_operation
+from .services.plan_report import period_report
 
 logger = logging.getLogger(__name__)
 
@@ -49,15 +48,22 @@ def sales_plans(request, scenario_id=None):
         if not (action == 'create' and form.errors):
             return redirect(reverse('motivation_sales_plan', args=[scenario.pk]) if scenario else reverse('motivation_sales_plans'))
     scope = 'subdivisions' if request.GET.get('scope') == 'subdivisions' else 'global'
-    lines = scenario.lines.all() if scenario else None
-    if lines is not None:
-        lines = lines.exclude(subdivision='') if scope == 'subdivisions' else lines.filter(subdivision='')
-        lines = lines.select_related('coefficient_version')
-    if scenario and request.GET.get('export') == 'csv':
-        response = HttpResponse(content_type='text/csv; charset=utf-8-sig')
+    report = period_report(scenario, scope, request.GET) if scenario else {}
+    lines = report.get('report_lines')
+    if scenario and request.GET.get('export') in ['csv', 'details']:
+        response = HttpResponse(content_type='text/csv; charset=utf-8')
         response['Content-Disposition'] = f'attachment; filename="motivation-plan-{scenario.pk}-{scope}.csv"'
         response.write('\ufeff')
         writer = csv.writer(response, delimiter=';')
+        if request.GET.get('export') == 'csv':
+            writer.writerow(['Подразделение', 'Группа планов продаж', 'Группа планов ERP', 'Марка / бренд', 'План USD', 'Политики USD', 'Продажи USD', 'Итого мотивация USD'])
+            for row in report['report_rows']:
+                labels = [row[field] or 'Глобальный план' for field in ['subdivision', 'planning_group_sales', 'group', 'brand']]
+                labels = ["'" + label if label.lstrip().startswith(('=', '+', '-', '@')) else label for label in labels]
+                writer.writerow([*labels, row['plan'], row['policies'], row['sales'], row['total']])
+            return response
+        # Optional audit export retains original dated coefficient snapshots.
+        lines = lines.select_related('coefficient_version')
         writer.writerow(['Дата', 'Подразделение', 'Группа планов', 'Группа', 'Марка', 'План USD', *[f'USD_O{i}' for i in range(5)], 'Версия коэффициентов', 'Политики USD', 'Продажи USD', 'Итого USD', *[f'{kind} {field} O{i}' for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['k', 'Мотивация', 'Источник', 'Версия источника', 'Подразделение источника', 'Группа планов источника']]])
         for line in lines.iterator():
             details = [line.calculation.get(kind, {}).get(f'O{i}', {}).get(field, '') for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['coefficient', 'motivation', 'source', 'source_version', 'source_subdivision', 'source_planning_group']]
@@ -73,6 +79,5 @@ def sales_plans(request, scenario_id=None):
     return render(request, 'admin_motivation/sales_plans.html', {
         'scenario': scenario, 'scenarios': SalesPlanScenario.objects.all(), 'form': form,
         'source_versions': versions, 'scope': scope, 'subdivisions': Subdivision.objects.all(),
-        'page': Paginator(lines, 50).get_page(request.GET.get('page')) if lines is not None else None,
-        'totals': lines.aggregate(plan=Sum('amount_usd'), policies=Sum('policies_usd'), sales=Sum('sales_usd'), total=Sum('total_usd')) if lines is not None else {},
+        **report,
     })

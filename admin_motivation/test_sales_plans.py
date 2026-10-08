@@ -139,8 +139,8 @@ class SalesPlanTests(TestCase):
         local_response = self.client.get(url+'?scope=subdivisions')
         self.assertEqual(local_response.context['totals']['total'], Decimal('345'))
         csv = self.client.get(url+'?export=csv').content.decode('utf-8-sig')
-        self.assertIn('Политики k O0', csv)
-        self.assertIn('1500.000000', csv)
+        self.assertIn('Итого мотивация USD', csv)
+        self.assertIn(';1500;', csv)
         self.assertEqual(self.client.get(reverse('motivation_sales_plan', args=[999999])).status_code, 404)
 
     def test_source_versions_and_connection_cleanup(self):
@@ -277,8 +277,8 @@ class SalesPlanTests(TestCase):
         self.assertEqual(policy['source_segment'], 'O4')
         self.assertEqual(policy['source_brand'], 'Alternative')
         response = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk]))
-        self.assertContains(response, 'Минимум по группе планов')
-        csv = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk])+'?export=csv').content.decode('utf-8-sig')
+        self.assertContains(response, 'Итоги за весь период')
+        csv = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk])+'?export=details').content.decode('utf-8-sig')
         self.assertIn('group_minimum', csv)
 
     def test_subdivision_fallback_does_not_use_other_subdivision_or_global_minimum(self):
@@ -339,8 +339,7 @@ class SalesPlanTests(TestCase):
         self.assertEqual(cell['source_subdivision'], 'B')
         self.assertEqual(cell['source_version_id'], self.version.pk)
         response = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk]))
-        self.assertContains(response, 'Минимум по всей таблице')
-        self.assertContains(response, 'Нет версии на дату плана')
+        self.assertContains(response, 'Итоги за весь период')
 
     def test_missing_type_in_entire_global_table_preserves_previous_result(self):
         self.load()
@@ -407,3 +406,54 @@ class SalesPlanTests(TestCase):
                 raise RuntimeError('Failure')
         with scenario_operation(self.scenario.pk):
             pass
+
+
+    def test_period_report_sums_dated_results_after_each_version_is_applied(self):
+        future = create_version(date(2026, 10, 8), 'Future', self.version.pk)
+        future.coefficients.all().update(motivation_coeff=.3)
+        self.cursor.fetchall.return_value = self.rows() + self.rows(date(2026, 10, 8))
+        self.load()
+        calculate_plan(self.scenario.pk)
+        url = reverse('motivation_sales_plan', args=[self.scenario.pk])
+        response = self.client.get(url)
+        self.assertEqual(len(response.context['report_rows']), 1)
+        self.assertEqual(response.context['totals']['total'], Decimal('1125'))
+        self.assertEqual(response.context['totals']['plan'], Decimal('3000'))
+        root = response.context['report_nodes'][0]
+        self.assertEqual(root['total'], Decimal('1125'))
+        self.assertEqual(root['children'][0]['children'][0]['children'][0]['total'], Decimal('1125'))
+        self.assertNotContains(response, '<th>Дата</th>')
+        local = self.client.get(url, {'scope': 'subdivisions', 'subdivision': 'A'})
+        self.assertEqual(len(local.context['report_nodes']), 1)
+        self.assertEqual(local.context['totals']['total'], Decimal('460'))
+
+    def test_filters_limit_report_subtotals_and_period_csv_consistently(self):
+        self.cursor.fetchall.return_value = self.rows() + [('A', 'Other Sales', date(2026, 10, 1), 'ERP & Group', 'Brand X', 100, 20, 20, 20, 20, 20)]
+        self.load()
+        calculate_plan(self.scenario.pk)
+        url = reverse('motivation_sales_plan', args=[self.scenario.pk])
+        filters = {'scope': 'subdivisions', 'subdivision': 'A', 'planning_group_sales': 'Other Sales', 'group': 'ERP & Group', 'brand': 'Brand X'}
+        response = self.client.get(url, filters)
+        self.assertEqual(response.context['totals']['plan'], Decimal('100'))
+        self.assertEqual(response.context['totals']['total'], Decimal('23'))
+        self.assertIn('ERP+%26+Group', response.context['export_url'])
+        export = self.client.get(url, {**filters, 'export': 'csv'}).content.decode('utf-8-sig')
+        import csv, io
+        rows = list(csv.reader(io.StringIO(export), delimiter=';'))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][:4], ['A', 'Other Sales', 'ERP & Group', 'Brand X'])
+        self.assertEqual(Decimal(rows[1][-1]), Decimal('23'))
+        self.assertNotIn('Дата', rows[0])
+        self.assertNotIn('2026-10-01', export)
+        self.assertNotIn('\ufeff', export)
+        empty = self.client.get(url, {'brand': 'Does not exist'})
+        self.assertEqual(empty.context['report_nodes'], [])
+        self.assertContains(empty, 'Нет данных по выбранным фильтрам')
+
+    def test_uncalculated_report_preserves_none_instead_of_showing_zero_motivation(self):
+        self.load()
+        response = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk]))
+        self.assertEqual(response.context['totals']['plan'], Decimal('1500'))
+        self.assertIsNone(response.context['totals']['total'])
+        self.assertEqual(response.context['pending_count'], 1)
+        self.assertContains(response, 'Не рассчитано строк: 1')

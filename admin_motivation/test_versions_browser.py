@@ -115,12 +115,12 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             with self.page.expect_navigation():
                 self.page.get_by_role('button', name='Рассчитать мотивацию', exact=True).click()
         self.assertEqual(self.db(lambda: scenario.lines.get(subdivision='').total_usd), 225)
-        self.assertEqual(self.page.locator('tbody tr').count(), 1)
-        self.page.locator('tbody summary').click()
-        self.assertIn('0.1 × 150', self.page.locator('tbody').inner_text())
+        self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 1)
+        self.page.get_by_role('button', name='Развернуть всё', exact=True).click()
+        self.assertEqual(self.page.locator('.report-leaf').count(), 1)
         with self.page.expect_navigation():
             self.page.get_by_role('link', name='По подразделениям', exact=True).click()
-        self.assertEqual(self.page.locator('tbody tr').count(), 2)
+        self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
         with self.page.expect_download() as download:
             self.page.get_by_role('link', name='Скачать CSV', exact=True).click()
         self.assertIn('subdivisions.csv', download.value.suggested_filename)
@@ -176,4 +176,47 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('#plan-progress-error')).to_contain_text('Нет коэффициента')
         expect(self.page.get_by_role('button', name='Рассчитать мотивацию', exact=True)).to_be_enabled()
         self.assertEqual(self.db(lambda: fixtures.scenario.lines.get(subdivision='').total_usd), 225)
+        self.assertEqual(self.errors, [])
+
+    def test_period_tree_default_expansion_subtotals_filters_and_csv(self):
+        from playwright.sync_api import expect
+        from .test_sales_plans import SalesPlanTests
+        from .services.sales_plans import calculate_plan
+        fixtures = SalesPlanTests()
+        self.db(fixtures.setUp)
+        self.db(fixtures.load)
+        self.db(lambda: calculate_plan(fixtures.scenario.pk))
+        url = self.live_server_url + reverse('motivation_sales_plan', args=[fixtures.scenario.pk])
+        self.page.goto(url)
+        expect(self.page.locator('.report-node[data-level="0"]')).to_have_attribute('open', '')
+        self.assertEqual(self.page.locator('.report-node[data-level="1"][open]').count(), 0)
+        self.assertFalse(self.page.locator('.report-leaf').is_visible())
+        self.page.locator('.report-node[data-level="1"] > summary').click()
+        self.page.locator('.report-node[data-level="2"] > summary').click()
+        expect(self.page.locator('.report-leaf')).to_be_visible()
+        expect(self.page.locator('.report-leaf')).to_contain_text('225')
+        self.page.get_by_role('button', name='Свернуть всё', exact=True).click()
+        self.assertEqual(self.page.locator('#period-report details[open]').count(), 0)
+        self.page.get_by_role('button', name='Развернуть всё', exact=True).click()
+        self.assertEqual(self.page.locator('#period-report details[open]').count(), 3)
+        with self.page.expect_navigation():
+            self.page.get_by_role('link', name='По подразделениям', exact=True).click()
+        self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
+        self.assertEqual(self.page.locator('#period-report details[open]').count(), 0)
+        self.page.locator('select[name=subdivision]').select_option('A')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Применить', exact=True).click()
+        self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 1)
+        expect(self.page.locator('.report-total')).to_contain_text('230')
+        with self.page.expect_download() as download:
+            self.page.get_by_role('link', name='Скачать CSV', exact=True).click()
+        import csv
+        with open(download.value.path(), encoding='utf-8-sig') as stream:
+            rows = list(csv.reader(stream, delimiter=';'))
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[1][0], 'A')
+        self.assertNotIn('Дата', rows[0])
+        with self.page.expect_navigation():
+            self.page.get_by_role('link', name='Сбросить', exact=True).click()
+        self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
         self.assertEqual(self.errors, [])
