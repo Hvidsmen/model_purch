@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}
 
-{% load crispy_forms_tags %}
+{% load crispy_forms_tags l10n tz %}
 
 {% block content %}
 
@@ -755,6 +755,32 @@
 }
 </style>
 
+<div class="container-fluid content" id="version-panel">
+    <h1>Версии общих коэффициентов</h1>
+    {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</div>{% endfor %}
+    <form method="get" class="d-flex flex-wrap gap-2 align-items-end mb-3">
+        <div><label for="coefficient-version">Версия коэффициентов</label>
+        <select id="coefficient-version" name="version" class="form-select">
+            {% for version in versions %}<option value="{{ version.pk }}" {% if version.pk == selected_version.pk %}selected{% endif %}>{{ version }}{% if version.pk == effective_version.pk %} — действует сейчас{% endif %}</option>{% endfor %}
+        </select></div><button class="btn btn-primary">Открыть</button>
+    </form>
+    <p>Выбрана: <strong>{{ selected_version }}</strong>. {% if version_editable %}Можно редактировать последнюю версию.{% else %}Историческая версия: только просмотр.{% endif %}</p>
+    <p>Действует сегодня: <strong>{{ effective_version|default:'Нет действующей версии' }}</strong>. Новая версия копирует сохранённые значения последней версии.</p>
+    <form method="post" action="{% url 'gb_act' %}" id="createVersionForm" class="mb-3">
+        {% csrf_token %}{{ version_form.source_version }}
+        <div class="d-flex gap-3 flex-wrap align-items-end">
+            <div>{{ version_form.effective_from.label_tag }} {{ version_form.effective_from }}
+                {% for error in version_form.effective_from.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}</div>
+            <div>{{ version_form.title.label_tag }} {{ version_form.title }}{{ version_form.title.errors }}</div>
+            <button class="btn btn-primary" name="action_button" value="create_version">Создать новую версию</button>
+        </div>{{ version_form.source_version.errors }}{{ version_form.non_field_errors }}
+    </form>
+    <details id="version-history"><summary>История версий ({{ versions|length }})</summary>
+        <div class="table-wrapper mt-2"><table class="table"><thead><tr><th class="header-base">Версия</th><th class="header-base">Начало действия</th><th class="header-base">Окончание действия</th><th class="header-base">Создана</th><th class="header-base">Коэффициентов</th></tr></thead>
+        <tbody>{% for version in versions %}<tr><td><a href="?version={{ version.pk }}">{{ version.title|default:'Версия' }}</a></td><td>{{ version.effective_from|date:'d.m.Y' }}</td><td>{{ version.effective_until|date:'d.m.Y'|default:'Без ограничения' }}</td><td>{% timezone 'Europe/Moscow' %}{{ version.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ version.coefficient_count }}</td></tr>{% endfor %}</tbody></table></div>
+    </details>
+</div>
+{% if version_editable %}
 <!-- ================= ФОРМА ДОБАВЛЕНИЯ ТОВАРА ================= -->
 <div class="container-fluid content">
     <div class="row">
@@ -764,7 +790,7 @@
     </div>
     <div class="row">
         <form method="post" action="{% url 'gb_act' %}" id="addProductForm">
-            {% csrf_token %}
+            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
             <div class="col-12">
                 <div class="table-wrapper">
                     <table>
@@ -817,13 +843,13 @@
 
                             {% for segment in segments %}
                             <td>
-                                <input type="text" name="k{{ forloop.counter0 }}" class="coeff-input policy-input coeff-validate required-field" placeholder="0.00%" maxlength="10" data-type="percent" required>
+                                <input type="text" name="k{{ forloop.counter0 }}" class="coeff-input policy-input coeff-validate required-field" placeholder="0.00%" maxlength="25" data-type="percent" required>
                             </td>
                             {% endfor %}
 
                             {% for segment in segments %}
                             <td{% if forloop.first %} class="sales-start"{% endif %}>
-                                <input type="text" name="s{{ forloop.counter0 }}" class="coeff-input sales-input coeff-validate required-field" placeholder="0.00%" maxlength="10" data-type="percent" required>
+                                <input type="text" name="s{{ forloop.counter0 }}" class="coeff-input sales-input coeff-validate required-field" placeholder="0.00%" maxlength="25" data-type="percent" required>
                             </td>
                             {% endfor %}
                         </tr>
@@ -842,6 +868,7 @@
 </div>
 
 
+{% endif %}
 <!-- ================= ОСНОВНАЯ ТАБЛИЦА КОЭФФИЦИЕНТОВ ================= -->
 <div class="container-fluid content">
     <div class="row">
@@ -851,10 +878,12 @@
     </div>
     <div class="row">
         <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">
-            {% csrf_token %}
+            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+            <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="actions">
                     <button type="submit" class="btn btn-primary" name="action_button" value="save_coeff">Сохранить изменения</button>
+                    <button type="submit" class="btn btn-secondary" name="action_button" value="sync_references">Обновить справочники из DWH</button>
 
                     <!-- Выпадающий список с чекбоксами подразделений -->
                     <div class="dropdown-wrapper">
@@ -889,10 +918,10 @@
                             <span class="file-name" id="fileName">Выбрать файл</span>
                         </label>
                         <button type="submit" class="btn btn-primary" name="action_button" value="file_load">Загрузить из файла</button>
-                        <a href="{{ templates_file.url }}" download class="btn-download">
+                        {% if templates_file %}<a href="{{ templates_file.url }}" download class="btn-download">
                             <span class="icon">📥</span>
                             Скачать шаблон
-                        </a>
+                        </a>{% endif %}
                     </div>
                 </div>
             </div>
@@ -958,13 +987,13 @@
                                 {% if forloop.counter0 == 0 %}
                                     {% for gb in sgb %}
                                     <td>
-                                        <input type="text" class="coeff-input policy-input coeff-validate" name="global_coeff={{ gb.id }}" data-value="{{ gb.motivation_coeff }}" required value="{{ gb.motivation_coeff }}" maxlength="10" data-type="percent">
+                                        <input type="text" class="coeff-input policy-input coeff-validate" name="global_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% else %}
                                     {% for gb in sgb %}
                                     <td{% if forloop.first %} class="sales-start"{% endif %}>
-                                        <input type="text" class="coeff-input sales-input coeff-validate" name="global_coeff={{ gb.id }}" data-value="{{ gb.motivation_coeff }}" required value="{{ gb.motivation_coeff }}" maxlength="10" data-type="percent">
+                                        <input type="text" class="coeff-input sales-input coeff-validate" name="global_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% endif %}
@@ -977,6 +1006,7 @@
                     </table>
                 </div>
             </div>
+            </fieldset>
         </form>
     </div>
 </div>
@@ -995,14 +1025,14 @@
         if (!value || value === '') return '';
         const num = parseFloat(value);
         if (isNaN(num)) return value;
-        return (num * 100).toFixed(2) + '%';
+        return Number((num * 100).toPrecision(15)) + '%';
     }
 
     function parsePercent(percentStr) {
         if (!percentStr || percentStr === '') return '';
         const num = parseFloat(percentStr.replace('%', ''));
         if (isNaN(num)) return percentStr;
-        return (num / 100).toFixed(4);
+        return String(Number((num / 100).toPrecision(15)));
     }
 
     function filterInput(value) {
@@ -1100,11 +1130,10 @@
                     const decimalValue = parsePercent(value);
                     this.value = decimalValue;
                     this.setAttribute('data-value', decimalValue);
-                } else if (this.hasAttribute('data-value')) {
-                    this.value = this.getAttribute('data-value');
                 }
                 this.classList.remove('invalid', 'valid', 'validation-tooltip', 'shake');
                 this.removeAttribute('data-error');
+                this.select();
             }
         });
 

@@ -1,0 +1,59 @@
+import importlib.util
+import os
+from concurrent.futures import ThreadPoolExecutor
+from datetime import date
+from unittest import skipUnless
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+from django.urls import reverse
+from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCoeff, VariationCalculate
+
+
+@skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
+class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def setUp(self):
+        self.first, _ = GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001, 1, 1))
+        good = Goods.objects.create(goods_key='Key', planning_group_sales='Sales', group='Group', brand='Brand')
+        segment = SegmentCoeff.objects.create(segment_name='Segment')
+        kind = TypeCoeff.objects.create(type_coeff_name='Политики')
+        variation = VariationCalculate.objects.create(variation_name='Level')
+        self.coeff = GlobalCoeff.objects.create(version=self.first, goods=good, type_coeff=kind, segment=segment,
+            motivation_coeff=0.123456, manager_coeff=1, variation_calculate=variation)
+        from playwright.sync_api import sync_playwright
+        self.driver = sync_playwright().start()
+        self.addCleanup(self.driver.stop)
+        self.browser = self.driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+        self.addCleanup(self.browser.close)
+        self.page = self.browser.new_page()
+        self.errors = []
+        self.page.on('pageerror', lambda error: self.errors.append(str(error)))
+        self.pool = ThreadPoolExecutor(max_workers=1)
+        self.addCleanup(self.pool.shutdown)
+
+    def db(self, action):
+        return self.pool.submit(action).result()
+
+    def test_create_edit_and_read_history_without_losing_percentage_precision(self):
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')
+        self.page.locator('#id_effective_from').fill('2027-01-01')
+        self.page.locator('#id_title').fill('January')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Создать новую версию', exact=True).click()
+        latest = self.db(lambda: GlobalCoeffVersion.objects.order_by('-effective_from').first())
+        self.assertEqual(self.page.locator('#coefficient-version').input_value(), str(latest.pk))
+        self.page.locator('#mainCoeffForm input[name^="global_coeff="]').fill('0.25')
+        self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '0.25')
+        self.page.locator('#mainCoeffForm input[name^="global_coeff="]').press('Tab')
+        self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '25%')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Сохранить изменения', exact=True).click()
+        self.assertEqual(self.db(lambda: latest.coefficients.get().motivation_coeff), 0.25, self.page.locator('#version-panel').inner_text())
+        self.assertEqual(self.db(lambda: GlobalCoeff.objects.get(pk=self.coeff.pk).motivation_coeff), 0.123456)
+        self.page.locator('#coefficient-version').select_option(str(self.first.pk))
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Открыть', exact=True).click()
+        self.assertTrue(self.page.get_by_role('button', name='Сохранить изменения', exact=True).is_disabled())
+        self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')
+        self.page.locator('#version-history summary').click()
+        self.assertIn('31.12.2026', self.page.locator('#version-history').inner_text())
+        self.assertEqual(self.errors, [])

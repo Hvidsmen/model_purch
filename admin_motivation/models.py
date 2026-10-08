@@ -109,57 +109,116 @@ class VariationCalculate(models.Model):
         return self.variation_name
 
 
-class GlobalCoeff(models.Model):
-    id = models.AutoField(primary_key=True)
-    goods = models.ForeignKey(Goods, on_delete=models.CASCADE)
-    type_coeff = models.ForeignKey(TypeCoeff, on_delete=models.CASCADE)
-    segment = models.ForeignKey(SegmentCoeff, on_delete=models.CASCADE)
-    motivation_coeff = models.FloatField()
-    manager_coeff = models.FloatField()
+class GlobalCoeffVersion(models.Model):
+    effective_from = models.DateField('Дата начала действия', unique=True)
+    title = models.CharField('Название', max_length=255, blank=True)
+    created_at = models.DateTimeField('Создана', auto_now_add=True)
 
-    variation_calculate = models.ForeignKey(VariationCalculate, on_delete=models.CASCADE)
+    class Meta:
+        ordering = ['effective_from', 'pk']
+        verbose_name = 'Версия общих коэффициентов'
+        verbose_name_plural = 'Версии общих коэффициентов'
 
     def __str__(self):
-        return f'{self.goods} - {self.segment} = {self.type_coeff}'
+        return f'{self.title or "Версия"} с {self.effective_from:%d.%m.%Y}'
+
+    def clean(self):
+        from datetime import date
+        from django.core.exceptions import ValidationError
+        super().clean()
+        if self.pk:
+            original = type(self).objects.get(pk=self.pk)
+            if original.effective_from != self.effective_from:
+                raise ValidationError({'effective_from': 'Дата сохранённой версии не изменяется.'})
+        else:
+            latest = type(self).objects.order_by('-effective_from').first()
+            if not latest and self.effective_from != date(2001, 1, 1):
+                raise ValidationError({'effective_from': 'Первая версия должна начинаться с 01.01.2001.'})
+            if latest and (self.effective_from is None or self.effective_from <= latest.effective_from):
+                raise ValidationError({'effective_from': 'Новая версия должна начинаться позже последней версии.'})
+
+    def save(self, *args, **kwargs):
+        self.full_clean()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('История версий не удаляется.')
+
+
+class GlobalCoeffQuerySet(models.QuerySet):
+    def check_editable(self):
+        from django.core.exceptions import ValidationError
+        latest = GlobalCoeffVersion.objects.order_by('-effective_from').first()
+        if self.exists() and (not latest or self.exclude(version=latest).exists()):
+            raise ValidationError('Историческая версия доступна только для просмотра.')
+
+    def update(self, **kwargs):
+        from django.core.exceptions import ValidationError
+        self.check_editable()
+        if 'version' in kwargs or 'version_id' in kwargs:
+            raise ValidationError('Нельзя переносить коэффициенты между версиями.')
+        return super().update(**kwargs)
+
+    def delete(self):
+        self.check_editable()
+        return super().delete()
+
+    def bulk_create(self, objs, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        objs = list(objs)
+        latest = GlobalCoeffVersion.objects.order_by('-effective_from').first()
+        if any(not latest or obj.version_id != latest.pk for obj in objs):
+            raise ValidationError('Нельзя добавлять строки в историческую версию.')
+        return super().bulk_create(objs, *args, **kwargs)
+
+
+class GlobalCoeff(models.Model):
+    objects = GlobalCoeffQuerySet.as_manager()
+    id = models.AutoField(primary_key=True)
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='coefficients')
+    goods = models.ForeignKey(Goods, on_delete=models.PROTECT)
+    type_coeff = models.ForeignKey(TypeCoeff, on_delete=models.PROTECT)
+    segment = models.ForeignKey(SegmentCoeff, on_delete=models.PROTECT)
+    motivation_coeff = models.FloatField()
+    manager_coeff = models.FloatField()
+    variation_calculate = models.ForeignKey(VariationCalculate, on_delete=models.PROTECT)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['version', 'goods', 'type_coeff', 'segment'],
+                                               name='unique_global_coeff_version_cell')]
+
+    def __str__(self):
+        return f'{self.version}: {self.goods} - {self.segment} = {self.type_coeff}'
+
+    def check_editable(self):
+        from django.core.exceptions import ValidationError
+        latest = GlobalCoeffVersion.objects.order_by('-effective_from').first()
+        if not latest or self.version_id != latest.pk:
+            raise ValidationError('Историческая версия доступна только для просмотра.')
+        if self.pk and type(self).objects.get(pk=self.pk).version_id != self.version_id:
+            raise ValidationError('Нельзя переносить коэффициент между версиями.')
+
+    def save(self, *args, **kwargs):
+        self.check_editable()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        self.check_editable()
+        return super().delete(*args, **kwargs)
 
     @classmethod
-    def get_matrix_str(cls):
-
-        pg_sales = Goods.objects.values_list('planning_group_sales').distinct()
-        pg_dict = {}
-        for pg in pg_sales:
-            pg = pg[0]
-            pg_dict[pg] = {}
-            groups = Goods.objects.filter(planning_group_sales=pg).values_list('group').distinct()
-            gp_dict = {}
-            for gr in groups:
-                gr = gr[0]
-                types_coeff = TypeCoeff.objects.all()
-                segments = SegmentCoeff.objects.all()
-                goods = [id for id in Goods.objects.filter(planning_group_sales=pg, group=gr)]
-
-                good_dict = {}
-
-                for good in goods:
-                    good_dict[good] = []
-                    for i_tp, tp in enumerate(types_coeff):
-                        tp_list = []
-                        for seg in segments:
-
-                            try:
-                                gb = GlobalCoeff.objects.get(goods=good, type_coeff=tp, segment=seg)
-                            except:
-                                gb = GlobalCoeff.objects.create(goods=good, type_coeff=tp, segment=seg,
-                                                                motivation_coeff=0, manager_coeff=1,
-                                                                variation_calculate=VariationCalculate.objects.get(
-                                                                    id=1))
-                                gb.save()
-                            tp_list.append(gb)
-                        good_dict[good].append(tp_list)
-
-                gp_dict[gr] = good_dict
-            pg_dict[pg] = gp_dict
-        return pg_dict
+    def get_matrix_str(cls, version):
+        rows = list(cls.objects.filter(version=version).select_related('goods', 'type_coeff', 'segment', 'variation_calculate'))
+        types = list(TypeCoeff.objects.order_by('pk'))
+        segments = list(SegmentCoeff.objects.order_by('pk'))
+        cells = {(row.goods_id, row.type_coeff_id, row.segment_id): row for row in rows}
+        goods = sorted({row.goods for row in rows}, key=lambda g: (g.planning_group_sales, g.group, g.brand, g.pk))
+        matrix = {}
+        for good in goods:
+            matrix.setdefault(good.planning_group_sales, {}).setdefault(good.group, {})[good] = [
+                [cells.get((good.pk, kind.pk, segment.pk)) for segment in segments] for kind in types]
+        return matrix
 
 
 class SubdivisionCoeff(models.Model):
