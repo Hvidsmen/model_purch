@@ -21,7 +21,7 @@ class GoodsEditorTests(TestCase):
         self.assertRedirects(response, reverse('pggoods_list') + f'?scenario={self.scenario.pk}')
         self.good.refresh_from_db()
         self.assertEqual((self.good.brand, self.good.purch, self.good.kddp), ('Brand', 'Supplier', 1))
-        self.assertAlmostEqual(self.good.ddp_usd, 117.326646)
+        self.assertEqual(self.good.ddp_usd, 0)  # Zero EXW and no freight parameters.
 
     def test_brand_and_purchase_are_displayed_and_can_be_changed_or_cleared(self):
         page = self.client.get(self.url)
@@ -37,7 +37,7 @@ class GoodsEditorTests(TestCase):
     def test_coefficient_is_calculated_server_side(self):
         self.client.post(self.url, dict(self.data, exw_usd='10', ddp_usd='15', kddp='999'))
         self.good.refresh_from_db()
-        self.assertEqual(self.good.kddp, 1.5)
+        self.assertEqual(self.good.kddp, 1)  # Submitted DDP is ignored; without additional costs DDP = EXW.
 
     def test_invalid_volume_explains_error_and_preserves_database_values(self):
         response = self.client.post(self.url, dict(self.data, volume='0'))
@@ -87,7 +87,7 @@ class GoodsEditorTests(TestCase):
         self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('goods.xlsx', stream.getvalue())})
         self.good.refresh_from_db()
         self.assertEqual(self.good.container_volume, 80)
-        sheet.delete_cols(15, 2)
+        sheet.delete_cols(15, 6)
         stream = io.BytesIO()
         workbook.save(stream)
         self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('legacy.xlsx', stream.getvalue())})
@@ -159,7 +159,7 @@ class GoodsEditorTests(TestCase):
         sheet.cell(2, 16).value = 12.5
         for legacy in (False, True):
             if legacy:
-                sheet.delete_cols(16)
+                sheet.delete_cols(16, 5)
             stream = io.BytesIO()
             workbook.save(stream)
             self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('duty.xlsx', stream.getvalue())})

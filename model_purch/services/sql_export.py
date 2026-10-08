@@ -139,6 +139,8 @@ def export_scenario(request, scenario, connection_string):
         exported_count = {'scenario': 0, 'purch': 0, 'purchpay': 0, 'pggoods': 0, 'plans': 0, 'freight': 0}
 
         with transaction.atomic():
+            from .pricing import reprice_goods
+            reprice_goods(scenario)
             parameters = snapshot(scenario)
             prepare_sql_goods(cursor)
             # Reference IDs and labels must be available before payment export.

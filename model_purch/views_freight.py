@@ -35,6 +35,10 @@ def freight_page(request):
             Freight.objects.update_or_create(scenario=scenario, defaults={
                 name: form.cleaned_data[name] for name in form.Meta.fields
             })
+            from .services.pricing import reprice_goods
+            invalid = reprice_goods(scenario, strict=False)
+            if invalid:
+                messages.warning(request, f'Не пересчитаны товары с некорректными исходными данными: {len(invalid)}. Исправьте их перед экспортом.')
         messages.success(request, 'Общие параметры закупок сохранены.')
         return freight_redirect(scenario)
     from .views import pggoods_list
@@ -57,5 +61,9 @@ def copy_freight(request):
             Freight.objects.update_or_create(scenario=target, defaults={
                 name: getattr(freight, name) for name in FreightForm.Meta.fields
             })
+            from .services.pricing import reprice_goods
+            invalid = reprice_goods(target, strict=False)
+            if invalid:
+                messages.warning(request, f'Не пересчитаны товары с некорректными исходными данными: {len(invalid)}.')
             messages.success(request, f'Общие параметры закупок скопированы из сценария «{source.name}».')
     return freight_redirect(target)

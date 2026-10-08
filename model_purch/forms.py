@@ -29,120 +29,51 @@ class PGGoodsCopyForm(forms.Form):
 class PGGoodsEditForm(forms.ModelForm):
     class Meta:
         model = PGGoods
-        fields = [
-            'volume', 'container_volume', 'duty_rate', 'exw_usd', 'ddp_usd', 'kddp',
-            'stock_cnt_day', 'percent_stock_end',
-            'brand', 'purch',
-        ]
-        labels = {
-            'volume': _('Объём'),
-            'container_volume': _('Объём контейнера, м³'),
-            'duty_rate': _('Пошлина, %'),
-            'exw_usd': _('Цена EXW (USD)'),
-            'ddp_usd': _('Цена DDP (USD)'),
-            'kddp': _('Коэффициент KDDP'),
-            'stock_cnt_day': _('Запас в днях'),
-            'percent_stock_end': _('% запаса на конец'),
-            'brand': _('Бренд'),
-            'purch': _('Закупка'),
-        }
+        fields = ['purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch',
+                  'volume', 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day']
+        labels = {'purch': _('Закупка'), 'planning_sales': _('Группа планов продаж'),
+                  'group_goods': _('Группа товаров'), 'brand': _('Бренд'), 'kind_purch': _('Вид закупки'),
+                  'volume': _('Объём'), 'container_volume': _('Объём контейнера, м³'),
+                  'duty_rate': _('Пошлина, %'), 'exw_usd': _('Цена EXW (USD)'), 'stock_cnt_day': _('Запас в днях')}
         widgets = {
-            'duty_rate': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'max': '100', 'class': 'form-control'}),
-            'container_volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.001', 'class': 'form-control'}),
-            'volume': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
-            'exw_usd': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
-            'ddp_usd': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
-            'kddp': forms.NumberInput(attrs={'step': '0.0001', 'min': '0', 'class': 'form-control', 'readonly': True}),
-            'stock_cnt_day': forms.NumberInput(attrs={'min': '0', 'class': 'form-control'}),
-            'percent_stock_end': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'max': '100', 'class': 'form-control'}),
+            'purch': forms.TextInput(attrs={'class': 'form-control', 'list': 'purchase-options'}),
+            'planning_sales': forms.TextInput(attrs={'class': 'form-control'}),
+            'group_goods': forms.TextInput(attrs={'class': 'form-control', 'list': 'goods-group-options'}),
             'brand': forms.TextInput(attrs={'class': 'form-control'}),
-            'purch': forms.TextInput(attrs={'class': 'form-control'}),
+            'kind_purch': forms.Select(attrs={'class': 'form-select'}),
+            'volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.000001', 'class': 'form-control'}),
+            'container_volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.001', 'class': 'form-control'}),
+            'duty_rate': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'max': '100', 'class': 'form-control'}),
+            'exw_usd': forms.NumberInput(attrs={'step': 'any', 'min': '0', 'class': 'form-control'}),
+            'stock_cnt_day': forms.NumberInput(attrs={'min': '0', 'class': 'form-control'}),
         }
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        # These model fields accept NULL; the editor must allow unassigned values.
-        for name in ['brand', 'purch']:
-            self.fields[name].required = False
-        # The coefficient is derived server-side, never trusted from browser input.
-        self.fields['container_volume'].required = False
-        self.fields['duty_rate'].required = False
-        self.fields['kddp'].disabled = True
-        self.fields['kddp'].required = False
-        for name in ['volume', 'exw_usd', 'ddp_usd']:
-            self.fields[name].widget.attrs['step'] = 'any'
-
-    def clean_brand(self):
-        if self.is_bound and self.add_prefix('brand') not in self.data:
-            return self.instance.brand
-        return self.cleaned_data.get('brand')
-
-    def clean_purch(self):
-        if self.is_bound and self.add_prefix('purch') not in self.data:
-            return self.instance.purch
-        return self.cleaned_data.get('purch')
-
-    def clean_duty_rate(self):
-        if self.add_prefix('duty_rate') not in self.data:
-            return self.instance.duty_rate
-        value = self.cleaned_data.get('duty_rate')
-        if value is None:
-            raise ValidationError(_('Укажите пошлину; если она не применяется, введите 0.'))
-        return value
-
-    def clean_container_volume(self):
-        if self.add_prefix("container_volume") not in self.data:
-            return self.instance.container_volume
-        value = self.cleaned_data.get("container_volume")
-        if value is None or value <= 0:
-            raise ValidationError(_("Объём контейнера должен быть больше нуля."))
-        return value
-
-    def clean_volume(self):
-        v = self.cleaned_data.get('volume')
-        if v is not None and v <= 0:
-            raise ValidationError(_('Объём должен быть больше нуля.'))
-        return v
-
-    def clean_exw_usd(self):
-        v = self.cleaned_data.get('exw_usd')
-        if v is not None and v < 0:
-            raise ValidationError(_('Цена EXW не может быть отрицательной.'))
-        return v
-
-    def clean_ddp_usd(self):
-        v = self.cleaned_data.get('ddp_usd')
-        if v is not None and v < 0:
-            raise ValidationError(_('Цена DDP не может быть отрицательной.'))
-        return v
-
-    def clean_stock_cnt_day(self):
-        v = self.cleaned_data.get('stock_cnt_day')
-        if v is not None and v < 0:
-            raise ValidationError(_('Запас в днях не может быть отрицательным.'))
-        return v
-
-    def clean_percent_stock_end(self):
-        v = self.cleaned_data.get('percent_stock_end')
-        if v is not None and (v < 0 or v > 100):
-            raise ValidationError(_('Процент запаса должен быть от 0 до 100.'))
-        return v
+        for name in self.fields:
+            if self.is_bound and self.add_prefix(name) not in self.data:
+                self.fields[name].required = False
+        self.fields['brand'].required = False
+        self.fields['purch'].required = False
 
     def clean(self):
-        cleaned_data = super().clean()
-        exw = cleaned_data.get('exw_usd')
-        ddp = cleaned_data.get('ddp_usd')
-        if exw is not None and ddp is not None and ddp < exw:
-            self.add_error('ddp_usd', _('Цена DDP обычно не может быть меньше цены EXW.'))
-        return cleaned_data
-
-    def save(self, commit=True):
-        instance = super().save(commit=False)
-        if instance.exw_usd and instance.exw_usd > 0 and instance.ddp_usd is not None:
-            instance.kddp = instance.ddp_usd / instance.exw_usd
-        if commit:
-            instance.save()
-        return instance
+        cleaned = super().clean()
+        for name in self.fields:
+            if self.add_prefix(name) not in self.data:
+                cleaned[name] = getattr(self.instance, name)
+        for name, label, positive in [('volume', 'Объём', True), ('container_volume', 'Объём контейнера', True),
+                                      ('exw_usd', 'Цена EXW', False), ('stock_cnt_day', 'Запас в днях', False)]:
+            value = cleaned.get(name)
+            if value is not None and (value <= 0 if positive else value < 0):
+                self.add_error(name, f'{label} должен быть больше нуля.' if positive else f'{label} не может быть отрицательным.')
+        if self.add_prefix('duty_rate') in self.data and cleaned.get('duty_rate') is None and 'duty_rate' not in self.errors:
+            self.add_error('duty_rate', 'Укажите пошлину; если она не применяется, введите 0.')
+        if cleaned.get('group_goods') != self.instance.group_goods and self.add_prefix('duty_rate') not in self.data:
+            from .models import GoodsGroup
+            from .goods_identity import planning_group_key
+            group = GoodsGroup.objects.filter(name_key=planning_group_key(cleaned.get('group_goods') or '')).first()
+            cleaned['duty_rate'] = group.duty_rate if group else 0
+        return cleaned
 
 
 # ==========================================
@@ -159,6 +90,7 @@ class ScenarioModelForm(forms.ModelForm):
             'overwrite_existing': _('Перезаписывать существующие данные'),
         }
         widgets = {
+            'is_russian': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введите название сценария'}),
             'date_start_plan': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'date_end_plan': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
@@ -209,11 +141,12 @@ from .models import Purch, PurchPay, ScenarioModel, KindLagPay
 class PurchForm(forms.ModelForm):
     class Meta:
         model = Purch
-        fields = ['name', 'lag_income', 'lage_make']
+        fields = ['name', 'lag_income', 'lage_make', 'is_russian']
         labels = {
             'name': 'Название закупки',
             'lag_income': 'Лаг доставки (дней)',
             'lage_make': 'Лаг производства (дней)',
+            'is_russian': 'Поставщик РФ',
         }
         widgets = {
             'name': forms.TextInput(attrs={
@@ -284,6 +217,7 @@ class FreightForm(forms.ModelForm):
     class Meta:
         model = Freight
         fields = ['price_per_container', 'customs_rate', 'warehouse_delivery_cost']
+        labels = {'price_per_container': 'Цена фрахта за контейнер, USD', 'warehouse_delivery_cost': 'Стоимость доставки до склада, USD'}
         widgets = {
             'price_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
             'customs_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'}),
@@ -325,3 +259,12 @@ class ScenarioBulkExportForm(forms.Form):
         error_messages={'required': 'Выберите хотя бы один сценарий.',
                         'invalid_choice': 'Один из выбранных сценариев не найден. Обновите страницу.'},
     )
+
+
+class GoodsGroupForm(forms.ModelForm):
+    class Meta:
+        from .models import GoodsGroup
+        model = GoodsGroup
+        fields = ['name', 'duty_rate']
+        widgets = {'name': forms.TextInput(attrs={'class': 'form-control'}),
+                   'duty_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'})}

@@ -2,6 +2,7 @@ from django.urls import path
 from . import views, views_freight
 from . import  views_graph
 urlpatterns = [
+    path('goods-groups/', views.goods_groups, name='goods_groups'),
     path("freight/", views_freight.freight_page, name="freight"),
     path("freight/copy/", views_freight.copy_freight, name="copy_freight"),
     # ==============================================================================

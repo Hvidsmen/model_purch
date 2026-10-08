@@ -29,6 +29,7 @@
 
 {% block content %}
 {% if current_scenario %}{% include 'model_purch/_freight_settings.html' %}{% endif %}
+{% include "model_purch/_pricing_options.html" %}
 <!-- Красивая шапка страницы -->
 <div class="page-header mb-4">
     <div class="d-flex justify-content-between align-items-center">
@@ -43,6 +44,7 @@
         </div>
 
         <div class="page-actions d-flex gap-2 align-items-center">
+            <a class="btn btn-outline-secondary" href="{% url 'goods_groups' %}">Группы и пошлины</a>
             <span class="badge bg-secondary fs-6 me-2">
                 <i aria-hidden="true" class="bi bi-collection"></i> Всего: {{ page_obj.paginator.count }}
             </span>
@@ -240,6 +242,7 @@
                     <th style="width: 140px;" class="text-end">Объём контейнера, м³</th>
                     <th style="width: 110px;" class="text-end">Пошлина, %</th>
                     <th style="width: 110px;" class="text-end">EXW USD</th>
+                    <th class="text-end">Фрахт за товар</th><th class="text-end">CIF</th><th class="text-end">Таможенный платёж</th><th class="text-end">Доставка за товар</th>
                     <th style="width: 110px;" class="text-end">DDP USD</th>
                     <th style="width: 100px;" class="text-end">KDDP</th>
                     <th style="width: 100px;" class="text-end">Запас (дни)</th>
@@ -249,7 +252,7 @@
             </thead>
             <tbody>
                 {% for item in page_obj %}
-                    <tr data-row-id="{{ item.id }}">
+                    <tr class="pricing-row" data-row-id="{{ item.id }}">
                         <form method="post" action="{% url 'pggoods_list' %}" class="inline-form m-0 d-none">
                             {% csrf_token %}
                                 <input type="hidden" name="record_id" value="{{ item.id }}">
@@ -258,10 +261,10 @@
                         </form>
                         <td class="text-muted">{{ item.id }}</td>
                         <td><input type="text" class="inline-input" value="{{ item.planning_group }}" readonly></td>
-                        <td><input type="text" class="inline-input" value="{{ item.planning_sales }}" readonly></td>
-                        <td><input type="text" class="inline-input editable-field" value="{{ item.group_goods }}" name="group_goods" data-original="{{ item.group_goods }}"></td>
+                        <td><input type="text" class="inline-input editable-field" value="{{ item.planning_sales }}" name="planning_sales" data-original="{{ item.planning_sales }}"></td>
+                        <td><input type="text" class="inline-input editable-field" value="{{ item.group_goods }}" name="group_goods" list="goods-group-options" data-original="{{ item.group_goods }}"></td>
                         <td><input type="text" class="inline-input editable-field" value="{{ item.brand|default:'' }}" name="brand" data-original="{{ item.brand|default:'' }}"></td>
-                        <td><input type="text" class="inline-input editable-field" value="{{ item.purch|default:'' }}" name="purch" data-original="{{ item.purch|default:'' }}"></td>
+                        <td><input type="text" class="inline-input editable-field" value="{{ item.purch|default:'' }}" name="purch" list="purchase-options" data-original="{{ item.purch|default:'' }}"></td>
                         <td>
                             <select class="inline-input editable-field" name="kind_purch" data-original="{{ item.kind_purch.id|default:'' }}">
                                 <option value="">— Не выбран —</option>
@@ -274,11 +277,12 @@
                         <td><input type="number" step="any" min="0.001" class="inline-input text-end editable-field" value="{{ item.container_volume|unlocalize }}" name="container_volume" data-original="{{ item.container_volume|unlocalize }}"></td>
                         <td class="percent-cell"><input type="number" step="0.01" min="0" max="100" class="inline-input text-end editable-field" value="{{ item.duty_rate|unlocalize }}" name="duty_rate" data-original="{{ item.duty_rate|unlocalize }}"></td>
                         <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.exw_usd|format_money:2 }}" name="exw_usd" data-original="{{ item.exw_usd }}"></td>
-                        <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.ddp_usd|format_money:2 }}" name="ddp_usd" data-original="{{ item.ddp_usd }}"></td>
+                        <td><input class="inline-input text-end" name="freight_usd" readonly value="{{ item.freight_usd|format_money:6 }}"></td><td><input class="inline-input text-end" name="cif_usd" readonly value="{{ item.cif_usd|format_money:6 }}"></td><td><input class="inline-input text-end" name="customs_payment_usd" readonly value="{{ item.customs_payment_usd|format_money:6 }}"></td><td><input class="inline-input text-end" name="warehouse_delivery_usd" readonly value="{{ item.warehouse_delivery_usd|format_money:6 }}"></td>
+                        <td><input type="number" step="0.01" min="0" class="inline-input text-end" value="{{ item.ddp_usd|format_money:2 }}" name="ddp_usd" readonly data-original="{{ item.ddp_usd }}"></td>
                         <td><input type="number" step="0.0001" min="0" class="inline-input text-end" value="{{ item.kddp|format_money:4 }}" name="kddp" readonly title="Рассчитывается автоматически"></td>
                         <td><input type="number" step="1" min="0" class="inline-input text-end editable-field" value="{{ item.stock_cnt_day|format_integer }}" name="stock_cnt_day" data-original="{{ item.stock_cnt_day }}"></td>
                         <td class="percent-cell">
-                            <input type="number" step="0.01" min="0" max="100" class="inline-input text-end editable-field" value="{{ item.percent_stock_end|format_percent }}" name="percent_stock_end" data-original="{{ item.percent_stock_end }}" title="{{ item.percent_stock_end|format_percent_display }}">
+                            <input type="number" step="0.01" min="0" max="100" class="inline-input text-end " readonly value="{{ item.percent_stock_end|format_percent }}" name="percent_stock_end" data-original="{{ item.percent_stock_end }}" title="{{ item.percent_stock_end|format_percent_display }}">
                         </td>
                         <td class="text-center text-nowrap">
                             <form method="post"
@@ -293,7 +297,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="17" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
+                    <tr><td colspan="21" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -474,18 +478,23 @@ const scenarioId = document.querySelector('input[name="scenario"]')?.value ||
 
             if (result.success) {
                 // Показываем сообщение (можно использовать showAlert из base, но здесь упростим через alert или перезагрузку)
-                alert(result.message);
-                Object.keys(changes).forEach(rowId => {
+                alert([result.message, ...(result.errors || [])].join('\n'));
+                (result.rows || []).forEach(saved => {
+                    const rowId = String(saved.id);
                     const row = document.querySelector(`tr[data-row-id="${rowId}"]`);
                     if (row) {
+                        Object.entries(saved.values).forEach(([name, value]) => {
+                            const field = row.querySelector(`[name="${name}"]`);
+                            if (field) field.value = value ?? '';
+                        });
                         row.querySelectorAll('.editable-field').forEach(input => {
                             input.dataset.original = input.value;
                             input.classList.remove('changed');
                         });
                         row.classList.remove('has-changes');
                     }
+                    delete changes[rowId];
                 });
-                for (const key in changes) delete changes[key];
                 updateSaveButton();
             } else {
                 throw new Error(result.message || 'Ошибка сохранения');

@@ -25,8 +25,6 @@ def copy_goods(source, target):
                     'container_volume': sg.container_volume,
                     'duty_rate': sg.duty_rate,
                     'exw_usd': sg.exw_usd,
-                    'ddp_usd': sg.ddp_usd,
-                    'kddp': sg.kddp,
                     'stock_cnt_day': sg.stock_cnt_day,
                     'percent_stock_end': sg.percent_stock_end,
                 }

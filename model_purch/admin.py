@@ -2,9 +2,27 @@ from django.contrib import admin
 from .models import *
 
 admin.site.register(KindPurch)
-admin.site.register(PGGoods)
+@admin.register(PGGoods)
+class PGGoodsAdmin(admin.ModelAdmin):
+    readonly_fields = ('scenario_plan', 'planning_group', 'planning_group_key', 'percent_stock_end', 'freight_usd',
+                       'cif_usd', 'customs_payment_usd', 'warehouse_delivery_usd', 'ddp_usd', 'kddp')
 
-admin.site.register(Purch)
+
+@admin.register(GoodsGroup)
+class GoodsGroupAdmin(admin.ModelAdmin):
+    list_display = ('name', 'duty_rate')
+    search_fields = ('name',)
+
+
+@admin.register(Purch)
+class PurchAdmin(admin.ModelAdmin):
+    list_display = ('name', 'is_russian', 'lag_income')
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from .services.pricing import reprice_goods
+        reprice_goods(strict=False)
+
 admin.site.register(PurchPay)
 
 
@@ -31,6 +49,12 @@ class PGGoodsDuplicateArchiveAdmin(admin.ModelAdmin):
 @admin.register(Freight)
 class FreightAdmin(admin.ModelAdmin):
     list_display = ("scenario", "price_per_container", "customs_rate", "warehouse_delivery_cost")
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        from .services.pricing import reprice_goods
+        reprice_goods(obj.scenario, strict=False)
+
 
 
 @admin.register(ScenarioExport)

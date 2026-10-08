@@ -1,126 +1,17 @@
 {% extends 'model_purch/base.html' %}
-{% load static %}
-
-{% block title %}{{ title }}{% endblock %}
-
+{% load custom_filters %}
 {% block content %}
-<div class="row justify-content-center">
-    <div class="col-lg-8">
-        <div class="card shadow-sm">
-            <div class="card-header bg-primary text-white">
-                <h4 class="mb-1">{{ title }}</h4>
-                <small>ID записи: {{ goods.id }}</small>
-            </div>
-            <div class="card-body">
-                <form method="post" novalidate>
-                    {% csrf_token %}
-                    <input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
-                    {% if form.errors %}
-                        <div class="alert alert-danger" role="alert">
-                            <strong>Изменения не сохранены:</strong>
-                            <ul class="mb-0">
-                                {% for field in form %}{% for error in field.errors %}<li><a href="#{{ field.id_for_label }}">{{ field.label }}</a>: {{ error }}</li>{% endfor %}{% endfor %}
-                                {% for error in form.non_field_errors %}<li>{{ error }}</li>{% endfor %}
-                            </ul>
-                        </div>
-                    {% endif %}
-                    <div class="row g-3 mb-4 pb-3 border-bottom">
-                        <div class="col-md-4">
-                            <label class="form-label text-muted small">Плановая группа</label>
-                            <div class="fw-semibold">{{ goods.planning_group }}</div>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label text-muted small">Группа товаров</label>
-                            <div class="fw-semibold">{{ goods.group_goods }}</div>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label text-muted small">Тип закупки</label>
-                            <div class="fw-semibold">{{ goods.kind_purch.name }}</div>
-                        </div>
-                    </div>
-
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label for="{{ form.brand.id_for_label }}" class="form-label">{{ form.brand.label }}</label>
-                            {{ form.brand }}
-                            {% for error in form.brand.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.purch.id_for_label }}" class="form-label">{{ form.purch.label }}</label>
-                            {{ form.purch }}
-                            {% for error in form.purch.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-                        </div>
-                    </div>
-
-                    <h6 class="text-muted mb-3">Объёмы и цены</h6>
-                    <div class="mb-3"><label for="{{ form.container_volume.id_for_label }}" class="form-label">{{ form.container_volume.label }}</label>{{ form.container_volume }}{% for error in form.container_volume.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label for="{{ form.volume.id_for_label }}" class="form-label">{{ form.volume.label }}</label>
-                            {{ form.volume }}
-                            {% if form.volume.errors %}<div class="text-danger small mt-1">{{ form.volume.errors.0 }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.exw_usd.id_for_label }}" class="form-label">{{ form.exw_usd.label }}</label>
-                            {{ form.exw_usd }}
-                            {% if form.exw_usd.errors %}<div class="text-danger small mt-1">{{ form.exw_usd.errors.0 }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.ddp_usd.id_for_label }}" class="form-label">{{ form.ddp_usd.label }}</label>
-                            {{ form.ddp_usd }}
-                            {% if form.ddp_usd.errors %}<div class="text-danger small mt-1">{{ form.ddp_usd.errors.0 }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.kddp.id_for_label }}" class="form-label">{{ form.kddp.label }} <small class="text-muted">(автоматически)</small></label>
-                            {{ form.kddp }}
-                            <div class="text-muted small">При EXW больше нуля: DDP / EXW. При EXW = 0 сохраняется текущий коэффициент.</div>
-                            {% if form.kddp.errors %}<div class="text-danger small mt-1">{{ form.kddp.errors.0 }}</div>{% endif %}
-                        </div>
-                    </div>
-
-                    <div class="mb-3"><label for="{{ form.duty_rate.id_for_label }}" class="form-label">{{ form.duty_rate.label }}</label>{{ form.duty_rate }}{% for error in form.duty_rate.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
-                    <h6 class="text-muted mb-3">Запасы</h6>
-                    <div class="row g-3 mb-4">
-                        <div class="col-md-6">
-                            <label for="{{ form.stock_cnt_day.id_for_label }}" class="form-label">{{ form.stock_cnt_day.label }}</label>
-                            {{ form.stock_cnt_day }}
-                            {% if form.stock_cnt_day.errors %}<div class="text-danger small mt-1">{{ form.stock_cnt_day.errors.0 }}</div>{% endif %}
-                        </div>
-                        <div class="col-md-6">
-                            <label for="{{ form.percent_stock_end.id_for_label }}" class="form-label">{{ form.percent_stock_end.label }}</label>
-                            {{ form.percent_stock_end }}
-                            {% if form.percent_stock_end.errors %}<div class="text-danger small mt-1">{{ form.percent_stock_end.errors.0 }}</div>{% endif %}
-                        </div>
-                    </div>
-
-                    <div class="d-flex justify-content-end gap-2 pt-3 border-top">
-                        <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}" class="btn btn-outline-secondary">Отмена</a>
-                        <button type="submit" class="btn btn-success">💾 Сохранить изменения</button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-    const exw = document.getElementById('{{ form.exw_usd.id_for_label }}');
-    const ddp = document.getElementById('{{ form.ddp_usd.id_for_label }}');
-    const kddp = document.getElementById('{{ form.kddp.id_for_label }}');
-    function recalc() {
-        const exwVal = parseFloat(exw.value);
-        const ddpVal = parseFloat(ddp.value);
-        if (!isNaN(exwVal) && !isNaN(ddpVal) && exwVal > 0) {
-            kddp.value = (ddpVal / exwVal).toFixed(4);
-        } else {
-            kddp.value = kddp.defaultValue;
-        }
-    }
-    exw.addEventListener('input', recalc);
-    ddp.addEventListener('input', recalc);
-});
-</script>
+<div class="card card-body"><h1 class="h3">{{ title }}</h1><p>Плановая группа: <strong>{{ goods.planning_group }}</strong></p>
+{% if form.errors %}<div class="alert alert-danger">Изменения не сохранены. {{ form.non_field_errors }}{% for field in form %}{% for error in field.errors %}<div><a href="#{{ field.id_for_label }}">{{ field.label }}</a>: {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
+<form method="post" class="pricing-row">{% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}"><div class="row g-3">{% for field in form %}<div class="col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}</div>
+<h2 class="h5 mt-4">Расчётные величины</h2><div class="row g-3">
+<div class="col-md-4"><label class="form-label">Фрахт за товар</label><input class="form-control" name="freight_usd" readonly value="{{ goods.freight_usd|format_money:6 }}"></div>
+<div class="col-md-4"><label class="form-label">CIF</label><input class="form-control" name="cif_usd" readonly value="{{ goods.cif_usd|format_money:6 }}"></div>
+<div class="col-md-4"><label class="form-label">Таможенный платёж</label><input class="form-control" name="customs_payment_usd" readonly value="{{ goods.customs_payment_usd|format_money:6 }}"></div>
+<div class="col-md-4"><label class="form-label">Доставка за товар</label><input class="form-control" name="warehouse_delivery_usd" readonly value="{{ goods.warehouse_delivery_usd|format_money:6 }}"></div>
+<div class="col-md-4"><label class="form-label">DDP</label><input class="form-control" name="ddp_usd" readonly value="{{ goods.ddp_usd|format_money:6 }}"></div>
+<div class="col-md-4"><label class="form-label">KDDP</label><input class="form-control" name="kddp" readonly value="{{ goods.kddp|format_money:6 }}"></div>
+</div><p class="text-muted small mt-2">При EXW &gt; 0: KDDP = DDP / EXW. При EXW = 0 сохраняется предыдущий KDDP. Для поставщиков РФ DDP = EXW.</p>
+<div class="mt-3"><a class="btn btn-outline-secondary" href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Отмена</a> <button class="btn btn-primary" type="submit">Сохранить изменения</button></div></form></div>
+{% include 'model_purch/_pricing_options.html' %}
 {% endblock %}

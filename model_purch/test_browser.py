@@ -187,3 +187,24 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.page.reload()
         self.assertEqual(self.page.locator('[name="duty_rate"]').input_value(), '7.25')
         self.assertEqual(self.errors, [])
+
+    def test_group_default_and_price_preview_match_saved_price(self):
+        from .models import GoodsGroup
+        self.db(lambda: GoodsGroup.objects.create(name='Tariff group', duty_rate=5))
+        self.db(lambda: Freight.objects.filter(scenario=self.source).update(price_per_container=1000, customs_rate=10, warehouse_delivery_cost=500))
+        self.visit('pggoods_list')
+        self.select(self.source)
+        row = self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
+        row.locator('[name="group_goods"]').fill('Tariff group')
+        self.assertEqual(row.locator('[name="duty_rate"]').input_value(), '5.00')
+        row.locator('[name="volume"]').fill('2')
+        row.locator('[name="container_volume"]').fill('50')
+        row.locator('[name="exw_usd"]').fill('100')
+        self.assertEqual(row.locator('[name="ddp_usd"]').input_value(), '174.7')
+        self.assertEqual(row.locator('[name="kddp"]').input_value(), '1.747')
+        self.assertTrue(row.locator('[name="ddp_usd"]').get_attribute('readonly') is not None)
+        self.assertTrue(row.locator('[name="percent_stock_end"]').get_attribute('readonly') is not None)
+        with self.page.expect_response(lambda response: '/pggoods/bulk-update/' in response.url):
+            self.page.locator('#saveAllBtn').click()
+        self.assertAlmostEqual(self.db(lambda: PGGoods.objects.get(pk=self.good.pk).ddp_usd), 174.7)
+        self.assertEqual(self.errors, [])

@@ -115,18 +115,16 @@ class ScenarioReliabilityTests(TestCase):
         self.assertTrue(status['parameters']['scenarios'][0]['exported_at'])
 
     def test_invalid_percent_totals_prices_and_volumes_report_specific_errors(self):
+        self.record_export()
         self.payment.percent_pay = 30
         self.payment.save()
-        self.good.volume = 0
-        self.good.percent_stock_end = 150
-        self.good.exw_usd = -1
-        self.good.save()
+        # Simulate invalid legacy database rows without passing through the new pricing validator.
+        PGGoods.objects.filter(pk=self.good.pk).update(volume=0, percent_stock_end=150, exw_usd=-1)
         errors = '\n'.join(validation_errors(self.scenario))
         self.assertIn('100%', errors)
         self.assertIn('Объём', errors)
         self.assertIn('EXW', errors)
         self.assertIn('от 0 до 100', errors)
-        self.record_export()
         self.assertEqual(self.start().status_code, 400)
 
     def test_input_changes_during_run_block_next_step(self):

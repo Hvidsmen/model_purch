@@ -41,7 +41,7 @@ class NewFieldExportTests(TestCase):
         reference = next(call for call in calls if 'MERGE INTO portal.KindLagPay' in call.args[0])
         self.assertEqual(reference.args[1:], (self.kind.pk, self.kind.name))
         purchase = next(call for call in calls if call.args[0].startswith('UPDATE [portal].[Purch]'))
-        self.assertEqual(purchase.args[1:], (35, 501))
+        self.assertEqual(purchase.args[1:], (35, False, 501))
         self.assertIn('[lage_make] = ?', purchase.args[0])
         payment = next(call for call in calls if 'INSERT INTO portal.PurchPay (' in call.args[0])
         self.assertEqual(payment.args[1:], (501, 'Advance', 30.0, -10, self.kind.pk, self.kind.name))

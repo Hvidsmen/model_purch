@@ -206,7 +206,7 @@
                     {% for purch in purch_list %}
                         <tr id="purchase-{{ purch.pk }}" data-payment-valid="{% if purch.payment_valid %}true{% else %}false{% endif %}">
                             <td class="text-muted">{{ purch.id }}</td>
-                            <td><strong>{{ purch.name }}</strong></td>
+                            <td><strong>{{ purch.name }}{% if purch.is_russian %} <span class="badge bg-success">РФ</span>{% endif %}</strong></td>
                             <td>
                                 <span class="badge bg-secondary">{{ purch.lag_income }}</span>
                             </td>
@@ -233,7 +233,7 @@
     <form method="post"
           action="{% url 'purch_delete' purch.id %}"
           class="d-inline"
-          onsubmit="return confirm('Удалить закупку «{{ purch.name }}»?');">
+          onsubmit="return confirm('Удалить закупку «{{ purch.name|escapejs }}»?');">
         {% csrf_token %}
         <button type="submit" class="btn btn-sm btn-outline-danger" title="Удалить">
             <i aria-hidden="true" class="bi bi-trash"></i>

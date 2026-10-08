@@ -32,6 +32,7 @@
                             <i aria-hidden="true" class="bi bi-list-ul"></i> Товары
                         </a>
                     </li>
+                    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'goods_groups' %}active{% endif %}" href="{% url 'goods_groups' %}">Группы и пошлины</a></li>
 
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'purch_list' %}active{% endif %}" href="{% url 'purch_list' %}">

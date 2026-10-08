@@ -74,7 +74,7 @@ class GoodsUniquenessTests(TestCase):
         target.refresh_from_db()
         self.assertEqual(target.planning_sales, source.planning_sales)
         self.assertEqual(target.group_goods, source.group_goods)
-        self.assertEqual(target.ddp_usd, 55)
+        self.assertEqual(target.ddp_usd, source.exw_usd)
         self.assertEqual(PGGoods.objects.filter(scenario_plan=self.scenario).count(), 1)
 
     def workbook(self, rows):
@@ -96,7 +96,7 @@ class GoodsUniquenessTests(TestCase):
                                     {'excel_file': self.workbook([self.excel_row(' daikin Sensira ')])})
         self.assertEqual(response.status_code, 302)
         target.refresh_from_db()
-        self.assertEqual(target.ddp_usd, 8)
+        self.assertEqual(target.ddp_usd, 2)  # Excel DDP is ignored.
         self.assertEqual(target.planning_sales, 'Imported sales')
         self.assertEqual(PGGoods.objects.count(), 1)
 
@@ -109,9 +109,9 @@ class GoodsUniquenessTests(TestCase):
         self.assertEqual(response.status_code, 302)
         target.refresh_from_db()
         other.refresh_from_db()
-        self.assertEqual(target.ddp_usd, 3)
+        self.assertEqual(target.ddp_usd, 2)
         self.assertEqual(other.planning_group, 'Another')
-        self.assertEqual(PGGoods.objects.get(planning_group='New group').ddp_usd, 88)
+        self.assertEqual(PGGoods.objects.get(planning_group='New group').ddp_usd, 2)
 
     def sql_source(self):
         cursor = Mock()
@@ -130,11 +130,11 @@ class GoodsUniquenessTests(TestCase):
         connect.return_value = connection
         sync_pggoods_data_for_scenario(self.scenario)
         target.refresh_from_db()
-        self.assertEqual(target.ddp_usd, 3)
+        self.assertEqual(target.ddp_usd, 2)
         self.scenario.overwrite_existing = True
         sync_pggoods_data_for_scenario(self.scenario)
         target.refresh_from_db()
-        self.assertEqual(target.ddp_usd, 66)
+        self.assertEqual(target.ddp_usd, 0)  # SQL sync has no EXW source; supplied DDP is replaced by the formula.
         self.assertEqual(target.planning_sales, 'Changed sales')
         self.assertEqual(PGGoods.objects.count(), 1)
 

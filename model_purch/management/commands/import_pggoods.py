@@ -109,8 +109,6 @@ class Command(BaseCommand):
                         'purch': str(purch).strip() if purch else None,
                         'volume': float(volume) if volume else 0.0,
                         'exw_usd': 0.0,
-                        'ddp_usd': ddp_usd_value,  # ← заполняем из SQL
-                        'kddp': 0.0,               # KDDP = DDP/EXW, но EXW=0, поэтому 0
                         'stock_cnt_day': 0,
                         'percent_stock_end': 0.0,
                     }

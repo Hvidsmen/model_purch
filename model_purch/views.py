@@ -626,8 +626,8 @@ INNER JOIN (
                 defaults = {
                     'planning_group': planning_group, 'planning_sales': planning_sales, 'group_goods': group_goods,
                     'brand': brand, 'purch': purch_name, 'kind_purch': kind_purch_obj,
-                    'volume': volume, 'exw_usd': 0.0, 'ddp_usd': ddp_usd,
-                    'kddp': 1.0 if ddp_usd > 0 else 0.0, 'stock_cnt_day': 0, 'percent_stock_end': 0.0,
+                    'volume': volume, 'exw_usd': 0.0,
+                    'stock_cnt_day': 0, 'percent_stock_end': 0.0,
                 }
 
                 if overwrite:
@@ -861,6 +861,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     if freight_form is None:
         freight_form = FreightForm(instance=Freight.objects.filter(scenario=current_scenario).first() if current_scenario else None)
     return render(request, 'model_purch/pggoods_list.html', {
+        **pricing_context(current_scenario),
         'freight_form': freight_form,
         'freight_sources': all_scenarios.exclude(pk=current_scenario.pk) if current_scenario else all_scenarios.none(),
         'page_obj': page_obj,
@@ -913,6 +914,7 @@ def edit_pggoods(request, pk):
         form = PGGoodsEditForm(instance=goods)
 
     return render(request, 'model_purch/edit_pggoods.html', {
+        **pricing_context(current_scenario),
         'form': form, 'goods': goods, 'title': f'Редактирование: {goods.group_goods}',
         'current_scenario': current_scenario,
     })
@@ -951,6 +953,7 @@ def bulk_update_pggoods(request):
 
         updated_count = 0
         errors = []
+        saved_rows = []
 
         with transaction.atomic():
             for item_data in updates:
@@ -962,49 +965,19 @@ def bulk_update_pggoods(request):
                     # ВАЖНО: ищем запись ТОЛЬКО в рамках текущего сценария
                     goods = PGGoods.objects.get(pk=record_id, scenario_plan=current_scenario)
 
-                    if 'group_goods' in item_data:
-                        goods.group_goods = item_data['group_goods']
-                    if 'brand' in item_data:
-                        goods.brand = item_data['brand']
-                    if 'purch' in item_data:
-                        goods.purch = item_data['purch']
-                    if 'duty_rate' in item_data:
-                        from decimal import Decimal
-                        value = Decimal(str(item_data['duty_rate']))
-                        if not value.is_finite() or not 0 <= value <= 100 or value != value.quantize(Decimal('0.01')):
-                            raise ValueError('Пошлина должна быть от 0 до 100%, не более двух знаков после запятой.')
-                        goods.duty_rate = value
-                    if 'container_volume' in item_data:
-                        value = float(item_data['container_volume'])
-                        if not math.isfinite(value) or value < 0.001:
-                            raise ValueError('Объём контейнера должен быть конечным числом не меньше 0.001.')
-                        goods.container_volume = value
-                    if 'volume' in item_data:
-                        goods.volume = float(item_data['volume'])
-                    if 'exw_usd' in item_data:
-                        goods.exw_usd = float(item_data['exw_usd'])
-                    if 'ddp_usd' in item_data:
-                        goods.ddp_usd = float(item_data['ddp_usd'])
-                    if 'stock_cnt_day' in item_data:
-                        goods.stock_cnt_day = int(item_data['stock_cnt_day'])
-                    if 'percent_stock_end' in item_data:
-                        goods.percent_stock_end = float(item_data['percent_stock_end'])
-
-                    if 'kind_purch' in item_data:
-                        kind_purch_id = item_data['kind_purch']
-                        if kind_purch_id:
-                            try:
-                                goods.kind_purch = KindPurch.objects.get(pk=int(kind_purch_id))
-                            except KindPurch.DoesNotExist:
-                                errors.append(f'Запись ID={record_id}: Вид закупки не найден')
-                        else:
-                            goods.kind_purch = None
-
-                    if goods.exw_usd and goods.exw_usd > 0 and goods.ddp_usd is not None:
-                        goods.kddp = goods.ddp_usd / goods.exw_usd
-
+                    # The same allowlist and validation apply to single and bulk edits.
+                    form = PGGoodsEditForm(item_data, instance=goods)
+                    if not form.is_valid():
+                        errors.append(f'Запись ID={record_id}: {form.errors.as_text()}')
+                        continue
+                    goods = form.save(commit=False)
                     goods.save()
                     updated_count += 1
+                    from .services.pricing import INPUT_FIELDS, CALCULATED_FIELDS
+                    saved_rows.append({'id': goods.pk, 'values': {
+                        name: (goods.kind_purch_id if name == 'kind_purch' else getattr(goods, name))
+                        for name in (*INPUT_FIELDS, *CALCULATED_FIELDS)
+                    }})
 
                 except PGGoods.DoesNotExist:
                     errors.append(f'Запись ID={record_id} не найдена в сценарии "{current_scenario.name}"')
@@ -1013,12 +986,12 @@ def bulk_update_pggoods(request):
 
         if errors:
             return JsonResponse({
-                'success': True, 'updated': updated_count, 'errors': errors,
+                'success': True, 'updated': updated_count, 'errors': errors, 'rows': saved_rows,
                 'message': f'Обновлено: {updated_count}, Ошибок: {len(errors)}'
             })
 
         return JsonResponse({
-            'success': True, 'updated': updated_count,
+            'success': True, 'updated': updated_count, 'rows': saved_rows,
             'message': f'✅ Успешно обновлено записей: {updated_count} в сценарии "{current_scenario.name}"'
         })
 
@@ -1036,6 +1009,8 @@ def export_to_excel(request):
     current_scenario, _ = get_current_scenario(request)
 
     if current_scenario:
+        from .services.pricing import reprice_goods
+        reprice_goods(current_scenario)
         queryset = PGGoods.objects.filter(scenario_plan=current_scenario).select_related('kind_purch')
     else:
         queryset = PGGoods.objects.none()
@@ -1075,7 +1050,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1085,7 +1060,7 @@ def export_to_excel(request):
         cell.alignment = header_alignment
         cell.border = thin_border
 
-    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14]
+    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14, 22, 18, 24, 24]
     for col_num, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1107,12 +1082,13 @@ def export_to_excel(request):
             item.percent_stock_end,
             item.container_volume,
             item.duty_rate,
+            item.freight_usd, item.cif_usd, item.customs_payment_usd, item.warehouse_delivery_usd,
         ]
 
         for col_num, value in enumerate(data, 1):
             cell = ws.cell(row=row_num, column=col_num, value=value)
             cell.border = thin_border
-            if col_num in [9, 10, 11, 12, 13, 14, 15, 16]:
+            if col_num in [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]:
                 cell.alignment = Alignment(horizontal='right')
             else:
                 cell.alignment = Alignment(horizontal='left')
@@ -1209,7 +1185,7 @@ def import_from_excel(request):
                                 ).first()
                                 kind_purch = existing.kind_purch if existing else KindPurch.objects.get_or_create(name='Закупается')[0]
                             defaults = {
-                                'planning_group': group_name,
+                                'planning_group': goods.planning_group if goods else group_name,
                                 'planning_sales': str(planning_sales).strip() if planning_sales else '',
                                 'group_goods': str(group_goods).strip() if group_goods else '',
                                 'brand': str(brand).strip() if brand else None,
@@ -1217,10 +1193,10 @@ def import_from_excel(request):
                                 'kind_purch': kind_purch,
                                 'volume': float(volume) if volume else 0.0,
                                 'exw_usd': float(exw_usd) if exw_usd else 0.0,
-                                'ddp_usd': float(ddp_usd) if ddp_usd else 0.0,
-                                'kddp': float(kddp) if kddp else 0.0,
+                                'ddp_usd': goods.ddp_usd if goods else 0.0,
+                                'kddp': goods.kddp if goods else 1.0,
                                 'stock_cnt_day': int(stock_cnt_day) if stock_cnt_day else 0,
-                                'percent_stock_end': float(percent_stock_end) if percent_stock_end else 0.0,
+                                'percent_stock_end': goods.percent_stock_end if goods else 0.0,
                             }
                             if duty_rate is not None:
                                 from decimal import Decimal
@@ -1314,6 +1290,10 @@ def purch_edit(request, pk=None):
             with transaction.atomic():
                 form.save()
                 formset.save()
+                from .services.pricing import reprice_goods
+                invalid = reprice_goods(strict=False)
+                if invalid:
+                    messages.warning(request, f'Не пересчитаны товары с некорректными исходными данными: {len(invalid)}.')
             messages.success(request, f'Закупка «{purch.name}» сохранена в общем справочнике. Повторите экспорт сценариев в MS SQL.')
             return redirect('purch_list')
     else:
@@ -1346,3 +1326,29 @@ def cancel_algorithm_api(request, run_id):
             run.finished_at = timezone.now()
             run.save(update_fields=['status', 'finished_at'])
     return JsonResponse({'success': True, 'status': run.status})
+
+
+def pricing_context(scenario):
+    from .models import GoodsGroup
+    freight = Freight.objects.filter(scenario=scenario).first() if scenario else None
+    return {'goods_groups': GoodsGroup.objects.all(), 'purchase_options': Purch.objects.all(),
+            'pricing_options': {
+                'container_price': str(freight.price_per_container) if freight else '0',
+                'customs_rate': str(freight.customs_rate) if freight else '0',
+                'delivery_cost': str(freight.warehouse_delivery_cost) if freight else '0',
+                'russian_suppliers': list(Purch.objects.filter(is_russian=True).values_list('name', flat=True)),
+                'group_duties': {group.name: str(group.duty_rate) for group in GoodsGroup.objects.all()},
+            }}
+
+
+def goods_groups(request):
+    from .models import GoodsGroup
+    from .forms import GoodsGroupForm
+    selected = request.POST.get('id') if request.method == 'POST' else request.GET.get('edit')
+    group = get_object_or_404(GoodsGroup, pk=selected) if selected else None
+    form = GoodsGroupForm(request.POST if request.method == 'POST' else None, instance=group)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Группа товаров и пошлина по умолчанию сохранены.')
+        return redirect('goods_groups')
+    return render(request, 'model_purch/goods_groups.html', {'form': form, 'group': group, 'groups': GoodsGroup.objects.all()})

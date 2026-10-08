@@ -114,6 +114,36 @@ class KindPurch(models.Model):
     def __str__(self):
         return self.name
 
+class GoodsGroup(models.Model):
+    name = models.CharField('Группа товаров', max_length=255)
+    name_key = models.CharField(max_length=64, unique=True, editable=False, default='')
+    duty_rate = models.DecimalField('Пошлина, %', max_digits=5, decimal_places=2, default=0,
+                                    validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
+
+    class Meta:
+        verbose_name = 'Группа товаров'
+        verbose_name_plural = 'Группы товаров'
+        ordering = ['name']
+        constraints = [models.CheckConstraint(condition=models.Q(duty_rate__gte=0, duty_rate__lte=100), name='goods_group_duty_range')]
+
+    def clean(self):
+        super().clean()
+        self.name = self.name.strip()
+        self.name_key = planning_group_key(self.name)
+        if not self.name:
+            raise ValidationError({'name': 'Введите название группы.'})
+        if type(self).objects.filter(name_key=self.name_key).exclude(pk=self.pk).exists():
+            raise ValidationError({'name': 'Группа с таким названием уже существует.'})
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.strip()
+        self.name_key = planning_group_key(self.name)
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.name
+
+
 class PGGoodsQuerySet(models.QuerySet):
     def update(self, **kwargs):
         if 'planning_group' in kwargs:
@@ -151,8 +181,12 @@ class PGGoods(models.Model):
     duty_rate = models.DecimalField('Пошлина, %', max_digits=5, decimal_places=2, default=0,
                                     validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     exw_usd = models.FloatField()
-    ddp_usd = models.FloatField()
-    kddp = models.FloatField()
+    freight_usd = models.FloatField('Фрахт за товар', default=0, editable=False)
+    cif_usd = models.FloatField('CIF', default=0, editable=False)
+    customs_payment_usd = models.FloatField('Таможенный платёж', default=0, editable=False)
+    warehouse_delivery_usd = models.FloatField('Доставка за товар', default=0, editable=False)
+    ddp_usd = models.FloatField(default=0, editable=False)
+    kddp = models.FloatField(default=1, editable=False)
 
     stock_cnt_day = models.IntegerField()
     percent_stock_end = models.FloatField()
@@ -167,9 +201,25 @@ class PGGoods(models.Model):
                                     name='unique_pg_unassigned_group'),
         ]
 
+    def __init__(self, *args, **kwargs):
+        self._duty_supplied = 'duty_rate' in kwargs or bool(args)
+        super().__init__(*args, **kwargs)
+
     def clean(self):
         super().clean()
         self.planning_group_key = planning_group_key(self.planning_group)
+        if not (self.planning_group or '').strip():
+            raise ValidationError('Плановая группа должна быть задана при загрузке товара.')
+        from .services.pricing import number
+        errors = {}
+        for name, label, positive in [('volume', 'Объём', True), ('container_volume', 'Объём контейнера', True),
+                                      ('exw_usd', 'EXW', False), ('stock_cnt_day', 'Запас в днях', False)]:
+            try:
+                number(getattr(self, name), label, positive=positive)
+            except ValidationError as error:
+                errors[name] = error.messages
+        if errors:
+            raise ValidationError(errors)
         duplicate = type(self).objects.filter(
             scenario_plan_id=self.scenario_plan_id, planning_group_key=self.planning_group_key,
         ).exclude(pk=self.pk).exists()
@@ -180,6 +230,15 @@ class PGGoods(models.Model):
         self.planning_group_key = planning_group_key(self.planning_group)
         if kwargs.get('update_fields') is not None and 'planning_group' in kwargs['update_fields']:
             kwargs['update_fields'] = set(kwargs['update_fields']) | {'planning_group_key'}
+        group_name = (self.group_goods or '').strip()
+        if group_name:
+            group, _ = GoodsGroup.objects.get_or_create(name_key=planning_group_key(group_name), defaults={'name': group_name})
+            if self._state.adding and not self._duty_supplied:
+                self.duty_rate = group.duty_rate
+        from .services.pricing import calculate_instance, CALCULATED_FIELDS
+        calculate_instance(self)
+        if kwargs.get('update_fields') is not None:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | set(CALCULATED_FIELDS)
         return super().save(*args, **kwargs)
 
     def __str__(self):
@@ -226,6 +285,7 @@ class Purch(models.Model):
     lag_income = models.IntegerField()
     name_key = models.CharField(max_length=64, editable=False, unique=True, default='')
     lage_make = models.IntegerField(default=0, null=True)
+    is_russian = models.BooleanField('Поставщик РФ', default=False)
 
     def clean(self):
         super().clean()
