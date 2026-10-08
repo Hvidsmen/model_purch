@@ -78,6 +78,7 @@
                         </div>
                     </div>
 
+                    <div class="mb-3"><label for="{{ form.duty_rate.id_for_label }}" class="form-label">{{ form.duty_rate.label }}</label>{{ form.duty_rate }}{% for error in form.duty_rate.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
                     <h6 class="text-muted mb-3">Запасы</h6>
                     <div class="row g-3 mb-4">
                         <div class="col-md-6">

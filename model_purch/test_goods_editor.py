@@ -87,7 +87,7 @@ class GoodsEditorTests(TestCase):
         self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('goods.xlsx', stream.getvalue())})
         self.good.refresh_from_db()
         self.assertEqual(self.good.container_volume, 80)
-        sheet.delete_cols(15)
+        sheet.delete_cols(15, 2)
         stream = io.BytesIO()
         workbook.save(stream)
         self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('legacy.xlsx', stream.getvalue())})
@@ -99,6 +99,8 @@ class GoodsEditorTests(TestCase):
         from .models import Purch
         Purch.objects.create(name='Supplier', lag_income=90, lage_make=30)
         self.good.container_volume = 72.5
+        from decimal import Decimal
+        self.good.duty_rate = Decimal('7.25')
         self.good.save()
         connection, cursor = Mock(), Mock()
         connection.cursor.return_value = cursor
@@ -112,4 +114,60 @@ class GoodsEditorTests(TestCase):
         update = next(call for call in calls if call.args[0].startswith('UPDATE [portal].[PGGoods]'))
         self.assertIn('[container_volume] = ?', update.args[0])
         self.assertIn(72.5, update.args[1:])
+        self.assertIn('[duty_rate] = ?', update.args[0])
+        self.assertIn('7.25', update.args[1:])
+        self.assertTrue(any("COL_LENGTH(N'portal.PGGoods', N'duty_rate')" in call.args[0] for call in calls))
         connection.rollback.assert_not_called()
+
+    def test_duty_rate_edit_bulk_copy_and_validation(self):
+        from decimal import Decimal
+        from .services.copying import copy_goods
+        self.assertEqual(self.good.duty_rate, 0)
+        self.assertContains(self.client.get(self.url), 'name="duty_rate"')
+        self.client.post(self.url, dict(self.data, duty_rate='7.25'))
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, Decimal('7.25'))
+        bulk_url = reverse('bulk_update_pggoods') + f'?scenario={self.scenario.pk}'
+        for value in ('-1', '101', 'nan', '', '1.234'):
+            response = self.client.post(self.url, dict(self.data, duty_rate=value))
+            self.assertEqual(response.status_code, 200)
+            self.assertIn('duty_rate', response.context['form'].errors)
+            self.client.post(bulk_url, {'updates': [{'id': self.good.pk, 'duty_rate': value}]}, content_type='application/json')
+            self.good.refresh_from_db()
+            self.assertEqual(self.good.duty_rate, Decimal('7.25'))
+        self.client.post(bulk_url, {'updates': [{'id': self.good.pk, 'duty_rate': '12.50'}]}, content_type='application/json')
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, Decimal('12.50'))
+        target = ScenarioModel.objects.create(name='Duty copy', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        copy_goods(self.scenario, target)
+        self.assertEqual(PGGoods.objects.get(scenario_plan=target).duty_rate, Decimal('12.50'))
+        self.client.post(self.url, self.data)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, Decimal('12.50'))
+
+    def test_duty_rate_excel_round_trip_and_legacy_import_preserve_value(self):
+        import io
+        from decimal import Decimal
+        from openpyxl import load_workbook
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.good.duty_rate = Decimal('7.25')
+        self.good.save()
+        response = self.client.get(reverse('export_pggoods'), {'scenario': self.scenario.pk})
+        workbook = load_workbook(io.BytesIO(response.content))
+        sheet = workbook.active
+        self.assertEqual((sheet.cell(1, 16).value, sheet.cell(2, 16).value), ('Пошлина, %', 7.25))
+        sheet.cell(2, 16).value = 12.5
+        for legacy in (False, True):
+            if legacy:
+                sheet.delete_cols(16)
+            stream = io.BytesIO()
+            workbook.save(stream)
+            self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('duty.xlsx', stream.getvalue())})
+            self.good.refresh_from_db()
+            self.assertEqual(self.good.duty_rate, Decimal('12.50'))
+
+    def test_duty_database_range_constraint(self):
+        from django.db import IntegrityError, transaction
+        for value in (-1, 101):
+            with self.assertRaises(IntegrityError), transaction.atomic():
+                PGGoods.objects.filter(pk=self.good.pk).update(duty_rate=value)

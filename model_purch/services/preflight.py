@@ -50,6 +50,8 @@ def validation_errors(scenario):
         for name, label in [('container_volume', 'Объём контейнера'), ('volume', 'Объём'), ('exw_usd', 'EXW'), ('ddp_usd', 'DDP'), ('kddp', 'KDDP')]:
             if not valid_number(getattr(good, name), strictly_positive=(name in {'volume', 'container_volume'})):
                 errors.append(f'{good.planning_group}: {label} должен быть конечным числом {"больше нуля" if name in {"volume", "container_volume"} else "не меньше нуля"}.')
+        if not valid_number(good.duty_rate, maximum=100):
+            errors.append(f'{good.planning_group}: пошлина должна быть от 0 до 100%.')
         if not valid_number(good.percent_stock_end, maximum=100):
             errors.append(f'{good.planning_group}: процент конечного запаса должен быть от 0 до 100.')
         if not valid_number(good.stock_cnt_day):

@@ -174,3 +174,16 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertTrue(self.page.locator('#workspace-scenario').is_visible())
         self.assertTrue(self.page.locator('[name="price_per_container"]').is_visible())
         self.assertEqual(self.errors, [], self.asset_events)
+
+    def test_product_duty_can_be_saved_from_goods_table(self):
+        self.visit('pggoods_list')
+        self.select(self.source)
+        field = self.page.locator('[name="duty_rate"]')
+        field.fill('7.25')
+        with self.page.expect_response(lambda response: '/pggoods/bulk-update/' in response.url) as result:
+            self.page.locator('#saveAllBtn').click()
+        self.assertEqual(result.value.status, 200)
+        self.assertEqual(self.db(lambda: str(PGGoods.objects.get(pk=self.good.pk).duty_rate)), '7.25')
+        self.page.reload()
+        self.assertEqual(self.page.locator('[name="duty_rate"]').input_value(), '7.25')
+        self.assertEqual(self.errors, [])

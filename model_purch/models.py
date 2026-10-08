@@ -148,6 +148,8 @@ class PGGoods(models.Model):
 
     volume = models.FloatField()
     container_volume = models.FloatField('Объём контейнера, м³', default=65, validators=[MinValueValidator(0.001)])
+    duty_rate = models.DecimalField('Пошлина, %', max_digits=5, decimal_places=2, default=0,
+                                    validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     exw_usd = models.FloatField()
     ddp_usd = models.FloatField()
     kddp = models.FloatField()
@@ -159,6 +161,7 @@ class PGGoods(models.Model):
 
     class Meta:
         constraints = [
+            models.CheckConstraint(condition=models.Q(duty_rate__gte=0, duty_rate__lte=100), name='pggoods_duty_rate_range'),
             models.UniqueConstraint(fields=['scenario_plan', 'planning_group_key'], name='unique_pg_scenario_group'),
             models.UniqueConstraint(fields=['planning_group_key'], condition=models.Q(scenario_plan__isnull=True),
                                     name='unique_pg_unassigned_group'),

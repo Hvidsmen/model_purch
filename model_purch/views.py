@@ -815,7 +815,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     sort_dir = request.GET.get('dir', 'asc')
     allowed_sort_fields = {
         'id', 'planning_group', 'planning_sales', 'group_goods',
-        'brand', 'purch', 'volume', 'container_volume', 'exw_usd', 'ddp_usd', 'kddp',
+        'brand', 'purch', 'volume', 'container_volume', 'duty_rate', 'exw_usd', 'ddp_usd', 'kddp',
         'stock_cnt_day', 'percent_stock_end',
     }
 
@@ -968,6 +968,12 @@ def bulk_update_pggoods(request):
                         goods.brand = item_data['brand']
                     if 'purch' in item_data:
                         goods.purch = item_data['purch']
+                    if 'duty_rate' in item_data:
+                        from decimal import Decimal
+                        value = Decimal(str(item_data['duty_rate']))
+                        if not value.is_finite() or not 0 <= value <= 100 or value != value.quantize(Decimal('0.01')):
+                            raise ValueError('Пошлина должна быть от 0 до 100%, не более двух знаков после запятой.')
+                        goods.duty_rate = value
                     if 'container_volume' in item_data:
                         value = float(item_data['container_volume'])
                         if not math.isfinite(value) or value < 0.001:
@@ -1069,7 +1075,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1079,7 +1085,7 @@ def export_to_excel(request):
         cell.alignment = header_alignment
         cell.border = thin_border
 
-    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24]
+    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14]
     for col_num, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1100,12 +1106,13 @@ def export_to_excel(request):
             item.stock_cnt_day,
             item.percent_stock_end,
             item.container_volume,
+            item.duty_rate,
         ]
 
         for col_num, value in enumerate(data, 1):
             cell = ws.cell(row=row_num, column=col_num, value=value)
             cell.border = thin_border
-            if col_num in [9, 10, 11, 12, 13, 14, 15]:
+            if col_num in [9, 10, 11, 12, 13, 14, 15, 16]:
                 cell.alignment = Alignment(horizontal='right')
             else:
                 cell.alignment = Alignment(horizontal='left')
@@ -1174,6 +1181,7 @@ def import_from_excel(request):
                             exw_usd, ddp_usd, kddp, stock_cnt_day, percent_stock_end
                         ) = row[:14]
                         container_volume = row[14] if len(row) > 14 else None
+                        duty_rate = row[15] if len(row) > 15 else None
 
                         if not planning_group and not planning_sales and not group_goods:
                             continue
@@ -1214,6 +1222,12 @@ def import_from_excel(request):
                                 'stock_cnt_day': int(stock_cnt_day) if stock_cnt_day else 0,
                                 'percent_stock_end': float(percent_stock_end) if percent_stock_end else 0.0,
                             }
+                            if duty_rate is not None:
+                                from decimal import Decimal
+                                duty_value = Decimal(str(duty_rate).replace(',', '.'))
+                                if not duty_value.is_finite() or not 0 <= duty_value <= 100 or duty_value != duty_value.quantize(Decimal('0.01')):
+                                    raise ValueError('Пошлина должна быть от 0 до 100%, не более двух знаков после запятой.')
+                                defaults['duty_rate'] = duty_value
                             if container_volume is not None:
                                 container_value = float(str(container_volume).replace(',', '.'))
                                 if not math.isfinite(container_value) or container_value < 0.001:

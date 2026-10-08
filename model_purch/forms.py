@@ -30,13 +30,14 @@ class PGGoodsEditForm(forms.ModelForm):
     class Meta:
         model = PGGoods
         fields = [
-            'volume', 'container_volume', 'exw_usd', 'ddp_usd', 'kddp',
+            'volume', 'container_volume', 'duty_rate', 'exw_usd', 'ddp_usd', 'kddp',
             'stock_cnt_day', 'percent_stock_end',
             'brand', 'purch',
         ]
         labels = {
             'volume': _('Объём'),
             'container_volume': _('Объём контейнера, м³'),
+            'duty_rate': _('Пошлина, %'),
             'exw_usd': _('Цена EXW (USD)'),
             'ddp_usd': _('Цена DDP (USD)'),
             'kddp': _('Коэффициент KDDP'),
@@ -46,6 +47,7 @@ class PGGoodsEditForm(forms.ModelForm):
             'purch': _('Закупка'),
         }
         widgets = {
+            'duty_rate': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'max': '100', 'class': 'form-control'}),
             'container_volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.001', 'class': 'form-control'}),
             'volume': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
             'exw_usd': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
@@ -64,6 +66,7 @@ class PGGoodsEditForm(forms.ModelForm):
             self.fields[name].required = False
         # The coefficient is derived server-side, never trusted from browser input.
         self.fields['container_volume'].required = False
+        self.fields['duty_rate'].required = False
         self.fields['kddp'].disabled = True
         self.fields['kddp'].required = False
         for name in ['volume', 'exw_usd', 'ddp_usd']:
@@ -78,6 +81,14 @@ class PGGoodsEditForm(forms.ModelForm):
         if self.is_bound and self.add_prefix('purch') not in self.data:
             return self.instance.purch
         return self.cleaned_data.get('purch')
+
+    def clean_duty_rate(self):
+        if self.add_prefix('duty_rate') not in self.data:
+            return self.instance.duty_rate
+        value = self.cleaned_data.get('duty_rate')
+        if value is None:
+            raise ValidationError(_('Укажите пошлину; если она не применяется, введите 0.'))
+        return value
 
     def clean_container_volume(self):
         if self.add_prefix("container_volume") not in self.data:
