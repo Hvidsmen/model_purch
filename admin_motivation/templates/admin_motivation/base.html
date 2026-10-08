@@ -1,11 +1,8 @@
+{% extends 'base/portal_shell.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
+{% block title %}Мотивация{% endblock %}
+{% block project_name %}Мотивация{% endblock %}
+{% block module_css %}
     <link rel="stylesheet" href="{% static 'bootstrap-5.0.2-dist/css/bootstrap.min.css' %}">
     <link rel="stylesheet" href="{% static 'coreui-5.8.0-dist/css/coreui.min.css' %}">
     <link rel="stylesheet" href="{% static 'css/main.css' %}">
@@ -205,17 +202,12 @@
         }
     </style>
 
-    <title>
-        {% block title %}
-        {% endblock title %}
-    </title>
     <link rel="stylesheet" href="{% static 'admin_motivation/workspace.css' %}">
     <script src="{% static 'admin_motivation/workspace.js' %}" defer></script>
-</head>
-<body>
-<header class="header">
-    <a class="header-brand" href="{% url 'global_coeff_admin_motivation' %}">Мотивация</a>
-    <ul class="header-nav">
+
+{% endblock %}
+{% block module_navigation %}
+    <ul class="portal-section-nav">
 
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'global_coeff_admin_motivation' or request.resolver_match.url_name == 'gb_act' %}active{% endif %}"
@@ -247,17 +239,20 @@
         </li>
         <li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
     </ul>
-</header>
-
+{% endblock %}
+{% block portal_content %}
 <div class="content-wrapper">
     {% block content %}
     {% endblock content %}
 </div>
 
+
+{% endblock %}
+{% block module_js %}
 <script src="{% static 'jquery/jquery-3.7.1.min.js' %}"></script>
 <script src="{% static 'jquery/popper.min.js' %}"></script>
 <script src="{% static 'bootstrap-5.0.2-dist/js/bootstrap.min.js' %}"></script>
 <script src="{% static 'coreui-5.8.0-dist/js/coreui.bundle.min.js' %}"></script>
 
-</body>
-</html>
+
+{% endblock %}

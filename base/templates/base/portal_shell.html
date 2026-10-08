@@ -1,0 +1,34 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Рабочий портал{% endblock %}</title>
+    {% block module_css %}<link rel="stylesheet" href="{% static 'vendor/bootstrap-5.3.2/bootstrap.min.css' %}">{% endblock %}
+    <link rel="stylesheet" href="{% static 'base/portal.css' %}">
+    <script src="{% static 'base/portal.js' %}" defer></script>
+</head>
+<body class="portal-body">
+<a class="portal-skip" href="#portal-main">Перейти к содержимому</a>
+<header class="portal-topbar">
+    <a class="portal-brand header-brand" href="{% url 'index_base' %}">Рабочий портал</a>
+    <nav class="portal-projects" aria-label="Проекты портала">
+        <a href="{% url 'scenario_list' %}" {% if '/model_purch/' in request.path %}aria-current="page"{% endif %}>Модель закупок</a>
+        <a href="{% url 'global_coeff_admin_motivation' %}" {% if '/admin_motivation' in request.path %}aria-current="page"{% endif %}>Мотивация</a>
+    </nav>
+    {% if request.user.is_authenticated %}<span class="portal-user">{{ request.user.get_full_name|default:request.user.username }}</span>{% endif %}
+</header>
+<div class="portal-layout">
+    <button type="button" class="portal-menu-toggle" id="portal-menu-toggle" aria-controls="portal-sidebar" aria-expanded="false">Меню раздела</button>
+    <aside class="portal-sidebar" id="portal-sidebar" aria-label="Навигация раздела">
+        <a class="portal-home" href="{% url 'index_base' %}">← Главная портала</a>
+        <h2>{% block project_name %}Рабочие разделы{% endblock %}</h2>
+        {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы"><a href="{% url 'scenario_list' %}">Модель закупок</a><a href="{% url 'global_coeff_admin_motivation' %}">Мотивация</a></nav>{% endblock %}
+        {% if request.user.is_staff %}<a class="portal-admin" href="{% url 'admin:index' %}">Администрирование</a>{% endif %}
+    </aside>
+    <main class="portal-main" id="portal-main" tabindex="-1">{% block portal_content %}{% block content %}{% endblock %}{% endblock %}</main>
+</div>
+{% block module_js %}{% endblock %}
+</body>
+</html>

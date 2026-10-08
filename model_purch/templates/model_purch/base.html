@@ -1,10 +1,8 @@
+{% extends 'base/portal_shell.html' %}
 {% load static %}
-<!DOCTYPE html>
-<html lang="ru">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Управление закупками{% endblock %}</title>
+{% block title %}Управление закупками{% endblock %}
+{% block project_name %}Модель закупок{% endblock %}
+{% block module_css %}
     <link href="{% static 'vendor/bootstrap-5.3.2/bootstrap.min.css' %}" rel="stylesheet">
     <link href="{% static 'vendor/bootstrap-icons-1.11.1/bootstrap-icons.css' %}" rel="stylesheet">
     <style>
@@ -16,20 +14,10 @@
     </style>
     {% block extra_css %}{% endblock %}
     <link href="{% static 'model_purch/workspace.css' %}" rel="stylesheet">
-</head>
-<body>
 
-    <!-- Навигация -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-primary mb-4 shadow-sm">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="{% url 'pggoods_list' %}{% if workspace_scenario %}?scenario={{ workspace_scenario.pk }}{% endif %}">
-                <i aria-hidden="true" class="bi bi-box-seam"></i> Управление закупками
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav me-auto">
+{% endblock %}
+{% block module_navigation %}
+                <ul class="portal-section-nav">
 
                     <li class="nav-item">
                         <a class="nav-link {% if request.resolver_match.url_name == 'scenario_list' %}active{% endif %}" href="{% url 'scenario_list' %}">
@@ -62,10 +50,8 @@
                     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'results_page' %}active{% endif %}" href="{% url 'results_page' %}">Расчёт</a></li>
 
                 </ul>
-            </div>
-        </div>
-    </nav>
-
+{% endblock %}
+{% block portal_content %}
     <div class="container-fluid px-4">
         <section class="workspace-panel" aria-label="Рабочий сценарий">
             <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
@@ -103,9 +89,12 @@
         {% block content %}{% endblock %}
     </div>
 
+
+{% endblock %}
+{% block module_js %}
     <!-- Глобальные скрипты -->
     <script src="{% static 'vendor/bootstrap-5.3.2/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'model_purch/workspace.js' %}"></script>
     {% block extra_js %}{% endblock %}
-</body>
-</html>
+
+{% endblock %}

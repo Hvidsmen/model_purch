@@ -1,29 +1,15 @@
 {% extends 'base/base.html' %}
-
-{% load crispy_forms_tags %}
+{% block title %}Главная · Рабочий портал{% endblock %}
 {% block content %}
-
-<div class="container">
-    <div class="row">
-        <div class="col">
-            <button class="btn btn-light">
-                <a href="{% url 'index' %}"
-                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
-                    <h3>Система планирования</h3>
-                </a>
-            </button>
-        </div>
-    </div>
-    <div class="row">
-        <div class="col">
-            <button class="btn btn-light">
-                <a href="{% url 're_ref_store_group' %}"
-                   class="link-dark link-offset-2 link-underline-opacity-25 link-underline-opacity-100-hover">
-                    <h3>Изменение таблиц DWH</h3>
-                </a>
-            </button>
-        </div>
-    </div>
+<section class="portal-welcome">
+<h1>Рабочий портал</h1><p>Выберите проект, чтобы продолжить работу.</p>
+<div class="portal-cards">
+<a class="portal-project-card" href="{% url 'scenario_list' %}"><h2>Модель закупок</h2><span>Сценарии, товары, закупки, фрахт и расчёты.</span></a>
+<a class="portal-project-card" href="{% url 'global_coeff_admin_motivation' %}"><h2>Мотивация</h2><span>Коэффициенты, версии, планы продаж и сравнение мотивации.</span></a>
 </div>
-
-{% endblock content %}
+<div class="portal-other-links"><h2>Другие разделы</h2>
+<a href="{% url 'index' %}">Система планирования</a>
+<a href="{% url 're_ref_store_group' %}">Редактор справочников DWH</a>
+</div>
+</section>
+{% endblock %}
