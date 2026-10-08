@@ -30,12 +30,13 @@ class PGGoodsEditForm(forms.ModelForm):
     class Meta:
         model = PGGoods
         fields = [
-            'volume', 'exw_usd', 'ddp_usd', 'kddp',
+            'volume', 'container_volume', 'exw_usd', 'ddp_usd', 'kddp',
             'stock_cnt_day', 'percent_stock_end',
             'brand', 'purch',
         ]
         labels = {
             'volume': _('Объём'),
+            'container_volume': _('Объём контейнера, м³'),
             'exw_usd': _('Цена EXW (USD)'),
             'ddp_usd': _('Цена DDP (USD)'),
             'kddp': _('Коэффициент KDDP'),
@@ -45,6 +46,7 @@ class PGGoodsEditForm(forms.ModelForm):
             'purch': _('Закупка'),
         }
         widgets = {
+            'container_volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.001', 'class': 'form-control'}),
             'volume': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
             'exw_usd': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
             'ddp_usd': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'class': 'form-control'}),
@@ -61,6 +63,7 @@ class PGGoodsEditForm(forms.ModelForm):
         for name in ['brand', 'purch']:
             self.fields[name].required = False
         # The coefficient is derived server-side, never trusted from browser input.
+        self.fields['container_volume'].required = False
         self.fields['kddp'].disabled = True
         self.fields['kddp'].required = False
         for name in ['volume', 'exw_usd', 'ddp_usd']:
@@ -75,6 +78,14 @@ class PGGoodsEditForm(forms.ModelForm):
         if self.is_bound and self.add_prefix('purch') not in self.data:
             return self.instance.purch
         return self.cleaned_data.get('purch')
+
+    def clean_container_volume(self):
+        if self.add_prefix("container_volume") not in self.data:
+            return self.instance.container_volume
+        value = self.cleaned_data.get("container_volume")
+        if value is None or value <= 0:
+            raise ValidationError(_("Объём контейнера должен быть больше нуля."))
+        return value
 
     def clean_volume(self):
         v = self.cleaned_data.get('volume')

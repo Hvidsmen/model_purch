@@ -53,6 +53,7 @@
                     </div>
 
                     <h6 class="text-muted mb-3">Объёмы и цены</h6>
+                    <div class="mb-3"><label for="{{ form.container_volume.id_for_label }}" class="form-label">{{ form.container_volume.label }}</label>{{ form.container_volume }}{% for error in form.container_volume.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
                     <div class="row g-3 mb-4">
                         <div class="col-md-6">
                             <label for="{{ form.volume.id_for_label }}" class="form-label">{{ form.volume.label }}</label>

@@ -1,5 +1,5 @@
 {% extends 'model_purch/base.html' %}
-{% load custom_filters %}
+{% load custom_filters l10n %}
 
 {% block title %}Список PGGoods{% endblock %}
 
@@ -236,6 +236,7 @@
                     <th>Закупка</th>
                     <th>Вид закупки</th>
                     <th style="width: 110px;" class="text-end">Объём</th>
+                    <th style="width: 140px;" class="text-end">Объём контейнера, м³</th>
                     <th style="width: 110px;" class="text-end">EXW USD</th>
                     <th style="width: 110px;" class="text-end">DDP USD</th>
                     <th style="width: 100px;" class="text-end">KDDP</th>
@@ -268,6 +269,7 @@
                             </select>
                         </td>
                         <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.volume|format_money:2 }}" name="volume" data-original="{{ item.volume }}"></td>
+                        <td><input type="number" step="any" min="0.001" class="inline-input text-end editable-field" value="{{ item.container_volume|unlocalize }}" name="container_volume" data-original="{{ item.container_volume|unlocalize }}"></td>
                         <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.exw_usd|format_money:2 }}" name="exw_usd" data-original="{{ item.exw_usd }}"></td>
                         <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.ddp_usd|format_money:2 }}" name="ddp_usd" data-original="{{ item.ddp_usd }}"></td>
                         <td><input type="number" step="0.0001" min="0" class="inline-input text-end" value="{{ item.kddp|format_money:4 }}" name="kddp" readonly title="Рассчитывается автоматически"></td>
@@ -288,7 +290,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="14" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
+                    <tr><td colspan="16" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
                 {% endfor %}
             </tbody>
         </table>

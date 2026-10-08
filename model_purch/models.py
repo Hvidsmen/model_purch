@@ -147,6 +147,7 @@ class PGGoods(models.Model):
     kind_purch = models.ForeignKey(KindPurch,on_delete=models.CASCADE)
 
     volume = models.FloatField()
+    container_volume = models.FloatField('Объём контейнера, м³', default=65, validators=[MinValueValidator(0.001)])
     exw_usd = models.FloatField()
     ddp_usd = models.FloatField()
     kddp = models.FloatField()

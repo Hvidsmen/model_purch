@@ -47,3 +47,69 @@ class GoodsEditorTests(TestCase):
         self.assertContains(response, 'href="#id_volume"')
         self.good.refresh_from_db()
         self.assertEqual(self.good.volume, .01)
+
+    def test_container_volume_default_edit_and_invalid_values(self):
+        self.assertEqual(self.good.container_volume, 65)
+        self.assertContains(self.client.get(self.url), 'name="container_volume"')
+        response = self.client.post(self.url, dict(self.data, container_volume='72.5'))
+        self.assertEqual(response.status_code, 302)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.container_volume, 72.5)
+        for value in ('0', '-1', 'nan', 'inf', ''):
+            response = self.client.post(self.url, dict(self.data, container_volume=value))
+            self.assertEqual(response.status_code, 200)
+            self.good.refresh_from_db()
+            self.assertEqual(self.good.container_volume, 72.5)
+
+    def test_container_volume_bulk_copy_and_excel_round_trip(self):
+        import io
+        from openpyxl import load_workbook
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .services.copying import copy_goods
+        bulk_url = reverse('bulk_update_pggoods') + f'?scenario={self.scenario.pk}'
+        response = self.client.post(bulk_url, {'updates': [{'id': self.good.pk, 'container_volume': 70}]}, content_type='application/json')
+        self.assertEqual(response.json()['updated'], 1)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.container_volume, 70)
+        self.client.post(bulk_url, {'updates': [{'id': self.good.pk, 'container_volume': 0}]}, content_type='application/json')
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.container_volume, 70)
+        target = ScenarioModel.objects.create(name='Copy', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        copy_goods(self.scenario, target)
+        self.assertEqual(PGGoods.objects.get(scenario_plan=target).container_volume, 70)
+        response = self.client.get(reverse('export_pggoods'), {'scenario': self.scenario.pk})
+        workbook = load_workbook(io.BytesIO(response.content))
+        sheet = workbook.active
+        self.assertEqual(sheet.cell(1, 15).value, 'Объём контейнера, м³')
+        sheet.cell(2, 15).value = 80
+        stream = io.BytesIO()
+        workbook.save(stream)
+        self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('goods.xlsx', stream.getvalue())})
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.container_volume, 80)
+        sheet.delete_cols(15)
+        stream = io.BytesIO()
+        workbook.save(stream)
+        self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('legacy.xlsx', stream.getvalue())})
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.container_volume, 80)
+
+    def test_sql_export_adds_container_column_and_sends_custom_value(self):
+        from unittest.mock import Mock, patch
+        from .models import Purch
+        Purch.objects.create(name='Supplier', lag_income=90, lage_make=30)
+        self.good.container_volume = 72.5
+        self.good.save()
+        connection, cursor = Mock(), Mock()
+        connection.cursor.return_value = cursor
+        cursor.description = [('id',), ('planning_group',), ('scenario_name',)]
+        cursor.fetchall.return_value = []
+        cursor.fetchone.side_effect = [(501,), (701,)]
+        with patch('model_purch.views.MS_SQL_CONN_STR', 'test'), patch('model_purch.views.pyodbc.connect', return_value=connection):
+            self.client.post(reverse('export_scenario_to_sql', args=[self.scenario.pk]))
+        calls = cursor.execute.call_args_list
+        self.assertTrue(any("COL_LENGTH(N'portal.PGGoods', N'container_volume')" in call.args[0] for call in calls))
+        update = next(call for call in calls if call.args[0].startswith('UPDATE [portal].[PGGoods]'))
+        self.assertIn('[container_volume] = ?', update.args[0])
+        self.assertIn(72.5, update.args[1:])
+        connection.rollback.assert_not_called()
