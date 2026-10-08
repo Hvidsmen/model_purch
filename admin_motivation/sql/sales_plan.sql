@@ -41,7 +41,9 @@ DECLARE @params_scenario nvarchar(255) = ?;
  CASE WHEN g.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN g.GroupERP ELSE '*' END,
  CASE WHEN g.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN g.BrandName ELSE '*' END
 )
-SELECT plan_.Subdivision, plan_.PlanningGroupSalesERP, plan_.GroupERP,
+SELECT plan_.Subdivision,
+ COALESCE(NULLIF(LTRIM(RTRIM(plan_.PlanningGroupSalesERP)), ''), '9. OTHER') AS PlanningGroupSalesERP,
+ plan_.GroupERP,
  plan_.Brand AS [Марка(Бренд)], plan_.Date_, plan_.AmountUSD,
  plan_.AmountUSD*COALESCE(f.O0,1) USD_O0, plan_.AmountUSD*COALESCE(f.O1,0) USD_O1,
  plan_.AmountUSD*COALESCE(f.O2,0) USD_O2, plan_.AmountUSD*COALESCE(f.O3,0) USD_O3,

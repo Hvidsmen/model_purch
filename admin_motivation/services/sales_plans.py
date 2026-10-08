@@ -65,6 +65,8 @@ def plan_date(value, row_number):
 
 
 def classification(value, column, row_number):
+    if column == 'planninggroupsaleserp' and (value is None or not str(value).strip()):
+        return '9. OTHER'
     if value is None or not str(value).strip():
         raise ValidationError(f'Строка {row_number}: не заполнено поле {column}.')
     value = str(value).strip()
@@ -101,21 +103,11 @@ def load_plan(scenario_id, connector=None):
             raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): сумма сегментов O0–O4 не совпадает с AmountUSD.')
         lines.append(SalesPlanLine(scenario_id=scenario_id, plan_date=on_date, subdivision=sub,
             planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, segment_amounts=amounts))
+    # The output fallback can collapse NULL, empty and explicit OTHER groups.
+    # Preserve all their amounts, both by subdivision and in the global plan.
+    lines = aggregate_lines(lines)
     subdivision_count = len(lines)
-    aggregates = {}
-    for line in lines:
-        key = (line.plan_date, line.planning_group_sales, line.group, line.brand)
-        if key not in aggregates:
-            aggregates[key] = SalesPlanLine(scenario_id=scenario_id, plan_date=line.plan_date, subdivision='',
-                planning_group_sales=line.planning_group_sales, group=line.group, brand=line.brand,
-                amount_usd=Decimal(0), segment_amounts={segment: '0' for segment in SEGMENTS})
-        total = aggregates[key]
-        total.amount_usd += line.amount_usd
-        for segment in SEGMENTS:
-            total.segment_amounts[segment] = str(Decimal(total.segment_amounts[segment]) + Decimal(line.segment_amounts[segment]))
-    for total in aggregates.values():
-        number(total.amount_usd)
-    lines.extend(aggregates.values())
+    lines.extend(aggregate_lines(lines, global_plan=True))
     with transaction.atomic():
         locked = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id)
         if locked.source_version != scenario.source_version:
@@ -125,6 +117,26 @@ def load_plan(scenario_id, connector=None):
         locked.loaded_at, locked.calculated_at = timezone.now(), None
         locked.save(update_fields=['loaded_at', 'calculated_at'])
     return subdivision_count
+
+
+def aggregate_lines(lines, global_plan=False):
+    aggregates = {}
+    for line in lines:
+        sub = '' if global_plan else line.subdivision
+        key = (sub, line.plan_date, line.planning_group_sales, line.group, line.brand)
+        if key not in aggregates:
+            aggregates[key] = SalesPlanLine(scenario_id=line.scenario_id, plan_date=line.plan_date, subdivision=sub,
+                planning_group_sales=line.planning_group_sales, group=line.group, brand=line.brand,
+                amount_usd=Decimal(0), segment_amounts={segment: '0' for segment in SEGMENTS})
+        total = aggregates[key]
+        total.amount_usd += line.amount_usd
+        for segment in SEGMENTS:
+            total.segment_amounts[segment] = str(Decimal(total.segment_amounts[segment]) + Decimal(line.segment_amounts[segment]))
+    for total in aggregates.values():
+        number(total.amount_usd)
+        for amount in total.segment_amounts.values():
+            number(amount)
+    return list(aggregates.values())
 
 
 @transaction.atomic

@@ -84,10 +84,10 @@ class SalesPlanTests(TestCase):
             calculate_plan(self.scenario.pk)
         self.assertEqual(self.scenario.lines.get(subdivision='').total_usd, Decimal('225'))
 
-    def test_empty_invalid_duplicate_or_failed_import_preserves_previous_data(self):
+    def test_empty_invalid_or_failed_import_preserves_previous_data(self):
         self.load()
         calculate_plan(self.scenario.pk)
-        for rows in [[], [('A', 'Sales', None, '*', '*', 1, 1, 0, 0, 0, 0)], [('A', 'Sales', date(2026, 1, 1), '*', '*', 100, 1, 0, 0, 0, 0)], self.rows()*2]:
+        for rows in [[], [('A', 'Sales', None, '*', '*', 1, 1, 0, 0, 0, 0)], [('A', 'Sales', date(2026, 1, 1), '*', '*', 100, 1, 0, 0, 0, 0)]]:
             self.cursor.fetchall.return_value = rows
             with self.assertRaises((ValidationError, IntegrityError)):
                 self.load()
@@ -199,3 +199,44 @@ class SalesPlanTests(TestCase):
         self.cursor.fetchall.return_value = [tuple(row)]
         with self.assertRaisesMessage(ValidationError, 'Date_='):
             self.load()
+
+
+    def test_empty_null_and_whitespace_group_use_other_without_losing_plan(self):
+        for raw in [None, '', '   ', '9. OTHER']:
+            row = list(self.rows()[0])
+            row[1] = raw
+            self.cursor.fetchall.return_value = [tuple(row)]
+            self.load()
+            self.assertEqual(self.scenario.lines.count(), 2)
+            for line in self.scenario.lines.all():
+                self.assertEqual(line.planning_group_sales, '9. OTHER')
+                self.assertEqual(line.amount_usd, Decimal('1000'))
+
+    def test_collapsed_other_rows_merge_local_and_global_and_calculate(self):
+        self.good.planning_group_sales = '9. OTHER'
+        self.good.save()
+        rows = []
+        for raw in [None, '', '  ', '9. OTHER']:
+            row = list(self.rows()[0])
+            row[1] = raw
+            rows.append(tuple(row))
+        row = list(self.rows()[1])
+        row[1] = '9. OTHER'
+        rows.append(tuple(row))
+        self.cursor.fetchall.return_value = rows
+        self.assertEqual(self.load(), 2)
+        self.assertEqual(self.scenario.lines.count(), 3)
+        self.assertEqual(self.scenario.lines.get(subdivision='A').amount_usd, Decimal('4000'))
+        global_line = self.scenario.lines.get(subdivision='')
+        self.assertEqual(global_line.amount_usd, Decimal('4500'))
+        self.assertEqual(Decimal(global_line.segment_amounts['O2']), Decimal('1350'))
+        calculate_plan(self.scenario.pk)
+        self.assertEqual(self.scenario.lines.get(subdivision='').total_usd, Decimal('675'))
+        self.assertEqual(self.scenario.lines.get(subdivision='A').total_usd, Decimal('920'))
+
+    def test_identical_output_keys_from_normalized_sql_are_merged(self):
+        self.cursor.fetchall.return_value = self.rows() * 2
+        self.assertEqual(self.load(), 2)
+        self.assertEqual(self.scenario.lines.count(), 3)
+        self.assertEqual(self.scenario.lines.get(subdivision='').amount_usd, Decimal('3000'))
+        self.assertIn("'9. OTHER') AS PlanningGroupSalesERP", SQL)
