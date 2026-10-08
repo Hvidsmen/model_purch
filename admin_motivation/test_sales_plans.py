@@ -31,6 +31,16 @@ class SalesPlanTests(TestCase):
         self.connector = Mock(return_value=(self.connection, self.cursor))
         self.cursor.description = [(name,) for name in ['Subdivision', 'PlanningGroupSalesERP', 'Date_', 'GroupERP', 'Brand', 'AmountUSD', *[f'USD_O{i}' for i in range(5)]]]
         self.cursor.fetchall.return_value = self.rows()
+        self.read_offset = 0
+        def execute(*args):
+            self.read_offset = 0
+        def fetchmany(size):
+            rows = self.cursor.fetchall.return_value
+            batch = rows[self.read_offset:self.read_offset + size]
+            self.read_offset += len(batch)
+            return batch
+        self.cursor.execute.side_effect = execute
+        self.cursor.fetchmany.side_effect = fetchmany
 
     def rows(self, on_date=date(2026, 10, 1)):
         return [('A', 'Sales', on_date, '*', '*', Decimal('1000'), Decimal('100'), Decimal('200'), Decimal('300'), Decimal('100'), Decimal('300')),
@@ -339,3 +349,61 @@ class SalesPlanTests(TestCase):
         with self.assertRaises(ValidationError):
             calculate_plan(self.scenario.pk)
         self.assertEqual(self.scenario.lines.get(subdivision='').total_usd, Decimal('225'))
+
+    def test_chunked_calculation_rolls_back_written_batches_on_late_error(self):
+        self.load()
+        template = self.scenario.lines.get(subdivision='A')
+        SalesPlanLine.objects.bulk_create([SalesPlanLine(scenario=self.scenario, subdivision='A',
+            plan_date=template.plan_date, planning_group_sales='Sales', group='*', brand=f'Batch{i}',
+            amount_usd=1000, segment_amounts=template.segment_amounts, total_usd=42) for i in range(1100)])
+        events = []
+        def progress(data):
+            events.append(data)
+            if data['processed'] == 1000:
+                raise RuntimeError('Failure after the first batch')
+        with self.assertRaises(RuntimeError):
+            calculate_plan(self.scenario.pk, progress=progress)
+        self.assertEqual(self.scenario.lines.get(brand='Batch0').total_usd, Decimal('42'))
+        self.assertEqual(self.scenario.lines.get(brand='Batch1099').total_usd, Decimal('42'))
+        self.assertIsNone(self.scenario.lines.get(subdivision='').total_usd)
+        self.assertEqual(events[-1]['total'], 1103)
+
+    def test_progress_and_streamed_import_preserve_real_results(self):
+        events = []
+        self.assertEqual(load_plan(self.scenario.pk, self.connector, progress=events.append), 2)
+        self.cursor.fetchall.assert_not_called()
+        self.assertTrue(any(event['processed'] == 2 for event in events))
+        events.clear()
+        self.assertEqual(calculate_plan(self.scenario.pk, progress=events.append), 3)
+        self.assertEqual(events[-1]['processed'], 3)
+        self.assertEqual(events[-1]['percent'], 99)
+        self.assertEqual(self.scenario.lines.get(subdivision='').total_usd, Decimal('225'))
+
+    def test_stream_response_delivers_progress_completion_and_error(self):
+        import json
+        url = reverse('motivation_sales_plan', args=[self.scenario.pk])
+        def operation(scenario_id, progress):
+            progress({'stage': 'Working', 'percent': 50, 'processed': 1, 'total': 2})
+            return 2
+        with patch('admin_motivation.plan_views.load_plan', side_effect=operation):
+            response = self.client.post(url, {'action': 'load'}, HTTP_ACCEPT='application/x-ndjson')
+            events = [json.loads(line) for line in b''.join(response.streaming_content).decode().splitlines()]
+        self.assertEqual(events[0]['percent'], 50)
+        self.assertEqual(events[-1]['type'], 'complete')
+        self.assertEqual(events[-1]['percent'], 100)
+        with patch('admin_motivation.plan_views.calculate_plan', side_effect=ValidationError('Test failure')):
+            response = self.client.post(url, {'action': 'calculate'}, HTTP_ACCEPT='application/x-ndjson')
+            events = [json.loads(line) for line in b''.join(response.streaming_content).decode().splitlines()]
+        self.assertEqual(events[-1]['type'], 'error')
+        self.assertIn('Test failure', events[-1]['message'])
+
+    def test_scenario_operation_rejects_duplicate_and_releases_after_failure(self):
+        from .services.plan_operations import scenario_operation
+        with self.assertRaises(RuntimeError):
+            with scenario_operation(self.scenario.pk):
+                with self.assertRaises(ValidationError):
+                    with scenario_operation(self.scenario.pk):
+                        self.fail('Concurrent operation was allowed')
+                raise RuntimeError('Failure')
+        with scenario_operation(self.scenario.pk):
+            pass

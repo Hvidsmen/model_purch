@@ -125,3 +125,55 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.get_by_role('link', name='Скачать CSV', exact=True).click()
         self.assertIn('subdivisions.csv', download.value.suggested_filename)
         self.assertEqual(self.errors, [])
+
+    def test_calculation_progress_is_visible_and_duplicate_click_is_blocked(self):
+        from threading import Event
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .test_sales_plans import SalesPlanTests
+        from .services.sales_plans import calculate_plan
+        fixtures = SalesPlanTests()
+        self.db(fixtures.setUp)
+        self.db(fixtures.load)
+        release = Event()
+        def slow_calculation(scenario_id, progress):
+            progress({'stage': 'Расчёт тестового плана', 'percent': 42, 'processed': 1, 'total': 3})
+            if not release.wait(10):
+                raise RuntimeError('Progress test timed out')
+            return calculate_plan(scenario_id, progress=progress)
+        url = self.live_server_url + reverse('motivation_sales_plan', args=[fixtures.scenario.pk])
+        self.page.goto(url)
+        with patch('admin_motivation.plan_views.calculate_plan', side_effect=slow_calculation):
+            try:
+                self.page.get_by_role('button', name='Рассчитать мотивацию', exact=True).click()
+                expect(self.page.locator('#plan-progress')).to_be_visible()
+                expect(self.page.locator('#plan-progress-bar')).to_have_attribute('aria-valuenow', '42')
+                expect(self.page.locator('#plan-progress-count')).to_have_text('Обработано 1 из 3 строк')
+                self.assertTrue(self.page.get_by_role('button', name='Рассчитать мотивацию', exact=True).is_disabled())
+                self.assertTrue(self.page.get_by_role('button', name='Загрузить план из MS SQL', exact=True).is_disabled())
+                response = self.page.request.post(url, form={'action': 'calculate', 'csrfmiddlewaretoken': self.page.locator('input[name=csrfmiddlewaretoken]').first.input_value()}, headers={'Accept': 'application/x-ndjson', 'Referer': url})
+                self.assertIn('уже выполняется', response.text())
+                with self.page.expect_navigation():
+                    release.set()
+                expect(self.page.locator('#plan-progress-bar')).to_have_attribute('aria-valuenow', '100')
+                self.assertEqual(self.db(lambda: fixtures.scenario.lines.get(subdivision='').total_usd), 225)
+            finally:
+                release.set()
+        self.assertEqual(self.errors, [])
+
+    def test_calculation_error_is_visible_and_buttons_are_reenabled(self):
+        from playwright.sync_api import expect
+        from .test_sales_plans import SalesPlanTests
+        from .services.sales_plans import calculate_plan
+        fixtures = SalesPlanTests()
+        self.db(fixtures.setUp)
+        self.db(fixtures.load)
+        self.db(lambda: calculate_plan(fixtures.scenario.pk))
+        self.db(lambda: fixtures.version.coefficients.filter(type_coeff__type_coeff_name='Политики').delete())
+        self.page.goto(self.live_server_url + reverse('motivation_sales_plan', args=[fixtures.scenario.pk]))
+        self.page.get_by_role('button', name='Рассчитать мотивацию', exact=True).click()
+        expect(self.page.locator('#plan-progress-error')).to_be_visible()
+        expect(self.page.locator('#plan-progress-error')).to_contain_text('Нет коэффициента')
+        expect(self.page.get_by_role('button', name='Рассчитать мотивацию', exact=True)).to_be_enabled()
+        self.assertEqual(self.db(lambda: fixtures.scenario.lines.get(subdivision='').total_usd), 225)
+        self.assertEqual(self.errors, [])

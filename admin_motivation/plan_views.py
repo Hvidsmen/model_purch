@@ -10,6 +10,7 @@ from django.urls import reverse
 from .forms import SalesPlanScenarioForm
 from .models import SalesPlanScenario, Subdivision
 from .services.sales_plans import load_plan, calculate_plan, source_versions
+from .services.plan_operations import operation_response, scenario_operation
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,8 @@ def sales_plans(request, scenario_id=None):
     versions = request.session.get('sales_plan_source_versions', [])
     if request.method == 'POST':
         action = request.POST.get('action')
+        if scenario and action in ['load', 'calculate'] and 'application/x-ndjson' in request.headers.get('Accept', ''):
+            return operation_response(scenario.pk, action, load_plan if action == 'load' else calculate_plan)
         try:
             if action == 'create' and form.is_valid():
                 created = SalesPlanScenario.objects.create(**form.cleaned_data)
@@ -29,10 +32,12 @@ def sales_plans(request, scenario_id=None):
                 request.session['sales_plan_source_versions'] = versions
                 messages.success(request, f'Найдено версий плана: {len(versions)}.')
             elif scenario and action == 'load':
-                count = load_plan(scenario.pk)
+                with scenario_operation(scenario.pk):
+                    count = load_plan(scenario.pk)
                 messages.success(request, f'План загружен: {count} строк подразделений. Глобальный план сформирован суммированием.')
             elif scenario and action == 'calculate':
-                count = calculate_plan(scenario.pk)
+                with scenario_operation(scenario.pk):
+                    count = calculate_plan(scenario.pk)
                 messages.success(request, f'Расчёт выполнен: {count} строк. Результаты сохранены вместе с использованными коэффициентами.')
             elif action != 'create':
                 messages.error(request, 'Неизвестное действие.')

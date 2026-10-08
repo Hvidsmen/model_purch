@@ -15,7 +15,8 @@ DECLARE @params_scenario nvarchar(255) = ?;
  INNER JOIN DataWH.dbo.Product p ON s.ProductCode = p.ProductCode AND p.[Тип номенклатуры] = N'Товар'
  LEFT JOIN DataWH.motivation.vSegmentMotivationFromTO sm ON s.ClosedDealDate BETWEEN sm.DateFrom AND sm.DateTo
  AND s.ДаичиТипСкидкиНаДату LIKE CONCAT('%',sm.TypeDiscount,'%')
- WHERE YEAR(s.ClosedDealDate) BETWEEN YEAR(GETDATE())-4 AND YEAR(GETDATE())-1
+ WHERE s.ClosedDealDate >= DATEFROMPARTS(YEAR(GETDATE())-4, 1, 1)
+ AND s.ClosedDealDate < DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
  AND sub.Chanel NOT IN (N'ДПП')
  AND sub.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг')
 ), fact_per AS (
