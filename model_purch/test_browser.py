@@ -96,7 +96,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.visit('freight')
         self.select(self.target)
         self.page.locator('[name="price_per_container"]').fill('2000.25')
-        self.page.locator('[name="volume_per_container"]').fill('76.500')
+        self.assertEqual(self.page.locator('[name="volume_per_container"]').count(), 0)
         with self.page.expect_navigation():
             self.page.get_by_role('button', name='Сохранить', exact=True).click()
         self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).price_per_container)), '2000.25')
@@ -104,7 +104,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.page.get_by_role('button', name='Копировать', exact=True).click()
         self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).price_per_container)), '1234.56')
-        self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).volume_per_container)), '67.890')
+        self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).volume_per_container)), '65.000')
         self.assertEqual(self.errors, [], self.asset_events)
 
     def test_bulk_export_select_all_and_submit_selected_scenarios(self):

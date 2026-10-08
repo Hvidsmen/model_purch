@@ -287,7 +287,8 @@ class Freight(models.Model):
     scenario = models.OneToOneField(ScenarioModel, on_delete=models.CASCADE, related_name='freight', verbose_name='Сценарий')
     price_per_container = models.DecimalField('Цена за контейнер', max_digits=18, decimal_places=2,
                                               validators=[MinValueValidator(Decimal('0'))])
-    volume_per_container = models.DecimalField('Объём контейнера, м³', max_digits=12, decimal_places=3,
+    # Retain the legacy value for existing SQL consumers; product volumes are edited on PGGoods.
+    volume_per_container = models.DecimalField('Архивный объём контейнера, м³', max_digits=12, decimal_places=3, default=65, editable=False,
                                                validators=[MinValueValidator(Decimal('0.001'))])
 
     class Meta:

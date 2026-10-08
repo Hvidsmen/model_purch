@@ -272,10 +272,9 @@ PurchPayFormSet = forms.inlineformset_factory(
 class FreightForm(forms.ModelForm):
     class Meta:
         model = Freight
-        fields = ['price_per_container', 'volume_per_container']
+        fields = ['price_per_container']
         widgets = {
             'price_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
-            'volume_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0.001', 'step': '0.001'}),
         }
 
 

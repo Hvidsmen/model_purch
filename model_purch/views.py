@@ -118,7 +118,7 @@ def results_page(request):
             if error.startswith('Закупка «'):
                 url = reverse('purch_list')
             if error.startswith('Фрахт:'):
-                url = f"{reverse('freight')}?scenario={checked.pk}"
+                url = f"{reverse('pggoods_list')}?scenario={checked.pk}#freight-settings"
             elif 'экспорт' in error.lower():
                 url = reverse('scenario_list')
             elif error.startswith(('Дата', 'Название')):
@@ -736,7 +736,7 @@ def scenario_delete(request, pk):
 # 3. VIEW ДЛЯ PGGoods (ПОЛНОСТЬЮ С УЧЁТОМ scenario_plan)
 # ==============================================================================
 
-def pggoods_list(request):
+def pggoods_list(request, freight_form=None, freight_scenario=None):
     """
     Список PGGoods с inline-редактированием.
     ВАЖНО: все операции фильтруются по current_scenario.
@@ -749,8 +749,11 @@ def pggoods_list(request):
     else:
         queryset = PGGoods.objects.none()
 
+    if freight_scenario is not None:
+        current_scenario = freight_scenario
+        queryset = PGGoods.objects.filter(scenario_plan=current_scenario).select_related('kind_purch')
     # --- Обработка inline-редактирования (POST) ---
-    if request.method == 'POST':
+    if request.method == 'POST' and freight_scenario is None:
         record_id = request.POST.get('record_id')
         if record_id:
             # ВАЖНО: ищем запись ТОЛЬКО в рамках текущего сценария
@@ -854,7 +857,12 @@ def pggoods_list(request):
     get_params.pop('page', None)
     clean_query_string = get_params.urlencode()
 
+    from .forms import FreightForm
+    if freight_form is None:
+        freight_form = FreightForm(instance=Freight.objects.filter(scenario=current_scenario).first() if current_scenario else None)
     return render(request, 'model_purch/pggoods_list.html', {
+        'freight_form': freight_form,
+        'freight_sources': all_scenarios.exclude(pk=current_scenario.pk) if current_scenario else all_scenarios.none(),
         'page_obj': page_obj,
         'search': search,
         'planning_sales': planning_sales,

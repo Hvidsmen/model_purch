@@ -28,6 +28,7 @@
 {% endblock %}
 
 {% block content %}
+{% if current_scenario %}{% include 'model_purch/_freight_settings.html' %}{% endif %}
 <!-- Красивая шапка страницы -->
 <div class="page-header mb-4">
     <div class="d-flex justify-content-between align-items-center">

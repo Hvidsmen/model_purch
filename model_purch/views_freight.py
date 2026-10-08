@@ -1,17 +1,18 @@
 from django.contrib import messages
 from django.db import transaction
-from django.shortcuts import redirect, render
+from django.shortcuts import redirect
 from django.urls import reverse
 from django.views.decorators.http import require_POST, require_http_methods
 
 from .forms import FreightForm, FreightCopyForm, FreightScenarioForm
-from .models import Freight, ScenarioModel
+from .models import Freight
 
 
 def freight_redirect(scenario=None):
-    url = reverse('freight')
+    url = reverse('pggoods_list')
     if scenario:
         url += f'?scenario={scenario.pk}'
+    url += "#freight-settings"
     return redirect(url)
 
 
@@ -26,20 +27,18 @@ def freight_page(request):
     else:
         from .services.scenarios import current_scenario
         scenario, _ = current_scenario(request)
-    freight = Freight.objects.filter(scenario=scenario).first() if scenario else None
-    form = FreightForm(request.POST if request.method == 'POST' else None, instance=freight)
-    if request.method == 'POST' and form.is_valid():
+        return freight_redirect(scenario)
+    freight = Freight.objects.filter(scenario=scenario).first()
+    form = FreightForm(request.POST, instance=freight)
+    if form.is_valid():
         with transaction.atomic():
             Freight.objects.update_or_create(scenario=scenario, defaults={
-                name: form.cleaned_data[name] for name in form.Meta.fields
+                'price_per_container': form.cleaned_data['price_per_container'],
             })
-        messages.success(request, 'Параметры фрахта сохранены.')
+        messages.success(request, 'Цена фрахта сохранена.')
         return freight_redirect(scenario)
-    scenarios = ScenarioModel.objects.order_by('name', 'pk')
-    return render(request, 'model_purch/freight.html', {
-        'current_scenario': scenario, 'scenarios': scenarios, 'form': form,
-        'source_scenarios': scenarios.exclude(pk=scenario.pk) if scenario else scenarios.none(),
-    })
+    from .views import pggoods_list
+    return pggoods_list(request, freight_form=form, freight_scenario=scenario)
 
 
 @require_POST
@@ -57,7 +56,6 @@ def copy_freight(request):
         else:
             Freight.objects.update_or_create(scenario=target, defaults={
                 'price_per_container': freight.price_per_container,
-                'volume_per_container': freight.volume_per_container,
             })
             messages.success(request, f'Параметры фрахта скопированы из сценария «{source.name}».')
     return freight_redirect(target)

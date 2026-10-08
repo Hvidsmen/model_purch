@@ -78,7 +78,7 @@ class ScenarioReliabilityTests(TestCase):
     def test_selection_persists_across_tabs_without_query_parameter(self):
         self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk})
         for url in ['pggoods_list', 'freight', 'results_page']:
-            response = self.client.get(reverse(url))
+            response = self.client.get(reverse(url), follow=True)
             self.assertEqual(response.context['current_scenario'], self.scenario)
             self.assertContains(response, 'id="active-database"')
         self.assertEqual(self.client.get(reverse('pggoods_list'), {'scenario': 'invalid'}).status_code, 404)

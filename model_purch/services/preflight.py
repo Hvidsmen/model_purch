@@ -70,8 +70,8 @@ def validation_errors(scenario):
         elif abs(sum(Decimal(str(pay.percent_pay)) for pay in payments) - Decimal('100')) > Decimal('0.01'):
             errors.append(f'{purchase.name}: сумма процентов платежей должна равняться 100%.')
     freight = Freight.objects.filter(scenario=scenario).first()
-    if freight and (not valid_number(freight.price_per_container) or not valid_number(freight.volume_per_container, strictly_positive=True)):
-        errors.append('Фрахт: цена должна быть неотрицательной, объём — больше нуля.')
+    if freight and not valid_number(freight.price_per_container):
+        errors.append('Фрахт: цена должна быть конечным неотрицательным числом.')
     return errors
 
 

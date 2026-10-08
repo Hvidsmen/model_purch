@@ -21,17 +21,16 @@ class FreightTests(TestCase):
         for price in ['2345.67', '3456.78']:
             response = self.client.post(reverse('freight'), {'scenario': self.source.pk,
                 'price_per_container': price, 'volume_per_container': '75.125'})
-            self.assertRedirects(response, reverse('freight') + f'?scenario={self.source.pk}')
+            self.assertRedirects(response, reverse('pggoods_list') + f'?scenario={self.source.pk}#freight-settings')
         self.assertEqual(Freight.objects.count(), 1)
         self.freight.refresh_from_db()
         self.assertEqual(self.freight.price_per_container, Decimal('3456.78'))
-        self.assertEqual(self.freight.volume_per_container, Decimal('75.125'))
+        self.assertEqual(self.freight.volume_per_container, self.values['volume_per_container'])
         self.assertFalse(Freight.objects.filter(scenario=self.target).exists())
 
     def test_invalid_values_or_target_do_not_modify_data(self):
         for data in [
             {'scenario': self.source.pk, 'price_per_container': '-1', 'volume_per_container': '50'},
-            {'scenario': self.source.pk, 'price_per_container': '10', 'volume_per_container': '0'},
             {'scenario': self.source.pk, 'price_per_container': '10.001', 'volume_per_container': '50'},
             {'price_per_container': '10', 'volume_per_container': '50'},
             {'scenario': 'invalid', 'price_per_container': '10', 'volume_per_container': '50'},
@@ -49,7 +48,7 @@ class FreightTests(TestCase):
         self.client.post(reverse('copy_freight'), data)
         target.refresh_from_db()
         self.assertEqual(target.price_per_container, self.values['price_per_container'])
-        self.assertEqual(target.volume_per_container, self.values['volume_per_container'])
+        self.assertEqual(target.volume_per_container, Decimal('65'))
         self.assertEqual(Freight.objects.count(), 2)
         self.freight.refresh_from_db()
         self.assertEqual(self.freight.price_per_container, target.price_per_container)
@@ -68,12 +67,24 @@ class FreightTests(TestCase):
         self.assertEqual(self.client.get(reverse('copy_freight')).status_code, 405)
 
     def test_page_displays_selected_scenario_and_handles_no_scenarios(self):
-        response = self.client.get(reverse('freight'), {'scenario': self.source.pk})
+        response = self.client.get(reverse('pggoods_list'), {'scenario': self.source.pk})
         self.assertContains(response, '1234.56')
-        self.assertContains(response, 'Копировать из сценария')
+        self.assertContains(response, 'Копировать цену фрахта из сценария')
+        self.assertNotContains(response, 'name="volume_per_container"')
+        self.assertNotContains(response, '>Фрахт</a>')
         self.assertEqual(response.context['current_scenario'], self.source)
+        self.assertRedirects(self.client.get(reverse('freight'), {'scenario': self.source.pk}), reverse('pggoods_list') + f'?scenario={self.source.pk}#freight-settings')
         ScenarioModel.objects.all().delete()
-        self.assertContains(self.client.get(reverse('freight')), 'создайте сценарий')
+        response = self.client.get(reverse('freight'))
+        self.assertRedirects(response, reverse('pggoods_list') + '#freight-settings')
+
+    def test_inline_validation_preserves_price_and_product_container_volumes(self):
+        response = self.client.post(reverse('freight'), {'scenario': self.source.pk, 'price_per_container': '-1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'id="freight-settings"')
+        self.assertTrue(response.context['freight_form'].errors)
+        self.freight.refresh_from_db()
+        self.assertEqual(self.freight.price_per_container, self.values['price_per_container'])
 
     def test_database_enforces_unique_scenario_and_valid_values(self):
         for scenario, price, volume in [(self.source, 1, 1), (self.target, -1, 1), (self.target, 1, 0)]:

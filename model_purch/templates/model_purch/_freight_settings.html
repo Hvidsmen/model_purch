@@ -1,0 +1,18 @@
+<section class="card card-body mb-3" id="freight-settings" aria-labelledby="freight-heading">
+    <h2 class="h5 mb-3" id="freight-heading">Фрахт · {{ current_scenario.name }}</h2>
+    <div class="row g-3 align-items-start">
+        <form class="col-lg-6" method="post" action="{% url 'freight' %}">
+            {% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
+            {{ freight_form.non_field_errors }}
+            <label class="form-label" for="{{ freight_form.price_per_container.id_for_label }}">Цена фрахта за контейнер</label>
+            <div class="d-flex gap-2">{{ freight_form.price_per_container }}<button type="submit" class="btn btn-primary">Сохранить</button></div>
+            {% for error in freight_form.price_per_container.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
+            <p class="text-muted small mt-2 mb-0">Объём контейнера задаётся отдельно у каждого товара в таблице ниже.</p>
+        </form>
+        <form class="col-lg-6" method="post" action="{% url 'copy_freight' %}" data-copy-target="{{ current_scenario.name }}">
+            {% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
+            <label class="form-label" for="freight-source">Копировать цену фрахта из сценария</label>
+            <div class="d-flex gap-2"><select id="freight-source" class="form-select" name="source_scenario_id" required><option value="">Выберите сценарий</option>{% for scenario in freight_sources %}<option value="{{ scenario.pk }}">{{ scenario.name }}</option>{% endfor %}</select><button class="btn btn-outline-primary" type="submit" {% if not freight_sources %}disabled{% endif %}>Копировать</button></div>
+        </form>
+    </div>
+</section>

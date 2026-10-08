@@ -30,7 +30,7 @@ class PGGoodsDuplicateArchiveAdmin(admin.ModelAdmin):
 
 @admin.register(Freight)
 class FreightAdmin(admin.ModelAdmin):
-    list_display = ("scenario", "price_per_container", "volume_per_container")
+    list_display = ("scenario", "price_per_container")
 
 
 @admin.register(ScenarioExport)
