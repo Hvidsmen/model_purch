@@ -8,14 +8,16 @@
     const warning = document.getElementById('comparison-warning');
     const dialog = document.getElementById('approval-dialog');
     const commit = document.getElementById('approval-commit');
-    const money = value => value == null ? '—' : new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 0}).format(Number(value));
-    const percent = value => value == null ? '—' : `${new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 1}).format(Number(value))}%`;
+    const money = value => value == null ? '—' : new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 0}).format(Math.abs(Number(value)) < 0.5 ? 0 : Number(value));
+    const percent = value => value == null ? '—' : `${new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 1}).format(Math.abs(Number(value)) < 0.05 ? 0 : Number(value))}%`;
     let controller, timer, review, revision = 0;
+    const summaryStatus = message => { const element = document.getElementById('editor-comparison-state'); if (element) element.textContent = message; };
+    const signedMoney = value => value == null ? '—' : `${Number(value) > 0 && money(value) !== '0' ? '+' : ''}${money(value)}`;
     const prefix = panel.dataset.subdivision ? 'sub_coeff=' : 'global_coeff=';
     const inputs = () => [...document.querySelectorAll(`input[name^="${prefix}"]`)];
     function parameters(action) {
         const changes = {};
-        inputs().filter(input => !input.disabled).forEach(input => changes[input.name.split('=')[1]] = input.value);
+        inputs().filter(input => !input.matches(':disabled') && (!document.getElementById('editor-toolbar') || input.classList.contains('editor-changed'))).forEach(input => changes[input.name.split('=')[1]] = input.value);
         const deleted = [...document.querySelectorAll('input[name^="delete_coeff="]:checked')].map(input => input.name.split('=')[1]);
         return {action, version: panel.dataset.version, subdivision: panel.dataset.subdivision || null,
                 plan: plan.value || null, baseline: baseline.value || null, changes, deleted};
@@ -37,7 +39,7 @@
         toggle.checked = visibility[name];
         const apply = () => {
             visibility[name] = toggle.checked;
-            panel.querySelectorAll(`[data-variant="${name}"]`).forEach(cell => cell.hidden = !toggle.checked);
+            document.querySelectorAll(`[data-variant="${name}"]`).forEach(cell => cell.hidden = !toggle.checked);
             try { localStorage.setItem(visibilityKey, JSON.stringify(visibility)); } catch (_) {}
         };
         toggle.addEventListener('change', apply);
@@ -46,35 +48,37 @@
     async function compare() {
         const requestRevision = ++revision;
         controller?.abort();
-        panel.querySelectorAll('[data-amount], [data-delta]').forEach(cell => {
+        document.querySelectorAll('[data-amount], [data-delta], [data-summary-amount], [data-summary-delta]').forEach(cell => {
             cell.textContent = '—'; cell.title = '';
             cell.classList.remove('delta-up', 'delta-down');
         });
         warning.hidden = true; error.hidden = true;
-        if (!plan.value) { status.textContent = 'Выберите план для сравнения.'; return; }
+        if (!plan.value) { status.textContent = 'Выберите план для сравнения.'; summaryStatus('Выберите план ниже'); return; }
         controller = new AbortController();
         error.hidden = true;
         status.textContent = 'Сравниваем варианты на одном плане…';
+        summaryStatus('Пересчёт…');
         try {
             const result = await post(parameters('compare'), controller.signal);
             if (requestRevision !== revision) return;
-            panel.querySelectorAll('[data-amount]').forEach(cell => {
-                const [variant, field] = cell.dataset.amount.split('.');
+            document.querySelectorAll('[data-amount], [data-summary-amount]').forEach(cell => {
+                const [variant, field] = (cell.dataset.amount || cell.dataset.summaryAmount).split('.');
                 cell.textContent = money(result.variants[variant][field]);
                 cell.title = result.variants[variant].error || '';
             });
-            panel.querySelectorAll('[data-delta]').forEach(cell => {
-                const [variant, field] = cell.dataset.delta.split('.');
+            document.querySelectorAll('[data-delta], [data-summary-delta]').forEach(cell => {
+                const [variant, field] = (cell.dataset.delta || cell.dataset.summaryDelta).split('.');
                 const delta = result.deltas[variant][field];
-                cell.textContent = `${money(delta.amount)} / ${percent(delta.percent)}`;
+                cell.textContent = `${signedMoney(delta.amount)} / ${percent(delta.percent)}`;
                 cell.classList.toggle('delta-up', Number(delta.amount) > 0);
                 cell.classList.toggle('delta-down', Number(delta.amount) < 0);
             });
+            summaryStatus(result.variants.current.error ? 'Расчёт недоступен' : result.unsaved ? 'Предварительно · есть правки' : 'По сохранённым значениям');
             status.textContent = result.unsaved ? 'Предварительный расчёт: учтены несохранённые изменения.' : 'Сравнение по сохранённым коэффициентам.';
-            const messages = Object.entries(result.variants).filter(([key, value]) => value.error && (key !== 'baseline' || baseline.value)).map(([key, value]) => `${key === 'approved' ? 'Утверждённый' : key === 'baseline' ? 'Базовый' : 'Текущий'}: ${value.error}`);
+            const messages = Object.entries(result.variants).filter(([key, value]) => value.error && (key !== 'baseline' || baseline.value)).map(([key, value]) => `${key === 'approved' ? 'Утверждённый' : key === 'baseline' ? 'Базовый' : 'Предлагаемый'}: ${value.error}`);
             const replaced = result.replaced_versions.map(version => version.title);
-            if (replaced.length) messages.push(`Текущий вариант заменяет версии с новой даты: ${replaced.join('; ')}. До утверждения история не меняется.`);
-            if (result.baseline_replaced) messages.push('Дата текущей версии не позже базовой. Базовая остаётся фиксированным эталоном.');
+            if (replaced.length) messages.push(`Предлагаемый вариант заменяет версии с новой даты: ${replaced.join('; ')}. До утверждения история не меняется.`);
+            if (result.baseline_replaced) messages.push('Дата предлагаемой версии не позже базовой. Базовая остаётся фиксированным эталоном.');
             warning.hidden = !messages.length;
             warning.textContent = messages.join(' ');
         } catch (problem) {
@@ -82,6 +86,7 @@
             error.hidden = false;
             error.textContent = problem.message;
             status.textContent = 'Сравнение не выполнено.';
+            summaryStatus('Ошибка сравнения');
         }
     }
     const schedule = () => { clearTimeout(timer); timer = setTimeout(compare, 600); };
@@ -91,6 +96,7 @@
     baseline.addEventListener('change', compare);
     document.getElementById('comparison-refresh').addEventListener('click', compare);
     document.getElementById('approval-review')?.addEventListener('click', async () => {
+        if (!document.dispatchEvent(new CustomEvent('motivation:before-approval', {cancelable: true}))) return;
         error.hidden = true;
         try {
             review = await post(parameters('review'));
@@ -122,6 +128,7 @@
         commit.disabled = true;
         try {
             await post({action: 'approve', token: review.token, confirm_overwrite: document.getElementById('approval-confirm').checked});
+            document.dispatchEvent(new CustomEvent('motivation:approved'));
             location.reload();
         } catch (problem) {
             document.getElementById('approval-error').textContent = problem.message;

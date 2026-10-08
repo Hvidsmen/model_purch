@@ -209,10 +209,12 @@
         {% block title %}
         {% endblock title %}
     </title>
+    <link rel="stylesheet" href="{% static 'admin_motivation/workspace.css' %}">
+    <script src="{% static 'admin_motivation/workspace.js' %}" defer></script>
 </head>
 <body>
 <header class="header">
-    <a class="header-brand" href="#">Панель администрирования мотивации</a>
+    <a class="header-brand" href="{% url 'global_coeff_admin_motivation' %}">Мотивация</a>
     <ul class="header-nav">
 
         <li class="nav-item">
@@ -222,47 +224,25 @@
             </a>
         </li>
 
-        <!-- Кастомный выпадающий список подразделений -->
-        <li class="nav-item custom-dropdown">
-            <a class="nav-link custom-dropdown-toggle {% if 'coeff_subdivisions' in request.resolver_match.url_name or request.GET.subdivision or 'sub_act' in request.resolver_match.url_name %}active{% endif %}"
-               href="#" role="button">
-                Коэффициенты по подразделениям
-                <svg width="10" height="6" viewBox="0 0 10 6" fill="none"
-                     style="margin-left: 6px; vertical-align: middle;">
-                    <path d="M1 1L5 5L9 1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
-                          stroke-linejoin="round"/>
-                </svg>
-            </a>
-            <ul class="custom-dropdown-menu">
-                <li>
-                    <a class="custom-dropdown-item" href="#">
-                        <strong>Подразделения</strong>
-                    </a>
-                </li>
-                <li>
-                    <hr class="custom-dropdown-divider">
-                </li>
-
-                {% for sub in subdivisions %}
-                <li>
-                    <a class="custom-dropdown-item {% if request.GET.subdivision == sub.id|stringformat:'s' %}active-sub{% endif %}"
-                       href="{% url 'coeff_subdivisions_admin_motivation' sub.id %}">
-                        {{ sub }}
-                    </a>
-                </li>
-                {% empty %}
-                <li>
-                    <span class="custom-dropdown-item text-muted" style="font-style: italic; font-size: 12px;">
-                        Подразделения не найдены
-                    </span>
-                </li>
-                {% endfor %}
-            </ul>
+        <li class="nav-item">
+            <details class="subdivision-nav" id="subdivision-nav">
+                <summary class="nav-link {% if sub %}active{% endif %}">Подразделения{% if sub %} · {{ sub }}{% endif %}</summary>
+                <div class="subdivision-menu">
+                    <label for="subdivision-search">Найти подразделение</label>
+                    <input type="search" id="subdivision-search" class="form-control" placeholder="Название подразделения" autocomplete="off">
+                    <ul id="subdivision-links">
+                    {% for subdivision in subdivisions %}
+                        <li><a {% if subdivision.pk == sub.pk %}aria-current="page"{% endif %} href="{% url 'coeff_subdivisions_admin_motivation' subdivision.pk %}">{{ subdivision }}</a></li>
+                    {% empty %}<li>Подразделения не найдены</li>{% endfor %}
+                    </ul>
+                    <p id="subdivision-search-empty" hidden>Совпадений нет</p>
+                </div>
+            </details>
         </li>
          <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}"
                href="{% url 'loader_motive' %}">
-                Применить настройки к расчету
+                Выгрузка в DWH
             </a>
         </li>
         <li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>

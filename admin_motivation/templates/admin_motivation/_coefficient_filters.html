@@ -1,0 +1,10 @@
+<div class="coefficient-filters" id="coefficient-filters">
+    <label>Поиск<input type="search" id="coefficient-search" class="form-control" placeholder="Группа, бренд или код товара" autocomplete="off"></label>
+    <label>Группа планов продаж<select id="coefficient-pg" class="form-select"><option value="">Все</option></select></label>
+    <label>Группа ERP<select id="coefficient-group" class="form-select"><option value="">Все</option></select></label>
+    <label>Марка / бренд<select id="coefficient-brand" class="form-select"><option value="">Все</option></select></label>
+    <label class="filter-changed"><input type="checkbox" id="coefficient-only-changed"> Только изменённые</label>
+    <button type="button" class="btn btn-outline-secondary" id="coefficient-reset">Сбросить фильтры</button>
+    <small id="coefficient-visible-count" role="status" aria-live="polite"></small>
+</div>
+<p id="coefficient-filter-empty" class="filter-empty" hidden>Нет строк по выбранным фильтрам. Измените условия или сбросьте фильтры.</p>

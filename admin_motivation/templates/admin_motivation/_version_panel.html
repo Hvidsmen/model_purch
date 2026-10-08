@@ -25,6 +25,8 @@
             {% for version in versions %}<option value="{{ version.pk }}" {% if version.pk == selected_version.pk %}selected{% endif %}>{{ version }} · {{ version.get_status_display }}{% if version.pk == effective_version.pk %} — действует сейчас{% endif %}</option>{% endfor %}
         </select></div><button class="btn btn-primary">Открыть</button>
     </form>
+    <details id="create-version-details" class="secondary-block" {% if version_form.is_bound %}open{% endif %}>
+    <summary>Создать версию</summary>
     <form method="post" action="{% url 'gb_act' %}" id="createVersionForm" title="Новая версия копирует глобальные коэффициенты и настройки всех подразделений">
         {% csrf_token %}{{ version_form.source_version }}{% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}
         <div class="d-flex gap-2 flex-wrap align-items-start">
@@ -35,6 +37,7 @@
             <button class="btn btn-primary" name="action_button" value="create_version">Создать новую версию</button>
         </div>{{ version_form.source_version.errors }}{{ version_form.non_field_errors }}
     </form>
+    </details>
     </div>
     <details id="version-history"><summary>История версий ({{ versions|length }})</summary>
         <div class="table-wrapper mt-2"><table class="table"><thead><tr><th class="header-base">Версия</th><th class="header-base">Статус / замена</th><th class="header-base">Начало действия</th><th class="header-base">Окончание действия</th><th class="header-base">Создана</th><th class="header-base">Коэффициентов</th></tr></thead>

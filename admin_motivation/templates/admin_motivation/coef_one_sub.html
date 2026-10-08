@@ -669,14 +669,10 @@
 </style>
 
 {% include 'admin_motivation/_version_panel.html' %}
+{% include 'admin_motivation/_editor_toolbar.html' %}
 {% include 'admin_motivation/_comparison_panel.html' %}
 <!-- ================= Коэф руководителя ================= -->
-<div class="container-fluid content">
-    <div class="row">
-        <div class="col-12">
-            <h1>Коэффициенты руководителя <span class="subdivision-badge">{{ sub }}</span></h1>
-        </div>
-    </div>
+<details class="container-fluid content secondary-block" id="manager-details"><summary>Коэффициенты руководителя · {{ sub }}</summary>
     <div class="row">
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
@@ -706,14 +702,14 @@
                 </div>
                  <div class="actions" style="justify-content: flex-end; margin-top: 20px; margin-bottom: 0;">
                     <button type="submit" class="btn btn-add" name="action_button" value="update_motive_coeff">
-                        Изменить
+                        Сохранить руководителя
                     </button>
                 </div>
             </div>
             </fieldset>
         </form>
     </div>
-</div>
+</details>
 
 <!-- ================= ТАБЛИЦА КОЭФФИЦИЕНТОВ ПОДРАЗДЕЛЕНИЯ ================= -->
 <div class="container-fluid content">
@@ -723,12 +719,13 @@
         </div>
     </div>
     <div class="row">
+        {% include 'admin_motivation/_coefficient_filters.html' %}
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
             <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="actions">
-                    <button type="submit" class="btn btn-primary" name="action_button" value="save_coeff">Сохранить изменения</button>
+                    <details class="editor-tools" id="coefficient-tools"><summary>Ещё: импорт, копирование и справочники</summary><div class="tool-options">
                     <button type="submit" class="btn btn-warning" name="action_button" value="copy_from_global">Копировать из глобальных</button>
 
                     <div class="file-upload-wrapper">
@@ -737,24 +734,25 @@
                             <span class="file-icon">📁</span>
                             <span class="file-name" id="fileName">Выбрать файл</span>
                         </label>
-                        <button type="submit" class="btn btn-primary" name="action_button" value="file_load">Загрузить из файла</button>
+                        <button type="submit" class="btn btn-secondary" name="action_button" value="file_load">Загрузить из файла</button>
                         {% if templates_file %}<a href="{{ templates_file.url }}" download class="btn-download">
                             <span class="icon">📥</span>
                             Скачать шаблон
                         </a>{% endif %}
                     </div>
+                    </div></details>
                 </div>
             </div>
             <div class="col-12">
                 <div class="table-wrapper">
-                    <table>
+                    <table class="coefficient-table" id="coefficient-table">
                         <thead>
                         <tr>
-                            <th rowspan="2" class="header-base" style="width: 12%;">Группа планов продаж</th>
-                            <th rowspan="2" class="header-base" style="width: 12%;">Группа</th>
-                            <th rowspan="2" class="header-base" style="width: 10%;">Марка</th>
-                            <th colspan="{{ segments|length }}" class="header-policies" style="width: 33%;">Политики</th>
-                            <th colspan="{{ segments|length }}" class="header-sales" style="width: 33%;">Продажи</th>
+                            <th rowspan="2" class="header-base">Группа планов продаж</th>
+                            <th rowspan="2" class="header-base">Группа ERP</th>
+                            <th rowspan="2" class="header-base">Марка / настройки</th>
+                            <th colspan="{{ segments|length }}" class="header-policies">Политики</th>
+                            <th colspan="{{ segments|length }}" class="header-sales">Продажи</th>
                         </tr>
                         <tr>
                             {% for segment in segments %}
@@ -767,34 +765,17 @@
                         </thead>
                         <tbody>
                         {% for pg_sales, br_d in goods.items %}
-                        <tr class="group-header">
-                            <td colspan="{{ 3|add:segments|length|add:segments|length }}"><strong>{{ pg_sales }}</strong></td>
-                        </tr>
-
                         {% for gp, goods in br_d.items %}
-                        <tr>
-                            <td colspan="{{ 3|add:segments|length|add:segments|length }}">{{ pg_sales }}</td>
-                            <td style="text-align: left; padding-left: 10px;">{{ gp }}</td>
-                            <td></td>
-                            {% for segment in segments %}
-                            <td></td>
-                            {% endfor %}
-                            {% for segment in segments %}
-                            <td></td>
-                            {% endfor %}
-                        </tr>
-
                         {% for good, gb_coefs in goods.items %}
-                        <tr>
-                            <td class="cell-select">
-                                <select name="select_var_calc={{ good.id }}" class="select-var-calc" title="Уровень мотивации для данной марки">
-                                    {% for vc in var_calcs %}
-                                    <option value="{{ vc.id }}" {% if vc.id == gb_coefs.0.0.variation_calculate.id %}selected{% endif %}>{{ vc }}</option>
-                                    {% endfor %}
-                                </select>
-                            </td>
-                            <td class="cell-delete"></td>
-                            <td class="brand">{{ good.brand }}</td>
+                        <tr class="coefficient-row" data-pg="{{ pg_sales }}" data-group="{{ gp }}" data-brand="{{ good.brand }}" data-key="{{ good.goods_key }}">
+                            <td class="classification-cell">{{ pg_sales }}</td>
+                            <td class="classification-cell">{{ gp }}</td>
+                            <td class="classification-cell"><strong>{{ good.brand }}</strong><details class="brand-settings"><summary>Настройки</summary><div class="brand-options">
+                                <label>Формула <select name="select_var_calc={{ good.id }}" class="select-var-calc" title="Вариант формулы для {{ good.brand }}">
+                                    {% for vc in var_calcs %}<option value="{{ vc.id }}" {% if vc.id == gb_coefs.0.0.variation_calculate.id %}selected{% endif %}>{{ vc }}</option>{% endfor %}
+                                </select></label>
+
+                            </div></details></td>
                             {% for sgb in gb_coefs %}
                                 {% if forloop.counter0 == 0 %}
                                     {% for gb in sgb %}
@@ -852,6 +833,7 @@
     }
 
     function filterInput(value) {
+        const percentage = value.trim().endsWith('%');
         value = value.replace(',', '.');
         value = value.replace(/[^0-9.\-]/g, '');
         const parts = value.split('.');
@@ -861,7 +843,7 @@
         if (value.indexOf('-') > 0) {
             value = value.replace(/-/g, '');
         }
-        return value;
+        return value + (percentage ? '%' : '');
     }
 
     function isValidCoeff(value) {
