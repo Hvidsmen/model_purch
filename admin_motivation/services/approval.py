@@ -24,7 +24,7 @@ def state_digest(version, plan):
 
 
 def affected_versions(version):
-    return GlobalCoeffVersion.objects.exclude(pk=version.pk).exclude(status='superseded').filter(effective_from__gte=version.effective_from).order_by('effective_from', 'pk')
+    return GlobalCoeffVersion.objects.filter(status='approved').exclude(pk=version.pk).filter(effective_from__gte=version.effective_from).order_by('effective_from', 'pk')
 
 
 def review_approval(version, plan=None, baseline=None, subdivision=None, changes=None, deleted=None):

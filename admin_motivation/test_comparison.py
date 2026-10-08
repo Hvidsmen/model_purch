@@ -179,3 +179,14 @@ class UnapprovedComparisonTests(TestCase):
         response = self.client.post(reverse('motivation_coefficient_comparison'),
             {'action': 'compare', 'version': fixture.version.pk, 'plan': fixture.scenario.pk, 'baseline': fixture.version.pk}, content_type='application/json')
         self.assertEqual(response.status_code, 400)
+
+    def test_legacy_drafts_can_be_approved_in_date_order_without_losing_later_drafts(self):
+        from .test_sales_plans import SalesPlanTests
+        fixture = SalesPlanTests(); fixture.setUp()
+        first = fixture.version
+        july = create_version(date(2026, 7, 1), source_version=first.pk)
+        october = create_version(date(2026, 10, 1), source_version=july.pk)
+        for version in [first, july, october]:
+            approve_review(review_approval(version)['token'])
+        self.assertEqual(GlobalCoeffVersion.objects.filter(status='approved').count(), 3)
+        self.assertEqual(GlobalCoeffVersion.objects.filter(status='superseded').count(), 0)
