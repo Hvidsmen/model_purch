@@ -95,3 +95,33 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertTrue(self.page.get_by_role('button', name='Изменить', exact=True).is_disabled())
         self.assertTrue(self.page.get_by_role('button', name='Сохранить изменения', exact=True).is_disabled())
         self.assertEqual(self.errors, [])
+
+    def test_sales_plan_create_load_calculate_and_change_scope(self):
+        from unittest.mock import patch
+        from .test_sales_plans import SalesPlanTests
+        from .models import SalesPlanScenario
+        fixtures = SalesPlanTests()
+        self.db(fixtures.setUp)
+        self.page.goto(self.live_server_url + reverse('motivation_sales_plans'))
+        self.page.get_by_text('Создать сценарий', exact=True).click()
+        self.page.locator('#id_title').fill('Browser plan')
+        self.page.locator('#id_source_version').fill('2027')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Создать', exact=True).click()
+        scenario = self.db(lambda: SalesPlanScenario.objects.get(title='Browser plan'))
+        with patch('admin_motivation.services.sales_plans.connect_database', fixtures.connector):
+            with self.page.expect_navigation():
+                self.page.get_by_role('button', name='Загрузить план из MS SQL', exact=True).click()
+            with self.page.expect_navigation():
+                self.page.get_by_role('button', name='Рассчитать мотивацию', exact=True).click()
+        self.assertEqual(self.db(lambda: scenario.lines.get(subdivision='').total_usd), 225)
+        self.assertEqual(self.page.locator('tbody tr').count(), 1)
+        self.page.locator('tbody summary').click()
+        self.assertIn('0.1 × 150', self.page.locator('tbody').inner_text())
+        with self.page.expect_navigation():
+            self.page.get_by_role('link', name='По подразделениям', exact=True).click()
+        self.assertEqual(self.page.locator('tbody tr').count(), 2)
+        with self.page.expect_download() as download:
+            self.page.get_by_role('link', name='Скачать CSV', exact=True).click()
+        self.assertIn('subdivisions.csv', download.value.suggested_filename)
+        self.assertEqual(self.errors, [])

@@ -374,3 +374,36 @@ class ExampleFiles(models.Model):
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
     file = models.FileField(null=True, upload_to='excel')
+
+class SalesPlanScenario(models.Model):
+    title = models.CharField('Название сценария', max_length=255)
+    source_version = models.CharField('Версия плана в MS SQL', max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    loaded_at = models.DateTimeField(null=True, blank=True)
+    calculated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-pk']
+
+    def __str__(self):
+        return self.title
+
+
+class SalesPlanLine(models.Model):
+    scenario = models.ForeignKey(SalesPlanScenario, on_delete=models.CASCADE, related_name='lines')
+    plan_date = models.DateField('Дата плана')
+    subdivision = models.CharField(max_length=255)
+    planning_group_sales = models.CharField(max_length=255)
+    group = models.CharField(max_length=255)
+    brand = models.CharField(max_length=255)
+    amount_usd = models.DecimalField(max_digits=24, decimal_places=6)
+    segment_amounts = models.JSONField(default=dict)
+    coefficient_version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, null=True, blank=True)
+    calculation = models.JSONField(default=dict)
+    policies_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True)
+    sales_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True)
+    total_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True)
+
+    class Meta:
+        ordering = ['plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand']
+        constraints = [models.UniqueConstraint(fields=['scenario', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand'], name='unique_motivation_sales_plan_line')]
