@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 """Run with RUN_BROWSER_TESTS=1; see README for Chromium installation."""
 import importlib.util
 import os
@@ -17,6 +18,7 @@ BROWSER_ENABLED = os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.
 @skipUnless(BROWSER_ENABLED, 'Enable RUN_BROWSER_TESTS=1 and install requirements-test.txt to run Chromium checks.')
 class PurchaseBrowserTests(StaticLiveServerTestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.source = ScenarioModel.objects.create(name='Source', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.target = ScenarioModel.objects.create(name='Target', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         self.purchase = Purch.objects.create(name='Supplier', lag_income=90, lage_make=35)
@@ -35,6 +37,8 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.browser = self.playwright.chromium.launch(executable_path=executable or None, headless=True)
         self.addCleanup(self.browser.close)
         self.page = self.browser.new_page()
+        from django.conf import settings
+        self.page.context.add_cookies([{'name': settings.SESSION_COOKIE_NAME, 'value': self.client.cookies[settings.SESSION_COOKIE_NAME].value, 'url': self.live_server_url}])
         self.errors = []
         self.asset_events = []
         self.page.on("response", lambda response: self.asset_events.append((response.status, response.url)) if "bootstrap.bundle" in response.url else None)

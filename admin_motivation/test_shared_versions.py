@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from .services.approval import review_approval, approve_review
 from datetime import date
 from io import BytesIO
@@ -17,6 +18,7 @@ from .services.sql_export import export_motivation
 
 class SharedMotivationVersionTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.first = GlobalCoeffVersion.objects.get(effective_from=date(2001, 1, 1))
         channel = Chanel.objects.create(chanel_name='Channel')
         self.sub = Subdivision.objects.create(subdivision_key='A', subdivision_name='A', subdivision_global='A', chanel=channel)

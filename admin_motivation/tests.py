@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case, authorize_admin
 from .services.approval import review_approval, approve_review
 from datetime import date
 from unittest.mock import patch
@@ -12,6 +13,7 @@ from .services.versions import create_version, effective_version, apply_to_subdi
 
 class GlobalCoefficientVersionTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.first = GlobalCoeffVersion.objects.get(effective_from=date(2001, 1, 1))
         self.good = Goods.objects.create(goods_key='Key', planning_group_sales='Sales', group='Group', brand='Brand')
         self.segment = SegmentCoeff.objects.create(segment_name='Segment')
@@ -126,6 +128,7 @@ class GlobalCoefficientVersionTests(TestCase):
 
     def test_post_requires_csrf_and_get_cannot_mutate(self):
         client = Client(enforce_csrf_checks=True)
+        authorize_admin(client)
         self.assertEqual(client.post(reverse('gb_act'), {'action_button': 'create_version'}).status_code, 403)
         self.assertEqual(self.client.get(reverse('gb_act')).status_code, 405)
 

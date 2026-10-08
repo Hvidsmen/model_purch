@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from unittest.mock import Mock, patch
 from django.db import IntegrityError, transaction
 from django.test import TestCase, override_settings
@@ -10,6 +11,7 @@ from .services.purchases import coverage_errors
 @override_settings(MS_SQL_CONN_STR='test')
 class SharedPurchaseTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.scenarios = [ScenarioModel.objects.create(name=name, date_start_plan='2026-01-01', date_end_plan='2026-12-31')
                           for name in ['A', 'B']]
         self.purchase = Purch.objects.create(name='Supplier', lag_income=90, lage_make=35)

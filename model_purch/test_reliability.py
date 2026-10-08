@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case, authorize_admin
 import json
 import os
 import sqlite3
@@ -53,6 +54,7 @@ class LocalDatabaseTests(SimpleTestCase):
 @override_settings(MS_SQL_CONN_STR='test')
 class ScenarioReliabilityTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.other = ScenarioModel.objects.create(name='Other', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         kind = KindPurch.objects.create(name='Purchased')
@@ -155,6 +157,7 @@ class ScenarioReliabilityTests(TestCase):
     def test_algorithm_requires_csrf_token(self):
         self.record_export()
         client = Client(enforce_csrf_checks=True)
+        authorize_admin(client)
         self.assertEqual(client.post(reverse('start_algorithm_api'), {'scenario': self.scenario.pk}).status_code, 403)
         client.get(reverse('results_page'), {'scenario': self.scenario.pk})
         response = client.post(reverse('start_algorithm_api'), {'scenario': self.scenario.pk},

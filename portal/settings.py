@@ -62,6 +62,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'base.middleware.PortalAccessMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 
@@ -80,6 +81,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'model_purch.context_processors.workspace',
+                'base.access.portal_access',
 
             ],
         },
@@ -167,3 +169,7 @@ STATICFILES_FINDERS = [
 MS_SQL_CONN_STR = os.environ.get('MS_SQL_CONN_STR', MS_SQL_CONN_STR)
 DWH_SQL_CONN_STR = os.environ.get('DWH_SQL_CONN_STR')
 ENABLE_LEGACY_DASH = os.environ.get('ENABLE_LEGACY_DASH', 'false').lower() in {'1', 'true', 'yes'}
+
+LOGIN_URL = "portal_login"
+LOGIN_REDIRECT_URL = "index_base"
+LOGOUT_REDIRECT_URL = "portal_login"

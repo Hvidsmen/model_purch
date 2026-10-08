@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from io import BytesIO, StringIO
 from unittest.mock import Mock, patch
 
@@ -16,6 +17,7 @@ from .views import sync_pggoods_data_for_scenario
 
 class GoodsUniquenessTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.other = ScenarioModel.objects.create(name='Other', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         self.scenario.refresh_from_db()

@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from datetime import date
 from decimal import Decimal
 from unittest.mock import Mock, patch
@@ -13,6 +14,7 @@ from .services.versions import create_version
 
 class SalesPlanTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.version = GlobalCoeffVersion.objects.get(effective_from=date(2001, 1, 1))
         self.scenario = SalesPlanScenario.objects.create(title='Budget', source_version="Plan ' version")
         channel = Chanel.objects.create(chanel_name='Dealer')

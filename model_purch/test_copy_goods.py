@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from html.parser import HTMLParser
 
 from django.contrib.messages import get_messages
@@ -9,6 +10,7 @@ from .models import KindPurch, PGGoods, ScenarioModel
 
 class CopyGoodsTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.source = ScenarioModel.objects.create(name='Source', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         self.target = ScenarioModel.objects.create(name='Target', date_start_plan='2025-01-01', date_end_plan='2025-12-31')
         self.other = ScenarioModel.objects.create(name='Other', date_start_plan='2026-01-01', date_end_plan='2026-12-31')

@@ -4,7 +4,8 @@ from .services.scenarios import current_scenario
 
 
 def workspace(request):
-    if not request.path.startswith('/model_purch/'):
+    from base.access import can_access
+    if not request.path.startswith('/model_purch/') or not can_access(request.user, 'purchases'):
         return {}
     route = request.resolver_match.url_name if request.resolver_match else ''
     if route in {'purch_list', 'purch_create', 'purch_edit', 'purch_delete'}:

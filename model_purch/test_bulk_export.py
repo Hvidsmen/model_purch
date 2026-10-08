@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from unittest.mock import Mock, patch
 
 from django.contrib.messages import get_messages
@@ -9,6 +10,7 @@ from .models import ScenarioModel, Freight
 
 class BulkScenarioExportTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.scenarios = [ScenarioModel.objects.create(name=f'Plan {i}', date_start_plan='2026-01-01',
                                                      date_end_plan='2026-12-31') for i in range(3)]
         self.url = reverse('bulk_export_scenarios')

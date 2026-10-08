@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case, authorize_admin
 from datetime import date
 from decimal import Decimal
 from unittest.mock import Mock
@@ -14,6 +15,7 @@ from .services.sql_export import export_motivation
 
 class ComparisonTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         from .test_sales_plans import SalesPlanTests
         fixture = SalesPlanTests()
         fixture.setUp()
@@ -132,7 +134,9 @@ class ComparisonTests(TestCase):
         self.assertEqual(result.status_code, 200)
         data['changes'] = {str(self.first.coefficients.first().pk): '.3'}
         self.assertEqual(self.client.post(url, data, content_type='application/json').status_code, 400)
-        self.assertEqual(Client(enforce_csrf_checks=True).post(url, data, content_type='application/json').status_code, 403)
+        csrf_client = Client(enforce_csrf_checks=True)
+        authorize_admin(csrf_client)
+        self.assertEqual(csrf_client.post(url, data, content_type='application/json').status_code, 403)
 
     def test_date_and_lifecycle_cannot_be_changed_directly(self):
         with self.assertRaises(ValidationError): self.draft(date(2000, 1, 1), .1, True)
@@ -170,6 +174,9 @@ class ComparisonTests(TestCase):
 
 
 class UnapprovedComparisonTests(TestCase):
+    def setUp(self):
+        authorize_test_case(self)
+
     def test_no_approved_versions_is_explicit_and_does_not_block_current_preview(self):
         from .test_sales_plans import SalesPlanTests
         fixture = SalesPlanTests(); fixture.setUp(); fixture.load()

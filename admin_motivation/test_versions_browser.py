@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 import importlib.util
 import os
 from concurrent.futures import ThreadPoolExecutor
@@ -11,6 +12,7 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.first, _ = GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001, 1, 1))
         good = Goods.objects.create(goods_key='Key', planning_group_sales='Sales', group='Group', brand='Brand')
         segment = SegmentCoeff.objects.create(segment_name='Segment')
@@ -24,6 +26,8 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.browser = self.driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
         self.addCleanup(self.browser.close)
         self.page = self.browser.new_page()
+        from django.conf import settings
+        self.page.context.add_cookies([{'name': settings.SESSION_COOKIE_NAME, 'value': self.client.cookies[settings.SESSION_COOKIE_NAME].value, 'url': self.live_server_url}])
         self.errors = []
         self.page.on('pageerror', lambda error: self.errors.append(str(error)))
         self.pool = ThreadPoolExecutor(max_workers=1)

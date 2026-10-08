@@ -4,12 +4,13 @@
 <section class="portal-welcome">
 <h1>Рабочий портал</h1><p>Выберите проект, чтобы продолжить работу.</p>
 <div class="portal-cards">
-<a class="portal-project-card" href="{% url 'scenario_list' %}"><h2>Модель закупок</h2><span>Сценарии, товары, закупки, фрахт и расчёты.</span></a>
-<a class="portal-project-card" href="{% url 'global_coeff_admin_motivation' %}"><h2>Мотивация</h2><span>Коэффициенты, версии, планы продаж и сравнение мотивации.</span></a>
+{% if portal_can_purchases %}<a class="portal-project-card" href="{% url 'scenario_list' %}"><h2>Модель закупок</h2><span>Сценарии, товары, закупки, фрахт и расчёты.</span></a>{% endif %}
+{% if portal_can_motivation %}<a class="portal-project-card" href="{% url 'global_coeff_admin_motivation' %}"><h2>Мотивация</h2><span>Коэффициенты, версии, планы продаж и сравнение мотивации.</span></a>{% endif %}
 </div>
-<div class="portal-other-links"><h2>Другие разделы</h2>
+{% if not portal_can_purchases and not portal_can_motivation %}<p>Роль не назначена. Обратитесь к администратору для получения доступа.</p>{% endif %}
+{% if portal_is_admin %}<div class="portal-other-links"><h2>Другие разделы</h2>
 <a href="{% url 'index' %}">Система планирования</a>
 <a href="{% url 're_ref_store_group' %}">Редактор справочников DWH</a>
-</div>
+</div>{% endif %}
 </section>
 {% endblock %}

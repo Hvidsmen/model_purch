@@ -25,3 +25,12 @@
 @media(max-width:1100px){.portal-layout{grid-template-columns:185px minmax(0,1fr);gap:12px;padding:14px}.portal-body .portal-sidebar{padding:12px 8px}.portal-sidebar h2{margin-left:8px}}
 @media(max-width:850px){.portal-layout{display:block;padding:12px}.portal-menu-toggle{display:block;margin-bottom:12px;padding:8px 12px;border:1px solid #cbd5e1;background:#fff;border-radius:6px;color:#475569;font-size:13px}.portal-body .portal-sidebar{position:static;max-height:none;margin-bottom:12px;display:none}.portal-body .portal-sidebar.portal-menu-open{display:block}.portal-body .portal-topbar{padding:12px 16px;gap:10px}.portal-body .portal-projects a{padding:7px 10px;font-size:13px}.portal-user{font-size:12px}.portal-main .editor-toolbar{position:static}.portal-cards{grid-template-columns:1fr}.portal-welcome{padding:18px}}
 @media(prefers-reduced-motion:reduce){.portal-body *{scroll-behavior:auto!important}}
+
+.portal-logout { margin: 0; }
+.portal-logout button { background: transparent; border: 1px solid #d9dfeb; border-radius: 6px; padding: 6px 12px; color: #263449; cursor: pointer; }
+.portal-user small { display: block; color: #65728a; }
+.portal-login { max-width: 420px; margin: 10vh auto; padding: 28px; background: white; border: 1px solid #dce2ed; border-radius: 12px; }
+.portal-login label, .portal-login input { display: block; width: 100%; box-sizing: border-box; margin: 10px 0; }
+.portal-login input { padding: 10px; border: 1px solid #bfc9db; border-radius: 6px; }
+.portal-login button { padding: 10px 24px; background: #6559cb; color: white; border: 0; border-radius: 6px; cursor: pointer; }
+@media (max-width: 600px) { .portal-login { margin: 24px 12px; } }

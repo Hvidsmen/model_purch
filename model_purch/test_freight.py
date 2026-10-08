@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from decimal import Decimal
 from unittest.mock import Mock, patch
 
@@ -10,6 +11,7 @@ from .models import Freight, ScenarioModel
 
 class FreightTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.source = ScenarioModel.objects.create(name='Source', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.target = ScenarioModel.objects.create(name='Target', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         self.values = {'price_per_container': Decimal('1234.56'), 'volume_per_container': Decimal('67.890')}

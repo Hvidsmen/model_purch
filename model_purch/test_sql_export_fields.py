@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from unittest.mock import Mock, patch
 
 from django.db import models
@@ -11,6 +12,7 @@ from .sql_export_fields import ensure_model_columns, export_additional_fields
 
 class NewFieldExportTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.kind = KindLagPay.objects.create(name='От даты поступления')
         self.purch = Purch.objects.create(name='Supplier', lag_income=90, lage_make=35)

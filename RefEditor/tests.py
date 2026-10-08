@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from django.test import TestCase
 from .models import GroupOZP, SubGroupOZP, Subdivision, StoreGroupOZP
 from .services import ReferenceUpsertService
@@ -39,6 +40,9 @@ class ReferenceUpsertTests(TestCase):
 
 
 class StorePageTests(TestCase):
+    def setUp(self):
+        authorize_test_case(self)
+
     def test_empty_database_does_not_require_example_file(self):
         from django.urls import reverse
         response = self.client.get(reverse('re_ref_store_group'))

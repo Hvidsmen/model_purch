@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase, TestCase, override_settings
@@ -49,6 +50,9 @@ class AlgorithmSqlTests(SimpleTestCase):
 
 
 class AlgorithmConfigurationApiTests(TestCase):
+    def setUp(self):
+        authorize_test_case(self)
+
     @override_settings(SETTINGS_MODULE='portal.settings_local', MS_SQL_CONN_STR=None)
     @patch('model_purch.conns.pyodbc.connect')
     def test_preparation_records_configuration_failure_in_step_and_run(self, connect):

@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 from django.test import TestCase
 from django.urls import reverse
 from .models import ScenarioModel, KindPurch, PGGoods
@@ -5,6 +6,7 @@ from .models import ScenarioModel, KindPurch, PGGoods
 
 class GoodsEditorTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         kind = KindPurch.objects.create(name='Purchased')
         self.good = PGGoods.objects.create(scenario_plan=self.scenario, planning_group='Group', planning_sales='Sales',

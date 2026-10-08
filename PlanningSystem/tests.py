@@ -1,3 +1,4 @@
+from base.testing import authorize_test_case
 import shutil
 import tempfile
 from unittest.mock import patch
@@ -11,6 +12,7 @@ from .models_algorithm import PercentSubdivisionHeader, PercentSubdivisionSeason
 
 class PercentageUploadTests(TestCase):
     def setUp(self):
+        authorize_test_case(self)
         self.media = tempfile.mkdtemp()
         self.addCleanup(shutil.rmtree, self.media)
         override = override_settings(MEDIA_ROOT=self.media)
