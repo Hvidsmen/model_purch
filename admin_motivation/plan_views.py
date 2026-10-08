@@ -53,12 +53,13 @@ def sales_plans(request, scenario_id=None):
         response['Content-Disposition'] = f'attachment; filename="motivation-plan-{scenario.pk}-{scope}.csv"'
         response.write('\ufeff')
         writer = csv.writer(response, delimiter=';')
-        writer.writerow(['Дата', 'Подразделение', 'Группа планов', 'Группа', 'Марка', 'План USD', *[f'USD_O{i}' for i in range(5)], 'Версия коэффициентов', 'Политики USD', 'Продажи USD', 'Итого USD', *[f'{kind} {field} O{i}' for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['k', 'Мотивация', 'Источник']]])
+        writer.writerow(['Дата', 'Подразделение', 'Группа планов', 'Группа', 'Марка', 'План USD', *[f'USD_O{i}' for i in range(5)], 'Версия коэффициентов', 'Политики USD', 'Продажи USD', 'Итого USD', *[f'{kind} {field} O{i}' for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['k', 'Мотивация', 'Источник', 'Версия источника', 'Подразделение источника', 'Группа планов источника']]])
         for line in lines.iterator():
-            details = [line.calculation.get(kind, {}).get(f'O{i}', {}).get(field, '') for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['coefficient', 'motivation', 'source']]
+            details = [line.calculation.get(kind, {}).get(f'O{i}', {}).get(field, '') for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['coefficient', 'motivation', 'source', 'source_version', 'source_subdivision', 'source_planning_group']]
             values = [line.plan_date, line.subdivision or 'Глобальный план', line.planning_group_sales, line.group, line.brand, line.amount_usd, *[line.segment_amounts.get(f'O{i}', '') for i in range(5)], str(line.coefficient_version or ''), line.policies_usd, line.sales_usd, line.total_usd, *details]
             # Escape external labels only; negative numeric results remain numeric.
-            for index in [1, 2, 3, 4, 11]:
+            label_indices = [1, 2, 3, 4, 11] + [i for i in range(15, len(values)) if (i - 15) % 6 >= 3]
+            for index in label_indices:
                 value = str(values[index])
                 if value.lstrip().startswith(('=', '+', '-', '@')):
                     values[index] = "'" + value

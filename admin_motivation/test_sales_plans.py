@@ -78,7 +78,7 @@ class SalesPlanTests(TestCase):
     def test_missing_coefficients_roll_back_every_result(self):
         self.load()
         calculate_plan(self.scenario.pk)
-        self.version.subdivision_coefficients.filter(subdivision=self.subs[1]).delete()
+        self.version.subdivision_coefficients.filter(type_coeff__type_coeff_name='Продажи').delete()
         self.version.coefficients.all().update(motivation_coeff=.9)
         with self.assertRaisesMessage(ValidationError, 'Нет коэффициента'):
             calculate_plan(self.scenario.pk)
@@ -293,7 +293,7 @@ class SalesPlanTests(TestCase):
         self.assertEqual(line.calculation['Политики']['O0']['source'], 'exact')
         self.assertEqual(line.calculation['Политики']['O0']['coefficient'], '0.0')
 
-    def test_fallback_uses_effective_version_and_never_another_planning_group(self):
+    def test_group_fallback_uses_effective_version_before_table_fallback(self):
         self.load()
         self.alternative_coefficient(GlobalCoeff, -.02)
         future = create_version(date(2026, 10, 8), 'Future', self.version.pk)
@@ -304,6 +304,38 @@ class SalesPlanTests(TestCase):
         self.assertEqual(line.coefficient_version, self.version)
         self.assertEqual(line.policies_usd, Decimal('-30'))
         self.scenario.lines.filter(subdivision='').update(planning_group_sales='No matching group')
-        with self.assertRaisesMessage(ValidationError, 'Нет коэффициента и значений для подстановки минимума'):
+        calculate_plan(self.scenario.pk)
+        line = self.scenario.lines.get(subdivision='')
+        self.assertEqual(line.policies_usd, Decimal('-1350'))
+        self.assertEqual(line.calculation['Политики']['O0']['source'], 'table_minimum')
+        self.assertEqual(line.calculation['Политики']['O0']['source_version_id'], future.pk)
+
+
+    def test_no_effective_version_uses_each_table_minimum_and_records_actual_version(self):
+        self.cursor.fetchall.return_value = self.rows(date(2000, 1, 1))
+        self.load()
+        self.alternative_coefficient(GlobalCoeff, -.02)
+        self.alternative_coefficient(SubdivisionCoeff, -.1, subdivision=self.subs[1])
+        calculate_plan(self.scenario.pk)
+        global_line = self.scenario.lines.get(subdivision='')
+        local_line = self.scenario.lines.get(subdivision='A')
+        self.assertIsNone(global_line.coefficient_version)
+        self.assertEqual(global_line.policies_usd, Decimal('-30'))
+        self.assertEqual(global_line.sales_usd, Decimal('75'))
+        self.assertEqual(local_line.policies_usd, Decimal('-100'))
+        self.assertEqual(local_line.sales_usd, Decimal('30'))
+        cell = local_line.calculation['Политики']['O0']
+        self.assertEqual(cell['source'], 'table_minimum')
+        self.assertEqual(cell['source_subdivision'], 'B')
+        self.assertEqual(cell['source_version_id'], self.version.pk)
+        response = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk]))
+        self.assertContains(response, 'Минимум по всей таблице')
+        self.assertContains(response, 'Нет версии на дату плана')
+
+    def test_missing_type_in_entire_global_table_preserves_previous_result(self):
+        self.load()
+        calculate_plan(self.scenario.pk)
+        self.version.coefficients.filter(type_coeff__type_coeff_name='Политики').delete()
+        with self.assertRaises(ValidationError):
             calculate_plan(self.scenario.pk)
-        self.assertEqual(self.scenario.lines.get(subdivision='').policies_usd, Decimal('-30'))
+        self.assertEqual(self.scenario.lines.get(subdivision='').total_usd, Decimal('225'))

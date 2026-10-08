@@ -159,7 +159,8 @@ def calculate_plan(scenario_id):
         if key in cells:
             raise ValidationError('Найдены неоднозначные глобальные коэффициенты.')
         cells[key] = cell.motivation_coeff
-    minimums = {}
+    version_names = {version.pk: str(version) for version in versions}
+    minimums, table_minimums = {}, {}
     for key, value in cells.items():
         version_id, subdivision, planning_group, group, brand, kind, segment = key
         if kind not in KINDS or segment not in SEGMENTS:
@@ -170,19 +171,26 @@ def calculate_plan(scenario_id):
         scope = (version_id, subdivision, planning_group, kind)
         if scope not in minimums or coefficient < minimums[scope][0]:
             minimums[scope] = (coefficient, key)
+        table_scope = (bool(subdivision), kind)
+        if table_scope not in table_minimums or coefficient < table_minimums[table_scope][0]:
+            table_minimums[table_scope] = (coefficient, key)
     for line in lines:
         version = next((v for v in reversed(versions) if v.effective_from <= line.plan_date), None)
-        if version is None:
-            raise ValidationError(f'Нет версии коэффициентов на {line.plan_date:%d.%m.%Y}.')
+        version_id = version.pk if version else None
         result, totals = {}, []
         for kind in KINDS:
             details, total = {}, Decimal(0)
             for segment in SEGMENTS:
-                key = (version.pk, line.subdivision, line.planning_group_sales, line.group, line.brand, kind, segment)
+                key = (version_id, line.subdivision, line.planning_group_sales, line.group, line.brand, kind, segment)
                 fallback = key not in cells
                 source_key = key
+                source = 'exact'
                 if fallback:
-                    candidate = minimums.get((version.pk, line.subdivision, line.planning_group_sales, kind))
+                    source = 'group_minimum'
+                    candidate = minimums.get((version_id, line.subdivision, line.planning_group_sales, kind))
+                    if candidate is None:
+                        source = 'table_minimum'
+                        candidate = table_minimums.get((bool(line.subdivision), kind))
                     if candidate is None:
                         raise ValidationError(f'Нет коэффициента и значений для подстановки минимума: {line.subdivision or "Глобальный план"}, {line.planning_group_sales}, {kind}; версия {version}.')
                     coefficient, source_key = candidate
@@ -193,7 +201,9 @@ def calculate_plan(scenario_id):
                 usd = number(line.segment_amounts.get(segment))
                 contribution = coefficient * usd
                 details[segment] = {'coefficient': str(coefficient), 'usd': str(usd), 'motivation': str(contribution),
-                                    'source': 'group_minimum' if fallback else 'exact',
+                                    'source': source, 'source_version_id': source_key[0],
+                                    'source_version': version_names[source_key[0]],
+                                    'source_subdivision': source_key[1], 'source_planning_group': source_key[2],
                                     'source_group': source_key[3], 'source_brand': source_key[4], 'source_segment': source_key[6]}
                 total += contribution
             result[kind] = details
