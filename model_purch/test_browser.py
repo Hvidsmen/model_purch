@@ -124,7 +124,12 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.errors, [], self.asset_events)
 
     @override_settings(MS_SQL_CONN_STR='test')
-    def test_calculation_start_uses_selected_scenario_and_saved_export(self):
+    def test_calculation_start_includes_all_scenarios_and_saved_exports(self):
+        from .services.copying import copy_goods, copy_purchases
+        self.db(lambda: copy_goods(self.source, self.target))
+        self.db(lambda: copy_purchases(self.source, self.target))
+        target_parameters = self.db(lambda: snapshot(self.target))
+        self.db(lambda: ScenarioExport.objects.create(scenario=self.target, parameters=target_parameters, fingerprint=fingerprint(target_parameters)))
         parameters = self.db(lambda: snapshot(self.source))
         export = self.db(lambda: ScenarioExport.objects.create(scenario=self.source, parameters=parameters,
                                                                fingerprint=fingerprint(parameters)))
@@ -135,10 +140,12 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
             self.page.locator('#completedSection').wait_for(state='visible')
             self.assertEqual(execute.call_count, 5)
         run = self.db(lambda: AlgorithmRun.objects.get())
-        self.assertEqual(run.scenario_id, self.source.pk)
-        self.assertEqual(run.scenario_export_id, export.pk)
+        self.assertIsNone(run.scenario_id)
+        self.assertIsNone(run.scenario_export_id)
         self.assertEqual(run.status, 'completed')
-        self.assertEqual(run.parameters, parameters)
+        self.assertEqual(run.parameters['scope'], 'all')
+        self.assertEqual({entry['scenario_id'] for entry in run.parameters['scenarios']}, {self.source.pk, self.target.pk})
+        self.assertEqual(run.parameters['scenarios'][0]['parameters'], parameters)
         self.assertEqual(self.errors, [], self.asset_events)
 
     def test_payment_conditions_filter_and_empty_search_are_readable(self):

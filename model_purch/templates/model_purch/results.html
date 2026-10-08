@@ -1,6 +1,6 @@
 {% extends 'model_purch/base.html' %}
 
-{% block title %}Расчет модели закупок{% endblock %}
+{% block title %}Расчёт всех сценариев{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -239,7 +239,7 @@
         <div class="page-title">
             <h2 class="mb-1">
                 <i aria-hidden="true" class="bi bi-gear-wide-connected text-primary"></i>
-                Расчет модели закупок
+                Расчёт всех сценариев
             </h2>
             <p class="text-muted mb-0 small">
                 Выполнение алгоритма с фиксацией состояния каждого шага
@@ -254,21 +254,24 @@
 </div>
 
 <ol class="checklist" aria-label="Подготовка к расчёту">
-    <li class="{% if data_ready %}done{% else %}needs-action{% endif %}"><strong>1. Данные</strong><span class="d-block small">{% if data_ready %}Товары заполнены{% else %}Добавьте товары{% endif %}</span><a href="{% url 'pggoods_list' %}">Открыть товары</a></li>
+    <li class="{% if data_ready %}done{% else %}needs-action{% endif %}"><strong>1. Данные</strong><span class="d-block small">{% if data_ready %}Товары заполнены во всех сценариях{% else %}Добавьте товары{% endif %}</span><a href="{% url 'pggoods_list' %}">Открыть товары</a></li>
     <li class="{% if validation_ready %}done{% else %}needs-action{% endif %}"><strong>2. Проверки</strong><span class="d-block small">{% if validation_ready %}Параметры корректны{% else %}Исправьте ошибки ниже{% endif %}</span><a href="{% url 'purch_list' %}">Открыть закупки</a></li>
-    <li class="{% if export_ready %}done{% else %}needs-action{% endif %}"><strong>3. Экспорт</strong><span class="d-block small">{% if export_ready %}Данные актуальны{% else %}Экспортируйте сценарий{% endif %}</span><a href="{% url 'scenario_list' %}">Открыть экспорт</a></li>
+    <li class="{% if export_ready %}done{% else %}needs-action{% endif %}"><strong>3. Экспорт</strong><span class="d-block small">{% if export_ready %}Данные актуальны{% else %}Экспортируйте все сценарии{% endif %}</span><a href="{% url 'scenario_list' %}">Открыть экспорт</a></li>
     <li class="{% if not readiness_errors and not active_runs %}done{% else %}needs-action{% endif %}"><strong>4. Расчёт</strong><span class="d-block small">{% if active_runs %}Другой запуск не завершён{% elif not readiness_errors %}Можно запускать{% else %}Завершите подготовку{% endif %}</span><a href="#controlPanel">Перейти к запуску</a></li>
 </ol>
 <div class="card card-body mb-3">
-    <p>Сценарий расчёта: <strong>{{ current_scenario.name|default:"не выбран" }}</strong></p>
-    <p>Последний успешный экспорт: <strong>{{ last_export.exported_at|date:"d.m.Y H:i:s"|default:"не выполнялся" }}</strong></p>
-    <details class="text-muted small mb-3"><summary>Как выполняется расчёт</summary><p>Заказ рассчитывается только для выбранного сценария. Подготовка данных, обновление таблиц и запуск OLAP выполняются общими SQL-процедурами. Фрахт экспортируется; его использование внешними процедурами требует их настройки.</p></details>
+    <p>Область расчёта: <strong>Все сценарии</strong>. Выбор сценария в верхней панели используется для редактирования данных и не ограничивает расчёт.</p>
+    <div class="table-responsive mb-3"><table class="table table-sm">
+        <thead><tr><th>Сценарий</th><th>Последний экспорт</th><th>Готовность</th></tr></thead>
+        <tbody>{% for check in scenario_checks %}<tr><td>{{ check.scenario.name }}</td><td>{{ check.export.exported_at|date:"d.m.Y H:i:s"|default:"не выполнялся" }}</td><td>{% if check.errors %}Требует подготовки{% else %}Готов{% endif %}</td></tr>{% empty %}<tr><td colspan="3">Создайте сценарии для расчёта.</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <details class="text-muted small mb-3"><summary>Как выполняется расчёт</summary><p>Все сценарии из подготовленных данных MS SQL рассчитываются за один запуск. Таблица поступлений заменяется общим результатом, как в исходном алгоритме. Подготовка данных, обновление таблиц и запуск OLAP выполняются общими SQL-процедурами. Фрахт экспортируется; его использование внешними процедурами требует их настройки.</p></details>
     {% if readiness_errors %}<div class="alert alert-warning"><strong>До запуска исправьте:</strong><ul>{% for issue in readiness_issues %}<li>{{ issue.message }} {% if issue.url %}<a href="{{ issue.url }}">Открыть данные</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
     {% if active_runs %}
         <div class="alert alert-info">
             <p>Есть незавершённые расчёты. Перед новым запуском завершите их или отмените остановленные между шагами:</p>
             {% for active_run in active_runs %}
-                <div class="mb-2">#{{ active_run.pk }} — {{ active_run.scenario.name|default:"старый запуск без сценария" }} — {{ active_run.started_at|date:"d.m.Y H:i:s" }}
+                <div class="mb-2">#{{ active_run.pk }} — {% if active_run.parameters.scope == 'all' %}Все сценарии{% else %}{{ active_run.scenario.name|default:"старый запуск без сценария" }}{% endif %} — {{ active_run.started_at|date:"d.m.Y H:i:s" }}
                     <button class="btn btn-outline-danger btn-sm" onclick="cancelRun({{ active_run.pk }})">Отменить остановленный расчёт</button>
                 </div>
             {% endfor %}
@@ -276,7 +279,7 @@
     {% endif %}
     {% for run in recent_runs %}
         <details class="mb-2"><summary>Расчёт #{{ run.pk }} — {{ run.started_at|date:"d.m.Y H:i:s" }} — {{ run.get_status_display }}</summary>
-            <p>Экспорт: {{ run.scenario_export.exported_at|date:"d.m.Y H:i:s"|default:"не зафиксирован" }}</p>
+            <p>{% if run.parameters.scope == 'all' %}Все сценарии; время экспорта и параметры каждого сохранены в снимке ниже.{% else %}Экспорт: {{ run.scenario_export.exported_at|date:"d.m.Y H:i:s"|default:"не зафиксирован" }}{% endif %}</p>
             <pre class="small" style="max-height: 300px; overflow: auto">{{ run.parameters_display }}</pre>
         </details>
     {% endfor %}
@@ -378,7 +381,7 @@
             const response = await fetch("{% url 'start_algorithm_api' %}", {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                body: JSON.stringify({scenario: '{{ current_scenario.pk }}'})
+                body: JSON.stringify({scope: 'all'})
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Ошибка запуска');

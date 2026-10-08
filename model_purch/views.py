@@ -93,45 +93,44 @@ STEP_FUNCTIONS = {
 # ==============================================================================
 
 def results_page(request):
-    from .services.preflight import calculation_readiness
+    from .services.preflight import batch_readiness, validation_errors
     scenario, _ = get_current_scenario(request)
-    errors, export, parameters = calculation_readiness(scenario) if scenario else (['Сначала создайте сценарий.'], None, {})
-    runs = AlgorithmRun.objects.filter(scenario=scenario).select_related('scenario_export').order_by('-started_at')[:5] if scenario else []
+    errors, parameters, checks = batch_readiness()
+    runs = AlgorithmRun.objects.select_related('scenario_export').order_by('-started_at')[:5]
     for run in runs:
         run.parameters_display = json.dumps(run.parameters, ensure_ascii=False, indent=2)
     issues = []
-    issue_purchases = list(Purch.objects.filter(scenario_plan=scenario)) if scenario else []
-    issue_goods = list(PGGoods.objects.filter(scenario_plan=scenario)) if scenario else []
-    for error in errors:
-        url = reverse('scenario_list')
-        if scenario:
-            url = f"{reverse('pggoods_list')}?scenario={scenario.pk}"
-            for purchase in issue_purchases:
+    for check in checks:
+        checked = check['scenario']
+        purchases = list(Purch.objects.filter(scenario_plan=checked)) if check['errors'] else []
+        goods = list(PGGoods.objects.filter(scenario_plan=checked)) if check['errors'] else []
+        for error in check['errors']:
+            url = f"{reverse('pggoods_list')}?scenario={checked.pk}"
+            for purchase in purchases:
                 if error.startswith(purchase.name + ':'):
-                    url = f"{reverse('purch_edit', args=[purchase.pk])}?scenario={scenario.pk}"
+                    url = f"{reverse('purch_edit', args=[purchase.pk])}?scenario={checked.pk}"
                     break
-            for good in issue_goods:
+            for good in goods:
                 if error.startswith(good.planning_group + ':'):
-                    url = f"{reverse('edit_pggoods', args=[good.pk])}?scenario={scenario.pk}"
+                    url = f"{reverse('edit_pggoods', args=[good.pk])}?scenario={checked.pk}"
                     break
             if error.startswith('Фрахт:'):
-                url = f"{reverse('freight')}?scenario={scenario.pk}"
+                url = f"{reverse('freight')}?scenario={checked.pk}"
             elif 'экспорт' in error.lower():
                 url = reverse('scenario_list')
-            elif error.startswith(('Дата', 'Название', 'Повторяются')):
-                url = f"{reverse('scenario_edit', args=[scenario.pk])}?scenario={scenario.pk}"
+            elif error.startswith(('Дата', 'Название')):
+                url = reverse('scenario_edit', args=[checked.pk])
             elif 'MS_SQL_CONN_STR' in error:
                 url = None
-        issues.append({'message': error, 'url': url})
-    data_ready = bool(parameters.get('goods'))
-    validation_ready = not errors
-    if scenario:
-        from .services.preflight import validation_errors
-        validation_ready = not validation_errors(scenario)
+            issues.append({'message': f'«{checked.name}»: {error}', 'url': url})
+    if not checks:
+        issues.append({'message': errors[0], 'url': reverse('scenario_create')})
     return render(request, 'model_purch/results.html', {
-        'current_scenario': scenario, 'readiness_errors': errors, 'readiness_issues': issues, 'last_export': export,
-        'data_ready': data_ready, 'validation_ready': validation_ready,
-        'export_ready': bool(export) and not any('экспорт' in error.lower() for error in errors),
+        'current_scenario': scenario, 'readiness_errors': errors, 'readiness_issues': issues,
+        'scenario_checks': checks,
+        'data_ready': bool(checks) and all(check['parameters'].get('goods') for check in checks),
+        'validation_ready': bool(checks) and all(not validation_errors(check['scenario']) for check in checks),
+        'export_ready': bool(checks) and all(check['export'] and not any('экспорт' in error.lower() for error in check['errors']) for check in checks),
         'recent_runs': runs,
         'active_runs': AlgorithmRun.objects.filter(status='running').select_related('scenario').order_by('-started_at'),
     })
@@ -148,28 +147,14 @@ def start_algorithm_api(request):
         return JsonResponse({'error': 'Метод не поддерживается'}, status=405)
 
     try:
-        from .forms import FreightScenarioForm
-        from .services.preflight import calculation_readiness
-        try:
-            data = json.loads(request.body or '{}') if request.content_type == 'application/json' else request.POST
-        except (ValueError, UnicodeDecodeError):
-            return JsonResponse({'error': 'Некорректный запрос запуска расчёта.'}, status=400)
-        if not hasattr(data, 'get'):
-            return JsonResponse({'error': 'Некорректный запрос запуска расчёта.'}, status=400)
-        selection = FreightScenarioForm(data)
-        if not selection.is_valid():
-            return JsonResponse({'error': 'Выберите действующий сценарий расчёта.'}, status=400)
-        scenario = selection.cleaned_data['scenario']
+        from .services.preflight import batch_readiness
         with transaction.atomic():
-            errors, export, parameters = calculation_readiness(scenario)
+            errors, parameters, checks = batch_readiness()
             if errors:
                 return JsonResponse({'error': '\n'.join(errors), 'validation_errors': errors}, status=400)
-            # Corporate preparation procedures and OLAP job operate on shared tables.
             if AlgorithmRun.objects.filter(status='running').exists():
                 return JsonResponse({'error': 'Другой расчёт уже выполняется. Завершите или остановите его.'}, status=409)
-            from .services.scenarios import remember_scenario
-            remember_scenario(request, scenario)
-            run = AlgorithmRun.objects.create(status='running', scenario=scenario, scenario_export=export, parameters=parameters)
+            run = AlgorithmRun.objects.create(status='running', parameters=parameters)
 
         # Создаем все шаги алгоритма
         steps_config = [
@@ -192,8 +177,8 @@ def start_algorithm_api(request):
         return JsonResponse({
             'success': True,
             'run_id': run.id,
-            'scenario_id': scenario.pk,
-            'scenario_name': scenario.name,
+            'scope': 'all',
+            'scenario_ids': [check['scenario'].pk for check in checks],
             'message': f'Алгоритм #{run.id} запущен'
         })
 
@@ -217,13 +202,12 @@ def execute_next_step_api(request, run_id):
 
         if run.status in {'failed', 'cancelled'}:
             return JsonResponse({'error': 'Этот расчёт остановлен. Запустите новый расчёт.'}, status=409)
-        if run.scenario_id:
-            from .services.preflight import snapshot, fingerprint
-            if fingerprint(snapshot(run.scenario)) != fingerprint(run.parameters):
-                run.status = 'failed'
-                run.finished_at = timezone.now()
-                run.save(update_fields=['status', 'finished_at'])
-                return JsonResponse({'error': 'Параметры сценария изменились во время расчёта. Повторите экспорт и запуск.'}, status=409)
+        from .services.preflight import run_inputs_unchanged
+        if not run_inputs_unchanged(run):
+            run.status = 'failed'
+            run.finished_at = timezone.now()
+            run.save(update_fields=['status', 'finished_at'])
+            return JsonResponse({'error': 'Набор сценариев или их параметры изменились во время расчёта. Повторите экспорт и запуск.'}, status=409)
 
         # Находим следующий шаг со статусом "pending"
         next_step = AlgorithmStep.objects.filter(

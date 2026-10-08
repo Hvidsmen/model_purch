@@ -63,11 +63,16 @@ class ScenarioReliabilityTests(TestCase):
         self.payment = PurchPay.objects.create(purch=self.purch, name='Payment', percent_pay=100, lag_day_pay=0)
 
     def record_export(self):
+        from .services.copying import copy_goods, copy_purchases
+        copy_goods(self.scenario, self.other)
+        copy_purchases(self.scenario, self.other)
+        other_parameters = snapshot(self.other)
+        ScenarioExport.objects.create(scenario=self.other, parameters=other_parameters, fingerprint=fingerprint(other_parameters))
         parameters = snapshot(self.scenario)
         return ScenarioExport.objects.create(scenario=self.scenario, parameters=parameters, fingerprint=fingerprint(parameters))
 
     def start(self):
-        return self.client.post(reverse('start_algorithm_api'), json.dumps({'scenario': self.scenario.pk}), content_type='application/json')
+        return self.client.post(reverse('start_algorithm_api'), json.dumps({'scope': 'all'}), content_type='application/json')
 
     def test_selection_persists_across_tabs_without_query_parameter(self):
         self.client.get(reverse('purch_list'), {'scenario': self.scenario.pk})
@@ -97,14 +102,16 @@ class ScenarioReliabilityTests(TestCase):
         response = self.start()
         self.assertEqual(response.status_code, 200)
         run = AlgorithmRun.objects.get(pk=response.json()['run_id'])
-        self.assertEqual(run.scenario_id, self.scenario.pk)
-        self.assertEqual(run.scenario_export_id, export.pk)
-        self.assertEqual(run.parameters, export.parameters)
+        self.assertIsNone(run.scenario_id)
+        self.assertIsNone(run.scenario_export_id)
+        self.assertEqual(run.parameters['scope'], 'all')
+        self.assertEqual(run.parameters['scenarios'][0]['parameters'], export.parameters)
+        self.assertEqual({entry['scenario_id'] for entry in run.parameters['scenarios']}, {self.scenario.pk, self.other.pk})
         self.assertEqual(run.steps.count(), 5)
         self.assertEqual(self.start().status_code, 409)
         status = self.client.get(reverse('get_algorithm_statuэ', args=[run.pk])).json()
-        self.assertEqual(status['parameters'], export.parameters)
-        self.assertTrue(status['exported_at'])
+        self.assertEqual(status['parameters'], run.parameters)
+        self.assertTrue(status['parameters']['scenarios'][0]['exported_at'])
 
     def test_invalid_percent_totals_prices_and_volumes_report_specific_errors(self):
         self.payment.percent_pay = 30

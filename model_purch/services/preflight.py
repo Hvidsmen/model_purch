@@ -92,3 +92,32 @@ def calculation_readiness(scenario):
     elif current != export.fingerprint:
         errors.append('Параметры изменились после экспорта. Повторите экспорт сценария в MS SQL.')
     return errors, export, parameters
+
+
+def batch_readiness():
+    """Validate and record every local scenario before one shared SQL calculation."""
+    scenarios = list(ScenarioModel.objects.order_by('pk'))
+    checks, entries, errors = [], [], []
+    for scenario in scenarios:
+        scenario_errors, export, parameters = calculation_readiness(scenario)
+        checks.append({'scenario': scenario, 'export': export, 'parameters': parameters, 'errors': scenario_errors})
+        errors.extend(f'«{scenario.name}»: {error}' for error in scenario_errors)
+        entries.append({'scenario_id': scenario.pk, 'export_id': export.pk if export else None,
+                        'exported_at': export.exported_at.isoformat() if export else None, 'parameters': parameters})
+    if not scenarios:
+        errors.append('Сначала создайте сценарии для расчёта.')
+    return errors, {'scope': 'all', 'scenarios': entries}, checks
+
+
+def run_inputs_unchanged(run):
+    if run.parameters.get('scope') == 'all':
+        entries = run.parameters['scenarios']
+        expected_ids = {entry['scenario_id'] for entry in entries}
+        scenarios = list(ScenarioModel.objects.order_by('pk'))
+        if {scenario.pk for scenario in scenarios} != expected_ids:
+            return False
+        current = {scenario.pk: snapshot(scenario) for scenario in scenarios}
+        return all(fingerprint(current[entry['scenario_id']]) == fingerprint(entry['parameters']) for entry in entries)
+    if run.scenario_id:
+        return fingerprint(snapshot(run.scenario)) == fingerprint(run.parameters)
+    return True
