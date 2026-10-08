@@ -1,8 +1,10 @@
 {% extends 'admin_motivation/base.html' %}
-{% load static %}
+{% load static i18n %}
 {% block title %}Планы продаж и мотивация{% endblock %}
 {% block content %}
-<style>.plan-card{background:white;border-radius:16px;padding:24px;margin-bottom:20px}.plan-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.plan-actions p{margin:0}.plan-table{font-size:13px}.plan-table td{vertical-align:top}.plan-card summary{cursor:pointer} .header{flex-wrap:wrap}.header-nav{flex-wrap:wrap}.report-grid{display:grid;grid-template-columns:minmax(320px,2fr) repeat(4,minmax(110px,1fr));gap:12px;align-items:center;padding:10px 12px;min-width:840px;border-bottom:1px solid #e2e8f0}.report-grid>span:not(:first-child),.report-grid>strong:not(:first-child){text-align:right;font-variant-numeric:tabular-nums}.report-heading,.report-total{background:#f3f4ff;font-weight:600}.report-node>summary{list-style:none}.report-node>summary::-webkit-details-marker{display:none}.report-node>summary .report-label:before{content:'▸';display:inline-block;width:18px}.report-node[open]>summary .report-label:before{content:'▾'}.report-node>summary:hover{background:#f8f9ff}.report-label{padding-left:calc(var(--level)*18px)}.report-leaf .report-label{padding-left:72px}.report-node[data-level="0"]>summary{font-weight:700;background:#f3f6ff}
+{% language 'ru' %}
+<style>.plan-card{background:white;border-radius:16px;padding:24px;margin-bottom:20px}.plan-actions{display:flex;gap:12px;flex-wrap:wrap;align-items:end}.plan-actions p{margin:0}.plan-table{font-size:13px}.plan-table td{vertical-align:top}.plan-card summary{cursor:pointer} .header{flex-wrap:wrap}.header-nav{flex-wrap:wrap}.report-grid{display:grid;grid-template-columns:minmax(320px,2fr) repeat(4,minmax(145px,1fr));gap:12px;align-items:center;padding:10px 12px;min-width:980px;border-bottom:1px solid #e2e8f0}.report-grid>span:not(:first-child),.report-grid>strong:not(:first-child){text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap;font-feature-settings:"tnum";letter-spacing:.01em}.report-heading,.report-total{background:#f3f4ff;font-weight:600}.report-node>summary{list-style:none}.report-node>summary::-webkit-details-marker{display:none}.report-node>summary .report-label:before{content:'▸';display:inline-block;width:18px}.report-node[open]>summary .report-label:before{content:'▾'}.report-node>summary:hover{background:#f8f9ff}.report-label{padding-left:calc(var(--level)*18px)}.report-leaf .report-label{padding-left:72px}.report-node[data-level="0"]>summary{font-weight:700;background:#f3f6ff}
+.report-grid>span:last-child,.report-grid>strong:last-child{color:#3730a3;font-weight:700}.report-total{border-top:2px solid #c7d2fe;padding-top:14px;padding-bottom:14px;font-size:16px}
 </style>
 {% for message in messages %}<div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}">{{ message }}</div>{% endfor %}
 <div class="plan-card">
@@ -22,7 +24,7 @@
 <div id="plan-progress-count"></div><div id="plan-progress-error" class="text-danger" hidden></div>
 </div>
 <div class="plan-card"><div class="plan-actions mb-3"><a class="btn {% if scope == 'global' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{{ scope_links.global }}">Глобальный план</a><a class="btn {% if scope == 'subdivisions' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="{{ scope_links.subdivisions }}">По подразделениям</a></div>
-<p>План: <strong>{{ totals.plan|floatformat:2|default:'0' }} USD</strong> · Политики: <strong>{{ totals.policies|floatformat:2|default:'—' }}</strong> · Продажи: <strong>{{ totals.sales|floatformat:2|default:'—' }}</strong> · Итого мотивация: <strong>{{ totals.total|floatformat:2|default:'—' }} USD</strong></p>
+<p>План: <strong>{{ totals.plan|floatformat:'0g'|default:'0' }} USD</strong> · Политики: <strong>{{ totals.policies|floatformat:'0g'|default:'—' }}</strong> · Продажи: <strong>{{ totals.sales|floatformat:'0g'|default:'—' }}</strong> · Итого мотивация: <strong>{{ totals.total|floatformat:'0g'|default:'—' }} USD</strong></p>
 <form method="get" class="plan-actions mb-3" id="report-filters">
 <input type="hidden" name="scope" value="{{ scope }}">
 {% if scope == 'subdivisions' %}<label>Подразделение<select name="subdivision" class="form-select"><option value="">Все</option>{% for value in filter_choices.subdivision %}<option value="{{ value }}" {% if filters.subdivision == value %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label>{% endif %}
@@ -36,10 +38,11 @@
 <div class="table-responsive"><div id="period-report">
 <div class="report-grid report-heading"><span>Подразделение / группа планов / группа ERP / марка</span><span>План</span><span>Политики</span><span>Продажи</span><span>Мотивация</span></div>
 {% for node in report_nodes %}{% include 'admin_motivation/_report_node.html' %}{% empty %}<p class="p-3">{% if scenario.loaded_at %}Нет данных по выбранным фильтрам.{% else %}План ещё не загружен.{% endif %}</p>{% endfor %}
-<div class="report-grid report-total"><strong>Итого за весь период</strong><strong>{{ totals.plan|floatformat:2|default:'0' }}</strong><strong>{{ totals.policies|floatformat:2|default:'—' }}</strong><strong>{{ totals.sales|floatformat:2|default:'—' }}</strong><strong>{{ totals.total|floatformat:2|default:'—' }}</strong></div>
+<div class="report-grid report-total"><strong>Итого за весь период</strong><strong>{{ totals.plan|floatformat:'0g'|default:'0' }}</strong><strong>{{ totals.policies|floatformat:'0g'|default:'—' }}</strong><strong>{{ totals.sales|floatformat:'0g'|default:'—' }}</strong><strong>{{ totals.total|floatformat:'0g'|default:'—' }}</strong></div>
 </div></div></div>
 
 {% endif %}
 <script src="{% static 'admin_motivation/sales_plan_progress.js' %}" defer></script>
 <script src="{% static 'admin_motivation/plan_report.js' %}" defer></script>
+{% endlanguage %}
 {% endblock %}
