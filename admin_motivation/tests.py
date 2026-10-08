@@ -86,18 +86,19 @@ class GlobalCoefficientVersionTests(TestCase):
         self.assertEqual(self.coeff.motivation_coeff, 0.2)
 
     def test_effective_version_and_future_application(self):
+        channel = Chanel.objects.create(chanel_name='Channel')
+        sub = Subdivision.objects.create(subdivision_key='Key', subdivision_name='Name', subdivision_global='Name', chanel=channel)
+        apply_to_subdivisions(self.first, [sub])
         future = self.create('2099-01-01')
         self.assertEqual(effective_version(date(2001, 1, 1)), self.first)
         self.assertIsNone(effective_version(date(2000, 12, 31)))
         self.assertEqual(effective_version(date(2098, 12, 31)), self.first)
         self.assertEqual(effective_version(date(2099, 1, 1)), future)
-        channel = Chanel.objects.create(chanel_name='Channel')
-        sub = Subdivision.objects.create(subdivision_key='Key', subdivision_name='Name', subdivision_global='Name', chanel=channel)
+        apply_to_subdivisions(future, [sub])
+        self.assertEqual(SubdivisionCoeff.objects.filter(version=self.first).get().motivation_coeff, 0.123456)
+        self.assertEqual(SubdivisionCoeff.objects.filter(version=future).get().motivation_coeff, 0.123456)
         with self.assertRaises(ValidationError):
-            apply_to_subdivisions(future, [sub])
-        self.assertFalse(SubdivisionCoeff.objects.exists())
-        apply_to_subdivisions(self.first, [sub])
-        self.assertEqual(SubdivisionCoeff.objects.get().motivation_coeff, 0.123456)
+            apply_to_subdivisions(self.first, [sub])
 
     def test_page_reads_history_without_sql_or_creating_coefficients(self):
         latest = self.create()
@@ -109,7 +110,7 @@ class GlobalCoefficientVersionTests(TestCase):
         self.assertContains(response, 'Историческая версия: только просмотр')
         self.assertFalse(response.context['version_editable'])
         self.assertEqual(GlobalCoeff.objects.count(), 2)
-        self.assertEqual(self.client.get(reverse('global_coeff_admin_motivation')).context['selected_version'], latest)
+        self.assertEqual(self.client.get(reverse('global_coeff_admin_motivation')).context['selected_version'], self.first)
 
     def test_create_and_edit_product_are_scoped_to_latest_version(self):
         latest = self.create()

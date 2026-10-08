@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}
 
-{% load crispy_forms_tags %}
+{% load crispy_forms_tags l10n %}
 
 {% block content %}
 
@@ -668,6 +668,7 @@
 }
 </style>
 
+{% include 'admin_motivation/_version_panel.html' %}
 <!-- ================= Коэф руководителя ================= -->
 <div class="container-fluid content">
     <div class="row">
@@ -677,7 +678,8 @@
     </div>
     <div class="row">
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data">
-            {% csrf_token %}
+            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+            <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="table-wrapper">
                     <table>
@@ -693,8 +695,8 @@
                             {% for scm in sub_coef_meneger %}
                              <td>
                                 <input type="text" class="coeff-input policy-input coeff-validate"
-                                       name="kind_coeff={{ scm.kind.id }}" data-value="{{ scm.coeff }}" required
-                                       value="{{ scm.coeff }}" maxlength="10" data-type="percent">
+                                       name="kind_coeff={{ scm.kind.id }}" data-value="{{ scm.coeff|unlocalize }}" required
+                                       value="{{ scm.coeff|unlocalize }}" maxlength="25" data-type="percent">
                             </td>
                             {% endfor %}
                         </tr>
@@ -707,6 +709,7 @@
                     </button>
                 </div>
             </div>
+            </fieldset>
         </form>
     </div>
 </div>
@@ -720,7 +723,8 @@
     </div>
     <div class="row">
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
-            {% csrf_token %}
+            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+            <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="actions">
                     <button type="submit" class="btn btn-primary" name="action_button" value="save_coeff">Сохранить изменения</button>
@@ -733,10 +737,10 @@
                             <span class="file-name" id="fileName">Выбрать файл</span>
                         </label>
                         <button type="submit" class="btn btn-primary" name="action_button" value="file_load">Загрузить из файла</button>
-                        <a href="{{ templates_file.url }}" download class="btn-download">
+                        {% if templates_file %}<a href="{{ templates_file.url }}" download class="btn-download">
                             <span class="icon">📥</span>
                             Скачать шаблон
-                        </a>
+                        </a>{% endif %}
                     </div>
                 </div>
             </div>
@@ -795,16 +799,16 @@
                                     {% for gb in sgb %}
                                     <td>
                                         <input type="text" class="coeff-input policy-input coeff-validate"
-                                               name="sub_coeff={{ gb.id }}" data-value="{{ gb.motivation_coeff }}" required
-                                               value="{{ gb.motivation_coeff }}" maxlength="10" data-type="percent">
+                                               name="sub_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
+                                               value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% else %}
                                     {% for gb in sgb %}
                                     <td {% if forloop.first %} class="sales-start"{% endif %}>
                                         <input type="text" class="coeff-input sales-input coeff-validate"
-                                               name="sub_coeff={{ gb.id }}" data-value="{{ gb.motivation_coeff }}" required
-                                               value="{{ gb.motivation_coeff }}" maxlength="10" data-type="percent">
+                                               name="sub_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
+                                               value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% endif %}
@@ -817,6 +821,7 @@
                     </table>
                 </div>
             </div>
+            </fieldset>
         </form>
     </div>
 </div>
@@ -835,14 +840,14 @@
         if (!value || value === '') return '';
         const num = parseFloat(value);
         if (isNaN(num)) return value;
-        return (num * 100).toFixed(2) + '%';
+        return Number((num * 100).toPrecision(15)) + '%';
     }
 
     function parsePercent(percentStr) {
         if (!percentStr || percentStr === '') return '';
         const num = parseFloat(percentStr.replace('%', ''));
         if (isNaN(num)) return percentStr;
-        return (num / 100).toFixed(4);
+        return String(Number((num / 100).toPrecision(15)));
     }
 
     function filterInput(value) {
@@ -940,11 +945,10 @@
                     const decimalValue = parsePercent(value);
                     this.value = decimalValue;
                     this.setAttribute('data-value', decimalValue);
-                } else if (this.hasAttribute('data-value')) {
-                    this.value = this.getAttribute('data-value');
                 }
                 this.classList.remove('invalid', 'valid', 'validation-tooltip', 'shake');
                 this.removeAttribute('data-error');
+                this.select();
             }
         });
 

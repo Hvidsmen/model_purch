@@ -5,7 +5,7 @@ from datetime import date
 from unittest import skipUnless
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.urls import reverse
-from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCoeff, VariationCalculate
+from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCoeff, VariationCalculate, Subdivision, SubdivisionCoeff, SubdivisionManagerCoeff, Chanel, KindManagerCoeff
 
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
@@ -56,4 +56,42 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')
         self.page.locator('#version-history summary').click()
         self.assertIn('31.12.2026', self.page.locator('#version-history').inner_text())
+        self.assertEqual(self.errors, [])
+
+    def test_shared_version_manager_and_subdivision_edits_leave_history_intact(self):
+        def setup_subdivision():
+            channel = Chanel.objects.create(chanel_name='Channel')
+            sub = Subdivision.objects.create(subdivision_key='A', subdivision_name='A', subdivision_global='A', chanel=channel)
+            kind = KindManagerCoeff.objects.create(name='Year')
+            global_coeff = GlobalCoeff.objects.get(pk=self.coeff.pk)
+            SubdivisionCoeff.objects.create(version=self.first, subdivision=sub, goods=global_coeff.goods,
+                type_coeff=global_coeff.type_coeff, segment=global_coeff.segment, variation_calculate=global_coeff.variation_calculate,
+                motivation_coeff=0.15, manager_coeff=1)
+            SubdivisionManagerCoeff.objects.create(version=self.first, subdivision=sub, kind=kind, coeff=0.8)
+            return sub.pk
+        sub_id = self.db(setup_subdivision)
+        self.page.goto(self.live_server_url + reverse('coeff_subdivisions_admin_motivation', args=[sub_id]))
+        self.page.locator('#id_effective_from').fill('2027-01-01')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Создать новую версию', exact=True).click()
+        latest = self.db(lambda: GlobalCoeffVersion.objects.order_by('-effective_from').first())
+        self.page.goto(self.live_server_url + reverse('coeff_subdivisions_admin_motivation', args=[sub_id]))
+        self.assertEqual(self.page.locator('#coefficient-version').input_value(), str(latest.pk))
+        self.page.locator('input[name^="kind_coeff="]').fill('0.9')
+        self.page.locator('input[name^="kind_coeff="]').press('Tab')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Изменить', exact=True).click()
+        self.page.locator('input[name^="sub_coeff="]').fill('0.25')
+        self.page.locator('input[name^="sub_coeff="]').press('Tab')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Сохранить изменения', exact=True).click()
+        self.assertEqual(self.db(lambda: latest.manager_coefficients.get().coeff), 0.9)
+        self.assertEqual(self.db(lambda: latest.subdivision_coefficients.get().motivation_coeff), 0.25)
+        self.assertEqual(self.db(lambda: self.first.manager_coefficients.get().coeff), 0.8)
+        self.assertEqual(self.db(lambda: self.first.subdivision_coefficients.get().motivation_coeff), 0.15)
+        self.page.locator('#coefficient-version').select_option(str(self.first.pk))
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Открыть', exact=True).click()
+        self.assertTrue(self.page.get_by_role('button', name='Изменить', exact=True).is_disabled())
+        self.assertTrue(self.page.get_by_role('button', name='Сохранить изменения', exact=True).is_disabled())
         self.assertEqual(self.errors, [])

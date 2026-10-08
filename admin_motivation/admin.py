@@ -34,6 +34,15 @@ admin.site.register(Subdivision)
 admin.site.register(Chanel)
 
 admin.site.register(KindManagerCoeff)
-admin.site.register(SubdivisionManagerCoeff)
+@admin.register(SubdivisionCoeff)
+class SubdivisionCoeffAdmin(GlobalCoeffAdmin):
+    list_display = ('version', 'subdivision', 'goods', 'segment', 'type_coeff', 'motivation_coeff')
+    list_filter = ('version', 'subdivision')
+
+
+@admin.register(SubdivisionManagerCoeff)
+class SubdivisionManagerCoeffAdmin(GlobalCoeffAdmin):
+    list_display = ('version', 'subdivision', 'kind', 'coeff')
+    list_filter = ('version', 'subdivision')
 admin.site.register(ExampleFiles)
 # Register your models here.

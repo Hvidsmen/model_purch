@@ -116,8 +116,8 @@ class GlobalCoeffVersion(models.Model):
 
     class Meta:
         ordering = ['effective_from', 'pk']
-        verbose_name = 'Версия общих коэффициентов'
-        verbose_name_plural = 'Версии общих коэффициентов'
+        verbose_name = 'Версия коэффициентов мотивации'
+        verbose_name_plural = 'Версии коэффициентов мотивации'
 
     def __str__(self):
         return f'{self.title or "Версия"} с {self.effective_from:%d.%m.%Y}'
@@ -208,8 +208,11 @@ class GlobalCoeff(models.Model):
         return super().delete(*args, **kwargs)
 
     @classmethod
-    def get_matrix_str(cls, version):
-        rows = list(cls.objects.filter(version=version).select_related('goods', 'type_coeff', 'segment', 'variation_calculate'))
+    def get_matrix_str(cls, version, subdivision=None):
+        queryset = cls.objects.filter(version=version)
+        if subdivision is not None:
+            queryset = queryset.filter(subdivision=subdivision)
+        rows = list(queryset.select_related('goods', 'type_coeff', 'segment', 'variation_calculate'))
         types = list(TypeCoeff.objects.order_by('pk'))
         segments = list(SegmentCoeff.objects.order_by('pk'))
         cells = {(row.goods_id, row.type_coeff_id, row.segment_id): row for row in rows}
@@ -222,54 +225,33 @@ class GlobalCoeff(models.Model):
 
 
 class SubdivisionCoeff(models.Model):
+    objects = GlobalCoeffQuerySet.as_manager()
     id = models.AutoField(primary_key=True)
-    subdivision = models.ForeignKey(Subdivision, on_delete=models.CASCADE)
-    goods = models.ForeignKey(Goods, on_delete=models.CASCADE)
-    type_coeff = models.ForeignKey(TypeCoeff, on_delete=models.CASCADE)
-    segment = models.ForeignKey(SegmentCoeff, on_delete=models.CASCADE)
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='subdivision_coefficients')
+    subdivision = models.ForeignKey(Subdivision, on_delete=models.PROTECT)
+    goods = models.ForeignKey(Goods, on_delete=models.PROTECT)
+    type_coeff = models.ForeignKey(TypeCoeff, on_delete=models.PROTECT)
+    segment = models.ForeignKey(SegmentCoeff, on_delete=models.PROTECT)
     motivation_coeff = models.FloatField()
     manager_coeff = models.FloatField()
+    variation_calculate = models.ForeignKey(VariationCalculate, on_delete=models.PROTECT)
 
-    variation_calculate = models.ForeignKey(VariationCalculate, on_delete=models.CASCADE)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['version', 'subdivision', 'goods', 'type_coeff', 'segment'],
+                                               name='unique_sub_coeff_version_cell')]
+
+    check_editable = GlobalCoeff.check_editable
+    def save(self, *args, **kwargs):
+        self.check_editable()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        self.check_editable()
+        return super().delete(*args, **kwargs)
 
     @classmethod
-    def get_matrix_str(cls, subdivision):
-
-        pg_sales = Goods.objects.values_list('planning_group_sales').distinct()
-        pg_dict = {}
-        for pg in pg_sales:
-            pg = pg[0]
-            pg_dict[pg] = {}
-            groups = Goods.objects.filter(planning_group_sales=pg).values_list('group').distinct()
-            gp_dict = {}
-            for gr in groups:
-                gr = gr[0]
-                types_coeff = TypeCoeff.objects.all()
-                segments = SegmentCoeff.objects.all()
-                goods = [id for id in Goods.objects.filter(planning_group_sales=pg, group=gr)]
-
-                good_dict = {}
-
-                for good in goods:
-                    good_dict[good] = []
-                    for i_tp, tp in enumerate(types_coeff):
-                        tp_list = []
-                        for seg in segments:
-
-                            try:
-                                gb = SubdivisionCoeff.objects.get(goods=good, type_coeff=tp, segment=seg,
-                                                                  subdivision=subdivision)
-                            except:
-                                gb = SubdivisionCoeff.objects.create(goods=good, type_coeff=tp, segment=seg,
-                                                                motivation_coeff=0, manager_coeff=1,
-                                                                variation_calculate=VariationCalculate.objects.get(
-                                                                    id=1,subdivision=subdivision))
-                            tp_list.append(gb)
-                        good_dict[good].append(tp_list)
-
-                gp_dict[gr] = good_dict
-            pg_dict[pg] = gp_dict
-        return pg_dict
+    def get_matrix_str(cls, subdivision, version):
+        return GlobalCoeff.get_matrix_str.__func__(cls, version, subdivision)
 
 
 class PlanningGroupSales(models.Model):
@@ -367,18 +349,25 @@ class KindManagerCoeff(models.Model):
 
 
 class SubdivisionManagerCoeff(models.Model):
+    objects = GlobalCoeffQuerySet.as_manager()
     id = models.AutoField(primary_key=True)
-    subdivision = models.ForeignKey(Subdivision, on_delete=models.CASCADE)
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='manager_coefficients')
+    subdivision = models.ForeignKey(Subdivision, on_delete=models.PROTECT)
     coeff = models.FloatField()
-    kind = models.ForeignKey(KindManagerCoeff, on_delete=models.CASCADE, null=True)
+    kind = models.ForeignKey(KindManagerCoeff, on_delete=models.PROTECT, null=True)
 
-    @classmethod
-    def get_or_create(cls, sub, kind_list):
-        for kind in kind_list:
-            if len(cls.objects.filter(subdivision=sub, kind=kind)) == 0:
-                no = cls.objects.create(subdivision=sub, kind=kind, coeff=1)
-                no.save()
-        return cls.objects.filter(subdivision=sub)
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['version', 'subdivision', 'kind'], name='unique_manager_coeff_version_kind')]
+
+    check_editable = GlobalCoeff.check_editable
+
+    def save(self, *args, **kwargs):
+        self.check_editable()
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        self.check_editable()
+        return super().delete(*args, **kwargs)
 
 
 class ExampleFiles(models.Model):
