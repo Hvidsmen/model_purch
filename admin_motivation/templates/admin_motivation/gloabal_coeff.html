@@ -755,26 +755,42 @@
 }
 </style>
 
+<style>
+#version-panel { padding: 16px 20px; margin-top: 18px; border-radius: 12px; }
+#version-panel .version-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+#version-panel h1 { font-size: 18px; margin: 0; }
+#version-panel .version-status { font-size: 12px; color: #64748b; }
+#version-panel .version-controls { display: flex; align-items: flex-start; gap: 12px 20px; flex-wrap: wrap; }
+#version-panel .version-controls form { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin: 0; }
+#version-panel label { display: block; font-size: 12px; margin: 0 0 3px; }
+#version-panel select, #version-panel input:not([type="hidden"]) { height: 32px; padding: 4px 8px; border: 1px solid #cbd5e1; border-radius: 5px; font-size: 13px; max-width: 100%; }
+#version-panel select { width: 340px; }
+#version-panel #id_title { width: 160px; }
+#version-panel .version-controls button { margin-top: 21px; min-height: 32px; padding: 5px 12px; font-size: 12px; }
+#version-panel #version-history { margin-top: 10px; font-size: 13px; }
+#version-panel .alert { margin-bottom: 8px; padding: 8px 12px; }
+@media(max-width: 600px) { #version-panel { padding: 12px; } #version-panel select { width: 100%; } #version-panel .version-picker { min-width: 0; flex: 1; } #version-panel .version-controls form { width: 100%; } }
+</style>
 <div class="container-fluid content" id="version-panel">
-    <h1>Версии общих коэффициентов</h1>
+    <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование{% else %}Историческая версия: только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Действует сейчас{% else %} · Сегодня действует: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
     {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</div>{% endfor %}
-    <form method="get" class="d-flex flex-wrap gap-2 align-items-end mb-3">
-        <div><label for="coefficient-version">Версия коэффициентов</label>
+    <div class="version-controls">
+    <form method="get">
+        <div class="version-picker"><label for="coefficient-version">Версия коэффициентов</label>
         <select id="coefficient-version" name="version" class="form-select">
             {% for version in versions %}<option value="{{ version.pk }}" {% if version.pk == selected_version.pk %}selected{% endif %}>{{ version }}{% if version.pk == effective_version.pk %} — действует сейчас{% endif %}</option>{% endfor %}
         </select></div><button class="btn btn-primary">Открыть</button>
     </form>
-    <p>Выбрана: <strong>{{ selected_version }}</strong>. {% if version_editable %}Можно редактировать последнюю версию.{% else %}Историческая версия: только просмотр.{% endif %}</p>
-    <p>Действует сегодня: <strong>{{ effective_version|default:'Нет действующей версии' }}</strong>. Новая версия копирует сохранённые значения последней версии.</p>
-    <form method="post" action="{% url 'gb_act' %}" id="createVersionForm" class="mb-3">
+    <form method="post" action="{% url 'gb_act' %}" id="createVersionForm" title="Новая версия копирует сохранённые значения последней версии">
         {% csrf_token %}{{ version_form.source_version }}
-        <div class="d-flex gap-3 flex-wrap align-items-end">
+        <div class="d-flex gap-2 flex-wrap align-items-start">
             <div>{{ version_form.effective_from.label_tag }} {{ version_form.effective_from }}
                 {% for error in version_form.effective_from.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}</div>
             <div>{{ version_form.title.label_tag }} {{ version_form.title }}{{ version_form.title.errors }}</div>
             <button class="btn btn-primary" name="action_button" value="create_version">Создать новую версию</button>
         </div>{{ version_form.source_version.errors }}{{ version_form.non_field_errors }}
     </form>
+    </div>
     <details id="version-history"><summary>История версий ({{ versions|length }})</summary>
         <div class="table-wrapper mt-2"><table class="table"><thead><tr><th class="header-base">Версия</th><th class="header-base">Начало действия</th><th class="header-base">Окончание действия</th><th class="header-base">Создана</th><th class="header-base">Коэффициентов</th></tr></thead>
         <tbody>{% for version in versions %}<tr><td><a href="?version={{ version.pk }}">{{ version.title|default:'Версия' }}</a></td><td>{{ version.effective_from|date:'d.m.Y' }}</td><td>{{ version.effective_until|date:'d.m.Y'|default:'Без ограничения' }}</td><td>{% timezone 'Europe/Moscow' %}{{ version.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ version.coefficient_count }}</td></tr>{% endfor %}</tbody></table></div>
