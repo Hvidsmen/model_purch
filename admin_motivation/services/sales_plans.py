@@ -32,29 +32,75 @@ def source_versions(connector=None):
         connection.close()
 
 
+def result_columns(description):
+    """Read ODBC metadata, never infer meaning from a column's position."""
+    columns = [str(column[0]).strip().casefold() for column in description or []]
+    if 'brand' in columns and 'марка(бренд)' not in columns:
+        columns[columns.index('brand')] = 'марка(бренд)'
+    required = ['subdivision', 'planninggroupsaleserp', 'grouperp', 'марка(бренд)',
+                'date_', 'amountusd', *[f'usd_o{i}' for i in range(5)]]
+    missing = [name for name in required if name not in columns]
+    if missing:
+        raise ValidationError('В результате SQL отсутствуют столбцы: ' + ', '.join(missing) + '.')
+    if len(set(columns)) != len(columns):
+        raise ValidationError('В результате SQL повторяются названия столбцов.')
+    return columns
+
+
+def plan_date(value, row_number):
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        text = value.strip()
+        try:
+            return date.fromisoformat(text)
+        except ValueError:
+            try:
+                return datetime.fromisoformat(text.replace('Z', '+00:00')).date()
+            except ValueError:
+                pass
+    raise ValidationError(f'Строка {row_number}: некорректная дата Date_={str(value)[:80]!r}. Ожидается дата YYYY-MM-DD.')
+
+
+def classification(value, column, row_number):
+    if value is None or not str(value).strip():
+        raise ValidationError(f'Строка {row_number}: не заполнено поле {column}.')
+    value = str(value).strip()
+    if len(value) > 255:
+        raise ValidationError(f'Строка {row_number}: поле {column} длиннее 255 символов.')
+    return value
+
+
 def load_plan(scenario_id, connector=None):
     scenario = SalesPlanScenario.objects.get(pk=scenario_id)
     connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
     try:
         cursor.execute(SQL, scenario.source_version)
         rows = cursor.fetchall()
+        columns = result_columns(cursor.description) if rows else []
     finally:
         connection.close()
     if not rows:
         raise ValidationError('Выбранный план пуст. Ранее загруженные данные сохранены.')
     lines = []
-    for row in rows:
-        sub, pg, on_date, group, brand, amount, *segments = row
-        if isinstance(on_date, datetime):
-            on_date = on_date.date()
-        if not isinstance(on_date, date) or len(segments) != 5 or not all([sub, pg, group, brand]):
-            raise ValidationError('В плане отсутствует дата или классификация товара/подразделения.')
-        amounts = {segment: str(number(value)) for segment, value in zip(SEGMENTS, segments)}
-        amount = number(amount)
+    for row_number, row in enumerate(rows, start=1):
+        if len(row) != len(columns):
+            raise ValidationError(f'Строка {row_number}: число значений не соответствует столбцам SQL.')
+        values = dict(zip(columns, row))
+        on_date = plan_date(values['date_'], row_number)
+        sub, pg, group, brand = [classification(values[column], column, row_number)
+                                for column in ['subdivision', 'planninggroupsaleserp', 'grouperp', 'марка(бренд)']]
+        try:
+            amounts = {segment: str(number(values[f'usd_{segment.lower()}'])) for segment in SEGMENTS}
+            amount = number(values['amountusd'])
+        except ValidationError as error:
+            raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): ' + ' '.join(error.messages)) from error
         if abs(sum(map(Decimal, amounts.values())) - amount) > max(Decimal('0.0001'), abs(amount)*Decimal('0.00000001')):
-            raise ValidationError('Сумма сегментов O0–O4 не совпадает с суммой плана.')
-        lines.append(SalesPlanLine(scenario_id=scenario_id, plan_date=on_date, subdivision=str(sub),
-            planning_group_sales=str(pg), group=str(group), brand=str(brand), amount_usd=amount, segment_amounts=amounts))
+            raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): сумма сегментов O0–O4 не совпадает с AmountUSD.')
+        lines.append(SalesPlanLine(scenario_id=scenario_id, plan_date=on_date, subdivision=sub,
+            planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, segment_amounts=amounts))
     subdivision_count = len(lines)
     aggregates = {}
     for line in lines:

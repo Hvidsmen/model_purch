@@ -1,3 +1,5 @@
+DECLARE @params_scenario nvarchar(255) = ?;
+
 ;WITH fact AS (
  SELECT sub.SubdivisionName, p.PlanningGroupSalesErp,
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE '*' END GroupERP,
@@ -32,14 +34,15 @@
  FROM DataWH.planning.PlanSales ps
  INNER JOIN DataWH.dbo.Subdivisions s ON s.SubdivisionKey = ps.Subdivision
  INNER JOIN DataWH.planning.Goods g ON ps.GoodsKey = g.PlanningKey
- WHERE CONVERT(nvarchar(255), ps.Version_) = ?
+ WHERE ps.Version_ = @params_scenario
  AND s.Chanel NOT IN (N'ДПП')
  AND s.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг')
  GROUP BY s.SubdivisionName, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date),
  CASE WHEN g.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN g.GroupERP ELSE '*' END,
  CASE WHEN g.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN g.BrandName ELSE '*' END
 )
-SELECT plan_.Subdivision, plan_.PlanningGroupSalesERP, plan_.Date_, plan_.GroupERP, plan_.Brand, plan_.AmountUSD,
+SELECT plan_.Subdivision, plan_.PlanningGroupSalesERP, plan_.GroupERP,
+ plan_.Brand AS [Марка(Бренд)], plan_.Date_, plan_.AmountUSD,
  plan_.AmountUSD*COALESCE(f.O0,1) USD_O0, plan_.AmountUSD*COALESCE(f.O1,0) USD_O1,
  plan_.AmountUSD*COALESCE(f.O2,0) USD_O2, plan_.AmountUSD*COALESCE(f.O3,0) USD_O3,
  plan_.AmountUSD*COALESCE(f.O4,0) USD_O4

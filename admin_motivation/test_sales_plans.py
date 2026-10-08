@@ -29,6 +29,7 @@ class SalesPlanTests(TestCase):
                     SubdivisionCoeff.objects.create(**base, subdivision=sub, motivation_coeff=float(local_k))
         self.connection, self.cursor = Mock(), Mock()
         self.connector = Mock(return_value=(self.connection, self.cursor))
+        self.cursor.description = [(name,) for name in ['Subdivision', 'PlanningGroupSalesERP', 'Date_', 'GroupERP', 'Brand', 'AmountUSD', *[f'USD_O{i}' for i in range(5)]]]
         self.cursor.fetchall.return_value = self.rows()
 
     def rows(self, on_date=date(2026, 10, 1)):
@@ -150,3 +151,51 @@ class SalesPlanTests(TestCase):
         self.assertIn("ELSE '*' END", SQL)
         self.assertIn('plan_.Subdivision=f.SubdivisionName', SQL)
         self.assertIn('COALESCE(f.O0,1)', SQL)
+
+    def test_user_query_column_order_with_string_date_loads_correctly(self):
+        self.cursor.description = [(name,) for name in ['Subdivision', 'PlanningGroupSalesERP', 'GroupERP', 'Марка(Бренд)', 'Date_', 'AmountUSD', *[f'USD_O{i}' for i in range(5)]]]
+        self.cursor.fetchall.return_value = [('A', 'Sales', '*', '*', '2025-01-01', 100, 10, 20, 30, 10, 30)]
+        self.load()
+        line = self.scenario.lines.get(subdivision='A')
+        self.assertEqual(line.plan_date, date(2025, 1, 1))
+        self.assertEqual(line.group, '*')
+        self.assertEqual(line.brand, '*')
+        calculate_plan(self.scenario.pk)
+        self.assertEqual(self.scenario.lines.get(subdivision='').total_usd, Decimal('15'))
+
+    def test_original_user_order_date_after_amount_and_reordered_segment_columns(self):
+        self.cursor.description = [(name,) for name in ['Subdivision', 'PlanningGroupSalesERP', 'GroupERP', 'Марка(Бренд)', 'AmountUSD', 'Date_', 'USD_O4', 'USD_O3', 'USD_O2', 'USD_O1', 'USD_O0']]
+        self.cursor.fetchall.return_value = [('A', 'Sales', '*', '*', 100, '2025-01-01 00:00:00', 30, 10, 30, 20, 10)]
+        self.load()
+        line = self.scenario.lines.get(subdivision='A')
+        self.assertEqual(line.plan_date, date(2025, 1, 1))
+        self.assertEqual(Decimal(line.segment_amounts['O1']), 20)
+        self.assertEqual(Decimal(line.segment_amounts['O4']), 30)
+
+    def test_missing_date_column_or_null_classification_has_specific_diagnostic(self):
+        self.load()
+        self.cursor.description[2] = ('MissingDate',)
+        with self.assertRaisesMessage(ValidationError, 'date_'):
+            self.load()
+        self.cursor.description[2] = ('Date_',)
+        for column, index in [('date_', 2), ('grouperp', 3), ('марка(бренд)', 4)]:
+            row = list(self.rows()[0])
+            row[index] = None
+            self.cursor.fetchall.return_value = [tuple(row)]
+            with self.assertRaises(ValidationError) as error:
+                self.load()
+            self.assertIn('Строка 1', str(error.exception))
+            self.assertIn(column, str(error.exception).casefold())
+            self.assertEqual(self.scenario.lines.count(), 3)
+
+    def test_iso_date_datetime_and_invalid_date_values(self):
+        for raw in ['2025-01-01', '2025-01-01T00:00:00', '2025-01-01 00:00:00.000', date(2025, 1, 1)]:
+            row = list(self.rows()[0])
+            row[2] = raw
+            self.cursor.fetchall.return_value = [tuple(row)]
+            self.load()
+            self.assertEqual(self.scenario.lines.get(subdivision='A').plan_date, date(2025, 1, 1))
+        row[2] = 'no date'
+        self.cursor.fetchall.return_value = [tuple(row)]
+        with self.assertRaisesMessage(ValidationError, 'Date_='):
+            self.load()
