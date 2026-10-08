@@ -7,7 +7,7 @@ from django.utils import timezone
 from django.core.exceptions import ValidationError
 from .goods_identity import planning_group_key
 from decimal import Decimal
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 
 class AlgorithmRun(models.Model):
@@ -287,6 +287,10 @@ class Freight(models.Model):
     scenario = models.OneToOneField(ScenarioModel, on_delete=models.CASCADE, related_name='freight', verbose_name='Сценарий')
     price_per_container = models.DecimalField('Цена за контейнер', max_digits=18, decimal_places=2,
                                               validators=[MinValueValidator(Decimal('0'))])
+    customs_rate = models.DecimalField('Таможенная ставка, %', max_digits=5, decimal_places=2, default=0,
+                                       validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
+    warehouse_delivery_cost = models.DecimalField('Стоимость доставки до склада', max_digits=18, decimal_places=2,
+                                                 default=0, validators=[MinValueValidator(Decimal('0'))])
     # Retain the legacy value for existing SQL consumers; product volumes are edited on PGGoods.
     volume_per_container = models.DecimalField('Архивный объём контейнера, м³', max_digits=12, decimal_places=3, default=65, editable=False,
                                                validators=[MinValueValidator(Decimal('0.001'))])
@@ -297,6 +301,8 @@ class Freight(models.Model):
         constraints = [
             models.CheckConstraint(condition=models.Q(price_per_container__gte=0), name='freight_price_nonnegative'),
             models.CheckConstraint(condition=models.Q(volume_per_container__gt=0), name='freight_volume_positive'),
+            models.CheckConstraint(condition=models.Q(customs_rate__gte=0, customs_rate__lte=100), name='freight_customs_rate_range'),
+            models.CheckConstraint(condition=models.Q(warehouse_delivery_cost__gte=0), name='freight_delivery_nonnegative'),
         ]
 
     def __str__(self):

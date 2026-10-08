@@ -33,9 +33,9 @@ def freight_page(request):
     if form.is_valid():
         with transaction.atomic():
             Freight.objects.update_or_create(scenario=scenario, defaults={
-                'price_per_container': form.cleaned_data['price_per_container'],
+                name: form.cleaned_data[name] for name in form.Meta.fields
             })
-        messages.success(request, 'Цена фрахта сохранена.')
+        messages.success(request, 'Общие параметры закупок сохранены.')
         return freight_redirect(scenario)
     from .views import pggoods_list
     return pggoods_list(request, freight_form=form, freight_scenario=scenario)
@@ -55,7 +55,7 @@ def copy_freight(request):
             messages.error(request, 'В сценарии-источнике параметры фрахта не заполнены.')
         else:
             Freight.objects.update_or_create(scenario=target, defaults={
-                'price_per_container': freight.price_per_container,
+                name: getattr(freight, name) for name in FreightForm.Meta.fields
             })
-            messages.success(request, f'Параметры фрахта скопированы из сценария «{source.name}».')
+            messages.success(request, f'Общие параметры закупок скопированы из сценария «{source.name}».')
     return freight_redirect(target)

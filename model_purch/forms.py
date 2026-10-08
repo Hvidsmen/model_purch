@@ -272,10 +272,32 @@ PurchPayFormSet = forms.inlineformset_factory(
 class FreightForm(forms.ModelForm):
     class Meta:
         model = Freight
-        fields = ['price_per_container']
+        fields = ['price_per_container', 'customs_rate', 'warehouse_delivery_cost']
         widgets = {
             'price_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
+            'customs_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'}),
+            'warehouse_delivery_cost': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
         }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Older callers can still submit only the freight price without resetting the new settings.
+        for name in ('customs_rate', 'warehouse_delivery_cost'):
+            self.fields[name].required = False
+
+    def clean_customs_rate(self):
+        return self._clean_setting('customs_rate')
+
+    def clean_warehouse_delivery_cost(self):
+        return self._clean_setting('warehouse_delivery_cost')
+
+    def _clean_setting(self, name):
+        if self.add_prefix(name) not in self.data:
+            return getattr(self.instance, name)
+        value = self.cleaned_data.get(name)
+        if value is None:
+            raise ValidationError(_('Укажите значение; если параметр не применяется, введите 0.'))
+        return value
 
 
 class FreightScenarioForm(forms.Form):

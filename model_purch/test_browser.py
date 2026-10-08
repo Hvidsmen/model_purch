@@ -96,10 +96,14 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.visit('freight')
         self.select(self.target)
         self.page.locator('[name="price_per_container"]').fill('2000.25')
+        self.page.locator('[name="customs_rate"]').fill('7.25')
+        self.page.locator('[name="warehouse_delivery_cost"]').fill('456.78')
         self.assertEqual(self.page.locator('[name="volume_per_container"]').count(), 0)
         with self.page.expect_navigation():
             self.page.get_by_role('button', name='Сохранить', exact=True).click()
         self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).price_per_container)), '2000.25')
+        self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).customs_rate)), '7.25')
+        self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).warehouse_delivery_cost)), '456.78')
         self.page.locator('#freight-source').select_option(str(self.source.pk))
         with self.page.expect_navigation():
             self.page.get_by_role('button', name='Копировать', exact=True).click()

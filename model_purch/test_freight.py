@@ -69,7 +69,7 @@ class FreightTests(TestCase):
     def test_page_displays_selected_scenario_and_handles_no_scenarios(self):
         response = self.client.get(reverse('pggoods_list'), {'scenario': self.source.pk})
         self.assertContains(response, '1234.56')
-        self.assertContains(response, 'Копировать цену фрахта из сценария')
+        self.assertContains(response, 'Копировать общие параметры из сценария')
         self.assertNotContains(response, 'name="volume_per_container"')
         self.assertNotContains(response, '>Фрахт</a>')
         self.assertEqual(response.context['current_scenario'], self.source)
@@ -106,3 +106,56 @@ class FreightTests(TestCase):
         self.assertEqual(call.args[1:], (self.source.pk, self.source.name, '1234.56', '67.890'))
         self.assertIn('ON target.scenario_id = source.scenario_id', call.args[0])
         self.assertEqual(call.args[0].count('?'), len(call.args) - 1)
+
+    def test_global_settings_save_copy_and_invalid_input(self):
+        url = reverse('freight')
+        data = {'scenario': self.source.pk, 'price_per_container': '1234.56',
+                'customs_rate': '7.25', 'warehouse_delivery_cost': '456.78'}
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 302)
+        self.freight.refresh_from_db()
+        self.assertEqual(self.freight.customs_rate, Decimal('7.25'))
+        self.assertEqual(self.freight.warehouse_delivery_cost, Decimal('456.78'))
+        self.client.post(reverse('copy_freight'), {'scenario': self.target.pk, 'source_scenario_id': self.source.pk})
+        target = Freight.objects.get(scenario=self.target)
+        self.assertEqual((target.customs_rate, target.warehouse_delivery_cost), (Decimal('7.25'), Decimal('456.78')))
+        for field, values in [('customs_rate', ['-1', '100.01', 'nan', '']),
+                              ('warehouse_delivery_cost', ['-1', 'inf', ''])]:
+            for value in values:
+                response = self.client.post(url, dict(data, **{field: value}))
+                self.assertEqual(response.status_code, 200)
+                self.assertIn(field, response.context['freight_form'].errors)
+                self.freight.refresh_from_db()
+                self.assertEqual((self.freight.customs_rate, self.freight.warehouse_delivery_cost), (Decimal('7.25'), Decimal('456.78')))
+        # An old client posting only price preserves the other saved settings.
+        self.client.post(url, {'scenario': self.source.pk, 'price_per_container': '1500'})
+        self.freight.refresh_from_db()
+        self.assertEqual((self.freight.customs_rate, self.freight.warehouse_delivery_cost), (Decimal('7.25'), Decimal('456.78')))
+
+    def test_global_settings_database_constraints_and_defaults(self):
+        target = Freight.objects.create(scenario=self.target, price_per_container=0)
+        self.assertEqual((target.customs_rate, target.warehouse_delivery_cost), (0, 0))
+        for values in [{'customs_rate': -1}, {'customs_rate': 101}, {'warehouse_delivery_cost': -1}]:
+            with self.assertRaises(IntegrityError), transaction.atomic():
+                Freight.objects.filter(pk=target.pk).update(**values)
+
+    @patch('model_purch.views.MS_SQL_CONN_STR', 'test')
+    @patch('model_purch.views.pyodbc.connect')
+    def test_global_settings_are_exported_to_existing_sql_table(self, connect):
+        self.freight.customs_rate = Decimal('7.25')
+        self.freight.warehouse_delivery_cost = Decimal('456.78')
+        self.freight.save()
+        connection, cursor = Mock(), Mock()
+        connect.return_value = connection
+        connection.cursor.return_value = cursor
+        cursor.description = [('id',), ('planning_group',), ('scenario_name',)]
+        cursor.fetchall.return_value = []
+        self.client.post(reverse('export_scenario_to_sql', args=[self.source.pk]))
+        calls = cursor.execute.call_args_list
+        for name in ('customs_rate', 'warehouse_delivery_cost'):
+            self.assertTrue(any(f"COL_LENGTH(N'portal.Freight', N'{name}')" in call.args[0] for call in calls))
+        update = next(call for call in calls if call.args[0].startswith('UPDATE [portal].[Freight]'))
+        self.assertIn('[customs_rate] = ?', update.args[0])
+        self.assertIn('[warehouse_delivery_cost] = ?', update.args[0])
+        self.assertEqual(update.args[1:], ('7.25', '456.78', self.source.pk))
+        connection.rollback.assert_not_called()
