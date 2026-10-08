@@ -16,13 +16,13 @@
 @media(max-width: 600px) { #version-panel { padding: 12px; } #version-panel select { width: 100%; } #version-panel .version-picker { min-width: 0; flex: 1; } #version-panel .version-controls form { width: 100%; } }
 </style>
 <div class="container-fluid content" id="version-panel">
-    <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование{% else %}Историческая версия: только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Действует сейчас{% else %} · Сегодня действует: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
+    <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование{% else %}Историческая версия: только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Утверждена и действует сейчас{% else %} · Утверждена на сегодня: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
     {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</div>{% endfor %}
     <div class="version-controls">
     <form method="get">
         <div class="version-picker"><label for="coefficient-version">Версия коэффициентов</label>
         <select id="coefficient-version" name="version" class="form-select">
-            {% for version in versions %}<option value="{{ version.pk }}" {% if version.pk == selected_version.pk %}selected{% endif %}>{{ version }}{% if version.pk == effective_version.pk %} — действует сейчас{% endif %}</option>{% endfor %}
+            {% for version in versions %}<option value="{{ version.pk }}" {% if version.pk == selected_version.pk %}selected{% endif %}>{{ version }} · {{ version.get_status_display }}{% if version.pk == effective_version.pk %} — действует сейчас{% endif %}</option>{% endfor %}
         </select></div><button class="btn btn-primary">Открыть</button>
     </form>
     <form method="post" action="{% url 'gb_act' %}" id="createVersionForm" title="Новая версия копирует глобальные коэффициенты и настройки всех подразделений">
@@ -31,12 +31,13 @@
             <div>{{ version_form.effective_from.label_tag }} {{ version_form.effective_from }}
                 {% for error in version_form.effective_from.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}</div>
             <div>{{ version_form.title.label_tag }} {{ version_form.title }}{{ version_form.title.errors }}</div>
+            <div style="max-width:260px;margin-top:20px">{{ version_form.allow_overwrite }} <label for="id_allow_overwrite" style="display:inline">{{ version_form.allow_overwrite.label }}</label></div>
             <button class="btn btn-primary" name="action_button" value="create_version">Создать новую версию</button>
         </div>{{ version_form.source_version.errors }}{{ version_form.non_field_errors }}
     </form>
     </div>
     <details id="version-history"><summary>История версий ({{ versions|length }})</summary>
-        <div class="table-wrapper mt-2"><table class="table"><thead><tr><th class="header-base">Версия</th><th class="header-base">Начало действия</th><th class="header-base">Окончание действия</th><th class="header-base">Создана</th><th class="header-base">Коэффициентов</th></tr></thead>
-        <tbody>{% for version in versions %}<tr><td><a href="?version={{ version.pk }}">{{ version.title|default:'Версия' }}</a></td><td>{{ version.effective_from|date:'d.m.Y' }}</td><td>{{ version.effective_until|date:'d.m.Y'|default:'Без ограничения' }}</td><td>{% timezone 'Europe/Moscow' %}{{ version.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ version.coefficient_count }}</td></tr>{% endfor %}</tbody></table></div>
+        <div class="table-wrapper mt-2"><table class="table"><thead><tr><th class="header-base">Версия</th><th class="header-base">Статус / замена</th><th class="header-base">Начало действия</th><th class="header-base">Окончание действия</th><th class="header-base">Создана</th><th class="header-base">Коэффициентов</th></tr></thead>
+        <tbody>{% for version in versions %}<tr><td><a href="?version={{ version.pk }}">{{ version.title|default:'Версия' }}</a></td><td>{{ version.get_status_display }}{% if version.replaced_by %}<br>Заменена: <a href="?version={{ version.replaced_by_id }}">{{ version.replaced_by }}</a>{% endif %}</td><td>{{ version.effective_from|date:'d.m.Y' }}</td><td>{% if version.status == 'approved' %}{{ version.effective_until|date:'d.m.Y'|default:'Без ограничения' }}{% elif version.status == 'superseded' %}Исключена из действующей цепочки{% else %}Не утверждена{% endif %}</td><td>{% timezone 'Europe/Moscow' %}{{ version.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ version.coefficient_count }}</td></tr>{% endfor %}</tbody></table></div>
     </details>
 </div>

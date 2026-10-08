@@ -55,7 +55,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertTrue(self.page.get_by_role('button', name='Сохранить изменения', exact=True).is_disabled())
         self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')
         self.page.locator('#version-history summary').click()
-        self.assertIn('31.12.2026', self.page.locator('#version-history').inner_text())
+        self.assertIn('Не утверждена', self.page.locator('#version-history').inner_text())
         self.assertEqual(self.errors, [])
 
     def test_shared_version_manager_and_subdivision_edits_leave_history_intact(self):
@@ -219,4 +219,52 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.page.get_by_role('link', name='Сбросить', exact=True).click()
         self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
+        self.assertEqual(self.errors, [])
+
+    def test_comparison_preview_visibility_and_confirmed_replacement(self):
+        from playwright.sync_api import expect
+        from .test_sales_plans import SalesPlanTests
+        from .services.approval import review_approval, approve_review
+        from .services.versions import create_version
+        def setup():
+            fixture = SalesPlanTests(); fixture.setUp(); fixture.load()
+            first = fixture.version
+            approve_review(review_approval(first)['token'])
+            future = create_version(date(2026, 7, 1), source_version=first.pk)
+            future.coefficients.update(motivation_coeff=.2)
+            approve_review(review_approval(future)['token'])
+            current = create_version(date(2026, 7, 1), source_version=future.pk, allow_overwrite=True)
+            row = current.coefficients.get(goods=fixture.good, type_coeff__type_coeff_name='Политики', segment__segment_name='K0')
+            return fixture.scenario.pk, fixture.subs[0].pk, first.pk, future.pk, current.pk, row.pk
+        plan, sub, first, future, current, row = self.db(setup)
+        url = self.live_server_url + reverse('global_coeff_admin_motivation') + f'?version={current}'
+        self.page.goto(url)
+        self.assertTrue(self.page.locator('#comparison-show-approved').is_checked())
+        self.assertFalse(self.page.locator('#comparison-show-baseline').is_checked())
+        self.page.locator('#comparison-plan').select_option(str(plan))
+        self.page.locator('#comparison-baseline').select_option(str(first))
+        expect(self.page.locator('[data-amount="approved.total"]')).to_have_text('600')
+        self.assertFalse(self.page.locator('[data-amount="baseline.total"]').is_visible())
+        self.page.locator('#comparison-show-baseline').check()
+        expect(self.page.locator('[data-amount="baseline.total"]')).to_have_text('225')
+        self.page.locator(f'input[name="global_coeff={row}"]').fill('0.5')
+        self.page.locator(f'input[name="global_coeff={row}"]').press('Tab')
+        expect(self.page.locator('[data-amount="current.total"]')).to_have_text('645')
+        self.assertEqual(self.db(lambda: GlobalCoeff.objects.get(pk=row).motivation_coeff), .2)
+        self.page.locator('#approval-review').click()
+        expect(self.page.locator('#approval-dialog')).to_be_visible()
+        self.page.locator('#approval-commit').click()
+        expect(self.page.locator('#approval-error')).to_contain_text('Подтвердите замену')
+        self.page.locator('#approval-confirm').check()
+        with self.page.expect_navigation(): self.page.locator('#approval-commit').click()
+        self.assertEqual(self.db(lambda: GlobalCoeffVersion.objects.get(pk=future).status), 'superseded')
+        self.assertEqual(self.db(lambda: GlobalCoeff.objects.get(pk=row).motivation_coeff), .5)
+        self.assertTrue(self.page.locator(f'input[name="global_coeff={row}"]').is_disabled())
+        expect(self.page.locator('[data-amount="approved.total"]')).to_have_text('645')
+        self.page.goto(self.live_server_url + reverse('coeff_subdivisions_admin_motivation', args=[sub]) + f'?version={current}')
+        self.assertTrue(self.page.locator('#comparison-show-baseline').is_checked())
+        self.assertEqual(self.page.locator('#comparison-plan').input_value(), str(plan))
+        expect(self.page.locator('[data-amount="current.total"]')).to_have_text('230')
+        self.page.locator('#comparison-plan').select_option('')
+        expect(self.page.locator('[data-amount="current.total"]')).to_have_text('—')
         self.assertEqual(self.errors, [])

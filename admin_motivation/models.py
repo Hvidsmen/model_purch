@@ -1,5 +1,5 @@
 import pandas as pd
-from django.db import models
+from django.db import models, transaction
 from django.utils.translation.template import dot_re
 from sqlalchemy import ForeignKey
 
@@ -109,33 +109,74 @@ class VariationCalculate(models.Model):
         return self.variation_name
 
 
+class VersionQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        from django.core.exceptions import ValidationError
+        if set(kwargs) - {'revision'}:
+            raise ValidationError('Изменение версии выполняется через создание или утверждение с сохранением истории.')
+        return super().update(**kwargs)
+
+    def bulk_create(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('Создавайте версии через сервис создания черновика.')
+
+    def delete(self):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('История версий не удаляется.')
+
+
 class GlobalCoeffVersion(models.Model):
-    effective_from = models.DateField('Дата начала действия', unique=True)
+    class Status(models.TextChoices):
+        DRAFT = 'draft', 'Черновик'
+        APPROVED = 'approved', 'Утверждена'
+        SUPERSEDED = 'superseded', 'Заменена'
+
+    objects = VersionQuerySet.as_manager()
+    effective_from = models.DateField('Дата начала действия')
     title = models.CharField('Название', max_length=255, blank=True)
     created_at = models.DateTimeField('Создана', auto_now_add=True)
+    status = models.CharField('Статус', max_length=16, choices=Status.choices, default=Status.DRAFT)
+    approved_at = models.DateTimeField('Утверждена', null=True, blank=True)
+    replaced_by = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='replaced_versions')
+    revision = models.PositiveBigIntegerField(default=0)
 
     class Meta:
         ordering = ['effective_from', 'pk']
         verbose_name = 'Версия коэффициентов мотивации'
         verbose_name_plural = 'Версии коэффициентов мотивации'
+        constraints = [models.UniqueConstraint(fields=['effective_from'], condition=models.Q(status='approved'), name='unique_approved_motivation_start')]
 
     def __str__(self):
         return f'{self.title or "Версия"} с {self.effective_from:%d.%m.%Y}'
+
+    @property
+    def is_editable(self):
+        latest = type(self).objects.exclude(status=self.Status.SUPERSEDED).order_by('-pk').first()
+        return self.status == self.Status.DRAFT and latest is not None and latest.pk == self.pk
 
     def clean(self):
         from datetime import date
         from django.core.exceptions import ValidationError
         super().clean()
+        if self.effective_from is None or self.effective_from < date(2001, 1, 1):
+            raise ValidationError({'effective_from': 'Дата версии не может быть раньше 01.01.2001.'})
         if self.pk:
             original = type(self).objects.get(pk=self.pk)
+            self.revision = original.revision
             if original.effective_from != self.effective_from:
-                raise ValidationError({'effective_from': 'Дата сохранённой версии не изменяется.'})
+                raise ValidationError({'effective_from': 'Дата сохранённой версии не изменяется. Создайте копию с другой датой.'})
+            if any(getattr(original, name) != getattr(self, name) for name in ['status', 'approved_at', 'replaced_by_id']):
+                raise ValidationError('Для изменения статуса используйте утверждение версии.')
+            if original.status != self.Status.DRAFT and original.title != self.title:
+                raise ValidationError('Утверждённая или заменённая версия доступна только для просмотра.')
         else:
-            latest = type(self).objects.order_by('-effective_from').first()
+            if self.status != self.Status.DRAFT:
+                raise ValidationError('Новая версия создаётся как черновик.')
+            latest = type(self).objects.exclude(status=self.Status.SUPERSEDED).order_by('-pk').first()
             if not latest and self.effective_from != date(2001, 1, 1):
                 raise ValidationError({'effective_from': 'Первая версия должна начинаться с 01.01.2001.'})
-            if latest and (self.effective_from is None or self.effective_from <= latest.effective_from):
-                raise ValidationError({'effective_from': 'Новая версия должна начинаться позже последней версии.'})
+            if latest and self.effective_from <= latest.effective_from and not getattr(self, '_allow_overwrite', False):
+                raise ValidationError({'effective_from': 'Новая версия должна начинаться позже последней версии либо подтвердите возможность замены.'})
 
     def save(self, *args, **kwargs):
         self.full_clean()
@@ -146,31 +187,49 @@ class GlobalCoeffVersion(models.Model):
         raise ValidationError('История версий не удаляется.')
 
 
+def touch_version(version_id):
+    GlobalCoeffVersion.objects.filter(pk=version_id).update(revision=models.F('revision') + 1)
+
+
 class GlobalCoeffQuerySet(models.QuerySet):
     def check_editable(self):
         from django.core.exceptions import ValidationError
-        latest = GlobalCoeffVersion.objects.order_by('-effective_from').first()
-        if self.exists() and (not latest or self.exclude(version=latest).exists()):
+        latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
+        if self.exists() and (not latest or latest.status != 'draft' or self.exclude(version=latest).exists()):
             raise ValidationError('Историческая версия доступна только для просмотра.')
 
+    @transaction.atomic
     def update(self, **kwargs):
         from django.core.exceptions import ValidationError
         self.check_editable()
         if 'version' in kwargs or 'version_id' in kwargs:
             raise ValidationError('Нельзя переносить коэффициенты между версиями.')
-        return super().update(**kwargs)
+        version_ids = list(self.values_list('version_id', flat=True).distinct())
+        result = super().update(**kwargs)
+        for version_id in version_ids:
+            touch_version(version_id)
+        return result
 
+    @transaction.atomic
     def delete(self):
         self.check_editable()
-        return super().delete()
+        version_ids = list(self.values_list('version_id', flat=True).distinct())
+        result = super().delete()
+        for version_id in version_ids:
+            touch_version(version_id)
+        return result
 
+    @transaction.atomic
     def bulk_create(self, objs, *args, **kwargs):
         from django.core.exceptions import ValidationError
         objs = list(objs)
-        latest = GlobalCoeffVersion.objects.order_by('-effective_from').first()
-        if any(not latest or obj.version_id != latest.pk for obj in objs):
+        latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
+        if any(not latest or latest.status != 'draft' or obj.version_id != latest.pk for obj in objs):
             raise ValidationError('Нельзя добавлять строки в историческую версию.')
-        return super().bulk_create(objs, *args, **kwargs)
+        result = super().bulk_create(objs, *args, **kwargs)
+        if objs:
+            touch_version(latest.pk)
+        return result
 
 
 class GlobalCoeff(models.Model):
@@ -193,19 +252,25 @@ class GlobalCoeff(models.Model):
 
     def check_editable(self):
         from django.core.exceptions import ValidationError
-        latest = GlobalCoeffVersion.objects.order_by('-effective_from').first()
-        if not latest or self.version_id != latest.pk:
+        latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
+        if not latest or latest.status != 'draft' or self.version_id != latest.pk:
             raise ValidationError('Историческая версия доступна только для просмотра.')
         if self.pk and type(self).objects.get(pk=self.pk).version_id != self.version_id:
             raise ValidationError('Нельзя переносить коэффициент между версиями.')
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         self.check_editable()
-        return super().save(*args, **kwargs)
+        result = super().save(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         self.check_editable()
-        return super().delete(*args, **kwargs)
+        result = super().delete(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
 
     @classmethod
     def get_matrix_str(cls, version, subdivision=None):
@@ -241,13 +306,19 @@ class SubdivisionCoeff(models.Model):
                                                name='unique_sub_coeff_version_cell')]
 
     check_editable = GlobalCoeff.check_editable
+    @transaction.atomic
     def save(self, *args, **kwargs):
         self.check_editable()
-        return super().save(*args, **kwargs)
+        result = super().save(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         self.check_editable()
-        return super().delete(*args, **kwargs)
+        result = super().delete(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
 
     @classmethod
     def get_matrix_str(cls, subdivision, version):
@@ -361,13 +432,19 @@ class SubdivisionManagerCoeff(models.Model):
 
     check_editable = GlobalCoeff.check_editable
 
+    @transaction.atomic
     def save(self, *args, **kwargs):
         self.check_editable()
-        return super().save(*args, **kwargs)
+        result = super().save(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
 
+    @transaction.atomic
     def delete(self, *args, **kwargs):
         self.check_editable()
-        return super().delete(*args, **kwargs)
+        result = super().delete(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
 
 
 class ExampleFiles(models.Model):
@@ -407,3 +484,33 @@ class SalesPlanLine(models.Model):
     class Meta:
         ordering = ['plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand']
         constraints = [models.UniqueConstraint(fields=['scenario', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand'], name='unique_motivation_sales_plan_line')]
+
+
+class ApprovalQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('История утверждений доступна только для просмотра.')
+
+    def delete(self):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('История утверждений не удаляется.')
+
+
+class MotivationApproval(models.Model):
+    objects = ApprovalQuerySet.as_manager()
+    version = models.OneToOneField(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='approval')
+    created_at = models.DateTimeField(auto_now_add=True)
+    plan = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT, null=True, blank=True)
+    baseline = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, null=True, blank=True, related_name='baseline_approvals')
+    replaced_ids = models.JSONField(default=list)
+    summary = models.JSONField(default=dict)
+
+    def save(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        if not self._state.adding:
+            raise ValidationError('История утверждений доступна только для просмотра.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('История утверждений не удаляется.')

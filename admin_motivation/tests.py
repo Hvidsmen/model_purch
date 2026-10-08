@@ -1,3 +1,4 @@
+from .services.approval import review_approval, approve_review
 from datetime import date
 from unittest.mock import patch
 from django.core.exceptions import ValidationError
@@ -89,12 +90,14 @@ class GlobalCoefficientVersionTests(TestCase):
         channel = Chanel.objects.create(chanel_name='Channel')
         sub = Subdivision.objects.create(subdivision_key='Key', subdivision_name='Name', subdivision_global='Name', chanel=channel)
         apply_to_subdivisions(self.first, [sub])
+        approve_review(review_approval(self.first)['token'])
         future = self.create('2099-01-01')
+        apply_to_subdivisions(future, [sub])
+        approve_review(review_approval(future)['token'])
         self.assertEqual(effective_version(date(2001, 1, 1)), self.first)
         self.assertIsNone(effective_version(date(2000, 12, 31)))
         self.assertEqual(effective_version(date(2098, 12, 31)), self.first)
         self.assertEqual(effective_version(date(2099, 1, 1)), future)
-        apply_to_subdivisions(future, [sub])
         self.assertEqual(SubdivisionCoeff.objects.filter(version=self.first).get().motivation_coeff, 0.123456)
         self.assertEqual(SubdivisionCoeff.objects.filter(version=future).get().motivation_coeff, 0.123456)
         with self.assertRaises(ValidationError):
@@ -106,7 +109,7 @@ class GlobalCoefficientVersionTests(TestCase):
             response = self.client.get(reverse('global_coeff_admin_motivation'), {'version': self.first.pk})
             sql.assert_not_called()
         self.assertContains(response, '01.01.2001')
-        self.assertContains(response, '31.12.2025')
+        self.assertContains(response, 'Не утверждена')
         self.assertContains(response, 'Историческая версия: только просмотр')
         self.assertFalse(response.context['version_editable'])
         self.assertEqual(GlobalCoeff.objects.count(), 2)

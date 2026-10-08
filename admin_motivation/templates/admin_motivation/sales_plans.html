@@ -9,6 +9,7 @@
 {% for message in messages %}<div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-success{% endif %}">{{ message }}</div>{% endfor %}
 <div class="plan-card">
 <h2>Планы продаж и мотивация</h2>
+{% if preliminary %}<p class="alert alert-warning">Утверждённых версий пока нет. Расчёт по черновикам предварительный; утвердите набор на странице коэффициентов для плановой суммы.</p>{% endif %}
 <p>Глобальный план суммируется по подразделениям и рассчитывается по глобальным коэффициентам. Каждое подразделение рассчитывается по своим. Версия коэффициентов определяется датой плана.</p>
 <div class="plan-actions"><form method="get" action="{% url 'motivation_sales_plans' %}"><label for="scenario-choice">Сценарий</label><select id="scenario-choice" class="form-select" onchange="if(this.value) location.href=this.value"><option value="">Выберите сценарий</option>{% for item in scenarios %}<option value="{% url 'motivation_sales_plan' item.pk %}" {% if scenario.pk == item.pk %}selected{% endif %}>{{ item.title }} · {{ item.source_version }}</option>{% endfor %}</select></form>
 <form method="post">{% csrf_token %}<input type="hidden" name="action" value="refresh_sources"><button class="btn btn-outline-primary">Получить версии из MS SQL</button></form></div>

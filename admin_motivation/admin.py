@@ -1,8 +1,15 @@
 from django.contrib import admin
-from django.contrib import admin
 from .models import *
 
-admin.site.register(Goods)
+# Classification references are shared by all historical snapshots.
+class CoefficientReferenceAdmin(admin.ModelAdmin):
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+admin.site.register(Goods, CoefficientReferenceAdmin)
 @admin.register(GlobalCoeff)
 class GlobalCoeffAdmin(admin.ModelAdmin):
     list_display = ('version', 'goods', 'segment', 'type_coeff', 'motivation_coeff')
@@ -20,20 +27,20 @@ class GlobalCoeffAdmin(admin.ModelAdmin):
 
 @admin.register(GlobalCoeffVersion)
 class GlobalCoeffVersionAdmin(GlobalCoeffAdmin):
-    list_display = ('effective_from', 'title', 'created_at')
+    list_display = ('effective_from', 'title', 'status', 'approved_at', 'replaced_by')
     list_filter = ()
-admin.site.register(TypeCoeff)
-admin.site.register(SegmentCoeff)
-admin.site.register(VariationCalculate)
+admin.site.register(TypeCoeff, CoefficientReferenceAdmin)
+admin.site.register(SegmentCoeff, CoefficientReferenceAdmin)
+admin.site.register(VariationCalculate, CoefficientReferenceAdmin)
 
 
 admin.site.register(Brand)
 admin.site.register(PlanningGroupSales)
 admin.site.register(GroupGoods)
-admin.site.register(Subdivision)
+admin.site.register(Subdivision, CoefficientReferenceAdmin)
 admin.site.register(Chanel)
 
-admin.site.register(KindManagerCoeff)
+admin.site.register(KindManagerCoeff, CoefficientReferenceAdmin)
 @admin.register(SubdivisionCoeff)
 class SubdivisionCoeffAdmin(GlobalCoeffAdmin):
     list_display = ('version', 'subdivision', 'goods', 'segment', 'type_coeff', 'motivation_coeff')
@@ -46,3 +53,9 @@ class SubdivisionManagerCoeffAdmin(GlobalCoeffAdmin):
     list_filter = ('version', 'subdivision')
 admin.site.register(ExampleFiles)
 # Register your models here.
+
+
+@admin.register(MotivationApproval)
+class MotivationApprovalAdmin(GlobalCoeffAdmin):
+    list_display = ('version', 'created_at', 'plan', 'baseline')
+    list_filter = ()

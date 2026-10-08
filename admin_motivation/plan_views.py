@@ -6,7 +6,7 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from .forms import SalesPlanScenarioForm
-from .models import SalesPlanScenario, Subdivision
+from .models import SalesPlanScenario, Subdivision, GlobalCoeffVersion
 from .services.sales_plans import load_plan, calculate_plan, source_versions
 from .services.plan_operations import operation_response, scenario_operation
 from .services.plan_report import period_report
@@ -77,6 +77,7 @@ def sales_plans(request, scenario_id=None):
             writer.writerow(values)
         return response
     return render(request, 'admin_motivation/sales_plans.html', {
+        'preliminary': not GlobalCoeffVersion.objects.filter(status='approved').exists(),
         'scenario': scenario, 'scenarios': SalesPlanScenario.objects.all(), 'form': form,
         'source_versions': versions, 'scope': scope, 'subdivisions': Subdivision.objects.all(),
         **report,

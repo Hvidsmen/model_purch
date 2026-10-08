@@ -1,3 +1,4 @@
+from .services.approval import review_approval, approve_review
 from datetime import date
 from io import BytesIO
 from unittest.mock import Mock, patch
@@ -133,9 +134,11 @@ class SharedMotivationVersionTests(TestCase):
         return Mock(return_value=(connection, cursor)), connection, cursor
 
     def test_sql_exports_full_timeline_with_exact_start_dates_and_matching_versions(self):
+        approve_review(review_approval(self.first)['token'])
         latest = self.create()
         latest.subdivision_coefficients.filter(subdivision=self.sub).update(motivation_coeff=0.4)
         latest.manager_coefficients.update(coeff=0.9)
+        approve_review(review_approval(latest)['token'])
         connector, connection, cursor = self.connector()
         exported = export_motivation(date(2026, 10, 1), connector)
         self.assertEqual([v.pk for v in exported], [self.first.pk, latest.pk])
@@ -154,6 +157,7 @@ class SharedMotivationVersionTests(TestCase):
         self.assertEqual(cursor.execute.call_count, 3)
 
     def test_failed_sql_export_rolls_back_and_closes_connection(self):
+        approve_review(review_approval(self.first)['token'])
         connector, connection, cursor = self.connector()
         cursor.executemany.side_effect = RuntimeError('Failed insert')
         with self.assertRaises(RuntimeError):

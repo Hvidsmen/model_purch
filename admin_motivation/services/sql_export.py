@@ -8,7 +8,7 @@ def export_motivation(start_date, connector):
     first = effective_version(start_date)
     if first is None:
         raise ValidationError('Нет версии, действующей на начало выбранного периода.')
-    versions = [first, *GlobalCoeffVersion.objects.filter(effective_from__gt=start_date).order_by('effective_from')]
+    versions = [first, *GlobalCoeffVersion.objects.filter(status='approved', effective_from__gt=start_date).order_by('effective_from')]
     connection = None
     try:
         connection, cursor = connector('vm-dwh', 'DataWH')

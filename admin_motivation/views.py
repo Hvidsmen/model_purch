@@ -95,8 +95,8 @@ def gloabal_coeff_action(request):
     version = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
     try:
         with transaction.atomic():
-            latest = GlobalCoeffVersion.objects.select_for_update().order_by('-effective_from').first()
-            if version.pk != latest.pk:
+            latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
+            if version.status != 'draft' or version.pk != latest.pk:
                 raise ValidationError('Историческая версия доступна только для просмотра. Для изменений создайте новую версию.')
             if action == 'sync_references':
                 PlanningGroupSales.create_from_dwh()
@@ -183,8 +183,8 @@ def sub_act(request, subdivision):
     action = request.POST.get('action_button')
     try:
         with transaction.atomic():
-            latest = GlobalCoeffVersion.objects.select_for_update().order_by('-effective_from').first()
-            if version.pk != latest.pk:
+            latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
+            if version.status != 'draft' or version.pk != latest.pk:
                 raise ValidationError('Историческая версия доступна только для просмотра.')
             if action == 'update_motive_coeff':
                 for kind in KindManagerCoeff.objects.all():

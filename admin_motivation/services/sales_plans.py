@@ -162,13 +162,16 @@ def calculate_plan(scenario_id, progress=None):
     if not total_lines:
         raise ValidationError('Сначала загрузите план продаж.')
     report(progress, 'Подготовка коэффициентов', 5, 0, total_lines)
-    versions = list(GlobalCoeffVersion.objects.order_by('effective_from'))
+    version_query = GlobalCoeffVersion.objects.exclude(status='superseded')
+    if version_query.filter(status='approved').exists():
+        version_query = version_query.filter(status='approved')
+    versions = list(version_query.order_by('effective_from', 'pk'))
     cells = {}
     fields = ['version_id', 'goods__planning_group_sales', 'goods__group', 'goods__brand',
               'type_coeff__type_coeff_name', 'segment__segment_name', 'motivation_coeff']
     for model in [SubdivisionCoeff, GlobalCoeff]:
         field_names = [fields[0], 'subdivision__subdivision_key', *fields[1:]] if model is SubdivisionCoeff else fields
-        for row in model.objects.values_list(*field_names).iterator(chunk_size=2000):
+        for row in model.objects.filter(version_id__in=[v.pk for v in versions]).values_list(*field_names).iterator(chunk_size=2000):
             row = row if model is SubdivisionCoeff else (row[0], '', *row[1:])
             key = (*row[:6], row[6].upper().replace('K', 'O', 1))
             if key in cells:

@@ -11,23 +11,24 @@ def today():
 
 
 def latest_version():
-    return GlobalCoeffVersion.objects.order_by('-effective_from').first()
+    return GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk').first()
 
 
 def effective_version(on_date=None):
-    return GlobalCoeffVersion.objects.filter(effective_from__lte=on_date or today()).order_by('-effective_from').first()
+    return GlobalCoeffVersion.objects.filter(status='approved', effective_from__lte=on_date or today()).order_by('-effective_from', '-pk').first()
 
 
 def effective_coefficients(on_date=None):
     return GlobalCoeff.objects.filter(version=effective_version(on_date))
 
 
-def create_version(effective_from, title='', source_version=None):
+def create_version(effective_from, title='', source_version=None, allow_overwrite=False):
     with transaction.atomic():
-        latest = GlobalCoeffVersion.objects.select_for_update().order_by('-effective_from').first()
+        latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
         if latest and source_version != latest.pk:
             raise ValidationError('Появилась новая версия. Обновите страницу перед созданием следующей.')
         version = GlobalCoeffVersion(effective_from=effective_from, title=title)
+        version._allow_overwrite = allow_overwrite
         version.save()
         if latest:
             GlobalCoeff.objects.bulk_create([
@@ -52,7 +53,7 @@ def create_version(effective_from, title='', source_version=None):
 
 @transaction.atomic
 def apply_to_subdivisions(version, subdivisions):
-    if version.pk != latest_version().pk:
+    if not version.is_editable:
         raise ValidationError('Историческая версия доступна только для просмотра.')
     for sub in subdivisions:
         for kind in KindManagerCoeff.objects.all():
