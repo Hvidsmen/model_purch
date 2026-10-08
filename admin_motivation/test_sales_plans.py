@@ -240,3 +240,70 @@ class SalesPlanTests(TestCase):
         self.assertEqual(self.scenario.lines.count(), 3)
         self.assertEqual(self.scenario.lines.get(subdivision='').amount_usd, Decimal('3000'))
         self.assertIn("'9. OTHER') AS PlanningGroupSalesERP", SQL)
+
+    def alternative_coefficient(self, model, value, kind='Политики', segment='K4', subdivision=None):
+        good, _ = Goods.objects.get_or_create(goods_key='SalesOtherAlt', defaults={
+            'planning_group_sales': 'Sales', 'group': 'Other group', 'brand': 'Alternative'})
+        base = self.version.coefficients.filter(type_coeff__type_coeff_name=kind, segment__segment_name=segment).first()
+        values = dict(version=self.version, goods=good, type_coeff=base.type_coeff, segment=base.segment,
+                      motivation_coeff=value, manager_coeff=1, variation_calculate=base.variation_calculate)
+        if subdivision:
+            values['subdivision'] = subdivision
+        return model.objects.create(**values)
+
+    def test_global_fallback_minimum_across_goods_and_segments_within_kind(self):
+        self.load()
+        self.alternative_coefficient(GlobalCoeff, -.02)
+        self.alternative_coefficient(GlobalCoeff, .01, kind='Продажи', segment='K2')
+        self.alternative_coefficient(SubdivisionCoeff, -.9, subdivision=self.subs[0])
+        self.scenario.lines.filter(subdivision='').update(brand='Unknown')
+        calculate_plan(self.scenario.pk)
+        line = self.scenario.lines.get(subdivision='')
+        self.assertEqual(line.policies_usd, Decimal('-30'))
+        self.assertEqual(line.sales_usd, Decimal('15'))
+        self.assertEqual(line.total_usd, Decimal('-15'))
+        policy = line.calculation['Политики']['O0']
+        self.assertEqual(policy['source'], 'group_minimum')
+        self.assertEqual(policy['source_segment'], 'O4')
+        self.assertEqual(policy['source_brand'], 'Alternative')
+        response = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk]))
+        self.assertContains(response, 'Минимум по группе планов')
+        csv = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk])+'?export=csv').content.decode('utf-8-sig')
+        self.assertIn('group_minimum', csv)
+
+    def test_subdivision_fallback_does_not_use_other_subdivision_or_global_minimum(self):
+        self.load()
+        self.alternative_coefficient(GlobalCoeff, -.9)
+        self.alternative_coefficient(SubdivisionCoeff, -.8, subdivision=self.subs[1])
+        self.alternative_coefficient(SubdivisionCoeff, .01, subdivision=self.subs[0])
+        self.scenario.lines.filter(subdivision='A').update(brand='Unknown')
+        calculate_plan(self.scenario.pk)
+        line = self.scenario.lines.get(subdivision='A')
+        self.assertEqual(line.policies_usd, Decimal('10'))
+        self.assertEqual(line.sales_usd, Decimal('30'))
+        self.assertEqual(line.total_usd, Decimal('40'))
+
+    def test_exact_zero_and_other_exact_cells_override_minimum(self):
+        self.load()
+        self.alternative_coefficient(GlobalCoeff, -.9)
+        self.version.coefficients.filter(type_coeff__type_coeff_name='Политики', segment__segment_name='K0').update(motivation_coeff=0)
+        calculate_plan(self.scenario.pk)
+        line = self.scenario.lines.get(subdivision='')
+        self.assertEqual(line.policies_usd, Decimal('135'))
+        self.assertEqual(line.calculation['Политики']['O0']['source'], 'exact')
+        self.assertEqual(line.calculation['Политики']['O0']['coefficient'], '0.0')
+
+    def test_fallback_uses_effective_version_and_never_another_planning_group(self):
+        self.load()
+        self.alternative_coefficient(GlobalCoeff, -.02)
+        future = create_version(date(2026, 10, 8), 'Future', self.version.pk)
+        future.coefficients.all().update(motivation_coeff=-.9)
+        self.scenario.lines.filter(subdivision='').update(brand='Unknown')
+        calculate_plan(self.scenario.pk)
+        line = self.scenario.lines.get(subdivision='')
+        self.assertEqual(line.coefficient_version, self.version)
+        self.assertEqual(line.policies_usd, Decimal('-30'))
+        self.scenario.lines.filter(subdivision='').update(planning_group_sales='No matching group')
+        with self.assertRaisesMessage(ValidationError, 'Нет коэффициента и значений для подстановки минимума'):
+            calculate_plan(self.scenario.pk)
+        self.assertEqual(self.scenario.lines.get(subdivision='').policies_usd, Decimal('-30'))

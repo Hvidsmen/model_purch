@@ -159,6 +159,17 @@ def calculate_plan(scenario_id):
         if key in cells:
             raise ValidationError('Найдены неоднозначные глобальные коэффициенты.')
         cells[key] = cell.motivation_coeff
+    minimums = {}
+    for key, value in cells.items():
+        version_id, subdivision, planning_group, group, brand, kind, segment = key
+        if kind not in KINDS or segment not in SEGMENTS:
+            continue
+        coefficient = number(value)
+        if not -1 <= coefficient <= 1:
+            raise ValidationError('Коэффициент должен быть от -1 до 1.')
+        scope = (version_id, subdivision, planning_group, kind)
+        if scope not in minimums or coefficient < minimums[scope][0]:
+            minimums[scope] = (coefficient, key)
     for line in lines:
         version = next((v for v in reversed(versions) if v.effective_from <= line.plan_date), None)
         if version is None:
@@ -168,14 +179,22 @@ def calculate_plan(scenario_id):
             details, total = {}, Decimal(0)
             for segment in SEGMENTS:
                 key = (version.pk, line.subdivision, line.planning_group_sales, line.group, line.brand, kind, segment)
-                if key not in cells:
-                    raise ValidationError(f'Нет коэффициента: {line.subdivision}, {line.planning_group_sales}, {line.group}, {line.brand}, {kind}, {segment}; версия {version}.')
-                coefficient = number(cells[key])
+                fallback = key not in cells
+                source_key = key
+                if fallback:
+                    candidate = minimums.get((version.pk, line.subdivision, line.planning_group_sales, kind))
+                    if candidate is None:
+                        raise ValidationError(f'Нет коэффициента и значений для подстановки минимума: {line.subdivision or "Глобальный план"}, {line.planning_group_sales}, {kind}; версия {version}.')
+                    coefficient, source_key = candidate
+                else:
+                    coefficient = number(cells[key])
                 if not -1 <= coefficient <= 1:
                     raise ValidationError('Коэффициент должен быть от -1 до 1.')
                 usd = number(line.segment_amounts.get(segment))
                 contribution = coefficient * usd
-                details[segment] = {'coefficient': str(coefficient), 'usd': str(usd), 'motivation': str(contribution)}
+                details[segment] = {'coefficient': str(coefficient), 'usd': str(usd), 'motivation': str(contribution),
+                                    'source': 'group_minimum' if fallback else 'exact',
+                                    'source_group': source_key[3], 'source_brand': source_key[4], 'source_segment': source_key[6]}
                 total += contribution
             result[kind] = details
             totals.append(total)
