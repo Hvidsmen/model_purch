@@ -57,15 +57,14 @@ class ScenarioReliabilityTests(TestCase):
         self.other = ScenarioModel.objects.create(name='Other', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         kind = KindPurch.objects.create(name='Purchased')
         self.good = PGGoods.objects.create(scenario_plan=self.scenario, planning_group='Group', planning_sales='Sales',
-            group_goods='Goods', kind_purch=kind, volume=1, exw_usd=10, ddp_usd=15, kddp=1.5,
+            group_goods='Goods', purch='Supplier', kind_purch=kind, volume=1, exw_usd=10, ddp_usd=15, kddp=1.5,
             stock_cnt_day=30, percent_stock_end=20)
-        self.purch = Purch.objects.create(scenario_plan=self.scenario, name='Supplier', lag_income=90, lage_make=35)
+        self.purch = Purch.objects.create(name='Supplier', lag_income=90, lage_make=35)
         self.payment = PurchPay.objects.create(purch=self.purch, name='Payment', percent_pay=100, lag_day_pay=0)
 
     def record_export(self):
-        from .services.copying import copy_goods, copy_purchases
+        from .services.copying import copy_goods
         copy_goods(self.scenario, self.other)
-        copy_purchases(self.scenario, self.other)
         other_parameters = snapshot(self.other)
         ScenarioExport.objects.create(scenario=self.other, parameters=other_parameters, fingerprint=fingerprint(other_parameters))
         parameters = snapshot(self.scenario)
@@ -75,14 +74,14 @@ class ScenarioReliabilityTests(TestCase):
         return self.client.post(reverse('start_algorithm_api'), json.dumps({'scope': 'all'}), content_type='application/json')
 
     def test_selection_persists_across_tabs_without_query_parameter(self):
-        self.client.get(reverse('purch_list'), {'scenario': self.scenario.pk})
+        self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk})
         for url in ['pggoods_list', 'freight', 'results_page']:
             response = self.client.get(reverse(url))
             self.assertEqual(response.context['current_scenario'], self.scenario)
             self.assertContains(response, 'id="active-database"')
-        self.assertEqual(self.client.get(reverse('purch_list'), {'scenario': 'invalid'}).status_code, 404)
+        self.assertEqual(self.client.get(reverse('pggoods_list'), {'scenario': 'invalid'}).status_code, 404)
         self.scenario.delete()
-        response = self.client.get(reverse('purch_list'))
+        response = self.client.get(reverse('pggoods_list'))
         self.assertEqual(response.context['current_scenario'], self.other)
 
     def test_no_export_and_stale_export_block_start_before_sql(self):

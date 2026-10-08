@@ -50,12 +50,14 @@ def ensure_column(cursor, table, name, column_type):
     """)
 
 
-def ensure_model_columns(cursor, table, model, supported_relations):
+def ensure_model_columns(cursor, table, model, supported_relations, excluded_fields=()):
     unknown = [field.name for field in model._meta.concrete_fields
                if field.is_relation and field.name not in supported_relations]
     if unknown:
         raise ValueError(f'Нужно настроить экспорт связей {model.__name__}: {", ".join(unknown)}')
     for field in scalar_fields(model):
+        if field.name in excluded_fields:
+            continue
         ensure_column(cursor, table, field.name, sql_type(field))
 
 

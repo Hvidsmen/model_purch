@@ -193,12 +193,52 @@ class PGGoodsDuplicateArchive(models.Model):
         verbose_name_plural = 'Архив дублей PGGoods'
 
 
+class PurchQuerySet(models.QuerySet):
+    def update(self, **kwargs):
+        if 'name' in kwargs:
+            if not isinstance(kwargs['name'], str):
+                raise ValueError('Use instance.save() to change the purchase name.')
+            kwargs['name'] = kwargs['name'].strip()
+            kwargs['name_key'] = planning_group_key(kwargs['name'])
+        return super().update(**kwargs)
+
+    def bulk_create(self, objs, *args, **kwargs):
+        objs = list(objs)
+        for obj in objs:
+            obj.name = obj.name.strip()
+            obj.name_key = planning_group_key(obj.name)
+        return super().bulk_create(objs, *args, **kwargs)
+
+    def bulk_update(self, objs, fields, *args, **kwargs):
+        if 'name' in fields:
+            raise ValueError('Use instance.save() to change the purchase name.')
+        return super().bulk_update(objs, fields, *args, **kwargs)
+
+
 class Purch(models.Model):
+    objects = PurchQuerySet.as_manager()
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255)
     lag_income = models.IntegerField()
-    scenario_plan = models.ForeignKey(ScenarioModel, on_delete=models.CASCADE, null=True)
+    name_key = models.CharField(max_length=64, editable=False, unique=True, default='')
     lage_make = models.IntegerField(default=0, null=True)
+
+    def clean(self):
+        super().clean()
+        self.name = self.name.strip()
+        self.name_key = planning_group_key(self.name)
+        if not self.name:
+            raise ValidationError({'name': 'Введите название закупки.'})
+        if type(self).objects.filter(name_key=self.name_key).exclude(pk=self.pk).exists():
+            raise ValidationError({'name': 'Закупка с таким названием уже существует.'})
+
+    def save(self, *args, **kwargs):
+        self.name = self.name.strip()
+        self.name_key = planning_group_key(self.name)
+        if kwargs.get('update_fields') is not None and 'name' in kwargs['update_fields']:
+            kwargs['update_fields'] = set(kwargs['update_fields']) | {'name_key'}
+        return super().save(*args, **kwargs)
+
     @property
     def total_percent(self):
         """Сумма процентов всех платежей."""
@@ -208,6 +248,19 @@ class Purch(models.Model):
 
     def __str__(self):
         return self.name
+
+class PurchScenarioArchive(models.Model):
+    """Original scenario-specific settings retained when creating the shared directory."""
+    original_id = models.PositiveIntegerField()
+    kept_id = models.PositiveIntegerField()
+    original_data = models.JSONField()
+    payments = models.JSONField()
+    archived_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Архив сценарных закупок'
+        verbose_name_plural = 'Архив сценарных закупок'
+
 
 class KindLagPay(models.Model):
     id = models.AutoField(primary_key=True)

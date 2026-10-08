@@ -46,3 +46,9 @@ class ScenarioExportAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+
+@admin.register(PurchScenarioArchive)
+class PurchScenarioArchiveAdmin(PGGoodsDuplicateArchiveAdmin):
+    list_display = ('original_id', 'kept_id', 'archived_at')
+    readonly_fields = ('original_id', 'kept_id', 'original_data', 'payments', 'archived_at')

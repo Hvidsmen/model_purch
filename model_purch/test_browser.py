@@ -19,12 +19,12 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
     def setUp(self):
         self.source = ScenarioModel.objects.create(name='Source', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.target = ScenarioModel.objects.create(name='Target', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
-        self.purchase = Purch.objects.create(scenario_plan=self.source, name='Supplier', lag_income=90, lage_make=35)
+        self.purchase = Purch.objects.create(name='Supplier', lag_income=90, lage_make=35)
         kind = KindLagPay.objects.create(name='Delivery')
         PurchPay.objects.create(purch=self.purchase, name='Payment', percent_pay=100, lag_day_pay=10, kind_lag_pay=kind)
         goods_kind = KindPurch.objects.create(name='Purchased')
         self.good = PGGoods.objects.create(scenario_plan=self.source, planning_group='Group', planning_sales='Sales',
-            group_goods='Goods', kind_purch=goods_kind, volume=1, exw_usd=10, ddp_usd=15, kddp=1.5,
+            group_goods='Goods', purch='Supplier', kind_purch=goods_kind, volume=1, exw_usd=10, ddp_usd=15, kddp=1.5,
             stock_cnt_day=30, percent_stock_end=20)
         Freight.objects.create(scenario=self.source, price_per_container='1234.56', volume_per_container='67.890')
 
@@ -55,27 +55,22 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.page.locator('#workspace-scenario').select_option(str(scenario.pk))
 
-    def test_select_scenario_open_modal_choose_source_and_copy_purchases(self):
-        self.visit('purch_list')
+    def test_shared_purchase_edit_is_visible_across_scenarios(self):
+        self.visit('pggoods_list')
         self.select(self.target)
-        self.page.locator('[data-bs-target="#copyPurchModal"]').click()
-        modal = self.page.locator('#copyPurchModal')
-        modal.wait_for(state='visible')
-        button = modal.locator('button[type="submit"]')
-        self.assertTrue(button.is_enabled())
-        button.click()
-        self.assertFalse(self.db(lambda: Purch.objects.filter(scenario_plan=self.target).exists()))
-        modal.locator('select[name="source_scenario_id"]').select_option(str(self.source.pk))
-        self.assertIn('Из: Source', modal.locator('.copy-direction').inner_text())
-        self.assertIn('В: Target', modal.locator('.copy-direction').inner_text())
+        self.page.get_by_role('link', name='Закупки', exact=True).click()
+        self.assertEqual(self.page.locator('#workspace-scenario').count(), 0)
+        self.assertTrue(self.page.locator(f'#purchase-{self.purchase.pk}').is_visible())
+        self.page.locator(f'#purchase-{self.purchase.pk} a[title="Редактировать"]').click()
+        self.page.locator('[name="lag_income"]').fill('77')
         with self.page.expect_navigation():
-            button.click()
-        copied = self.db(lambda: Purch.objects.get(scenario_plan=self.target, name='Supplier'))
-        self.assertEqual((copied.lag_income, copied.lage_make), (90, 35))
-        self.assertEqual(self.db(lambda: copied.purchpay_set.get().kind_lag_pay_id),
-                         self.db(lambda: self.purchase.purchpay_set.get().kind_lag_pay_id))
-        self.page.get_by_role('link', name='Фрахт', exact=True).click()
+            self.page.get_by_role('button', name='Сохранить', exact=True).click()
+        self.assertEqual(self.db(lambda: Purch.objects.get(pk=self.purchase.pk).lag_income), 77)
+        self.page.get_by_role('link', name='Товары', exact=True).click()
         self.assertEqual(self.page.locator('#workspace-scenario').input_value(), str(self.target.pk))
+        self.select(self.source)
+        self.page.get_by_role('link', name='Закупки', exact=True).click()
+        self.assertIn('77', self.page.locator(f'#purchase-{self.purchase.pk}').inner_text())
         self.assertEqual(self.errors, [], self.asset_events)
 
     def test_copy_goods_through_modal_and_preserve_selected_scenario(self):
@@ -125,9 +120,8 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
 
     @override_settings(MS_SQL_CONN_STR='test')
     def test_calculation_start_includes_all_scenarios_and_saved_exports(self):
-        from .services.copying import copy_goods, copy_purchases
+        from .services.copying import copy_goods
         self.db(lambda: copy_goods(self.source, self.target))
-        self.db(lambda: copy_purchases(self.source, self.target))
         target_parameters = self.db(lambda: snapshot(self.target))
         self.db(lambda: ScenarioExport.objects.create(scenario=self.target, parameters=target_parameters, fingerprint=fingerprint(target_parameters)))
         parameters = self.db(lambda: snapshot(self.source))
@@ -150,12 +144,11 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
 
     def test_payment_conditions_filter_and_empty_search_are_readable(self):
         def create_invalid_purchase():
-            purchase = Purch.objects.create(scenario_plan=self.source, name='Needs review', lag_income=10, lage_make=0)
+            purchase = Purch.objects.create(name='Needs review', lag_income=10, lage_make=0)
             PurchPay.objects.create(purch=purchase, name='Advance', percent_pay=30, lag_day_pay=-10)
             return purchase.pk
         invalid_id = self.db(create_invalid_purchase)
         self.visit('purch_list')
-        self.select(self.source)
         self.assertIn('100% · Payment', self.page.locator(f'#purchase-{self.purchase.pk}').inner_text())
         self.page.locator('#purchPaymentFilter').select_option('invalid')
         self.assertTrue(self.page.locator(f'#purchase-{invalid_id}').is_visible())

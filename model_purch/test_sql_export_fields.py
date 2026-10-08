@@ -13,7 +13,7 @@ class NewFieldExportTests(TestCase):
     def setUp(self):
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.kind = KindLagPay.objects.create(name='От даты поступления')
-        self.purch = Purch.objects.create(name='Supplier', scenario_plan=self.scenario, lag_income=90, lage_make=35)
+        self.purch = Purch.objects.create(name='Supplier', lag_income=90, lage_make=35)
         self.pay = PurchPay.objects.create(purch=self.purch, name='Advance', percent_pay=30,
                                           lag_day_pay=-10, kind_lag_pay=self.kind)
 

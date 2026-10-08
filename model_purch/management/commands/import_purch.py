@@ -2,6 +2,7 @@
 from django.core.management.base import BaseCommand
 import pyodbc
 from model_purch.models import Purch, PurchPay
+from model_purch.goods_identity import planning_group_key
 
 
 class Command(BaseCommand):
@@ -110,8 +111,8 @@ class Command(BaseCommand):
                 # Создаём или обновляем Purch
                 try:
                     purch, created = Purch.objects.get_or_create(
-                        name=purch_name,
-                        defaults={'lag_income': data['lag_income']}
+                        name_key=planning_group_key(purch_name),
+                        defaults={'name': purch_name, 'lag_income': data['lag_income']}
                     )
 
                     if not created:

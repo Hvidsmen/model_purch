@@ -102,18 +102,20 @@ def results_page(request):
     issues = []
     for check in checks:
         checked = check['scenario']
-        purchases = list(Purch.objects.filter(scenario_plan=checked)) if check['errors'] else []
+        purchases = list(Purch.objects.all()) if check['errors'] else []
         goods = list(PGGoods.objects.filter(scenario_plan=checked)) if check['errors'] else []
         for error in check['errors']:
             url = f"{reverse('pggoods_list')}?scenario={checked.pk}"
             for purchase in purchases:
                 if error.startswith(purchase.name + ':'):
-                    url = f"{reverse('purch_edit', args=[purchase.pk])}?scenario={checked.pk}"
+                    url = reverse('purch_edit', args=[purchase.pk])
                     break
             for good in goods:
                 if error.startswith(good.planning_group + ':'):
                     url = f"{reverse('edit_pggoods', args=[good.pk])}?scenario={checked.pk}"
                     break
+            if error.startswith('Закупка «'):
+                url = reverse('purch_list')
             if error.startswith('Фрахт:'):
                 url = f"{reverse('freight')}?scenario={checked.pk}"
             elif 'экспорт' in error.lower():
@@ -360,29 +362,6 @@ def _export_scenario_to_sql(request, scenario):
 # ФУНКЦИИ КОПИРОВАНИЯ ДАННЫХ МЕЖДУ СЦЕНАРИЯМИ
 # ==============================================================================
 
-def copy_purch_from_scenario(request):
-    """Копирует закупки и графики платежей из выбранного сценария в текущий"""
-    if request.method == 'POST':
-        form = PGGoodsCopyForm(request.POST)
-        if not form.is_valid():
-            for errors in form.errors.values():
-                for error in errors:
-                    messages.error(request, error)
-            target = form.cleaned_data.get('scenario')
-            return redirect(f"{reverse('purch_list')}?scenario={target.pk}" if target else reverse('purch_list'))
-        current_scenario = form.cleaned_data['scenario']
-        source_scenario = form.cleaned_data['source_scenario_id']
-
-        from .services.copying import copy_purchases
-        created_count, updated_count = copy_purchases(source_scenario, current_scenario)
-
-        messages.success(request,
-                         f'Закупки скопированы из «{source_scenario.name}» в «{current_scenario.name}». Создано: {created_count}, обновлено: {updated_count}.')
-        return redirect(f"{reverse('purch_list')}?scenario={current_scenario.id}")
-
-    return redirect('purch_list')
-
-
 def copy_pggoods_from_scenario(request):
     """Copy goods into the target explicitly submitted by the copy form."""
     if request.method == 'POST':
@@ -415,11 +394,8 @@ def copy_pggoods_from_scenario(request):
 # 1. СИНХРОНИЗАЦИЯ ДАННЫХ ИЗ MS SQL
 # ==============================================================================
 
-def sync_purch_data_for_scenario(scenario):
-    """
-    Синхронизация Purch. Если scenario.overwrite_existing=True — обновляет существующие,
-    иначе только создаёт новые.
-    """
+def sync_purch_data():
+    """Add missing shared purchases without replacing existing settings."""
     if not MS_SQL_CONN_STR:
         raise ValueError("Не задана строка подключения MS_SQL_CONN_STR в settings.py")
 
@@ -455,28 +431,19 @@ def sync_purch_data_for_scenario(scenario):
         for row in raw_data:
             purch_groups[row['PurchName']].append(row)
 
-        overwrite = scenario.overwrite_existing
-        created_count = 0
-        updated_count = 0
-        skipped_count = 0
-
+        from .goods_identity import planning_group_key
+        created_count = skipped_count = 0
         with transaction.atomic():
             for purch_name, payments in purch_groups.items():
-                if overwrite:
-                    # РЕЖИМ ПЕРЕЗАПИСИ: get_or_create + обновление + замена платежей
-                    purch, created = Purch.objects.get_or_create(
-                        name=purch_name, scenario_plan=scenario,
-                        defaults={'lag_income': int(payments[0]['lag_income'] or 120)}
-                    )
-                    if not created:
-                        purch.lag_income = int(payments[0]['lag_income'] or 120)
-                        purch.save()
-                        updated_count += 1
-                    else:
-                        created_count += 1
-
-                    # Полностью заменяем платежи
-                    purch.purchpay_set.all().delete()
+                purch_name = (purch_name or '').strip()
+                if not purch_name:
+                    continue
+                purch, created = Purch.objects.get_or_create(
+                    name_key=planning_group_key(purch_name),
+                    defaults={'name': purch_name, 'lag_income': int(payments[0]['lag_income'] or 120)}
+                )
+                if created:
+                    created_count += 1
                     PurchPay.objects.bulk_create([
                         PurchPay(purch=purch, name=row['PurchPayName'] or 'Без названия',
                                  percent_pay=float(row['percent_pay'] or 0.0),
@@ -484,27 +451,8 @@ def sync_purch_data_for_scenario(scenario):
                         for row in payments
                     ])
                 else:
-                    # РЕЖИМ БЕЗ ПЕРЕЗАПИСИ: только создаём новые, существующие пропускаем
-                    purch, created = Purch.objects.get_or_create(
-                        name=purch_name, scenario_plan=scenario,
-                        defaults={'lag_income': int(payments[0]['lag_income'] or 120)}
-                    )
-                    if created:
-                        created_count += 1
-                        # Создаём платежи только для новых закупок
-                        PurchPay.objects.bulk_create([
-                            PurchPay(purch=purch, name=row['PurchPayName'] or 'Без названия',
-                                     percent_pay=float(row['percent_pay'] or 0.0),
-                                     lag_day_pay=int(row['lag_day_pay'] or 0))
-                            for row in payments
-                        ])
-                    else:
-                        skipped_count += 1
-
-        logger.info(
-            f"Синхронизация Purch для '{scenario.name}' (overwrite={overwrite}): "
-            f"создано={created_count}, обновлено={updated_count}, пропущено={skipped_count}"
-        )
+                    skipped_count += 1
+        logger.info(f'Синхронизация общего справочника Purch: создано={created_count}, пропущено={skipped_count}')
     finally:
         if conn: conn.close()
 
@@ -729,7 +677,7 @@ def scenario_create(request):
             plan_formset.save()
 
             try:
-                sync_purch_data_for_scenario(scenario)
+                sync_purch_data()
                 sync_pggoods_data_for_scenario(scenario)
                 messages.success(request, f'Сценарий "{scenario.name}" создан, данные синхронизированы!')
             except Exception as e:
@@ -756,7 +704,7 @@ def scenario_edit(request, pk):
             plan_formset.save()
 
             try:
-                sync_purch_data_for_scenario(scenario)
+                sync_purch_data()
                 sync_pggoods_data_for_scenario(scenario)
                 messages.success(request, f'Сценарий "{scenario.name}" обновлён, данные синхронизированы!')
             except Exception as e:
@@ -1292,30 +1240,25 @@ def import_from_excel(request):
     })
 
 # ==============================================================================
-# 4. VIEW ДЛЯ Purch (ПОЛНОСТЬЮ С УЧЁТОМ scenario_plan)
+# 4. Общий справочник закупок
 # ==============================================================================
 
 def purch_list(request):
-    current_scenario, all_scenarios = get_current_scenario(request)
-
-    if current_scenario:
-        purch_queryset = Purch.objects.filter(scenario_plan=current_scenario).prefetch_related('purchpay_set__kind_lag_pay').order_by('name')
-    else:
-        purch_queryset = Purch.objects.none()
-
+    from .services.purchases import missing_purchases
+    purch_queryset = Purch.objects.all().prefetch_related('purchpay_set__kind_lag_pay').order_by('name')
     for purchase in purch_queryset:
         payments = list(purchase.purchpay_set.all())
         purchase.payment_schedule = payments
         purchase.payment_total = sum(pay.percent_pay for pay in payments)
         purchase.payment_valid = bool(payments) and abs(purchase.payment_total - 100) <= 0.01 and all(0 <= pay.percent_pay <= 100 for pay in payments)
+    missing, blanks = missing_purchases()
     return render(request, 'model_purch/purch_list.html', {
-        'purch_list': purch_queryset, 'scenarios': all_scenarios,
-        'current_scenario': current_scenario, 'title': 'Закупки',
-        'source_scenarios': all_scenarios.exclude(pk=current_scenario.pk) if current_scenario else all_scenarios.none()
+        'purch_list': purch_queryset, 'missing_purchases': missing, 'blank_purchase_count': blanks,
+        'title': 'Общий справочник закупок',
     })
 
 
-from .forms import PurchForm, PurchPayFormSet  # Убедитесь, что PurchPayFormSet импортирован!
+from .forms import PurchForm, PurchPayFormSet
 
 
 def get_current_scenario(request):
@@ -1324,87 +1267,37 @@ def get_current_scenario(request):
 
 
 def purch_create(request):
-    current_scenario, _ = get_current_scenario(request)
-
-    if not current_scenario:
-        messages.error(request, '❌ Сначала создайте сценарий.')
-        return redirect('scenario_list')
-
-    if request.method == 'POST':
-        form = PurchForm(request.POST)
-        # ВАЖНО: передаем request.POST в formset, но пока без instance (он будет назначен после сохранения Purch)
-        formset = PurchPayFormSet(request.POST)
-
-        if form.is_valid() and formset.is_valid():
-            purch = form.save(commit=False)
-            purch.scenario_plan = current_scenario
-            purch.save()
-
-            # Теперь привязываем formset к сохраненному purch и сохраняем платежи
-            formset.instance = purch
-            formset.save()
-
-            messages.success(request, f'Закупка "{purch.name}" создана для сценария "{current_scenario.name}"')
-            return redirect(f"{reverse('purch_list')}?scenario={current_scenario.id}")
-    else:
-        form = PurchForm()
-        formset = PurchPayFormSet()  # Пустой formset для создания
-
-    return render(request, 'model_purch/purch_edit.html', {
-        'form': form,
-        'formset': formset,  # ОБЯЗАТЕЛЬНО передаем в шаблон
-        'scenario': current_scenario,
-        'title': f'Создание закупки для: {current_scenario.name}'
-    })
+    return purch_edit(request)
 
 
 def purch_edit(request, pk=None):
-    """Создание или редактирование закупки"""
-    purch = get_object_or_404(Purch, pk=pk) if pk else None
-
-    # Получаем сценарий из URL-параметра
-    scenario_id = request.POST.get('scenario') or request.GET.get('scenario') or (purch.scenario_plan_id if purch else None)
-    scenario = get_object_or_404(ScenarioModel, pk=scenario_id) if scenario_id else None
-    if purch and purch.scenario_plan_id != (scenario.pk if scenario else None):
-        from django.http import Http404
-        raise Http404('Закупка не принадлежит выбранному сценарию.')
-
+    purch = get_object_or_404(Purch, pk=pk) if pk else Purch()
     if request.method == 'POST':
         form = PurchForm(request.POST, instance=purch)
         formset = PurchPayFormSet(request.POST, instance=purch)
-
         if form.is_valid() and formset.is_valid():
-            new_purch = form.save(commit=False)
-            # Устанавливаем сценарий программно (не из формы)
-            if scenario:
-                new_purch.scenario_plan = scenario
-            new_purch.save()
-            formset.save()
-            return redirect(f"{reverse('purch_list')}?scenario={scenario.pk}" if scenario else reverse('purch_list'))
+            with transaction.atomic():
+                form.save()
+                formset.save()
+            messages.success(request, f'Закупка «{purch.name}» сохранена в общем справочнике. Повторите экспорт сценариев в MS SQL.')
+            return redirect('purch_list')
     else:
-        form = PurchForm(instance=purch)
+        initial = {'name': request.GET.get('name', '')} if not pk else None
+        form = PurchForm(instance=purch, initial=initial)
         formset = PurchPayFormSet(instance=purch)
-
     return render(request, 'model_purch/purch_edit.html', {
-        'form': form,
-        'formset': formset,
-        'scenario': scenario,
-        'title': f'Редактирование: {purch.name}' if purch else 'Новая закупка',
+        'form': form, 'formset': formset,
+        'title': f'Редактирование: {purch.name}' if pk else 'Новая закупка',
     })
 
-def purch_delete(request, pk):
-    """
-    Удаление Purch.
-    ВАЖНО: удаляем только если запись принадлежит текущему сценарию.
-    """
-    current_scenario, _ = get_current_scenario(request)
-    purch = get_object_or_404(Purch, pk=pk, scenario_plan=current_scenario)
 
+def purch_delete(request, pk):
+    purch = get_object_or_404(Purch, pk=pk)
     if request.method == 'POST':
         name = purch.name
         purch.delete()
-        messages.success(request, f'Закупка «{name}» удалена из сценария "{current_scenario.name}".')
-    return redirect(f"{reverse('purch_list')}?scenario={current_scenario.pk}")
+        messages.success(request, f'Закупка «{name}» удалена из общего справочника. Повторите экспорт сценариев в MS SQL.')
+    return redirect('purch_list')
 
 
 @require_POST

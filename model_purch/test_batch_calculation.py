@@ -1,7 +1,7 @@
 from unittest.mock import patch
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from .models import AlgorithmRun, AlgorithmStep, ScenarioModel, ScenarioExport, PGGoods, KindPurch
+from .models import AlgorithmRun, AlgorithmStep, ScenarioModel, ScenarioExport, PGGoods, KindPurch, Purch, PurchPay
 from .services.preflight import snapshot, fingerprint
 from .services.calculation import run_step
 
@@ -12,8 +12,10 @@ class BatchCalculationTests(TestCase):
         self.scenarios = [ScenarioModel.objects.create(name=name, date_start_plan='2026-01-01', date_end_plan='2026-12-31')
                           for name in ['Plan A', 'Plan B']]
         kind = KindPurch.objects.create(name='Purchased')
+        purchase = Purch.objects.create(name='Supplier', lag_income=30)
+        PurchPay.objects.create(purch=purchase, name='Payment', percent_pay=100, lag_day_pay=0)
         for scenario in self.scenarios:
-            PGGoods.objects.create(scenario_plan=scenario, planning_group='Group', planning_sales='Sales', group_goods='Goods',
+            PGGoods.objects.create(scenario_plan=scenario, planning_group='Group', planning_sales='Sales', group_goods='Goods', purch='Supplier',
                 kind_purch=kind, volume=1, exw_usd=10, ddp_usd=15, kddp=1.5, stock_cnt_day=30, percent_stock_end=20)
             self.export(scenario)
 
@@ -25,7 +27,7 @@ class BatchCalculationTests(TestCase):
         return self.client.post(reverse('start_algorithm_api'), {'scenario': self.scenarios[0].pk})
 
     def test_selected_scenario_does_not_limit_calculation(self):
-        self.client.get(reverse('purch_list'), {'scenario': self.scenarios[0].pk})
+        self.client.get(reverse('pggoods_list'), {'scenario': self.scenarios[0].pk})
         response = self.start()
         self.assertEqual(response.status_code, 200)
         self.assertEqual(set(response.json()['scenario_ids']), {scenario.pk for scenario in self.scenarios})

@@ -6,7 +6,7 @@ from django.test import TestCase, SimpleTestCase
 from django.urls import reverse
 
 from .goods_identity import planning_group_key
-from .models import KindPurch, PGGoods, ScenarioModel
+from .models import KindPurch, PGGoods, ScenarioModel, Purch
 from .sql_goods import prepare_sql_goods
 
 
@@ -39,8 +39,9 @@ class SqlGoodsPreparationTests(SimpleTestCase):
 class SqlGoodsExportTests(TestCase):
     def setUp(self):
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
+        Purch.objects.create(name='Supplier', lag_income=30)
         self.goods = PGGoods.objects.create(
-            scenario_plan=self.scenario, planning_group='Daikin SENSIRA', planning_sales='Sales', group_goods='Group',
+            scenario_plan=self.scenario, planning_group='Daikin SENSIRA', planning_sales='Sales', group_goods='Group', purch='Supplier',
             kind_purch=KindPurch.objects.create(name='Purchased'), volume=1, exw_usd=2, ddp_usd=3,
             kddp=1.5, stock_cnt_day=30, percent_stock_end=20,
         )
@@ -52,6 +53,7 @@ class SqlGoodsExportTests(TestCase):
         connection.cursor.return_value = cursor
         cursor.description = [('id',), ('planning_group',), ('scenario_name',)]
         cursor.fetchall.return_value = []
+        cursor.fetchone.return_value = (501,)
         connect.return_value = connection
         response = self.client.post(reverse('export_scenario_to_sql', args=[self.scenario.pk]))
         self.assertEqual(response.status_code, 302)
@@ -72,6 +74,7 @@ class SqlGoodsExportTests(TestCase):
         connection.cursor.return_value = cursor
         cursor.description = [('id',), ('planning_group',), ('scenario_name',)]
         cursor.fetchall.return_value = []
+        cursor.fetchone.return_value = (501,)
         connect.return_value = connection
         def fail_merge(sql, *args):
             if 'MERGE INTO portal.PGGoods AS target' in sql:

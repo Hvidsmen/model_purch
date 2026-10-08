@@ -67,24 +67,6 @@
         margin-right: 2px;
     }
 
-    /* Стили для селектора сценария */
-    .scenario-selector {
-        max-width: 350px;
-    }
-    .scenario-selector .form-select {
-        font-size: 0.9rem;
-        border-color: #0d6efd;
-        background-color: #e7f1ff;
-    }
-    .scenario-selector .form-select:focus {
-        border-color: #0d6efd;
-        box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
-    }
-    .scenario-info {
-        font-size: 0.8rem;
-        color: #6c757d;
-        margin-top: 4px;
-    }
 </style>
 {% endblock %}
 
@@ -98,18 +80,16 @@
                 Настройки закупок
             </h2>
             <p class="text-muted mb-0 small">
-                Управление закупками и графиками платежей
+                Единые настройки закупок и графики платежей для всех сценариев
             </p>
         </div>
 
         <div class="page-actions d-flex gap-2">
-            <a href="{% url 'purch_create' %}?scenario={{ current_scenario.id }}"
+            <a href="{% url 'purch_create' %}"
                class="btn btn-primary">
                 <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать закупку
             </a>
-            <button type="button" class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#copyPurchModal" {% if scenarios|length < 2 %}disabled title="Создайте второй сценарий для копирования"{% endif %}>
-                <i aria-hidden="true" class="bi bi-files"></i> Копировать из сценария
-            </button>
+
         </div>
     </div>
 </div>
@@ -162,31 +142,24 @@
 </style>
 
 
-<style>
-.scenario-badge {
-    background: linear-gradient(135deg, #e7f1ff 0%, #f8f9fa 100%);
-    padding: 16px 20px;
-    border-radius: 10px;
-    border: 1px solid #b6d4fe;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.scenario-badge i {
-    font-size: 1.5rem;
-}
-</style>
 
 
-{% if current_scenario %}
+
+<div class="alert alert-info">Изменения закупок применяются ко всем сценариям. В MS SQL настройки выгружаются отдельно для каждого сценария.</div>
+{% if missing_purchases or blank_purchase_count %}
+<div class="alert alert-warning" id="purchase-coverage-errors">
+    <strong>Не заполнены настройки закупок:</strong>
+    {% for name in missing_purchases %}<div>«{{ name }}» — <a href="{% url 'purch_create' %}?name={{ name|urlencode }}">Создать закупку</a></div>{% endfor %}
+    {% if blank_purchase_count %}<div>Не заполнена колонка «Закупка» у товаров: {{ blank_purchase_count }}. <a href="{% url 'pggoods_list' %}">Открыть товары</a></div>{% endif %}
+</div>
+{% else %}<div class="text-muted small mb-3">Для всех названий закупок в товарах есть записи справочника.</div>{% endif %}
     <div class="card shadow-sm">
         <!-- === ДОБАВЛЕНО: Шапка карточки с поиском === -->
         <div class="card-header bg-white border-bottom py-3">
             <div class="row align-items-center g-3">
                 <div class="col-md-6">
                     <h5 class="mb-0 text-secondary">
-                        <i aria-hidden="true" class="bi bi-list-ul"></i> Список поставщиков
+                        <i aria-hidden="true" class="bi bi-list-ul"></i> Справочник закупок
                     </h5>
                 </div>
                 <div class="col-md-6">
@@ -247,18 +220,18 @@
                                             {% endfor %}
                                         </ul>
                                     </details>
-                                    {% if not purch.payment_valid %}<div class="payment-warning">Сумма: {{ purch.payment_total|floatformat:"-2" }}% — требуется 100%. <a href="{% url 'purch_edit' purch.pk %}?scenario={{ current_scenario.pk }}">Исправить</a></div>{% endif %}
+                                    {% if not purch.payment_valid %}<div class="payment-warning">Сумма: {{ purch.payment_total|floatformat:"-2" }}% — требуется 100%. <a href="{% url 'purch_edit' purch.pk %}">Исправить</a></div>{% endif %}
                                 {% else %}
-                                    <span class="payment-warning">Нет графика платежей. <a href="{% url 'purch_edit' purch.pk %}?scenario={{ current_scenario.pk }}">Добавить</a></span>
+                                    <span class="payment-warning">Нет графика платежей. <a href="{% url 'purch_edit' purch.pk %}">Добавить</a></span>
                                 {% endif %}
                             </td>
                             <td class="text-center">
-    <a href="{% url 'purch_edit' purch.id %}?scenario={{ current_scenario.id }}"
+    <a href="{% url 'purch_edit' purch.id %}"
        class="btn btn-sm btn-outline-primary" title="Редактировать">
         <i aria-hidden="true" class="bi bi-pencil"></i>
     </a>
     <form method="post"
-          action="{% url 'purch_delete' purch.id %}?scenario={{ current_scenario.id }}"
+          action="{% url 'purch_delete' purch.id %}"
           class="d-inline"
           onsubmit="return confirm('Удалить закупку «{{ purch.name }}»?');">
         {% csrf_token %}
@@ -272,9 +245,9 @@
                         <tr>
                             <td colspan="5" class="text-center text-muted py-4">
                                 <i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>
-                                Для сценария «{{ current_scenario.name }}» закупок ещё не создано. Создайте закупку или скопируйте поставщиков и платежи из другого сценария.
+                                Справочник закупок пуст. Создайте закупку и настройте график платежей.
                                 <br>
-                                <a href="{% url 'purch_create' %}?scenario={{ current_scenario.id }}" class="btn btn-sm btn-primary mt-2">
+                                <a href="{% url 'purch_create' %}" class="btn btn-sm btn-primary mt-2">
                                     <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать первую закупку
                                 </a>
                             </td>
@@ -284,58 +257,10 @@
             </table>
         </div>
     </div>
-{% else %}<div class="card card-body text-center empty-guidance"><h3 class="h5">Сначала нужен сценарий</h3><p>Создайте сценарий, затем добавьте поставщиков и условия оплаты. Если данные уже были, проверьте активную базу в панели выше.</p><a href="{% url 'scenario_create' %}" class="btn btn-primary">Создать сценарий</a></div>{% endif %}
-
-<div class="modal fade" id="copyPurchModal" tabindex="-1" aria-labelledby="copyPurchModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-            <form method="post" action="{% url 'copy_purch_from_scenario' %}" data-copy-target="{{ current_scenario.name }}">
-                {% csrf_token %}
-                <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
-                <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="copyPurchModalLabel"><i aria-hidden="true" class="bi bi-files"></i> Копирование закупок</h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <p class="text-muted small mb-3">
-                        Выберите сценарий, из которого нужно скопировать закупки и графики платежей в текущий сценарий
-                        "<strong>{{ current_scenario.name }}</strong>".
-                        <br><span class="text-warning"><i aria-hidden="true" class="bi bi-exclamation-triangle"></i> Существующие закупки с такими же именами будут обновлены.</span>
-                    </p>
-                    <label for="copy-purch-source" class="form-label fw-semibold">Сценарий-источник:</label>
-                    <select id="copy-purch-source" name="source_scenario_id" class="form-select" required>
-                        <option value="" disabled selected>Выберите сценарий...</option>
-                        {% for sc in scenarios %}
-                            {% if sc.id != current_scenario.id %}
-                                <option value="{{ sc.id }}">{{ sc.name }} ({{ sc.date_start_plan|date:"d.m.Y" }})</option>
-                            {% endif %}
-                        {% empty %}
-                            <option disabled>Других сценариев нет</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-                    <button type="submit" class="btn btn-primary" id="confirmCopyPurchBtn" {% if scenarios|length < 2 %}disabled{% endif %}>
-                        <i aria-hidden="true" class="bi bi-check-lg"></i> Скопировать
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block extra_js %}
 <script>
-// Функция смены сценария
-function changeScenario(scenarioId) {
-    if (scenarioId) {
-        // Перезагружаем страницу с выбранным сценарием
-        window.location.href = '?scenario=' + scenarioId;
-    }
-}
-
     // Функция фильтрации таблицы
 function filterPurchTable() {
     const filter = document.getElementById('purchSearchInput').value.toLowerCase().trim();

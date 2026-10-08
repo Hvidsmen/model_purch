@@ -32,7 +32,6 @@ urlpatterns = [
     path('purch/<int:pk>/edit/', views.purch_edit, name='purch_edit'),
     path('purch/<int:pk>/delete/', views.purch_delete, name='purch_delete'),
 
-    path('purch/copy/', views.copy_purch_from_scenario, name='copy_purch_from_scenario'),
     path('pggoods/copy/', views.copy_pggoods_from_scenario, name='copy_pggoods_from_scenario'),
     path('scenarios/<int:pk>/export-sql/', views.export_scenario_to_sql, name='export_scenario_to_sql'),
 

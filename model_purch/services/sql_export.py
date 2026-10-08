@@ -4,9 +4,11 @@ from django.contrib import messages
 from django.db import transaction
 from ..models import ScenarioModel, ScenarioPlanSales, Purch, PurchPay, PGGoods, KindLagPay, Freight, ScenarioExport
 from ..sql_goods import prepare_sql_goods
+from ..goods_identity import planning_group_key
 from ..sql_export_fields import ensure_model_columns, ensure_column, export_additional_fields
 
 from .preflight import snapshot, fingerprint
+from .purchases import coverage_errors
 
 logger = logging.getLogger(__name__)
 
@@ -15,6 +17,12 @@ def export_scenario(request, scenario, connection_string):
     Экспортирует данные сценария в MS SQL Server (схема portal).
     Автоматически создаёт таблицы, если они не существуют.
     """
+
+    errors = coverage_errors(scenario)
+    if errors:
+        for error in errors:
+            messages.error(request, f'«{scenario.name}»: {error}')
+        return False
 
     if not connection_string:
         messages.error(request, "Не настроено подключение к MS SQL Server")
@@ -118,12 +126,12 @@ def export_scenario(request, scenario, connection_string):
             ('Scenario', ScenarioModel, set()),
             ('Freight', Freight, {'scenario'}),
             ('ScenarioPlanSales', ScenarioPlanSales, {'scenario_model'}),
-            ('Purch', Purch, {'scenario_plan'}),
+            ('Purch', Purch, set()),
             ('PurchPay', PurchPay, {'purch', 'kind_lag_pay'}),
             ('PGGoods', PGGoods, {'scenario_plan', 'kind_purch'}),
             ('KindLagPay', KindLagPay, set()),
         ]:
-            ensure_model_columns(cursor, table, model, relations)
+            ensure_model_columns(cursor, table, model, relations, {'name_key'} if model is Purch else ())
         ensure_column(cursor, 'PurchPay', 'kind_lag_pay_id', 'INT')
         ensure_column(cursor, 'PurchPay', 'kind_lag_pay', 'NVARCHAR(255)')
         conn.commit()
@@ -222,7 +230,19 @@ def export_scenario(request, scenario, connection_string):
                 exported_count['plans'] += 1
 
             # === ЭКСПОРТ ЗАКУПОК И ПЛАТЕЖЕЙ ===
-            purchs = Purch.objects.filter(scenario_plan=scenario).prefetch_related('purchpay_set__kind_lag_pay')
+            purchs = list(Purch.objects.all().prefetch_related('purchpay_set__kind_lag_pay'))
+            # Remove obsolete settings only from the scenario being exported.
+            # Retain the highest SQL ID when old scenario-specific duplicates exist.
+            known = {purch.name_key for purch in purchs}
+            cursor.execute('SELECT id, name FROM portal.Purch WHERE scenario_name = ? ORDER BY id DESC', scenario.name)
+            seen = set()
+            for old_id, old_name in cursor.fetchall():
+                key = planning_group_key(old_name)
+                if key not in known or key in seen:
+                    cursor.execute('DELETE FROM portal.PurchPay WHERE purch_id = ?', old_id)
+                    cursor.execute('DELETE FROM portal.Purch WHERE id = ? AND scenario_name = ?', old_id, scenario.name)
+                else:
+                    seen.add(key)
 
             for purch in purchs:
                 # Вставляем/обновляем закупку
@@ -231,7 +251,7 @@ def export_scenario(request, scenario, connection_string):
                     USING (SELECT ? AS name, ? AS lag_income, ? AS scenario_name) AS source
                     ON target.name = source.name AND target.scenario_name = source.scenario_name
                     WHEN MATCHED THEN
-                        UPDATE SET lag_income = source.lag_income
+                        UPDATE SET name = source.name, lag_income = source.lag_income
                     WHEN NOT MATCHED THEN
                         INSERT (name, lag_income, scenario_name)
                         VALUES (source.name, source.lag_income, source.scenario_name)
@@ -244,7 +264,7 @@ def export_scenario(request, scenario, connection_string):
                     raise RuntimeError('SQL Server не вернул ID экспортированной закупки.')
 
                 if purch_id is not None:
-                    export_additional_fields(cursor, 'Purch', purch, {'name', 'lag_income'}, {'id': purch_id})
+                    export_additional_fields(cursor, 'Purch', purch, {'name', 'lag_income', 'name_key'}, {'id': purch_id})
                     # Удаляем старые платежи этой закупки в этом сценарии
                     cursor.execute("""
                         DELETE FROM portal.PurchPay

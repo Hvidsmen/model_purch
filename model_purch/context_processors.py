@@ -6,6 +6,9 @@ from .services.scenarios import current_scenario
 def workspace(request):
     if not request.path.startswith('/model_purch/'):
         return {}
+    route = request.resolver_match.url_name if request.resolver_match else ''
+    if route in {'purch_list', 'purch_create', 'purch_edit', 'purch_delete'}:
+        return {'workspace_shared_purchases': True, 'active_database': str(settings.DATABASES['default']['NAME'])}
     scenario, scenarios = current_scenario(request)
     export_state, export_label = 'stale', 'Сценарий не выбран'
     if scenario:

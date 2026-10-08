@@ -187,7 +187,6 @@ from .models import Purch, PurchPay, ScenarioModel, KindLagPay
 class PurchForm(forms.ModelForm):
     class Meta:
         model = Purch
-        # Убрали scenario_plan - он устанавливается во view из URL
         fields = ['name', 'lag_income', 'lage_make']
         labels = {
             'name': 'Название закупки',
