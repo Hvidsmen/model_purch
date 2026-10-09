@@ -18,6 +18,17 @@
 <div class="container-fluid content" id="version-panel">
     <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование{% else %}Историческая версия: только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Утверждена и действует сейчас{% else %} · Утверждена на сегодня: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
     {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</div>{% endfor %}
+    <div class="d-flex align-items-center gap-3 flex-wrap mb-3" id="version-approval-actions">
+        <strong>Статус: {{ selected_version.get_status_display }}</strong>
+        {% if selected_version.status == 'draft' %}
+        <button type="button" class="btn btn-primary" id="approval-review">Утвердить версию…</button>
+        <span class="text-muted small">Утверждается весь набор: глобальные коэффициенты, подразделения и руководители.</span>
+        {% elif selected_version.status == 'approved' %}
+        <span class="text-muted small">Версия уже утверждена. Для изменения коэффициентов создайте новую версию.</span>
+        {% else %}
+        <span class="text-muted small">Версия сохранена в истории. Для утверждения создайте новый черновик.</span>
+        {% endif %}
+    </div>
     <div class="version-controls">
     <form method="get">
         <div class="version-picker"><label for="coefficient-version">Версия коэффициентов</label>

@@ -5,7 +5,7 @@
     <div class="editor-state"><strong id="editor-dirty-count" role="status" aria-live="polite">Изменено: 0</strong><small id="editor-save-state">Нет несохранённых правок</small></div>
     <div class="editor-primary-actions">
         <button type="submit" form="{% if sub %}subCoeffForm{% else %}mainCoeffForm{% endif %}" class="btn btn-primary" id="editor-save" name="action_button" value="save_coeff" {% if not version_editable %}disabled{% endif %}>Сохранить изменения</button>
-        {% if selected_version.status == 'draft' %}<button type="button" class="btn btn-outline-primary" id="approval-review">Утвердить…</button>{% endif %}
+        {% if selected_version.status == 'draft' %}<a class="btn btn-outline-primary" href="#version-approval-actions">Утверждение версии ↑</a>{% endif %}
     </div>
     <div id="editor-error" role="alert" hidden></div>
 </div>
