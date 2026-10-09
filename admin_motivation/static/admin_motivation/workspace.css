@@ -155,3 +155,15 @@ body{background:#f4f6fa!important;color:#334155}
 @media (max-width: 900px) {
     .content-wrapper .coefficient-table { min-width: 800px; }
 }
+
+/* Use the full shared surface for every card, including version and editor cards. */
+.content-wrapper .content,
+.content-wrapper .plan-card,
+.content-wrapper #comparison-panel,
+.content-wrapper .editor-toolbar {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+    box-sizing: border-box;
+}
