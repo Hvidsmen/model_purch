@@ -34,9 +34,10 @@
 .product-costs .inline-input { flex: 1; width: 125px; }
 .product-volumes { min-width: 180px; }
 .product-volumes .inline-input { flex: 1; width: 110px; }
-.product-purchase { min-width: 210px; max-width: 260px; }
-.product-purchase .inline-input { flex: 1; width: 140px; min-width: 0; }
-.product-classification { min-width: 210px; max-width: 260px; }
+.product-planning-group { min-width: 240px; width: 280px; }
+.product-planning-group .inline-input { min-width: 220px; }
+.product-classification { min-width: 280px; max-width: 340px; }
+.product-classification .inline-input { flex: 1; width: 200px; min-width: 0; }
 .product-classification-field { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
 .product-classification-field > span { flex: 0 0 64px; color: #64748b; font-size: 10px; line-height: 12px; }
 .product-classification-field select { flex: 1; width: 140px; min-width: 0 !important; }
@@ -248,9 +249,8 @@
             <thead>
                 <tr>
                     <th style="width: 50px;">#</th>
-                    <th style="width: 350px;">План. группа</th>
+                    <th class="product-planning-group">План. группа</th>
                     <th>Классификация</th>
-                    <th>Закупка</th>
                     <th class="text-end">Объёмы, м³</th>
                     <th style="width: 110px;" class="text-end">EXW USD</th>
                     <th class="text-end">Пошлина, %</th>
@@ -271,9 +271,8 @@
     <input type="hidden" name="query_string" value="{{ clean_query_string }}">
                         </form>
                         <td class="text-muted">{{ item.id }}</td>
-                        <td><input type="text" class="inline-input" value="{{ item.planning_group }}" readonly></td>
-                        <td class="product-classification"><label class="product-classification-field"><span>Группа планов продаж</span><select class="inline-input editable-field" name="planning_sales" aria-label="Группа планов продаж" data-original="{{ item.planning_sales|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.planning_sales %}<option value="{{ value }}" {% if value == item.planning_sales %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Группа товаров</span><select class="inline-input editable-field" name="group_goods" aria-label="Группа товаров" data-original="{{ item.group_goods|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.group_goods %}<option value="{{ value }}" {% if value == item.group_goods %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Марка</span><select class="inline-input editable-field" name="brand" aria-label="Марка" data-original="{{ item.brand|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.brand %}<option value="{{ value }}" {% if value == item.brand %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label></td>
-                        <td class="product-purchase"><label class="product-classification-field"><span>Закупка</span><input type="text" class="inline-input editable-field" value="{{ item.purch|default:'' }}" name="purch" aria-label="Закупка" list="purchase-options" data-original="{{ item.purch|default:'' }}"></label><label class="product-classification-field"><span>Вид закупки</span><select class="inline-input editable-field" name="kind_purch" aria-label="Вид закупки" data-original="{{ item.kind_purch.id|default:'' }}">
+                        <td class="product-planning-group"><input type="text" class="inline-input" value="{{ item.planning_group }}" title="{{ item.planning_group }}" readonly></td>
+                        <td class="product-classification"><label class="product-classification-field"><span>Группа планов продаж</span><select class="inline-input editable-field" name="planning_sales" aria-label="Группа планов продаж" data-original="{{ item.planning_sales|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.planning_sales %}<option value="{{ value }}" {% if value == item.planning_sales %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Группа товаров</span><select class="inline-input editable-field" name="group_goods" aria-label="Группа товаров" data-original="{{ item.group_goods|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.group_goods %}<option value="{{ value }}" {% if value == item.group_goods %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Марка</span><select class="inline-input editable-field" name="brand" aria-label="Марка" data-original="{{ item.brand|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.brand %}<option value="{{ value }}" {% if value == item.brand %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Закупка</span><input type="text" class="inline-input editable-field" value="{{ item.purch|default:'' }}" name="purch" aria-label="Закупка" list="purchase-options" data-original="{{ item.purch|default:'' }}"></label><label class="product-classification-field"><span>Вид закупки</span><select class="inline-input editable-field" name="kind_purch" aria-label="Вид закупки" data-original="{{ item.kind_purch.id|default:'' }}">
                                 <option value="">— Не выбран —</option>
                                 {% for kp in kind_purch_list %}
                                     <option value="{{ kp.id }}" {% if item.kind_purch and kp.id == item.kind_purch.id %}selected{% endif %}>{{ kp }}</option>
@@ -299,7 +298,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="12" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
+                    <tr><td colspan="11" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
                 {% endfor %}
             </tbody>
         </table>
