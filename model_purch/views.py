@@ -1329,9 +1329,10 @@ def cancel_algorithm_api(request, run_id):
 
 
 def pricing_context(scenario):
+    from .services.product_options import classification_options
     from .models import GoodsGroup
     freight = Freight.objects.filter(scenario=scenario).first() if scenario else None
-    return {'goods_groups': GoodsGroup.objects.all(), 'purchase_options': Purch.objects.all(),
+    return {'classification_options': classification_options(), 'goods_groups': GoodsGroup.objects.all(), 'purchase_options': Purch.objects.all(),
             'pricing_options': {
                 'container_price': str(freight.price_per_container) if freight else '0',
                 'customs_rate': str(freight.customs_rate) if freight else '0',

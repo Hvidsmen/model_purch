@@ -140,3 +140,15 @@ class ProductPricingTests(TestCase):
         self.good.refresh_from_db()
         self.assertEqual(self.good.duty_rate, Decimal('5'))
         self.assertAlmostEqual(self.good.ddp_usd, 174.7)
+
+    def test_product_classification_fields_offer_existing_and_reference_choices(self):
+        from PlanningSystem.models import PlanningGroupSalesRef, GroupERPRef, BrangRef
+        from .forms import PGGoodsEditForm
+        from django.forms import Select
+        PlanningGroupSalesRef.objects.create(planning_group_sales_name='Reference sales')
+        GroupERPRef.objects.create(group_ERP_name='Reference group')
+        BrangRef.objects.create(brand_name='Reference brand')
+        form = PGGoodsEditForm(instance=self.good)
+        for field, value in [('planning_sales', 'Reference sales'), ('group_goods', 'Reference group'), ('brand', 'Reference brand')]:
+            self.assertIsInstance(form.fields[field].widget, Select)
+            self.assertIn(value, dict(form.fields[field].widget.choices))

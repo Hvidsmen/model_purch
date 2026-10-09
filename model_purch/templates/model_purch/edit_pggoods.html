@@ -5,12 +5,12 @@
 {% if form.errors %}<div class="alert alert-danger">Изменения не сохранены. {{ form.non_field_errors }}{% for field in form %}{% for error in field.errors %}<div><a href="#{{ field.id_for_label }}">{{ field.label }}</a>: {{ error }}</div>{% endfor %}{% endfor %}</div>{% endif %}
 <form method="post" class="pricing-row">{% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}"><div class="row g-3">{% for field in form %}<div class="col-md-6"><label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>{{ field }}{{ field.errors }}</div>{% endfor %}</div>
 <h2 class="h5 mt-4">Расчётные величины</h2><div class="row g-3">
-<div class="col-md-4"><label class="form-label">Фрахт за товар</label><input class="form-control" name="freight_usd" readonly value="{{ goods.freight_usd|format_money:6 }}"></div>
-<div class="col-md-4"><label class="form-label">CIF</label><input class="form-control" name="cif_usd" readonly value="{{ goods.cif_usd|format_money:6 }}"></div>
-<div class="col-md-4"><label class="form-label">Таможенный платёж</label><input class="form-control" name="customs_payment_usd" readonly value="{{ goods.customs_payment_usd|format_money:6 }}"></div>
-<div class="col-md-4"><label class="form-label">Доставка за товар</label><input class="form-control" name="warehouse_delivery_usd" readonly value="{{ goods.warehouse_delivery_usd|format_money:6 }}"></div>
-<div class="col-md-4"><label class="form-label">DDP</label><input class="form-control" name="ddp_usd" readonly value="{{ goods.ddp_usd|format_money:6 }}"></div>
-<div class="col-md-4"><label class="form-label">KDDP</label><input class="form-control" name="kddp" readonly value="{{ goods.kddp|format_money:6 }}"></div>
+<div class="col-md-4"><label class="form-label">Фрахт за товар</label><input class="form-control" name="freight_usd" readonly value="{{ goods.freight_usd|format_money:2 }}"></div>
+<div class="col-md-4"><label class="form-label">CIF</label><input class="form-control" name="cif_usd" readonly value="{{ goods.cif_usd|format_money:2 }}"></div>
+<div class="col-md-4"><label class="form-label">Таможенный платёж</label><input class="form-control" name="customs_payment_usd" readonly value="{{ goods.customs_payment_usd|format_money:2 }}"></div>
+<div class="col-md-4"><label class="form-label">Доставка за товар</label><input class="form-control" name="warehouse_delivery_usd" readonly value="{{ goods.warehouse_delivery_usd|format_money:2 }}"></div>
+<div class="col-md-4"><label class="form-label">DDP</label><input class="form-control" name="ddp_usd" readonly value="{{ goods.ddp_usd|format_money:2 }}"></div>
+<div class="col-md-4"><label class="form-label">KDDP</label><input class="form-control" name="kddp" readonly value="{{ goods.kddp|format_money:2 }}"></div>
 </div><p class="text-muted small mt-2">При EXW &gt; 0: KDDP = DDP / EXW. При EXW = 0 сохраняется предыдущий KDDP. Для поставщиков РФ DDP = EXW.</p>
 <div class="mt-3"><a class="btn btn-outline-secondary" href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Отмена</a> <button class="btn btn-primary" type="submit">Сохранить изменения</button></div></form></div>
 {% include 'model_purch/_pricing_options.html' %}

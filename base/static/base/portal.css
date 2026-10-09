@@ -34,3 +34,13 @@
 .portal-login input { padding: 10px; border: 1px solid #bfc9db; border-radius: 6px; }
 .portal-login button { padding: 10px 24px; background: #6559cb; color: white; border: 0; border-radius: 6px; cursor: pointer; }
 @media (max-width: 600px) { .portal-login { margin: 24px 12px; } }
+
+.searchable-filter { position: relative; min-width: 0; width: 100%; }
+.searchable-filter > button { width: 100%; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.searchable-filter-menu { position: absolute; top: calc(100% + 4px); left: 0; min-width: 100%; width: max-content; max-width: min(380px, 85vw); padding: 8px; z-index: 100; background: #fff; border: 1px solid #cbd5e1; border-radius: 6px; box-shadow: 0 6px 18px #33415526; }
+.searchable-filter-menu[hidden] { display: none !important; }
+.searchable-filter-menu input { width: 100% !important; margin-bottom: 6px; }
+.searchable-filter-options { max-height: 240px; overflow-y: auto; }
+.searchable-filter-options button { display: block; width: 100%; border: 0; border-radius: 4px; padding: 7px 8px; text-align: left; white-space: normal; background: #fff; color: #334155; font-size: 13px; }
+.searchable-filter-options button:hover, .searchable-filter-options button:focus, .searchable-filter-options button.selected { background: #eff6ff; color: #1d4ed8; }
+.searchable-filter-options p { margin: 6px; color: #64748b; font-size: 13px; }

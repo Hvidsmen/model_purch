@@ -94,6 +94,14 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('#comparison-plan')).to_be_visible()
         self.assertEqual(self.errors, [])
 
+    def choose_filter(self, selector, value):
+        select = self.page.locator(selector)
+        text = select.locator('option').evaluate_all('(options, value) => options.find(option => option.value === value).textContent', value)
+        root = select.locator('xpath=following-sibling::div[1]')
+        root.locator(':scope > button').click()
+        root.locator('input[type=search]').fill(text)
+        root.locator('.searchable-filter-options button').get_by_text(text, exact=True).click()
+
     def test_create_edit_and_read_history_without_losing_percentage_precision(self):
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
         self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')
@@ -269,7 +277,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.get_by_role('link', name='По подразделениям', exact=True).click()
         self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
         self.assertEqual(self.page.locator('#period-report details[open]').count(), 0)
-        self.page.locator('select[name=subdivision]').select_option('A')
+        self.choose_filter('select[name=subdivision]', 'A')
         with self.page.expect_navigation():
             self.page.get_by_role('button', name='Применить', exact=True).click()
         self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 1)
@@ -370,7 +378,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         first_input.fill('0.25'); first_input.press('Tab')
         second_input = self.page.locator(f'input[name="global_coeff={second}"]')
         second_input.fill('0.35'); second_input.press('Tab')
-        self.page.locator('#coefficient-pg').select_option('Other')
+        self.choose_filter('#coefficient-pg', 'Other')
         expect(first_input).not_to_be_visible()
         expect(self.page.locator('#coefficient-visible-count')).to_have_text('Показано: 1 из 2')
         with self.page.expect_navigation(): self.page.locator('#editor-save').click()
@@ -382,10 +390,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.page.locator('#coefficient-search').fill('missing')
         expect(self.page.locator('#coefficient-filter-empty')).to_be_visible()
         self.page.locator('#coefficient-reset').click()
-        self.page.locator('#coefficient-group').select_option('Other ERP')
+        self.choose_filter('#coefficient-group', 'Other ERP')
         expect(self.page.locator('#coefficient-visible-count')).to_have_text('Показано: 1 из 2')
         self.page.locator('#coefficient-reset').click()
-        self.page.locator('#coefficient-brand').select_option('Other brand')
+        self.choose_filter('#coefficient-brand', 'Other brand')
         expect(self.page.locator('#coefficient-visible-count')).to_have_text('Показано: 1 из 2')
         self.assertEqual(self.errors, [])
 

@@ -9,7 +9,7 @@
         const field = name => row.querySelector(`[name="${name}"]`);
         const numeric = name => Number((field(name)?.value || '0').replace(',', '.'));
         const previousKddp = field('kddp')?.value || '1';
-        const display = (name, value) => { if (field(name)) field(name).value = Number.isFinite(value) ? value.toFixed(6).replace(/\.?0+$/, '') : ''; };
+        const display = (name, value) => { if (field(name)) field(name).value = Number.isFinite(value) ? value.toFixed(2) : ''; };
         function calculate() {
             const exw = numeric('exw_usd');
             const ratio = numeric('volume') / numeric('container_volume');
@@ -25,6 +25,7 @@
             if (exw > 0) display('kddp', ddp / exw);
             else if (field('kddp')) field('kddp').value = previousKddp;
         }
+        row.addEventListener('change', event => { if (event.target.tagName === 'SELECT') event.target.dispatchEvent(new Event('input', {bubbles: true})); });
         row.addEventListener('input', event => {
             if (event.target.name === 'group_goods' && field('duty_rate')) {
                 field('duty_rate').value = duties.get(key(event.target.value)) || '0';

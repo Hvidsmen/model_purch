@@ -50,6 +50,12 @@ class PGGoodsEditForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        from .services.product_options import classification_options
+        for name, options in classification_options().items():
+            current = getattr(self.instance, name, None)
+            if current and current not in options:
+                options.append(current)
+            self.fields[name].widget = forms.Select(attrs={'class': 'form-select'}, choices=[('', '— Не выбрано —'), *((value, value) for value in options)])
         for name in self.fields:
             if self.is_bound and self.add_prefix(name) not in self.data:
                 self.fields[name].required = False
