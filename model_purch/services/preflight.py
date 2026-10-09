@@ -48,8 +48,8 @@ def validation_errors(scenario):
         errors.append('В сценарии нет товаров для расчёта.')
     for good in goods:
         for name, label in [('container_volume', 'Объём контейнера'), ('volume', 'Объём'), ('exw_usd', 'EXW'), ('ddp_usd', 'DDP'), ('kddp', 'KDDP')]:
-            if not valid_number(getattr(good, name), strictly_positive=(name in {'volume', 'container_volume'})):
-                errors.append(f'{good.planning_group}: {label} должен быть конечным числом {"больше нуля" if name in {"volume", "container_volume"} else "не меньше нуля"}.')
+            if not valid_number(getattr(good, name), strictly_positive=(name in {'volume', 'container_volume', 'exw_usd'})):
+                errors.append(f'{good.planning_group}: {label} должен быть конечным числом {"больше нуля" if name in {"volume", "container_volume", "exw_usd"} else "не меньше нуля"}.')
         if not valid_number(good.duty_rate, maximum=100):
             errors.append(f'{good.planning_group}: пошлина должна быть от 0 до 100%.')
         if not valid_number(good.percent_stock_end, maximum=100):
@@ -132,3 +132,15 @@ def run_inputs_unchanged(run):
     if run.scenario_id:
         return fingerprint(snapshot(run.scenario)) == fingerprint(run.parameters)
     return True
+
+
+def incomplete_goods(scenario):
+    rows = []
+    if scenario is None:
+        return rows
+    for good in PGGoods.objects.filter(scenario_plan=scenario).only('id', 'planning_group', 'exw_usd', 'volume').order_by('planning_group'):
+        missing = [label for field, label in [('exw_usd', 'EXW'), ('volume', 'Объём товара')]
+                   if not valid_number(getattr(good, field), strictly_positive=True)]
+        if missing:
+            rows.append({'id': good.pk, 'name': good.planning_group, 'missing': ', '.join(missing)})
+    return rows

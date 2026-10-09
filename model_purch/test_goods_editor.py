@@ -171,3 +171,15 @@ class GoodsEditorTests(TestCase):
         for value in (-1, 101):
             with self.assertRaises(IntegrityError), transaction.atomic():
                 PGGoods.objects.filter(pk=self.good.pk).update(duty_rate=value)
+
+    def test_completeness_warning_and_filter(self):
+        from .services.preflight import incomplete_goods, validation_errors
+        rows = incomplete_goods(self.scenario)
+        self.assertEqual(rows[0]['missing'], 'EXW')
+        self.assertTrue(any('EXW' in error and 'больше нуля' in error for error in validation_errors(self.scenario)))
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk, 'incomplete': '1'})
+        self.assertContains(page, 'Показать проблемные товары')
+        self.assertEqual(page.context['page_obj'].paginator.count, 1)
+        self.good.exw_usd = 100
+        self.good.save()
+        self.assertEqual(incomplete_goods(self.scenario), [])

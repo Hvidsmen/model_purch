@@ -810,6 +810,11 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     if purch:
         queryset = queryset.filter(purch=purch)
 
+    from .services.preflight import incomplete_goods
+    incomplete = incomplete_goods(current_scenario)
+    if request.GET.get('incomplete') == '1':
+        queryset = queryset.filter(pk__in=[row['id'] for row in incomplete])
+
     # --- Сортировка ---
     sort_by = request.GET.get('sort', None)
     sort_dir = request.GET.get('dir', 'asc')
@@ -862,6 +867,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
         freight_form = FreightForm(instance=Freight.objects.filter(scenario=current_scenario).first() if current_scenario else None)
     return render(request, 'model_purch/pggoods_list.html', {
         **pricing_context(current_scenario),
+        'incomplete_goods': incomplete,
         'freight_form': freight_form,
         'freight_sources': all_scenarios.exclude(pk=current_scenario.pk) if current_scenario else all_scenarios.none(),
         'page_obj': page_obj,
