@@ -74,3 +74,56 @@ body{background:#f4f6fa!important;color:#334155}
 @media(max-width:900px){.content-wrapper .coefficient-table .classification-cell,.content-wrapper .coefficient-table th[rowspan]{position:static;box-shadow:none}}
 .content-wrapper .brand-settings{display:block;margin-top:3px}.brand-settings summary{cursor:pointer;font-size:11px;color:#64748b}.brand-options{display:flex;flex-direction:column;gap:5px;margin-top:6px}
 @media(max-width:600px){.coefficient-filters input[type=search]{width:100%}}
+
+/* Neutral table surfaces shared by global and subdivision coefficients. */
+.content-wrapper table thead th {
+    background: #f8fafc !important;
+    color: #475569 !important;
+    border-right: 1px solid #e2e8f0 !important;
+    border-bottom: 1px solid #dbe3ed;
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 600;
+    text-transform: none;
+    letter-spacing: normal;
+}
+.content-wrapper table thead .header-policies {
+    background: #eff6ff !important;
+    color: #1e40af !important;
+}
+.content-wrapper table thead .header-sales {
+    background: #f0fdfa !important;
+    color: #115e59 !important;
+}
+.content-wrapper table thead .header-policies.group-divider {
+    border-right: 2px solid #cbd5e1 !important;
+}
+.content-wrapper .table-wrapper {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.content-wrapper .table-wrapper::-webkit-scrollbar-thumb { background: #94a3b8; }
+.content-wrapper .add-product-row { background: #fff; }
+.content-wrapper #addProductForm table { min-width: 1320px; }
+.content-wrapper #addProductForm thead th { padding: 9px 8px; }
+.content-wrapper #addProductForm .coeff-input,
+.content-wrapper #addProductForm .select-var-calc-add {
+    width: 100%;
+    max-width: none;
+    min-height: 34px;
+    font-size: 12px;
+    font-style: normal;
+    color: #334155;
+    background-color: #fff;
+    border: 1px solid #cbd5e1;
+    border-radius: 5px;
+}
+.content-wrapper #addProductForm .coeff-input { text-align: right; padding: 6px 8px; }
+.content-wrapper #addProductForm .brand-cell { gap: 6px; }
+.content-wrapper #addProductForm .required-mark { color: #b91c1c; }
+.content-wrapper #addProductForm input:focus,
+.content-wrapper #addProductForm select:focus {
+    outline: 2px solid #93c5fd;
+    outline-offset: 1px;
+    box-shadow: none;
+}
