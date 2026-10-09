@@ -255,9 +255,8 @@
                     <th style="width: 110px;" class="text-end">EXW USD</th>
                     <th class="text-end">Пошлина, %</th>
                     <th class="text-end ddp-detail" hidden>Расчёт стоимости, USD</th>
-                    <th class="text-end">Загран без DDP, USD</th>
-                    <th class="text-end">НР НДС, USD</th>
                     <th style="width: 110px;" class="text-end">DDP USD <button type="button" id="toggle-ddp-details" class="btn btn-sm btn-outline-secondary" aria-expanded="false" title="Показать составляющие DDP">+</button></th>
+                    <th class="text-end">Дополнительные расходы, USD</th>
                     <th class="text-end">Запас и остаток</th>
                     <th class="text-center" style="width: 120px;">Действия</th>
                 </tr>
@@ -284,9 +283,8 @@
                         <td><input type="number" step="0.01" min="0" class="inline-input text-end editable-field" value="{{ item.exw_usd|floatformat:"2u" }}" name="exw_usd" data-original="{{ item.exw_usd|floatformat:"2u" }}"></td>
                         <td class="percent-cell"><input type="number" step="0.01" min="0" max="100" class="inline-input text-end editable-field" value="{{ item.duty_rate|unlocalize }}" name="duty_rate" data-original="{{ item.duty_rate|unlocalize }}"></td>
                         <td class="product-costs ddp-detail" hidden><label class="product-classification-field"><span>Фрахт</span><input class="inline-input text-end" name="freight_usd" aria-label="Фрахт" readonly value="{{ item.freight_usd|format_money:2 }}"></label><label class="product-classification-field"><span>CIF</span><input class="inline-input text-end" name="cif_usd" aria-label="CIF" readonly value="{{ item.cif_usd|format_money:2 }}"></label><label class="product-classification-field"><span>Таможня</span><input class="inline-input text-end" name="customs_payment_usd" aria-label="Таможня" readonly value="{{ item.customs_payment_usd|format_money:2 }}"></label><label class="product-classification-field"><span>Доставка</span><input class="inline-input text-end" name="warehouse_delivery_usd" aria-label="Доставка за товар" readonly value="{{ item.warehouse_delivery_usd|format_money:2 }}"></label></td>
-                        <td><input class="inline-input text-end" name="foreign_delivery_usd" aria-label="Загран без DDP" readonly value="{{ item.foreign_delivery_usd|format_money:2 }}"></td>
-                        <td><input class="inline-input text-end" name="nr_customs_vat_usd" aria-label="НР НДС" readonly value="{{ item.nr_customs_vat_usd|format_money:2 }}"></td>
                         <td class="product-ddp"><label class="product-classification-field"><span>DDP, USD</span><input type="number" step="0.01" min="0" class="inline-input text-end" value="{{ item.ddp_usd|floatformat:"2u" }}" name="ddp_usd" aria-label="DDP, USD" readonly data-original="{{ item.ddp_usd }}"></label><label class="product-classification-field"><span>KDDP</span><input type="number" step="0.0001" min="0" class="inline-input text-end" value="{{ item.kddp|floatformat:"2u" }}" name="kddp" aria-label="KDDP" readonly title="Рассчитывается автоматически"></label></td>
+                        <td class="product-costs"><label class="product-classification-field"><span>Загран без DDP</span><input class="inline-input text-end" name="foreign_delivery_usd" aria-label="Загран без DDP" readonly value="{{ item.foreign_delivery_usd|format_money:2 }}"></label><label class="product-classification-field"><span>НР НДС</span><input class="inline-input text-end" name="nr_customs_vat_usd" aria-label="НР НДС" readonly value="{{ item.nr_customs_vat_usd|format_money:2 }}"></label></td>
                         <td class="product-stock"><label class="product-classification-field"><span>Запас, дни</span><input type="number" step="1" min="0" class="inline-input text-end editable-field" value="{{ item.stock_cnt_day|format_integer }}" name="stock_cnt_day" aria-label="Запас, дни" data-original="{{ item.stock_cnt_day }}"></label><label class="product-classification-field"><span>Остаток, %</span><input type="number" step="0.01" min="0" max="100" class="inline-input text-end " readonly value="{{ item.percent_stock_end|format_percent }}" name="percent_stock_end" aria-label="Остаток, %" data-original="{{ item.percent_stock_end }}" title="{{ item.percent_stock_end|format_percent_display }}"></label></td>
                         <td class="text-center text-nowrap">
                             <form method="post"
@@ -301,7 +299,7 @@
                         </td>
                     </tr>
                 {% empty %}
-                    <tr><td colspan="13" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
+                    <tr><td colspan="12" class="text-center text-muted py-4"><i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>Нет товаров по выбранным условиям. Сбросьте фильтры или импортируйте товары для этого сценария. <a href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Сбросить фильтры</a> · <a href="{% url 'import_from_excel' %}?scenario={{ current_scenario.pk }}">Импортировать Excel</a></td></tr>
                 {% endfor %}
             </tbody>
         </table>
