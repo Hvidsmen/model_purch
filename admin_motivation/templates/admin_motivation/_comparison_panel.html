@@ -4,7 +4,8 @@
 </style>
 <div id="comparison-panel" data-endpoint="{% url 'motivation_coefficient_comparison' %}" data-version="{{ selected_version.pk }}" data-subdivision="{{ sub.pk|default:'' }}">
 <h2>Сравнение мотивации{% if sub %} · {{ sub.subdivision_key }}{% endif %}</h2>
-<div class="compare-controls">
+<details id="comparison-settings" open><summary>Параметры сравнения</summary>
+<div class="compare-controls mt-2">
 <label>План продаж<select id="comparison-plan" class="form-select"><option value="">Выберите загруженный план</option>{% for plan in comparison_plans %}<option value="{{ plan.pk }}" {% if plan.pk == comparison_plan %}selected{% endif %}>{{ plan.title }}</option>{% endfor %}</select></label>
 <label>Базовая версия на весь период<select id="comparison-baseline" class="form-select"><option value="">Не выбрана</option>{% for version in comparison_baselines %}<option value="{{ version.pk }}" {% if version.pk == comparison_baseline %}selected{% endif %}>{{ version }} · {{ version.get_status_display }}</option>{% endfor %}</select></label>
 <button type="button" class="btn btn-outline-primary" id="comparison-refresh">Сравнить</button>
@@ -13,6 +14,7 @@
 <div class="compare-controls mt-2"><label><input type="checkbox" id="comparison-show-approved" checked> Утверждённый</label><label><input type="checkbox" id="comparison-show-baseline"> Базовый</label><span>Предлагаемый — показан всегда</span></div>
 <details class="comparison-help"><summary>Как считаются варианты</summary><p class="compare-note">Утверждённый: история утверждённых версий. Базовый: выбранная версия на весь план. Предлагаемый: история до {{ selected_version.effective_from|date:'d.m.Y' }}, затем выбранная версия, включая изменения в ячейках.</p></details>
 <div id="comparison-status" class="compare-note" role="status" aria-live="polite">Выберите план для сравнения.</div>
+</details>
 <div id="comparison-error" class="text-danger compare-note" hidden></div>
 <div class="table-responsive"><table class="compare-table"><thead><tr><th>Мотивация, USD</th><th data-variant="approved">Утверждённый</th><th data-variant="baseline" hidden>Базовый</th><th>Предлагаемый</th><th data-variant="approved">Δ к утверждённому / %</th><th data-variant="baseline" hidden>Δ к базовому / %</th></tr></thead><tbody>
 <tr><td>Политики</td><td data-variant="approved" data-amount="approved.policies">—</td><td data-variant="baseline" data-amount="baseline.policies" hidden>—</td><td data-amount="current.policies">—</td><td data-variant="approved" data-delta="approved.policies">—</td><td data-variant="baseline" data-delta="baseline.policies" hidden>—</td></tr>

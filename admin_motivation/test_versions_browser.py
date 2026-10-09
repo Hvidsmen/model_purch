@@ -81,6 +81,19 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('button[value="delete_version"]')).to_have_count(0)
         self.assertEqual(self.errors, [])
 
+    def test_comparison_settings_collapse_keeps_results_and_remembers_state(self):
+        from playwright.sync_api import expect
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        self.page.locator('#comparison-settings > summary').click()
+        expect(self.page.locator('#comparison-plan')).not_to_be_visible()
+        expect(self.page.locator('#comparison-panel .compare-table')).to_be_visible()
+        self.page.reload()
+        expect(self.page.locator('#comparison-plan')).not_to_be_visible()
+        expect(self.page.locator('#comparison-panel .compare-table')).to_be_visible()
+        self.page.locator('#comparison-settings > summary').click()
+        expect(self.page.locator('#comparison-plan')).to_be_visible()
+        self.assertEqual(self.errors, [])
+
     def test_create_edit_and_read_history_without_losing_percentage_precision(self):
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
         self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')

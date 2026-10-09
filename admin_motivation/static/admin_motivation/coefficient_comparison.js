@@ -1,6 +1,17 @@
 (() => {
     const panel = document.getElementById('comparison-panel');
     if (!panel) return;
+    const settings = document.getElementById('comparison-settings');
+    const settingsKey = 'motivation-comparison-settings-open';
+    if (settings) {
+        try {
+            const saved = localStorage.getItem(settingsKey);
+            if (saved !== null) settings.open = saved !== 'false';
+        } catch (_) {}
+        settings.addEventListener('toggle', () => {
+            try { localStorage.setItem(settingsKey, String(settings.open)); } catch (_) {}
+        });
+    }
     const plan = document.getElementById('comparison-plan');
     const baseline = document.getElementById('comparison-baseline');
     const status = document.getElementById('comparison-status');
