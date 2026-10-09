@@ -172,3 +172,5 @@ class ProductPricingTests(TestCase):
         self.good.save()
         self.assertEqual(self.good.nr_customs_vat_usd, 0)
         self.assertEqual(self.good.ddp_usd, self.good.exw_usd)
+        for field in ('freight_usd', 'cif_usd', 'customs_payment_usd', 'warehouse_delivery_usd', 'foreign_delivery_usd', 'nr_customs_vat_usd'):
+            self.assertEqual(getattr(self.good, field), 0)

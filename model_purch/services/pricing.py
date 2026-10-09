@@ -34,7 +34,11 @@ def apply_price(good, freight=None, is_russian=False, supply_type=None):
         delivery = number(freight.warehouse_delivery_cost, 'Доставка до склада') * ratio if freight else Decimal(0)
         foreign_delivery = number(freight.foreign_delivery_cost, 'Загран доставка') * ratio if freight else Decimal(0)
         vat = number(freight.nr_customs_vat_rate, 'НР_Таможенный НДС', maximum=100) / 100 * customs if freight and supply_type == 'p2' else Decimal(0)
-        ddp = exw if is_russian or supply_type == 'russian' else cif + customs + delivery
+        if is_russian or supply_type == 'russian':
+            shipping = cif = customs = delivery = foreign_delivery = vat = Decimal(0)
+            ddp = exw
+        else:
+            ddp = cif + customs + delivery
         for name, value in zip(CALCULATED_FIELDS[:-1], (shipping, cif, customs, delivery, foreign_delivery, vat, ddp)):
             converted = float(value)
             if not math.isfinite(converted):
