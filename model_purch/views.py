@@ -1342,10 +1342,22 @@ def pricing_context(scenario):
 
 
 def goods_groups(request):
+    from django.core.exceptions import ValidationError
     from .models import GoodsGroup
     from .forms import GoodsGroupForm
     selected = request.POST.get('id') if request.method == 'POST' else request.GET.get('edit')
     group = get_object_or_404(GoodsGroup, pk=selected) if selected else None
+    if request.method == 'POST' and request.POST.get('action') == 'apply_duty':
+        from .services.pricing import apply_group_duty
+        try:
+            if group is None or request.POST.get('confirm_apply') != 'yes':
+                raise ValidationError('Подтвердите применение пошлины выбранной группы.')
+            count = apply_group_duty(group.pk)
+        except ValidationError as error:
+            messages.error(request, 'Пошлина не применена: ' + ' '.join(error.messages))
+        else:
+            messages.success(request, f'Пошлина {group.duty_rate}% применена к {count} товарам во всех сценариях. DDP и KDDP пересчитаны. Повторите экспорт изменённых сценариев в MS SQL.')
+        return redirect('goods_groups')
     form = GoodsGroupForm(request.POST if request.method == 'POST' else None, instance=group)
     if request.method == 'POST' and form.is_valid():
         form.save()

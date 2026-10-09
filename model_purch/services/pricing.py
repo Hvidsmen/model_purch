@@ -1,3 +1,4 @@
+from django.db import transaction
 """One source of truth for unit prices; percentages are stored as 0..100."""
 from decimal import Decimal, localcontext
 import math
@@ -49,9 +50,10 @@ def calculate_instance(good):
     return apply_price(good, freight, russian)
 
 
-def reprice_goods(scenario=None, strict=True):
+def reprice_goods(scenario=None, strict=True, goods=None):
     from ..models import Freight, Purch, PGGoods
-    goods = PGGoods.objects.all()
+    if goods is None:
+        goods = PGGoods.objects.all()
     if scenario is not None:
         goods = goods.filter(scenario_plan=scenario)
     freights = {row.scenario_id: row for row in Freight.objects.all()}
@@ -74,3 +76,16 @@ def reprice_goods(scenario=None, strict=True):
         PGGoods.objects.bulk_update(batch, CALCULATED_FIELDS, batch_size=100)
 
     return invalid
+
+
+@transaction.atomic
+def apply_group_duty(group_id):
+    """Explicitly replace overrides for this group across every scenario."""
+    from ..models import GoodsGroup, PGGoods
+    group = GoodsGroup.objects.select_for_update().get(pk=group_id)
+    ids = [pk for pk, name in PGGoods.objects.values_list('pk', 'group_goods').iterator(chunk_size=500)
+           if planning_group_key(name or '') == group.name_key]
+    goods = PGGoods.objects.filter(pk__in=ids)
+    count = goods.update(duty_rate=group.duty_rate)
+    reprice_goods(goods=goods)
+    return count

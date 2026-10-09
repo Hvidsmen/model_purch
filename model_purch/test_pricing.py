@@ -106,3 +106,37 @@ class ProductPricingTests(TestCase):
         self.assertEqual([row['id'] for row in response.json()['rows']], [self.good.pk])
         self.assertAlmostEqual(response.json()['rows'][0]['values']['ddp_usd'], 285.2)
         self.assertEqual(len(response.json()['errors']), 1)
+
+    def test_apply_group_duty_replaces_overrides_across_scenarios_and_reprices(self):
+        group = GoodsGroup.objects.get(name='Group')
+        group.duty_rate = Decimal('20')
+        group.save()
+        other_scenario = ScenarioModel.objects.create(name='Other', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        second = PGGoods.objects.create(scenario_plan=other_scenario, planning_group='Second',
+            group_goods=' group ', kind_purch=self.kind, volume=1, container_volume=65, duty_rate=3, exw_usd=50, stock_cnt_day=30, percent_stock_end=0)
+        unrelated = PGGoods.objects.create(scenario_plan=self.scenario, planning_group='Unrelated',
+            group_goods='Different', kind_purch=self.kind, volume=1, container_volume=65, duty_rate=7, exw_usd=80, stock_cnt_day=30, percent_stock_end=0)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, Decimal('5'))
+        response = self.client.post(reverse('goods_groups'), {'id': group.pk, 'action': 'apply_duty', 'confirm_apply': 'yes'})
+        self.assertEqual(response.status_code, 302)
+        self.good.refresh_from_db(); second.refresh_from_db(); unrelated.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, Decimal('20'))
+        self.assertEqual(second.duty_rate, Decimal('20'))
+        self.assertEqual(unrelated.duty_rate, Decimal('7'))
+        self.assertAlmostEqual(self.good.customs_payment_usd, 16.8)
+        self.assertAlmostEqual(self.good.ddp_usd, 176.8)
+        self.assertAlmostEqual(self.good.kddp, 1.768)
+
+    def test_apply_group_duty_requires_confirmation_and_rolls_back_invalid_prices(self):
+        group = GoodsGroup.objects.get(name='Group')
+        group.duty_rate = Decimal('20')
+        group.save()
+        self.client.post(reverse('goods_groups'), {'id': group.pk, 'action': 'apply_duty'})
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, Decimal('5'))
+        PGGoods.objects.filter(pk=self.good.pk).update(container_volume=0)
+        self.client.post(reverse('goods_groups'), {'id': group.pk, 'action': 'apply_duty', 'confirm_apply': 'yes'})
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, Decimal('5'))
+        self.assertAlmostEqual(self.good.ddp_usd, 174.7)
