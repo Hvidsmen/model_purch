@@ -1356,6 +1356,17 @@ def goods_groups(request):
     from .forms import GoodsGroupForm
     selected = request.POST.get('id') if request.method == 'POST' else request.GET.get('edit')
     group = get_object_or_404(GoodsGroup, pk=selected) if selected else None
+    if request.method == 'POST' and request.POST.get('action') == 'apply_parameters':
+        from .services.pricing import apply_group_parameters
+        try:
+            if request.POST.get('confirm_apply') != 'yes':
+                raise ValidationError('Подтвердите замену индивидуальных значений товаров.')
+            ids = [int(value) for value in request.POST.getlist('group_ids')]
+            count = apply_group_parameters(ids, request.POST.get('parameter'))
+            messages.success(request, f'Параметры применены к {count} товарам во всех сценариях. Стоимости пересчитаны. Повторите экспорт в MS SQL.')
+        except (ValidationError, ValueError) as error:
+            messages.error(request, 'Применение отменено: ' + str(error))
+        return redirect('goods_groups')
     if request.method == 'POST' and request.POST.get('action') == 'apply_duty':
         from .services.pricing import apply_group_duty
         try:

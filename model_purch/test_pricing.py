@@ -84,7 +84,7 @@ class ProductPricingTests(TestCase):
         user = User.objects.create_user('logistician')
         user.groups.add(Group.objects.get(name=LOGISTICIAN))
         self.client.force_login(user)
-        response = self.client.post(reverse('goods_groups'), {'name': 'Duty group', 'duty_rate': '7.25'})
+        response = self.client.post(reverse('goods_groups'), {'name': 'Duty group', 'duty_rate': '7.25', 'container_volume': '65'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(GoodsGroup.objects.get(name='Duty group').duty_rate, Decimal('7.25'))
 
@@ -174,3 +174,34 @@ class ProductPricingTests(TestCase):
         self.assertEqual(self.good.ddp_usd, self.good.exw_usd)
         for field in ('freight_usd', 'cif_usd', 'customs_payment_usd', 'warehouse_delivery_usd', 'foreign_delivery_usd', 'nr_customs_vat_usd'):
             self.assertEqual(getattr(self.good, field), 0)
+
+    def test_group_container_and_bulk_parameters(self):
+        group = GoodsGroup.objects.get(name='Group')
+        self.assertEqual(group.container_volume, 65)
+        group.container_volume = 100
+        group.duty_rate = 20
+        group.save()
+        response = self.client.post(reverse('goods_groups'), {
+            'action': 'apply_parameters', 'confirm_apply': 'yes',
+            'group_ids': [group.pk], 'parameter': 'container_volume',
+        })
+        self.assertEqual(response.status_code, 302)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.container_volume, 100)
+        self.assertEqual(self.good.duty_rate, 5)
+        self.assertAlmostEqual(self.good.freight_usd, 20)
+        self.client.post(reverse('goods_groups'), {
+            'action': 'apply_parameters', 'confirm_apply': 'yes',
+            'group_ids': [group.pk], 'parameter': 'both',
+        })
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, 20)
+        self.assertAlmostEqual(self.good.customs_payment_usd, 14.4)
+
+    def test_group_container_application_requires_confirmation(self):
+        group = GoodsGroup.objects.get(name='Group')
+        self.client.post(reverse('goods_groups'), {
+            'action': 'apply_parameters', 'group_ids': [group.pk], 'parameter': 'both',
+        })
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.container_volume, 50)

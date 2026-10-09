@@ -115,6 +115,7 @@ class KindPurch(models.Model):
         return self.name
 
 class GoodsGroup(models.Model):
+    container_volume = models.DecimalField('Объём контейнера, м³', max_digits=12, decimal_places=3, default=65, validators=[MinValueValidator(Decimal('0.001'))])
     name = models.CharField('Группа товаров', max_length=255)
     name_key = models.CharField(max_length=64, unique=True, editable=False, default='')
     duty_rate = models.DecimalField('Пошлина, %', max_digits=5, decimal_places=2, default=0,
@@ -124,7 +125,7 @@ class GoodsGroup(models.Model):
         verbose_name = 'Группа товаров'
         verbose_name_plural = 'Группы товаров'
         ordering = ['name']
-        constraints = [models.CheckConstraint(condition=models.Q(duty_rate__gte=0, duty_rate__lte=100), name='goods_group_duty_range')]
+        constraints = [models.CheckConstraint(condition=models.Q(duty_rate__gte=0, duty_rate__lte=100), name='goods_group_duty_range'), models.CheckConstraint(condition=models.Q(container_volume__gte=Decimal('0.001')), name='goods_group_container_positive')]
 
     def clean(self):
         super().clean()

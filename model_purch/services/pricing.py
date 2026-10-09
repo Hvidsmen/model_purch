@@ -95,3 +95,32 @@ def apply_group_duty(group_id):
     count = goods.update(duty_rate=group.duty_rate)
     reprice_goods(goods=goods)
     return count
+
+
+@transaction.atomic
+def apply_group_parameters(group_ids, parameter):
+    from ..models import GoodsGroup, PGGoods
+    if parameter not in ('duty_rate', 'container_volume', 'both'):
+        raise ValidationError('Выберите параметр для применения.')
+    groups = list(GoodsGroup.objects.select_for_update().filter(pk__in=group_ids))
+    if not groups or len(groups) != len(set(group_ids)):
+        raise ValidationError('Выберите существующие группы товаров.')
+    mapping = {group.name_key: group for group in groups}
+    batch = []
+    for pk, name in PGGoods.objects.values_list('pk', 'group_goods').iterator():
+        group = mapping.get(planning_group_key(name or ''))
+        if group:
+            batch.append((pk, group))
+    for group in groups:
+        ids = [pk for pk, matched in batch if matched.pk == group.pk]
+        values = {}
+        if parameter in ('duty_rate', 'both'):
+            values['duty_rate'] = group.duty_rate
+        if parameter in ('container_volume', 'both'):
+            values['container_volume'] = group.container_volume
+        for start in range(0, len(ids), 500):
+            PGGoods.objects.filter(pk__in=ids[start:start + 500]).update(**values)
+    ids = [pk for pk, group in batch]
+    for start in range(0, len(ids), 500):
+        reprice_goods(goods=PGGoods.objects.filter(pk__in=ids[start:start + 500]))
+    return len(ids)

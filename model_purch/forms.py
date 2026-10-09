@@ -290,6 +290,6 @@ class GoodsGroupForm(forms.ModelForm):
     class Meta:
         from .models import GoodsGroup
         model = GoodsGroup
-        fields = ['name', 'duty_rate']
-        widgets = {'name': forms.TextInput(attrs={'class': 'form-control'}),
+        fields = ['name', 'duty_rate', 'container_volume']
+        widgets = {'container_volume': forms.NumberInput(attrs={'class': 'form-control', 'min': '0.001', 'step': '0.001'}), 'name': forms.TextInput(attrs={'class': 'form-control'}),
                    'duty_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'})}
