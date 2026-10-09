@@ -127,3 +127,31 @@ body{background:#f4f6fa!important;color:#334155}
     outline-offset: 1px;
     box-shadow: none;
 }
+
+/* Fit the coefficient grid to the working area on desktop screens. */
+.content-wrapper .coefficient-table { width: 100%; min-width: 0; }
+.content-wrapper .coefficient-table th:nth-child(1)[rowspan],
+.content-wrapper .coefficient-table td:nth-child(1) { width: 11%; }
+.content-wrapper .coefficient-table th:nth-child(2)[rowspan],
+.content-wrapper .coefficient-table td:nth-child(2) { width: 16%; }
+.content-wrapper .coefficient-table th:nth-child(3)[rowspan],
+.content-wrapper .coefficient-table td:nth-child(3) { width: 15%; }
+.content-wrapper .coefficient-table .classification-cell:nth-child(2),
+.content-wrapper .coefficient-table th:nth-child(2)[rowspan] { left: 11%; }
+.content-wrapper .coefficient-table .classification-cell:nth-child(3),
+.content-wrapper .coefficient-table th:nth-child(3)[rowspan] { left: 27%; }
+.content-wrapper .coefficient-table td,
+.content-wrapper .coefficient-table th { padding-left: 4px; padding-right: 4px; }
+.content-wrapper .coefficient-table .coeff-input {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    padding: 5px 2px;
+    font-size: 12px;
+}
+.content-wrapper .coefficient-table .brand { white-space: normal; overflow-wrap: anywhere; }
+.content-wrapper .coefficient-table .brand-settings label { flex-wrap: wrap; }
+.content-wrapper .coefficient-table .brand-settings select { width: 100%; min-width: 0; max-width: 100%; }
+@media (max-width: 900px) {
+    .content-wrapper .coefficient-table { min-width: 800px; }
+}

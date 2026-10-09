@@ -54,6 +54,17 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('#approval-dialog')).not_to_be_visible()
         self.assertEqual(self.errors, [])
 
+    def test_coefficient_table_fits_desktop_working_area(self):
+        self.db(lambda: [SegmentCoeff.objects.get_or_create(segment_name=f'K{i}') for i in range(5)])
+        for width in (1280, 1536):
+            self.page.set_viewport_size({'width': width, 'height': 900})
+            self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+            dimensions = self.page.locator('#coefficient-table').evaluate(
+                '(table) => ({table: table.getBoundingClientRect().width, wrapper: table.parentElement.clientWidth, scroll: table.parentElement.scrollWidth})')
+            self.assertLessEqual(dimensions['table'], dimensions['wrapper'] + 1)
+            self.assertLessEqual(dimensions['scroll'], dimensions['wrapper'] + 1)
+        self.assertEqual(self.errors, [])
+
     def test_create_edit_and_read_history_without_losing_percentage_precision(self):
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
         self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')
