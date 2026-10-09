@@ -5,7 +5,7 @@ import math
 from django.core.exceptions import ValidationError
 from ..goods_identity import planning_group_key
 
-CALCULATED_FIELDS = ('freight_usd', 'cif_usd', 'customs_payment_usd', 'warehouse_delivery_usd', 'ddp_usd', 'kddp')
+CALCULATED_FIELDS = ('freight_usd', 'cif_usd', 'customs_payment_usd', 'warehouse_delivery_usd', 'foreign_delivery_usd', 'nr_customs_vat_usd', 'ddp_usd', 'kddp')
 INPUT_FIELDS = ('purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch', 'volume',
                 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day')
 
@@ -20,7 +20,7 @@ def number(value, label, positive=False, maximum=None):
         raise ValidationError(f'{label}: некорректное значение.') from error
 
 
-def apply_price(good, freight=None, is_russian=False):
+def apply_price(good, freight=None, is_russian=False, supply_type=None):
     with localcontext() as context:
         context.prec = 36
         exw = number(good.exw_usd, 'EXW')
@@ -32,8 +32,10 @@ def apply_price(good, freight=None, is_russian=False):
         cif = exw + shipping
         customs = number(freight.customs_rate, 'Таможенная ставка', maximum=100) / 100 * cif * (1 + duty) if freight else Decimal(0)
         delivery = number(freight.warehouse_delivery_cost, 'Доставка до склада') * ratio if freight else Decimal(0)
-        ddp = exw if is_russian else cif + customs + delivery
-        for name, value in zip(CALCULATED_FIELDS[:-1], (shipping, cif, customs, delivery, ddp)):
+        foreign_delivery = number(freight.foreign_delivery_cost, 'Загран доставка') * ratio if freight else Decimal(0)
+        vat = number(freight.nr_customs_vat_rate, 'НР_Таможенный НДС', maximum=100) / 100 * customs if freight and supply_type == 'p2' else Decimal(0)
+        ddp = exw if is_russian or supply_type == 'russian' else cif + customs + delivery
+        for name, value in zip(CALCULATED_FIELDS[:-1], (shipping, cif, customs, delivery, foreign_delivery, vat, ddp)):
             converted = float(value)
             if not math.isfinite(converted):
                 raise ValidationError('Расчётная стоимость слишком велика.')
@@ -46,8 +48,8 @@ def apply_price(good, freight=None, is_russian=False):
 def calculate_instance(good):
     from ..models import Freight, Purch
     freight = Freight.objects.filter(scenario_id=good.scenario_plan_id).first() if good.scenario_plan_id else None
-    russian = Purch.objects.filter(name_key=planning_group_key(good.purch or ''), is_russian=True).exists()
-    return apply_price(good, freight, russian)
+    supplier = Purch.objects.filter(name_key=planning_group_key(good.purch or '')).first()
+    return apply_price(good, freight, supply_type=supplier.supply_type if supplier else None)
 
 
 def reprice_goods(scenario=None, strict=True, goods=None):
@@ -57,12 +59,12 @@ def reprice_goods(scenario=None, strict=True, goods=None):
     if scenario is not None:
         goods = goods.filter(scenario_plan=scenario)
     freights = {row.scenario_id: row for row in Freight.objects.all()}
-    russian = set(Purch.objects.filter(is_russian=True).values_list('name_key', flat=True))
+    suppliers = dict(Purch.objects.values_list('name_key', 'supply_type'))
     batch = []
     invalid = []
     for good in goods.iterator(chunk_size=500):
         try:
-            apply_price(good, freights.get(good.scenario_plan_id), planning_group_key(good.purch or '') in russian)
+            apply_price(good, freights.get(good.scenario_plan_id), supply_type=suppliers.get(planning_group_key(good.purch or '')))
         except ValidationError:
             if strict:
                 raise

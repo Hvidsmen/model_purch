@@ -185,6 +185,8 @@ class PGGoods(models.Model):
     cif_usd = models.FloatField('CIF', default=0, editable=False)
     customs_payment_usd = models.FloatField('Таможенный платёж', default=0, editable=False)
     warehouse_delivery_usd = models.FloatField('Доставка за товар', default=0, editable=False)
+    foreign_delivery_usd = models.FloatField('Расходы на загран доставку без DDP за товар', default=0, editable=False)
+    nr_customs_vat_usd = models.FloatField('НР_Таможенный НДС за товар', default=0, editable=False)
     ddp_usd = models.FloatField(default=0, editable=False)
     kddp = models.FloatField(default=1, editable=False)
 
@@ -285,7 +287,12 @@ class Purch(models.Model):
     lag_income = models.IntegerField()
     name_key = models.CharField(max_length=64, editable=False, unique=True, default='')
     lage_make = models.IntegerField(default=0, null=True)
-    is_russian = models.BooleanField('Поставщик РФ', default=False)
+    class SupplyType(models.TextChoices):
+        DIRECT = 'direct', 'Прямой контракт'
+        P2 = 'p2', 'P2'
+        RUSSIAN = 'russian', 'Закупка РФ'
+
+    supply_type = models.CharField('Тип поставки', max_length=16, choices=SupplyType.choices, default=SupplyType.P2)
 
     def clean(self):
         super().clean()
@@ -354,8 +361,10 @@ class Freight(models.Model):
                                        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     warehouse_delivery_cost = models.DecimalField('Стоимость доставки до склада', max_digits=18, decimal_places=2,
                                                  default=0, validators=[MinValueValidator(Decimal('0'))])
-    foreign_delivery_cost = models.DecimalField('Заграничная доставка без DDP, USD за контейнер', max_digits=18, decimal_places=2,
+    foreign_delivery_cost = models.DecimalField('Расходы на загран доставку без DDP, USD за контейнер', max_digits=18, decimal_places=2,
                                                 default=1100, validators=[MinValueValidator(Decimal('0'))])
+    nr_customs_vat_rate = models.DecimalField('НР_Таможенный НДС, %', max_digits=5, decimal_places=2, default=10,
+                                              validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     # Retain the legacy value for existing SQL consumers; product volumes are edited on PGGoods.
     volume_per_container = models.DecimalField('Архивный объём контейнера, м³', max_digits=12, decimal_places=3, default=65, editable=False,
                                                validators=[MinValueValidator(Decimal('0.001'))])
@@ -369,6 +378,7 @@ class Freight(models.Model):
             models.CheckConstraint(condition=models.Q(customs_rate__gte=0, customs_rate__lte=100), name='freight_customs_rate_range'),
             models.CheckConstraint(condition=models.Q(warehouse_delivery_cost__gte=0), name='freight_delivery_nonnegative'),
             models.CheckConstraint(condition=models.Q(foreign_delivery_cost__gte=0), name='freight_foreign_delivery_nonnegative'),
+            models.CheckConstraint(condition=models.Q(nr_customs_vat_rate__gte=0, nr_customs_vat_rate__lte=100), name='freight_nr_vat_rate_range'),
         ]
 
     def __str__(self):

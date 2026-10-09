@@ -1,5 +1,5 @@
 {% load static %}
 <datalist id="goods-group-options">{% for group in goods_groups %}<option value="{{ group.name }}"></option>{% endfor %}</datalist>
-<datalist id="purchase-options">{% for item in purchase_options %}<option value="{{ item.name }}">{% if item.is_russian %}РФ{% endif %}</option>{% endfor %}</datalist>
+<datalist id="purchase-options">{% for item in purchase_options %}<option value="{{ item.name }}">{% if item.supply_type == 'russian' %}РФ{% endif %}</option>{% endfor %}</datalist>
 {{ pricing_options|json_script:'pricing-options' }}
 <script src="{% static 'model_purch/pricing.js' %}" defer></script>

@@ -206,7 +206,7 @@
                     {% for purch in purch_list %}
                         <tr id="purchase-{{ purch.pk }}" data-payment-valid="{% if purch.payment_valid %}true{% else %}false{% endif %}">
                             <td class="text-muted">{{ purch.id }}</td>
-                            <td><strong>{{ purch.name }}{% if purch.is_russian %} <span class="badge bg-success">РФ</span>{% endif %}</strong></td>
+                            <td><strong>{{ purch.name }}<span class="badge bg-light text-dark">{{ purch.get_supply_type_display }}</span></strong></td>
                             <td>
                                 <span class="badge bg-secondary">{{ purch.lag_income }}</span>
                             </td>

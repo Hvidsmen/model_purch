@@ -96,7 +96,6 @@ class ScenarioModelForm(forms.ModelForm):
             'overwrite_existing': _('Перезаписывать существующие данные'),
         }
         widgets = {
-            'is_russian': forms.CheckboxInput(attrs={'class': 'form-check-input'}),
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Введите название сценария'}),
             'date_start_plan': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
             'date_end_plan': forms.DateInput(attrs={'class': 'form-control', 'type': 'date'}),
@@ -147,12 +146,12 @@ from .models import Purch, PurchPay, ScenarioModel, KindLagPay
 class PurchForm(forms.ModelForm):
     class Meta:
         model = Purch
-        fields = ['name', 'lag_income', 'lage_make', 'is_russian']
+        fields = ['name', 'lag_income', 'lage_make', 'supply_type']
         labels = {
             'name': 'Название закупки',
             'lag_income': 'Лаг доставки (дней)',
             'lage_make': 'Лаг производства (дней)',
-            'is_russian': 'Поставщик РФ',
+            'supply_type': 'Тип поставки',
         }
         widgets = {
             'name': forms.TextInput(attrs={
@@ -163,11 +162,23 @@ class PurchForm(forms.ModelForm):
                 'class': 'form-control',
                 'min': '0'
             }),
+            'supply_type': forms.Select(attrs={'class': 'form-select'}),
             'lage_make': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'min': '0'
             }),
         }
+
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.is_bound and self.add_prefix('supply_type') not in self.data:
+            self.fields['supply_type'].required = False
+
+    def clean_supply_type(self):
+        if self.add_prefix('supply_type') not in self.data:
+            return self.instance.supply_type
+        return self.cleaned_data['supply_type']
 
 
 class PurchPayForm(forms.ModelForm):
@@ -222,11 +233,12 @@ PurchPayFormSet = forms.inlineformset_factory(
 class FreightForm(forms.ModelForm):
     class Meta:
         model = Freight
-        fields = ['price_per_container', 'foreign_delivery_cost', 'customs_rate', 'warehouse_delivery_cost']
+        fields = ['price_per_container', 'foreign_delivery_cost', 'nr_customs_vat_rate', 'customs_rate', 'warehouse_delivery_cost']
         labels = {'price_per_container': 'Цена фрахта за контейнер, USD', 'warehouse_delivery_cost': 'Стоимость доставки до склада, USD'}
         widgets = {
             'price_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
             'foreign_delivery_cost': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
+            'nr_customs_vat_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'}),
             'customs_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'}),
             'warehouse_delivery_cost': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
         }
@@ -234,8 +246,11 @@ class FreightForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Older callers can still submit only the freight price without resetting the new settings.
-        for name in ('customs_rate', 'warehouse_delivery_cost', 'foreign_delivery_cost'):
+        for name in ('customs_rate', 'warehouse_delivery_cost', 'foreign_delivery_cost', 'nr_customs_vat_rate'):
             self.fields[name].required = False
+
+    def clean_nr_customs_vat_rate(self):
+        return self._clean_setting('nr_customs_vat_rate')
 
     def clean_foreign_delivery_cost(self):
         return self._clean_setting('foreign_delivery_cost')

@@ -87,7 +87,7 @@ class GoodsEditorTests(TestCase):
         self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('goods.xlsx', stream.getvalue())})
         self.good.refresh_from_db()
         self.assertEqual(self.good.container_volume, 80)
-        sheet.delete_cols(15, 6)
+        sheet.delete_cols(15, 8)
         stream = io.BytesIO()
         workbook.save(stream)
         self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('legacy.xlsx', stream.getvalue())})
@@ -159,7 +159,7 @@ class GoodsEditorTests(TestCase):
         sheet.cell(2, 16).value = 12.5
         for legacy in (False, True):
             if legacy:
-                sheet.delete_cols(16, 5)
+                sheet.delete_cols(16, 7)
             stream = io.BytesIO()
             workbook.save(stream)
             self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('duty.xlsx', stream.getvalue())})

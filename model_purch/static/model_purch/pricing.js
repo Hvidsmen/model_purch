@@ -4,6 +4,7 @@
     const options = JSON.parse(node.textContent);
     const key = value => String(value || '').normalize('NFC').trim().toLocaleLowerCase();
     const russian = new Set(options.russian_suppliers.map(key));
+    const suppliers = new Map(Object.entries(options.supplier_types || {}).map(([name, type]) => [key(name), type]));
     const duties = new Map(Object.entries(options.group_duties).map(([name, value]) => [key(name), value]));
     document.querySelectorAll('.pricing-row').forEach(row => {
         const field = name => row.querySelector(`[name="${name}"]`);
@@ -21,6 +22,8 @@
             const delivery = Number(options.delivery_cost) * ratio;
             const ddp = russian.has(key(field('purch')?.value)) ? exw : cif + customs + delivery;
             display('freight_usd', shipping); display('cif_usd', cif); display('customs_payment_usd', customs);
+            display('foreign_delivery_usd', ratio * Number(options.foreign_delivery_cost || 0));
+            display('nr_customs_vat_usd', suppliers.get(key(field('purch')?.value)) === 'p2' ? customs * Number(options.nr_customs_vat_rate || 0) / 100 : 0);
             display('warehouse_delivery_usd', delivery); display('ddp_usd', ddp);
             if (exw > 0) display('kddp', ddp / exw);
             else if (field('kddp')) field('kddp').value = previousKddp;

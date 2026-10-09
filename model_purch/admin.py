@@ -16,7 +16,7 @@ class GoodsGroupAdmin(admin.ModelAdmin):
 
 @admin.register(Purch)
 class PurchAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_russian', 'lag_income')
+    list_display = ('name', 'supply_type', 'lag_income')
 
     def save_model(self, request, obj, form, change):
         super().save_model(request, obj, form, change)

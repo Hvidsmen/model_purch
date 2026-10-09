@@ -1050,7 +1050,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1060,7 +1060,7 @@ def export_to_excel(request):
         cell.alignment = header_alignment
         cell.border = thin_border
 
-    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14, 22, 18, 24, 24]
+    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14, 22, 18, 24, 24, 32, 30]
     for col_num, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1082,7 +1082,7 @@ def export_to_excel(request):
             item.percent_stock_end,
             item.container_volume,
             item.duty_rate,
-            item.freight_usd, item.cif_usd, item.customs_payment_usd, item.warehouse_delivery_usd,
+            item.freight_usd, item.cif_usd, item.customs_payment_usd, item.warehouse_delivery_usd, item.foreign_delivery_usd, item.nr_customs_vat_usd,
         ]
 
         for col_num, value in enumerate(data, 1):
@@ -1336,9 +1336,11 @@ def pricing_context(scenario):
             'pricing_options': {
                 'container_price': str(freight.price_per_container) if freight else '0',
                 'foreign_delivery_cost': str(freight.foreign_delivery_cost) if freight else '0',
+                'nr_customs_vat_rate': str(freight.nr_customs_vat_rate) if freight else '10',
+                'supplier_types': dict(Purch.objects.values_list('name', 'supply_type')),
                 'customs_rate': str(freight.customs_rate) if freight else '0',
                 'delivery_cost': str(freight.warehouse_delivery_cost) if freight else '0',
-                'russian_suppliers': list(Purch.objects.filter(is_russian=True).values_list('name', flat=True)),
+                'russian_suppliers': list(Purch.objects.filter(supply_type='russian').values_list('name', flat=True)),
                 'group_duties': {group.name: str(group.duty_rate) for group in GoodsGroup.objects.all()},
             }}
 

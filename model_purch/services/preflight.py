@@ -77,6 +77,8 @@ def validation_errors(scenario):
             errors.append('Фрахт: цена должна быть конечным неотрицательным числом.')
         if not valid_number(freight.customs_rate, maximum=100):
             errors.append('Таможенная ставка должна быть от 0 до 100%.')
+        if not valid_number(freight.nr_customs_vat_rate, maximum=100):
+            errors.append('НР_Таможенный НДС должен быть от 0 до 100%.')
         if not valid_number(freight.foreign_delivery_cost):
             errors.append('Заграничная доставка должна быть конечным неотрицательным числом.')
         if not valid_number(freight.warehouse_delivery_cost):

@@ -11,7 +11,7 @@
 <div class="col-md-4"><label class="form-label">Доставка за товар</label><input class="form-control" name="warehouse_delivery_usd" readonly value="{{ goods.warehouse_delivery_usd|format_money:2 }}"></div>
 <div class="col-md-4"><label class="form-label">DDP</label><input class="form-control" name="ddp_usd" readonly value="{{ goods.ddp_usd|format_money:2 }}"></div>
 <div class="col-md-4"><label class="form-label">KDDP</label><input class="form-control" name="kddp" readonly value="{{ goods.kddp|format_money:2 }}"></div>
-</div><p class="text-muted small mt-2">При EXW &gt; 0: KDDP = DDP / EXW. При EXW = 0 сохраняется предыдущий KDDP. Для поставщиков РФ DDP = EXW.</p>
+<div class="col-md-4"><label class="form-label">Расходы на загран доставку без DDP</label><input class="form-control" name="foreign_delivery_usd" readonly value="{{ goods.foreign_delivery_usd|format_money:2 }}"></div><div class="col-md-4"><label class="form-label">НР_Таможенный НДС</label><input class="form-control" name="nr_customs_vat_usd" readonly value="{{ goods.nr_customs_vat_usd|format_money:2 }}"></div></div><p class="text-muted small mt-2">При EXW &gt; 0: KDDP = DDP / EXW. При EXW = 0 сохраняется предыдущий KDDP. Для поставщиков РФ DDP = EXW.</p>
 <div class="mt-3"><a class="btn btn-outline-secondary" href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">Отмена</a> <button class="btn btn-primary" type="submit">Сохранить изменения</button></div></form></div>
 {% include 'model_purch/_pricing_options.html' %}
 {% endblock %}

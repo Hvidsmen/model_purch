@@ -24,7 +24,7 @@ class ProductPricingTests(TestCase):
         self.assertAlmostEqual(self.good.warehouse_delivery_usd, 20)
         self.assertAlmostEqual(self.good.ddp_usd, 174.7)
         self.assertAlmostEqual(self.good.kddp, 1.747)
-        self.supplier.is_russian = True
+        self.supplier.supply_type = 'russian'
         self.supplier.save()
         self.good.save()
         self.assertEqual((self.good.ddp_usd, self.good.kddp), (100, 1))
@@ -70,7 +70,7 @@ class ProductPricingTests(TestCase):
         self.assertEqual(self.good.percent_stock_end, 20)
 
     def test_supplier_flag_edit_reprices_all_scenarios(self):
-        data = {'name': self.supplier.name, 'lag_income': 30, 'lage_make': 0, 'is_russian': 'on',
+        data = {'name': self.supplier.name, 'lag_income': 30, 'lage_make': 0, 'supply_type': 'russian',
             'purchpay_set-TOTAL_FORMS': 0, 'purchpay_set-INITIAL_FORMS': 0,
             'purchpay_set-MIN_NUM_FORMS': 0, 'purchpay_set-MAX_NUM_FORMS': 10}
         response = self.client.post(reverse('purch_edit', args=[self.supplier.pk]), data)
@@ -152,3 +152,23 @@ class ProductPricingTests(TestCase):
         for field, value in [('planning_sales', 'Reference sales'), ('group_goods', 'Reference group'), ('brand', 'Reference brand')]:
             self.assertIsInstance(form.fields[field].widget, Select)
             self.assertIn(value, dict(form.fields[field].widget.choices))
+
+    def test_p2_expenses_and_vat_are_separate_from_ddp(self):
+        self.assertEqual(self.supplier.supply_type, 'p2')
+        self.assertEqual(self.freight.foreign_delivery_cost, 1100)
+        self.assertEqual(self.freight.nr_customs_vat_rate, 10)
+        self.good.save()
+        self.assertAlmostEqual(self.good.foreign_delivery_usd, 44)
+        self.assertAlmostEqual(self.good.nr_customs_vat_usd, 1.47)
+        self.assertAlmostEqual(self.good.ddp_usd, 174.7)
+        self.supplier.supply_type = 'direct'
+        self.supplier.save()
+        self.good.save()
+        self.assertEqual(self.good.nr_customs_vat_usd, 0)
+        self.assertAlmostEqual(self.good.foreign_delivery_usd, 44)
+        self.assertAlmostEqual(self.good.ddp_usd, 174.7)
+        self.supplier.supply_type = 'russian'
+        self.supplier.save()
+        self.good.save()
+        self.assertEqual(self.good.nr_customs_vat_usd, 0)
+        self.assertEqual(self.good.ddp_usd, self.good.exw_usd)

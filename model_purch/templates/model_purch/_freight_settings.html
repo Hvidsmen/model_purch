@@ -7,13 +7,14 @@
             <label class="form-label" for="{{ freight_form.price_per_container.id_for_label }}">Цена фрахта за контейнер, USD</label>
             {{ freight_form.price_per_container }}
             {% for error in freight_form.price_per_container.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}
-            <div class="mt-3"><label class="form-label" for="{{ freight_form.foreign_delivery_cost.id_for_label }}">Заграничная доставка без DDP, USD за контейнер</label>{{ freight_form.foreign_delivery_cost }}{% for error in freight_form.foreign_delivery_cost.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+            <div class="mt-3"><label class="form-label" for="{{ freight_form.foreign_delivery_cost.id_for_label }}">Расходы на загран доставку без DDP, USD за контейнер</label>{{ freight_form.foreign_delivery_cost }}{% for error in freight_form.foreign_delivery_cost.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
+            <div class="mt-3"><label class="form-label" for="{{ freight_form.nr_customs_vat_rate.id_for_label }}">НР_Таможенный НДС, %</label>{{ freight_form.nr_customs_vat_rate }}{{ freight_form.nr_customs_vat_rate.errors }}</div>
             <div class="row g-3 mt-1">
                 <div class="col-sm-6"><label class="form-label" for="{{ freight_form.customs_rate.id_for_label }}">Таможенная ставка, %</label>{{ freight_form.customs_rate }}{% for error in freight_form.customs_rate.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
                 <div class="col-sm-6"><label class="form-label" for="{{ freight_form.warehouse_delivery_cost.id_for_label }}">Стоимость доставки до склада, USD</label>{{ freight_form.warehouse_delivery_cost }}{% for error in freight_form.warehouse_delivery_cost.errors %}<div class="text-danger small mt-1">{{ error }}</div>{% endfor %}</div>
             </div>
             <button type="submit" class="btn btn-primary mt-3">Сохранить</button>
-            <p class="text-muted small mt-2 mb-0">Фрахт и доставка задаются за контейнер. Объём контейнера задаётся отдельно у каждого товара в таблице ниже.</p>
+            <p class="text-muted small mt-2 mb-0">Фрахт и доставка задаются за контейнер. Объём контейнера задаётся отдельно у каждого товара в таблице ниже. Загран доставка без DDP и НР_Таможенный НДС рассчитываются отдельно и не увеличивают DDP.</p>
         </form>
         <form class="col-lg-6" method="post" action="{% url 'copy_freight' %}" data-copy-target="{{ current_scenario.name }}">
             {% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
