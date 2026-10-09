@@ -50,3 +50,28 @@ body .table tbody tr:hover { background: #f4f7ff; }
 }
 
 body .page-header p { font-size: .85rem; }
+
+/* Purchase pages use the available viewport rather than a centered width cap. */
+.portal-layout:has(.product-table),
+.portal-layout:has(.workspace-panel) {
+    max-width: none;
+    padding: 12px;
+    gap: 12px;
+}
+@media (min-width: 851px) {
+    .portal-layout:has(.workspace-panel) { grid-template-columns: 180px minmax(0, 1fr); }
+}
+body .product-table { width: 100%; }
+body .product-table thead th { white-space: normal; padding: 8px 6px; }
+body .product-table tbody td { padding: 8px 6px; }
+body .product-table .product-planning-group { min-width: 200px; width: 220px; }
+body .product-table .product-planning-group .inline-input { min-width: 180px; }
+body .product-table .product-classification { min-width: 240px; max-width: 280px; }
+body .product-table .product-classification .inline-input { width: 160px; }
+body .product-table .product-stock,
+body .product-table .product-ddp,
+body .product-table .product-volumes { min-width: 140px; }
+body .product-table .product-costs { min-width: 160px; }
+body .product-table .pricing-row input.text-end { min-width: 70px; width: 80px; }
+body .product-table .product-classification-field > span { flex-basis: 56px; }
+body .product-table th:last-child { width: 60px !important; }
