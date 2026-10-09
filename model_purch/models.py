@@ -354,6 +354,8 @@ class Freight(models.Model):
                                        validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     warehouse_delivery_cost = models.DecimalField('Стоимость доставки до склада', max_digits=18, decimal_places=2,
                                                  default=0, validators=[MinValueValidator(Decimal('0'))])
+    foreign_delivery_cost = models.DecimalField('Заграничная доставка без DDP, USD за контейнер', max_digits=18, decimal_places=2,
+                                                default=1100, validators=[MinValueValidator(Decimal('0'))])
     # Retain the legacy value for existing SQL consumers; product volumes are edited on PGGoods.
     volume_per_container = models.DecimalField('Архивный объём контейнера, м³', max_digits=12, decimal_places=3, default=65, editable=False,
                                                validators=[MinValueValidator(Decimal('0.001'))])
@@ -366,6 +368,7 @@ class Freight(models.Model):
             models.CheckConstraint(condition=models.Q(volume_per_container__gt=0), name='freight_volume_positive'),
             models.CheckConstraint(condition=models.Q(customs_rate__gte=0, customs_rate__lte=100), name='freight_customs_rate_range'),
             models.CheckConstraint(condition=models.Q(warehouse_delivery_cost__gte=0), name='freight_delivery_nonnegative'),
+            models.CheckConstraint(condition=models.Q(foreign_delivery_cost__gte=0), name='freight_foreign_delivery_nonnegative'),
         ]
 
     def __str__(self):

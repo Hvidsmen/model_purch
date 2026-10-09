@@ -1335,6 +1335,7 @@ def pricing_context(scenario):
     return {'classification_options': classification_options(), 'goods_groups': GoodsGroup.objects.all(), 'purchase_options': Purch.objects.all(),
             'pricing_options': {
                 'container_price': str(freight.price_per_container) if freight else '0',
+                'foreign_delivery_cost': str(freight.foreign_delivery_cost) if freight else '0',
                 'customs_rate': str(freight.customs_rate) if freight else '0',
                 'delivery_cost': str(freight.warehouse_delivery_cost) if freight else '0',
                 'russian_suppliers': list(Purch.objects.filter(is_russian=True).values_list('name', flat=True)),

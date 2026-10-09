@@ -157,5 +157,18 @@ class FreightTests(TestCase):
         update = next(call for call in calls if call.args[0].startswith('UPDATE [portal].[Freight]'))
         self.assertIn('[customs_rate] = ?', update.args[0])
         self.assertIn('[warehouse_delivery_cost] = ?', update.args[0])
-        self.assertEqual(update.args[1:], ('7.25', '456.78', self.source.pk))
+        self.assertEqual(update.args[1:], ('7.25', '456.78', '1100.00', self.source.pk))
         connection.rollback.assert_not_called()
+
+    def test_foreign_delivery_default_save_copy_and_validation(self):
+        self.assertEqual(self.freight.foreign_delivery_cost, Decimal('1100'))
+        data = {'scenario': self.source.pk, 'price_per_container': '1234.56', 'foreign_delivery_cost': '1250.50'}
+        self.client.post(reverse('freight'), data)
+        self.freight.refresh_from_db()
+        self.assertEqual(self.freight.foreign_delivery_cost, Decimal('1250.50'))
+        self.client.post(reverse('copy_freight'), {'scenario': self.target.pk, 'source_scenario_id': self.source.pk})
+        self.assertEqual(Freight.objects.get(scenario=self.target).foreign_delivery_cost, Decimal('1250.50'))
+        for value in ('-1', 'nan', ''):
+            self.client.post(reverse('freight'), {**data, 'foreign_delivery_cost': value})
+            self.freight.refresh_from_db()
+            self.assertEqual(self.freight.foreign_delivery_cost, Decimal('1250.50'))

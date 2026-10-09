@@ -222,10 +222,11 @@ PurchPayFormSet = forms.inlineformset_factory(
 class FreightForm(forms.ModelForm):
     class Meta:
         model = Freight
-        fields = ['price_per_container', 'customs_rate', 'warehouse_delivery_cost']
+        fields = ['price_per_container', 'foreign_delivery_cost', 'customs_rate', 'warehouse_delivery_cost']
         labels = {'price_per_container': 'Цена фрахта за контейнер, USD', 'warehouse_delivery_cost': 'Стоимость доставки до склада, USD'}
         widgets = {
             'price_per_container': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
+            'foreign_delivery_cost': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
             'customs_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'}),
             'warehouse_delivery_cost': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'step': '0.01'}),
         }
@@ -233,8 +234,11 @@ class FreightForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Older callers can still submit only the freight price without resetting the new settings.
-        for name in ('customs_rate', 'warehouse_delivery_cost'):
+        for name in ('customs_rate', 'warehouse_delivery_cost', 'foreign_delivery_cost'):
             self.fields[name].required = False
+
+    def clean_foreign_delivery_cost(self):
+        return self._clean_setting('foreign_delivery_cost')
 
     def clean_customs_rate(self):
         return self._clean_setting('customs_rate')
