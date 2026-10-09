@@ -1041,6 +1041,9 @@ def export_to_excel(request):
 
     header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
     header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
+    editable_number_fill = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
+    editable_number_font = Font(name='Calibri', size=11, bold=True, color='065F46')
+    editable_number_headers = {'Объём', 'EXW USD', 'Запас (дни)', 'Объём контейнера, м³', 'Пошлина, %'}
     header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     thin_border = Border(
         left=Side(style='thin'), right=Side(style='thin'),
@@ -1056,7 +1059,9 @@ def export_to_excel(request):
     for col_num, header in enumerate(headers, 1):
         cell = ws.cell(row=1, column=col_num, value=header)
         cell.font = header_font
-        cell.fill = header_fill
+        cell.fill = editable_number_fill if header in editable_number_headers else header_fill
+        if header in editable_number_headers:
+            cell.font = editable_number_font
         cell.alignment = header_alignment
         cell.border = thin_border
 

@@ -241,7 +241,7 @@
     </div>
 </div>
 
-<div class="hint-text mb-2"><i aria-hidden="true" class="bi bi-info-circle"></i> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
+<div class="hint-text mb-2"><i aria-hidden="true" class="bi bi-info-circle"></i> <span class="editable-number-label">Зелёные заголовки — числа, которые можно менять.</span> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
 
 <div class="card shadow-sm">
     <div class="table-responsive">
@@ -251,13 +251,13 @@
                     <th style="width: 50px;">#</th>
                     <th class="product-planning-group">План. группа</th>
                     <th>Классификация</th>
-                    <th class="text-end">Объёмы, м³</th>
-                    <th style="width: 110px;" class="text-end">EXW USD</th>
-                    <th class="text-end">Пошлина, %</th>
+                    <th class="text-end editable-number-heading" title="Объём товара и контейнера можно менять">Объёмы, м³</th>
+                    <th style="width: 110px;" class="text-end editable-number-heading">EXW USD</th>
+                    <th class="text-end editable-number-heading">Пошлина, %</th>
                     <th class="text-end ddp-detail" hidden>Расчёт стоимости, USD</th>
                     <th style="width: 110px;" class="text-end">DDP USD <button type="button" id="toggle-ddp-details" class="btn btn-sm btn-outline-secondary" aria-expanded="false" title="Показать составляющие DDP">+</button></th>
                     <th class="text-end">Дополнительные расходы, USD</th>
-                    <th class="text-end">Запас и остаток</th>
+                    <th class="text-end"><span class="editable-number-label">Запас, дни</span><br><span>Остаток, % — расчётный</span></th>
                     <th class="text-center" style="width: 120px;">Действия</th>
                 </tr>
             </thead>

@@ -75,3 +75,8 @@ body .product-table .product-costs { min-width: 160px; }
 body .product-table .pricing-row input.text-end { min-width: 70px; width: 80px; }
 body .product-table .product-classification-field > span { flex-basis: 56px; }
 body .product-table th:last-child { width: 60px !important; }
+
+body .product-table thead th.editable-number-heading,
+body .product-table .editable-number-label,
+body .hint-text .editable-number-label { background: #d1fae5; color: #065f46; }
+.editable-number-label { display: inline-block; padding: 2px 4px; border-radius: 3px; }
