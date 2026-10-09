@@ -40,6 +40,13 @@ class ComparisonTests(TestCase):
         self.approve(october)
         return july, october
 
+    def test_future_draft_does_not_change_historical_plan_and_reports_no_affected_lines(self):
+        current = self.draft(date(2027, 1, 1), 1)
+        result = compare_plan(self.plan, current, self.first)
+        self.assertEqual(result['affected_plan_lines'], 0)
+        self.assertEqual(result['variants']['current']['total'], result['variants']['approved']['total'])
+        self.assertEqual(Decimal(result['deltas']['approved']['total']['amount']), Decimal(0))
+
     def test_comparison_uses_dates_but_baseline_covers_entire_period(self):
         july, october = self.timeline()
         current = self.draft(date(2026, 9, 1), .4, True)

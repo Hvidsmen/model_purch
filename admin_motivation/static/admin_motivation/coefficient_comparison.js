@@ -76,6 +76,11 @@
             summaryStatus(result.variants.current.error ? 'Расчёт недоступен' : result.unsaved ? 'Предварительно · есть правки' : 'По сохранённым значениям');
             status.textContent = result.unsaved ? 'Предварительный расчёт: учтены несохранённые изменения.' : 'Сравнение по сохранённым коэффициентам.';
             const messages = Object.entries(result.variants).filter(([key, value]) => value.error && (key !== 'baseline' || baseline.value)).map(([key, value]) => `${key === 'approved' ? 'Утверждённый' : key === 'baseline' ? 'Базовый' : 'Предлагаемый'}: ${value.error}`);
+            if (result.affected_plan_lines === 0) {
+                const date = result.current_date.split('-').reverse().join('.');
+                messages.push(`В выбранном плане нет строк с датой ${date} или позже. Предлагаемая версия не применяется к этому периоду: изменения коэффициентов не изменят сумму. Выберите другой план или создайте версию с более ранней датой начала действия.`);
+                summaryStatus('Версия вне периода плана');
+            }
             const replaced = result.replaced_versions.map(version => version.title);
             if (replaced.length) messages.push(`Предлагаемый вариант заменяет версии с новой даты: ${replaced.join('; ')}. До утверждения история не меняется.`);
             if (result.baseline_replaced) messages.push('Дата предлагаемой версии не позже базовой. Базовая остаётся фиксированным эталоном.');

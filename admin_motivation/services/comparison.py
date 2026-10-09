@@ -117,9 +117,12 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
     if subdivision:
         lines = lines.filter(subdivision=subdivision.subdivision_key)
     found = False
+    affected_lines = 0
     for on_date, sub, pg, group, brand, amounts in lines.order_by('pk').values_list(
             'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts').iterator(chunk_size=2000):
         found = True
+        if on_date >= current.effective_from:
+            affected_lines += 1
         usd = [number(amounts.get(segment)) for segment in SEGMENTS]
         for name, versions in profiles:
             if results[name].get('error'):
@@ -155,6 +158,6 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
                 change = new - old
                 percent = change / abs(old) * 100 if old else (Decimal(0) if new == 0 else None)
                 deltas[name][field] = {'amount': str(change), 'percent': str(percent) if percent is not None else None}
-    return {'variants': output, 'deltas': deltas, 'current_date': current.effective_from.isoformat(),
+    return {'variants': output, 'deltas': deltas, 'current_date': current.effective_from.isoformat(), 'affected_plan_lines': affected_lines,
             'unsaved': bool(changes or deleted), 'replaced_versions': [{'id': v.pk, 'title': str(v)} for v in approved if v.pk != current.pk and v.effective_from >= current.effective_from],
             'baseline_replaced': bool(baseline and current.effective_from <= baseline.effective_from)}
