@@ -1,6 +1,6 @@
-<section class="card card-body mb-3" id="freight-settings" aria-labelledby="freight-heading">
-    <h2 class="h5 mb-3" id="freight-heading">Общие параметры закупок · {{ current_scenario.name }}</h2>
-    <div class="row g-3 align-items-start">
+<details class="card card-body mb-3" id="freight-settings" open data-has-errors="{% if freight_form.errors %}true{% else %}false{% endif %}">
+    <summary class="h5 mb-0" id="freight-heading" style="cursor:pointer">Общие параметры закупок · {{ current_scenario.name }}</summary>
+    <div class="row g-3 align-items-start mt-2">
         <form class="col-lg-6" method="post" action="{% url 'freight' %}">
             {% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
             {{ freight_form.non_field_errors }}
@@ -20,4 +20,18 @@
             <div class="d-flex gap-2"><select id="freight-source" class="form-select" name="source_scenario_id" required><option value="">Выберите сценарий</option>{% for scenario in freight_sources %}<option value="{{ scenario.pk }}">{{ scenario.name }}</option>{% endfor %}</select><button class="btn btn-outline-primary" type="submit" {% if not freight_sources %}disabled{% endif %}>Копировать</button></div>
         </form>
     </div>
-</section>
+</details>
+<script>
+(() => {
+    const panel = document.getElementById('freight-settings');
+    const key = 'purchase-common-settings-open';
+    const hasErrors = panel.dataset.hasErrors === 'true';
+    try {
+        const saved = localStorage.getItem(key);
+        if (!hasErrors && saved !== null) panel.open = saved !== 'false';
+    } catch (_) {}
+    panel.addEventListener('toggle', () => {
+        try { localStorage.setItem(key, String(panel.open)); } catch (_) {}
+    });
+})();
+</script>

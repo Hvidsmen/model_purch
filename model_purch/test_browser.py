@@ -217,6 +217,19 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator(f'tr[data-row-id="{self.good.pk}"]')).to_be_visible()
         self.assertEqual(self.errors, [])
 
+    def test_common_purchase_settings_collapse_and_remember_state(self):
+        from playwright.sync_api import expect
+        self.visit('pggoods_list')
+        self.select(self.source)
+        self.page.locator('#freight-settings > summary').click()
+        expect(self.page.locator('#freight-settings [name="price_per_container"]')).not_to_be_visible()
+        expect(self.page.locator(f'tr[data-row-id="{self.good.pk}"]')).to_be_visible()
+        self.page.reload()
+        expect(self.page.locator('#freight-settings [name="price_per_container"]')).not_to_be_visible()
+        self.page.locator('#freight-settings > summary').click()
+        expect(self.page.locator('#freight-settings [name="price_per_container"]')).to_be_visible()
+        self.assertEqual(self.errors, [])
+
     def test_group_default_and_price_preview_match_saved_price(self):
         from .models import GoodsGroup
         self.db(lambda: GoodsGroup.objects.create(name='Tariff group', duty_rate=5))
