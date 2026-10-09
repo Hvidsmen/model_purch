@@ -78,6 +78,20 @@ def upsert_product(version, group_sales, group, brand, variation_id, policies, s
 @require_POST
 def gloabal_coeff_action(request):
     action = request.POST.get('action_button')
+    if action == 'delete_version':
+        from .services.versions import delete_draft
+        destination = get_object_or_404(Subdivision, pk=request.POST['return_subdivision']) if request.POST.get('return_subdivision') else None
+        version = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
+        target = version
+        try:
+            if request.POST.get('confirm_delete') != 'yes':
+                raise ValidationError('Подтвердите удаление черновика.')
+            target = delete_draft(version.pk)
+            messages.success(request, 'Черновик и его коэффициенты удалены. Другие версии сохранены.')
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        route = reverse('coeff_subdivisions_admin_motivation', args=[destination.pk]) if destination else reverse('global_coeff_admin_motivation')
+        return redirect(route + (f'?version={target.pk}' if target else ''))
     if action == 'create_version':
         destination = get_object_or_404(Subdivision, pk=request.POST['return_subdivision']) if request.POST.get('return_subdivision') else None
         form = GlobalCoeffVersionForm(request.POST)

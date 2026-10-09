@@ -29,6 +29,29 @@ class GlobalCoefficientVersionTests(TestCase):
     def post(self, version, action, **extra):
         return self.client.post(reverse('gb_act'), {'version': version.pk, 'action_button': action, **extra})
 
+    def test_delete_draft_requires_confirmation_and_preserves_other_versions(self):
+        draft = create_version(date(2026, 1, 1), source_version=self.first.pk)
+        later = create_version(date(2026, 2, 1), source_version=draft.pk)
+        data = {'action_button': 'delete_version', 'version': draft.pk}
+        self.client.post(reverse('gb_act'), data)
+        self.assertTrue(GlobalCoeffVersion.objects.filter(pk=draft.pk).exists())
+        response = self.client.post(reverse('gb_act'), {**data, 'confirm_delete': 'yes'})
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(GlobalCoeffVersion.objects.filter(pk=draft.pk).exists())
+        self.assertTrue(GlobalCoeffVersion.objects.filter(pk=later.pk).exists())
+        self.assertEqual(later.coefficients.count(), 1)
+        self.assertTrue(GlobalCoeff.objects.filter(pk=self.coeff.pk).exists())
+
+    def test_delete_draft_rejects_initial_and_approved_versions(self):
+        from .services.versions import delete_draft
+        with self.assertRaises(ValidationError):
+            delete_draft(self.first.pk)
+        draft = create_version(date(2026, 1, 1), source_version=self.first.pk)
+        approve_review(review_approval(draft)['token'])
+        with self.assertRaises(ValidationError):
+            delete_draft(draft.pk)
+        self.assertEqual(draft.coefficients.count(), 1)
+
     def test_dates_required_and_strictly_increasing(self):
         count = GlobalCoeffVersion.objects.count()
         for starts in ['', '2000-01-01', '2001-01-01', 'bad']:

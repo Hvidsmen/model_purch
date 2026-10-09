@@ -65,6 +65,22 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.assertLessEqual(dimensions['scroll'], dimensions['wrapper'] + 1)
         self.assertEqual(self.errors, [])
 
+    def test_delete_draft_confirmation_and_return_to_previous_version(self):
+        from playwright.sync_api import expect
+        from .services.versions import create_version
+        draft = self.db(lambda: create_version(date(2026, 1, 1), source_version=self.first.pk).pk)
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation') + f'?version={draft}')
+        self.page.once('dialog', lambda dialog: dialog.dismiss())
+        self.page.locator('button[value="delete_version"]').click()
+        self.assertTrue(self.db(lambda: GlobalCoeffVersion.objects.filter(pk=draft).exists()))
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        with self.page.expect_navigation():
+            self.page.locator('button[value="delete_version"]').click()
+        self.assertFalse(self.db(lambda: GlobalCoeffVersion.objects.filter(pk=draft).exists()))
+        expect(self.page.locator('#coefficient-version')).to_have_value(str(self.first.pk))
+        expect(self.page.locator('button[value="delete_version"]')).to_have_count(0)
+        self.assertEqual(self.errors, [])
+
     def test_create_edit_and_read_history_without_losing_percentage_precision(self):
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
         self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')

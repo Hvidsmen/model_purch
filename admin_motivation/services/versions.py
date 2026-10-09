@@ -66,3 +66,30 @@ def apply_to_subdivisions(version, subdivisions):
                              variation_calculate_id=c.variation_calculate_id)
             for c in version.coefficients.all()
         ])
+
+
+@transaction.atomic
+def delete_draft(version_id):
+    """Remove only an unused draft and its copied coefficients; retain history."""
+    from datetime import date
+    from django.db import models
+    from django.db.models.deletion import ProtectedError
+    # Same lock order as approval and creation to prevent a concurrent approval.
+    versions = list(GlobalCoeffVersion.objects.select_for_update().order_by('pk'))
+    version = next((item for item in versions if item.pk == version_id), None)
+    if version is None:
+        raise ValidationError('Версия уже удалена. Обновите страницу.')
+    if version.status != GlobalCoeffVersion.Status.DRAFT:
+        raise ValidationError('Удалить можно только черновик. Утверждённые и архивные версии сохраняются в истории.')
+    if version.effective_from == date(2001, 1, 1):
+        raise ValidationError('Исходная версия с 01.01.2001 должна сохраняться.')
+    # Bypass edit-only guards for older drafts, after locking and checking status.
+    # All deletions roll back if a protected result/baseline still references it.
+    try:
+        models.QuerySet.delete(version.coefficients.all())
+        models.QuerySet.delete(version.subdivision_coefficients.all())
+        models.QuerySet.delete(version.manager_coefficients.all())
+        models.QuerySet.delete(GlobalCoeffVersion.objects.filter(pk=version.pk))
+    except ProtectedError:
+        raise ValidationError('Версия используется в результатах расчёта или как базовая для утверждения. Удаление запрещено.')
+    return latest_version()
