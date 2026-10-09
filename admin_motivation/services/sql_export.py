@@ -1,14 +1,13 @@
-"""Export a shared version timeline from the requested quarter onward."""
+"""Export the approved timeline using each version's original effective date."""
 from django.core.exceptions import ValidationError
 from ..models import GlobalCoeffVersion, SubdivisionCoeff, SubdivisionManagerCoeff, Goods
-from .versions import effective_version
 
 
-def export_motivation(start_date, connector):
-    first = effective_version(start_date)
-    if first is None:
-        raise ValidationError('Нет версии, действующей на начало выбранного периода.')
-    versions = [first, *GlobalCoeffVersion.objects.filter(status='approved', effective_from__gt=start_date).order_by('effective_from')]
+def export_motivation(connector):
+    versions = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
+    if not versions:
+        raise ValidationError('Нет утверждённых версий для выгрузки. Сначала утвердите версию коэффициентов.')
+    start_date = versions[0].effective_from
     connection = None
     try:
         connection, cursor = connector('vm-dwh', 'DataWH')
@@ -16,7 +15,7 @@ def export_motivation(start_date, connector):
         for table in ['SubdivisionManagerCoeff', 'SubdivisionMotiveCoeff', 'GoodsMotivation']:
             cursor.execute(f'DELETE FROM DataWH.motivation.{table} WHERE Date_ >= ?', start_date)
         for version in versions:
-            date_from = max(start_date, version.effective_from)
+            date_from = version.effective_from
             managers = SubdivisionManagerCoeff.objects.filter(version=version).select_related('subdivision', 'kind')
             manager_rows = [(date_from, row.subdivision.subdivision_key, row.kind.name if row.kind else None, row.coeff) for row in managers]
             if manager_rows:

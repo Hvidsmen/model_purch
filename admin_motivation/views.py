@@ -242,20 +242,15 @@ from .conns import *
 
 
 def loader_motive(request):
-    from datetime import date
     from .services.sql_export import export_motivation
     subdivisions = Subdivision.objects.all()
     if request.method == 'POST':
         try:
-            year, quarter = int(request.POST.get('year', '')), int(request.POST.get('quarter', ''))
-            if not 2020 <= year <= 2099 or not 1 <= quarter <= 4:
-                raise ValueError('Неверный период')
-            start_date = date(year, 3 * quarter - 2, 1)
-            versions = export_motivation(start_date, connect_database)
-        except (ValidationError, ValueError) as error:
-            messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Выберите год от 2020 до 2099 и квартал от 1 до 4.')
+            versions = export_motivation(connect_database)
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
         except Exception as error:
             messages.error(request, f'Не удалось выгрузить настройки в DataWH: {error}')
         else:
             return render(request, 'admin_motivation/loader_complete.html', {'subdivisions': subdivisions, 'exported_versions': versions})
-    return render(request, 'admin_motivation/loader.html', {'subdivisions': subdivisions})
+    return render(request, 'admin_motivation/loader.html', {'subdivisions': subdivisions, 'export_versions': GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk')})

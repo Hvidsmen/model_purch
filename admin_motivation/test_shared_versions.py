@@ -142,12 +142,12 @@ class SharedMotivationVersionTests(TestCase):
         latest.manager_coefficients.update(coeff=0.9)
         approve_review(review_approval(latest)['token'])
         connector, connection, cursor = self.connector()
-        exported = export_motivation(date(2026, 10, 1), connector)
+        exported = export_motivation(connector)
         self.assertEqual([v.pk for v in exported], [self.first.pk, latest.pk])
         batches = cursor.executemany.call_args_list
         coefficients = [call.args[1] for call in batches if 'SubdivisionMotiveCoeff' in call.args[0]]
         managers = [call.args[1] for call in batches if 'SubdivisionManagerCoeff' in call.args[0]]
-        self.assertEqual(coefficients[0][0][0], date(2026, 10, 1))
+        self.assertEqual(coefficients[0][0][0], self.first.effective_from)
         self.assertEqual(coefficients[0][0][-1], 0.15)
         self.assertEqual(coefficients[1][0][0], date(2026, 10, 8))
         self.assertEqual(coefficients[1][0][-1], 0.4)
@@ -157,21 +157,22 @@ class SharedMotivationVersionTests(TestCase):
         connection.rollback.assert_not_called()
         connection.close.assert_called_once()
         self.assertEqual(cursor.execute.call_count, 3)
+        self.assertTrue(all(call.args[1] == self.first.effective_from for call in cursor.execute.call_args_list))
 
     def test_failed_sql_export_rolls_back_and_closes_connection(self):
         approve_review(review_approval(self.first)['token'])
         connector, connection, cursor = self.connector()
         cursor.executemany.side_effect = RuntimeError('Failed insert')
         with self.assertRaises(RuntimeError):
-            export_motivation(date(2026, 10, 1), connector)
+            export_motivation(connector)
         connection.commit.assert_not_called()
         connection.rollback.assert_called_once()
         connection.close.assert_called_once()
 
-    def test_export_before_first_date_blocks_connection(self):
+    def test_export_without_approved_versions_blocks_connection(self):
         connector, _, _ = self.connector()
         with self.assertRaises(ValidationError):
-            export_motivation(date(2000, 12, 31), connector)
+            export_motivation(connector)
         connector.assert_not_called()
 
 

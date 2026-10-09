@@ -1,7 +1,7 @@
 from base.testing import authorize_test_case, authorize_admin
 from datetime import date
 from decimal import Decimal
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from django.core.exceptions import ValidationError
 from django.test import TestCase, Client
 from django.urls import reverse
@@ -130,8 +130,22 @@ class ComparisonTests(TestCase):
         calculate_plan(self.plan.pk)
         self.assertEqual(sum(self.plan.lines.filter(subdivision='').values_list('total_usd', flat=True)), Decimal('1725'))
         connection, cursor = Mock(), Mock()
-        versions = export_motivation(date(2026, 1, 1), Mock(return_value=(connection, cursor)))
+        versions = export_motivation(Mock(return_value=(connection, cursor)))
         self.assertEqual([v.pk for v in versions], [self.first.pk, july.pk, october.pk])
+
+    def test_export_form_uses_version_dates_and_ignores_legacy_period_inputs(self):
+        url = reverse('loader_motive')
+        response = self.client.get(url)
+        self.assertNotContains(response, 'name="year"')
+        self.assertNotContains(response, 'name="quarter"')
+        self.assertContains(response, '01.01.2001')
+        connection, cursor = Mock(), Mock()
+        with patch('admin_motivation.views.connect_database', return_value=(connection, cursor)):
+            response = self.client.post(url, {'year': '2026', 'quarter': '4'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'Коэффициенты выгружены')
+        self.assertContains(response, '01.01.2001')
+        self.assertTrue(all(call.args[1] == date(2001, 1, 1) for call in cursor.execute.call_args_list))
 
     def test_api_rejects_foreign_cells_and_requires_csrf(self):
         current = self.draft(date(2026, 9, 1), .4)
