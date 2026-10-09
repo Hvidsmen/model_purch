@@ -36,6 +36,24 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
     def db(self, action):
         return self.pool.submit(action).result()
 
+    def test_approval_dialog_opens_before_slow_review_and_blocks_duplicate_requests(self):
+        from playwright.sync_api import expect
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        pending = []
+        self.page.route('**' + reverse('motivation_coefficient_comparison'), lambda route: pending.append(route))
+        self.page.locator('#approval-review').click()
+        expect(self.page.locator('#approval-dialog')).to_be_visible()
+        expect(self.page.locator('#approval-description')).to_contain_text('Проверяем версию')
+        expect(self.page.locator('#approval-commit')).to_be_disabled()
+        self.page.locator('#approval-review').evaluate('(button) => button.click()')
+        self.assertEqual(len(pending), 1)
+        pending[0].fulfill(status=400, content_type='application/json', body='{"error":"Проверка не завершена"}')
+        expect(self.page.locator('#approval-error')).to_have_text('Проверка не завершена')
+        expect(self.page.locator('#approval-commit')).to_be_disabled()
+        self.page.locator('#approval-cancel').click()
+        expect(self.page.locator('#approval-dialog')).not_to_be_visible()
+        self.assertEqual(self.errors, [])
+
     def test_create_edit_and_read_history_without_losing_percentage_precision(self):
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
         self.assertEqual(self.page.locator('#mainCoeffForm input[name^="global_coeff="]').input_value(), '12.3456%')

@@ -10,7 +10,7 @@
     const commit = document.getElementById('approval-commit');
     const money = value => value == null ? '—' : new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 0}).format(Math.abs(Number(value)) < 0.5 ? 0 : Number(value));
     const percent = value => value == null ? '—' : `${new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 1}).format(Math.abs(Number(value)) < 0.05 ? 0 : Number(value))}%`;
-    let controller, timer, review, revision = 0;
+    let controller, timer, review, reviewController, revision = 0;
     const summaryStatus = message => { const element = document.getElementById('editor-comparison-state'); if (element) element.textContent = message; };
     const signedMoney = value => value == null ? '—' : `${Number(value) > 0 && money(value) !== '0' ? '+' : ''}${money(value)}`;
     const prefix = panel.dataset.subdivision ? 'sub_coeff=' : 'global_coeff=';
@@ -97,9 +97,27 @@
     document.getElementById('comparison-refresh').addEventListener('click', compare);
     document.getElementById('approval-review')?.addEventListener('click', async () => {
         if (!document.dispatchEvent(new CustomEvent('motivation:before-approval', {cancelable: true}))) return;
+        if (dialog.open) return;
         error.hidden = true;
+        clearTimeout(timer);
+        controller?.abort();
+        review = null;
+        reviewController?.abort();
+        const pending = new AbortController();
+        reviewController = pending;
+        commit.disabled = true;
+        dialog.setAttribute('aria-busy', 'true');
+        document.getElementById('approval-description').textContent = 'Проверяем версию и рассчитываем сравнение мотивации…';
+        document.getElementById('approval-impact').replaceChildren();
+        document.getElementById('approval-replaced').replaceChildren();
+        document.getElementById('approval-confirm-label').hidden = true;
+        document.getElementById('approval-baseline-warning').hidden = true;
+        document.getElementById('approval-error').textContent = '';
+        dialog.showModal();
         try {
-            review = await post(parameters('review'));
+            const result = await post(parameters('review'), pending.signal);
+            if (pending.signal.aborted || !dialog.open) return;
+            review = result;
             document.getElementById('approval-description').textContent = `Начало действия: ${review.date}. ${review.unsaved ? 'Несохранённые изменения будут сохранены при утверждении.' : 'Будут утверждены сохранённые коэффициенты.'}`;
             const list = document.getElementById('approval-replaced');
             list.replaceChildren();
@@ -120,11 +138,20 @@
             document.getElementById('approval-baseline-warning').hidden = !review.baseline_replaced;
             document.getElementById('approval-confirm').checked = false;
             document.getElementById('approval-error').textContent = '';
-            dialog.showModal();
-        } catch (problem) { error.hidden = false; error.textContent = problem.message; }
+            commit.disabled = false;
+        } catch (problem) {
+            if (problem.name !== 'AbortError' && dialog.open) {
+                document.getElementById('approval-description').textContent = 'Не удалось подготовить утверждение. Закройте окно и повторите попытку.';
+                document.getElementById('approval-error').textContent = problem.message;
+            }
+        } finally {
+            if (reviewController === pending) dialog.setAttribute('aria-busy', 'false');
+        }
     });
+    dialog.addEventListener('close', () => { reviewController?.abort(); review = null; });
     document.getElementById('approval-cancel').addEventListener('click', () => dialog.close());
     commit.addEventListener('click', async () => {
+        if (!review || commit.disabled) return;
         commit.disabled = true;
         try {
             await post({action: 'approve', token: review.token, confirm_overwrite: document.getElementById('approval-confirm').checked});
