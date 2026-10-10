@@ -1,8 +1,9 @@
 # Раскрытие детализации отчёта мотивации менеджера
 
 В пользовательском RDL «Отчет мотивация менеджера» детализация группы
-`ГруппаПлановПродаж` раскрыта по умолчанию только для `VariationCalculate = Подразделение`.
-Названия и итоги остальных разделов остаются видимыми; детали раскрываются
+`ГруппаПлановПродаж` свёрнута по умолчанию только для `VariationCalculate = Подразделение`.
+Остальные разделы раскрыты по умолчанию.
+Названия и итоги остальных разделов остаются видимыми; детали можно раскрывать и сворачивать
 через текстовое поле `VariationCalculate` в заголовке родительского раздела.
 SQL, параметры, суммы и формулы отчёта не изменены.
 
@@ -10,7 +11,7 @@ SQL, параметры, суммы и формулы отчёта не изме
 
 ```xml
 <Visibility>
-  <Hidden>=LCase(Trim(CStr(Fields!VariationCalculate.Value))) &lt;&gt; "подразделение"</Hidden>
+  <Hidden>=LCase(Trim(CStr(Fields!VariationCalculate.Value))) = "подразделение"</Hidden>
   <ToggleItem>VariationCalculate</ToggleItem>
 </Visibility>
 ```
@@ -19,7 +20,7 @@ SQL, параметры, суммы и формулы отчёта не изме
 
 ```xml
 <ToggleImage>
-  <InitialState>=LCase(Trim(CStr(Fields!VariationCalculate.Value))) = "подразделение"</InitialState>
+  <InitialState>=LCase(Trim(CStr(Fields!VariationCalculate.Value))) &lt;&gt; "подразделение"</InitialState>
 </ToggleImage>
 ```
 
