@@ -18,9 +18,11 @@ SQL, параметры, суммы и формулы отчёта не изме
 В Textbox `VariationCalculate` добавлено:
 
 ```xml
-<InitialToggleState>=LCase(Trim(CStr(Fields!VariationCalculate.Value))) = "подразделение"</InitialToggleState>
+<ToggleImage>
+  <InitialState>=LCase(Trim(CStr(Fields!VariationCalculate.Value))) = "подразделение"</InitialState>
+</ToggleImage>
 ```
 
-Проверено: XML разбирается; после удаления двух добавленных элементов исходное
+Проверено: XML разбирается; после удаления Visibility и ToggleImage исходное
 дерево полностью совпадает. Отображение и интерактивное раскрытие нужно проверить
 в Preview Report Builder/SSRS; доступа к серверу отчётов в этой среде нет.
