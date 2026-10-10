@@ -93,3 +93,31 @@ def delete_draft(version_id):
     except ProtectedError:
         raise ValidationError('Версия используется в результатах расчёта или как базовая для утверждения. Удаление запрещено.')
     return latest_version()
+
+
+@transaction.atomic
+def copy_from_version(destination_id, source_id, subdivision=None):
+    versions = list(GlobalCoeffVersion.objects.select_for_update().order_by('pk'))
+    destination = next((v for v in versions if v.pk == destination_id), None)
+    source = next((v for v in versions if v.pk == source_id), None)
+    latest = next((v for v in reversed(versions) if v.status != 'superseded'), None)
+    if not destination or destination.status != 'draft' or destination.pk != latest.pk:
+        raise ValidationError('Копировать можно только в последний черновик.')
+    if not source or source.pk == destination.pk:
+        raise ValidationError('Выберите другую существующую версию.')
+    model = SubdivisionCoeff if subdivision else GlobalCoeff
+    scope = {'subdivision': subdivision} if subdivision else {}
+    rows = list(model.objects.filter(version=source, **scope))
+    if not rows:
+        raise ValidationError('В выбранной версии нет коэффициентов для этой страницы.')
+    model.objects.filter(version=destination, **scope).delete()
+    model.objects.bulk_create([model(version=destination, **scope, goods_id=c.goods_id,
+        type_coeff_id=c.type_coeff_id, segment_id=c.segment_id,
+        motivation_coeff=c.motivation_coeff, manager_coeff=c.manager_coeff,
+        variation_calculate_id=c.variation_calculate_id) for c in rows])
+    if subdivision:
+        managers = list(SubdivisionManagerCoeff.objects.filter(version=source, subdivision=subdivision))
+        SubdivisionManagerCoeff.objects.filter(version=destination, subdivision=subdivision).delete()
+        SubdivisionManagerCoeff.objects.bulk_create([SubdivisionManagerCoeff(version=destination,
+            subdivision=subdivision, kind_id=c.kind_id, coeff=c.coeff) for c in managers])
+    return len(rows)

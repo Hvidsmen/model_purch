@@ -11,13 +11,15 @@ def period_report(scenario, scope, params):
     filters = {field: params.get(field, '').strip() for field in DIMENSIONS}
     if scope == 'global':
         filters['subdivision'] = ''
-    choices = {field: list(base.order_by(field).values_list(field, flat=True).distinct()) for field in DIMENSIONS}
+    # Aggregate once: derive filter choices and apply dimensional filters to period rows.
+    all_rows = list(base.values(*DIMENSIONS).annotate(plan=Sum('amount_usd'), policies=Sum('policies_usd'),
+        sales=Sum('sales_usd'), total=Sum('total_usd'), row_count=Count('pk'), calculated_count=Count('total_usd')).order_by(*DIMENSIONS))
+    choices = {field: sorted({row[field] for row in all_rows}) for field in DIMENSIONS}
+    rows = [row for row in all_rows if all(not value or row[field] == value for field, value in filters.items())]
     lines = base
     for field, value in filters.items():
         if value:
             lines = lines.filter(**{field: value})
-    rows = list(lines.values(*DIMENSIONS).annotate(plan=Sum('amount_usd'), policies=Sum('policies_usd'),
-        sales=Sum('sales_usd'), total=Sum('total_usd'), row_count=Count('pk'), calculated_count=Count('total_usd')).order_by(*DIMENSIONS))
     root = {'children': {}, **empty_totals()}
     for row in rows:
         current = root

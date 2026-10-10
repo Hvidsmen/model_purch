@@ -57,6 +57,16 @@
     </form>
     </details>
     </div>
+    {% if version_editable %}
+    <details class="secondary-block"><summary>Копировать коэффициенты из версии</summary>
+    <form method="post" action="{% url 'gb_act' %}" onsubmit="return confirm('Заменить сохранённые коэффициенты этой страницы значениями выбранной версии? Несохранённые изменения будут потеряны. Дата версии не меняется.');">
+    {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="action_button" value="copy_version"><input type="hidden" name="confirm_copy" value="yes">
+    {% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}
+    <label>Версия-источник<select name="copy_source" class="form-select" required><option value="">Выберите версию</option>{% for version in versions %}{% if version.pk != selected_version.pk %}<option value="{{ version.pk }}">{{ version }} · {{ version.get_status_display }}</option>{% endif %}{% endfor %}</select></label>
+    <button class="btn btn-outline-primary" type="submit">Копировать коэффициенты</button>
+    <p class="small text-muted">{% if sub %}Копируются коэффициенты выбранного подразделения и его руководителей.{% else %}Копируются глобальные коэффициенты. Настройки подразделений сохраняются.{% endif %}</p>
+    </form></details>
+    {% endif %}
     <details id="version-history"><summary>История версий ({{ versions|length }})</summary>
         <div class="table-wrapper mt-2"><table class="table"><thead><tr><th class="header-base">Версия</th><th class="header-base">Статус / замена</th><th class="header-base">Начало действия</th><th class="header-base">Окончание действия</th><th class="header-base">Создана</th><th class="header-base">Коэффициентов</th></tr></thead>
         <tbody>{% for version in versions %}<tr><td><a href="?version={{ version.pk }}">{{ version.title|default:'Версия' }}</a></td><td>{{ version.get_status_display }}{% if version.replaced_by %}<br>Заменена: <a href="?version={{ version.replaced_by_id }}">{{ version.replaced_by }}</a>{% endif %}</td><td>{{ version.effective_from|date:'d.m.Y' }}</td><td>{% if version.status == 'approved' %}{{ version.effective_until|date:'d.m.Y'|default:'Без ограничения' }}{% elif version.status == 'superseded' %}Исключена из действующей цепочки{% else %}Не утверждена{% endif %}</td><td>{% timezone 'Europe/Moscow' %}{{ version.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ version.coefficient_count }}</td></tr>{% endfor %}</tbody></table></div>

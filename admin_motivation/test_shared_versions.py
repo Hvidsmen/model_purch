@@ -36,6 +36,37 @@ class SharedMotivationVersionTests(TestCase):
         SubdivisionCoeff.objects.create(subdivision=self.other, **{**values, 'motivation_coeff': 0.3})
         self.manager = SubdivisionManagerCoeff.objects.create(version=self.first, subdivision=self.sub, kind=self.manager_kind, coeff=0.8)
 
+    def test_copy_version_global_and_subdivision_scopes(self):
+        from .services.versions import copy_from_version
+        draft = self.create()
+        draft.coefficients.update(motivation_coeff=0.9)
+        draft.subdivision_coefficients.filter(subdivision=self.sub).update(motivation_coeff=0.7)
+        draft.manager_coefficients.update(coeff=0.5)
+        copy_from_version(draft.pk, self.first.pk)
+        self.assertEqual(draft.coefficients.get().motivation_coeff, 0.1)
+        self.assertEqual(draft.subdivision_coefficients.get(subdivision=self.sub).motivation_coeff, 0.7)
+        copy_from_version(draft.pk, self.first.pk, self.sub)
+        self.assertEqual(draft.subdivision_coefficients.get(subdivision=self.sub).motivation_coeff, 0.15)
+        self.assertEqual(draft.manager_coefficients.get().coeff, 0.8)
+        self.assertEqual(draft.subdivision_coefficients.get(subdivision=self.other).motivation_coeff, 0.3)
+        self.assertEqual(self.first.coefficients.get().motivation_coeff, 0.1)
+        self.assertEqual(draft.effective_from, date(2026, 10, 8))
+        with self.assertRaises(ValidationError):
+            copy_from_version(draft.pk, draft.pk)
+        with self.assertRaises(ValidationError):
+            copy_from_version(self.first.pk, draft.pk)
+
+    def test_copy_version_post_requires_confirmation(self):
+        draft = self.create()
+        draft.coefficients.update(motivation_coeff=0.9)
+        response = self.client.post(reverse('gb_act'), {'action_button': 'copy_version',
+            'version': draft.pk, 'copy_source': self.first.pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(draft.coefficients.get().motivation_coeff, 0.9)
+        self.client.post(reverse('gb_act'), {'action_button': 'copy_version',
+            'version': draft.pk, 'copy_source': self.first.pk, 'confirm_copy': 'yes'})
+        self.assertEqual(draft.coefficients.get().motivation_coeff, 0.1)
+
     def create(self, starts='2026-10-08', source=None):
         return create_version(date.fromisoformat(starts), 'Shared', (source or self.first).pk)
 

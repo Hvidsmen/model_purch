@@ -78,6 +78,19 @@ def upsert_product(version, group_sales, group, brand, variation_id, policies, s
 @require_POST
 def gloabal_coeff_action(request):
     action = request.POST.get('action_button')
+    if action == 'copy_version':
+        from .services.versions import copy_from_version
+        destination = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
+        sub = get_object_or_404(Subdivision, pk=request.POST['return_subdivision']) if request.POST.get('return_subdivision') else None
+        try:
+            if request.POST.get('confirm_copy') != 'yes':
+                raise ValidationError('Подтвердите замену текущих коэффициентов.')
+            count = copy_from_version(destination.pk, int(request.POST.get('copy_source', '')), sub)
+            messages.success(request, f'Скопировано коэффициентов: {count}. Дата и статус черновика сохранены.')
+        except (ValidationError, ValueError) as error:
+            messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Выберите версию-источник.')
+        route = reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) if sub else reverse('global_coeff_admin_motivation')
+        return redirect(route + f'?version={destination.pk}')
     if action == 'delete_version':
         from .services.versions import delete_draft
         destination = get_object_or_404(Subdivision, pk=request.POST['return_subdivision']) if request.POST.get('return_subdivision') else None

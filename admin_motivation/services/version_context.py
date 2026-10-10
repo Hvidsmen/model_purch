@@ -1,4 +1,6 @@
 from datetime import timedelta
+from django.db.models import Count
+from ..models import GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ..models import GlobalCoeffVersion, SalesPlanScenario
@@ -18,10 +20,14 @@ def version_context(request, version_form=None):
         selected = GlobalCoeffVersion.objects.filter(pk=request.session.get('motivation_version')).first() or latest
     versions = list(GlobalCoeffVersion.objects.order_by('-effective_from', '-pk'))
     approved = sorted([v for v in versions if v.status == 'approved'], key=lambda v: v.effective_from)
+    counts = {}
+    for model in (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff):
+        for row in model.objects.order_by().values('version_id').annotate(n=Count('pk')):
+            counts[row['version_id']] = counts.get(row['version_id'], 0) + row['n']
     for i, version in enumerate(versions):
         next_version = next((v for v in approved if v.effective_from > version.effective_from), None)
         version.effective_until = next_version.effective_from - timedelta(days=1) if next_version and version.status == 'approved' else None
-        version.coefficient_count = version.coefficients.count() + version.subdivision_coefficients.count() + version.manager_coefficients.count()
+        version.coefficient_count = counts.get(version.pk, 0)
     minimum = latest.effective_from + timedelta(days=1) if latest else None
     form = version_form or GlobalCoeffVersionForm(initial={'source_version': latest.pk if latest else None,
         'effective_from': max(today(), minimum) if minimum else '2001-01-01'})

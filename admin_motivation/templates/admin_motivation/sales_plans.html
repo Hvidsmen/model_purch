@@ -36,7 +36,8 @@
 </form>
 <div class="plan-actions mb-2"><strong>Итоги за весь период, USD</strong><button type="button" class="btn btn-sm btn-outline-secondary" id="report-expand">Развернуть всё</button><button type="button" class="btn btn-sm btn-outline-secondary" id="report-collapse">Свернуть всё</button></div>
 {% if pending_count %}<div class="alert alert-warning">Не рассчитано строк: {{ pending_count }}. План показан полностью, суммы мотивации — по рассчитанным строкам.</div>{% endif %}
-<div class="table-responsive"><div id="period-report">
+{{ report_nodes|json_script:"report-tree-data" }}
+<div class="table-responsive"><div id="period-report" data-scope="{{ scope }}">
 <div class="report-grid report-heading"><span>Подразделение / группа планов / группа ERP / марка</span><span>План</span><span>Политики</span><span>Продажи</span><span>Мотивация</span></div>
 {% for node in report_nodes %}{% include 'admin_motivation/_report_node.html' %}{% empty %}<p class="p-3">{% if scenario.loaded_at %}Нет данных по выбранным фильтрам.{% else %}План ещё не загружен.{% endif %}</p>{% endfor %}
 <div class="report-grid report-total"><strong>Итого за весь период</strong><strong>{{ totals.plan|floatformat:'0g'|default:'0' }}</strong><strong>{{ totals.policies|floatformat:'0g'|default:'—' }}</strong><strong>{{ totals.sales|floatformat:'0g'|default:'—' }}</strong><strong>{{ totals.total|floatformat:'0g'|default:'—' }}</strong></div>

@@ -195,6 +195,9 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.page.get_by_role('link', name='По подразделениям', exact=True).click()
         self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
+        self.assertEqual(self.page.locator('.report-leaf').count(), 0)
+        self.page.get_by_role('button', name='Развернуть всё', exact=True).click()
+        self.assertEqual(self.page.locator('.report-leaf').count(), 2)
         with self.page.expect_download() as download:
             self.page.get_by_role('link', name='Скачать CSV', exact=True).click()
         self.assertIn('subdivisions.csv', download.value.suggested_filename)
@@ -276,6 +279,9 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.page.get_by_role('link', name='По подразделениям', exact=True).click()
         self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
+        self.assertEqual(self.page.locator('.report-leaf').count(), 0)
+        self.page.get_by_role('button', name='Развернуть всё', exact=True).click()
+        self.assertEqual(self.page.locator('.report-leaf').count(), 2)
         self.assertEqual(self.page.locator('#period-report details[open]').count(), 0)
         self.choose_filter('select[name=subdivision]', 'A')
         with self.page.expect_navigation():
@@ -293,6 +299,9 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.page.get_by_role('link', name='Сбросить', exact=True).click()
         self.assertEqual(self.page.locator('.report-node[data-level="0"]').count(), 2)
+        self.assertEqual(self.page.locator('.report-leaf').count(), 0)
+        self.page.get_by_role('button', name='Развернуть всё', exact=True).click()
+        self.assertEqual(self.page.locator('.report-leaf').count(), 2)
         self.assertEqual(self.errors, [])
 
     def test_comparison_preview_visibility_and_confirmed_replacement(self):
