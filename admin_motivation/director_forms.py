@@ -8,8 +8,9 @@ KEYS = [f'k{i}' for i in range(5)]
 class DirectorEmployeeForm(forms.ModelForm):
     class Meta:
         model = DirectorEmployee
-        fields = ['full_name', 'subdivisions']
+        fields = ['full_name', 'position', 'subdivisions']
         widgets = {'full_name': forms.TextInput(attrs={'class': 'form-control'}),
+                   'position': forms.TextInput(attrs={'class': 'form-control'}),
                    'subdivisions': forms.SelectMultiple(attrs={'class': 'form-select'})}
 
     def clean_full_name(self):

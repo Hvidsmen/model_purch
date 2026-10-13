@@ -11,7 +11,7 @@ from ..director_forms import DirectorEmployeeForm
 
 def template():
     book = Workbook()
-    book.active.append(['ФИО', 'Филиалы'])
+    book.active.append(['ФИО', 'Должность', 'Филиалы'])
     stream = BytesIO()
     book.save(stream)
     return stream.getvalue()
@@ -58,7 +58,8 @@ def import_directors(upload):
             existing = list(DirectorEmployee.objects.filter(full_name__iexact=name)[:2])
             if len(existing) > 1:
                 raise ValidationError(f'Строка {number}: несколько директоров с таким ФИО. Измените их вручную.')
-            form = DirectorEmployeeForm({'full_name': name, 'subdivisions': selected}, instance=existing[0] if existing else None)
+            position = cell('Должность') if 'Должность' in headers else (existing[0].position if existing else '')
+            form = DirectorEmployeeForm({'full_name': name, 'position': position, 'subdivisions': selected}, instance=existing[0] if existing else None)
             if name.startswith('=') or not form.is_valid():
                 raise ValidationError(f'Строка {number}: проверьте ФИО и филиалы.')
             prepared.append(form)

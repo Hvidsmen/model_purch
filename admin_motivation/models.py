@@ -523,6 +523,7 @@ def director_employee_code():
 
 class DirectorEmployee(models.Model):
     full_name = models.CharField('ФИО сотрудника', max_length=255)
+    position = models.CharField('Должность', max_length=255, blank=True)
     employee_code = models.CharField('Код сотрудника', max_length=64, unique=True, default=director_employee_code)
     subdivisions = models.ManyToManyField(Subdivision, related_name='directors', verbose_name='Филиалы')
 

@@ -13,6 +13,33 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_director_position_form_and_excel(self):
+        from io import BytesIO
+        from openpyxl import Workbook, load_workbook
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .services.director_import import import_directors, template
+        url = reverse('motivation_director_directory')
+        response = self.client.post(url, {'edit_employee': self.first.pk,
+            'full_name': self.first.full_name, 'position': 'Директор филиала', 'subdivisions': [self.sub.pk]})
+        self.assertRedirects(response, url)
+        self.first.refresh_from_db()
+        self.assertEqual(self.first.position, 'Директор филиала')
+        self.assertContains(self.client.get(url), 'Директор филиала')
+        def upload(with_position):
+            book = Workbook()
+            book.active.append(['ФИО', 'Должность', 'Филиалы'] if with_position else ['ФИО', 'Филиалы'])
+            book.active.append([self.first.full_name, 'Региональный директор', 'A'] if with_position else [self.first.full_name, 'A'])
+            output = BytesIO()
+            book.save(output)
+            return SimpleUploadedFile('directors.xlsx', output.getvalue())
+        import_directors(upload(True))
+        import_directors(upload(False))
+        self.first.refresh_from_db()
+        self.assertEqual(self.first.position, 'Региональный директор')
+        book = load_workbook(BytesIO(template()))
+        self.assertIn('Должность', [cell.value for cell in book.active[1]])
+        book.close()
+
     def test_excel_import_atomic_update_and_auto_code(self):
         from io import BytesIO
         from openpyxl import Workbook
