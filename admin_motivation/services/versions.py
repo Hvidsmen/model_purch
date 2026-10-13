@@ -58,20 +58,33 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
 
 
 @transaction.atomic
-def apply_to_subdivisions(version, subdivisions):
+def apply_to_subdivisions(version, subdivisions, groups=None, employee=None):
     if not version.is_editable:
         raise ValidationError('Историческая версия доступна только для просмотра.')
+    from .coefficient_groups import selected_groups
+    from ..models import TypeCoeff
+    selected = selected_groups(groups)
+    names = {'policies': 'политики', 'sales': 'продажи'}
+    type_ids = [kind.pk for kind in TypeCoeff.objects.all() if kind.type_coeff_name.strip().casefold() in {names[group] for group in selected if group in names}]
+    subdivisions = list(subdivisions)
+    if 'directors' in selected:
+        if not employee or any(not employee.subdivisions.filter(pk=sub.pk).exists() for sub in subdivisions):
+            raise ValidationError('Выберите сотрудника-директора, привязанного к выбранным филиалам.')
     for sub in subdivisions:
-        for kind in KindManagerCoeff.objects.all():
-            SubdivisionManagerCoeff.objects.get_or_create(version=version, subdivision=sub, kind=kind, defaults={'coeff': 1})
-        # Replace this subdivision's set so deleted goods cannot retain obsolete coefficients.
-        SubdivisionCoeff.objects.filter(version=version, subdivision=sub).delete()
-        SubdivisionCoeff.objects.bulk_create([
-            SubdivisionCoeff(version=version, subdivision=sub, goods_id=c.goods_id, type_coeff_id=c.type_coeff_id, segment_id=c.segment_id,
-                             motivation_coeff=c.motivation_coeff, manager_coeff=c.manager_coeff,
-                             variation_calculate_id=c.variation_calculate_id)
-            for c in version.coefficients.all()
-        ])
+        if type_ids:
+            for kind in KindManagerCoeff.objects.all():
+                SubdivisionManagerCoeff.objects.get_or_create(version=version, subdivision=sub, kind=kind, defaults={'coeff': 1})
+            # Replace only selected groups. Other groups and employees retain their values.
+            SubdivisionCoeff.objects.filter(version=version, subdivision=sub, type_coeff_id__in=type_ids).delete()
+            SubdivisionCoeff.objects.bulk_create([
+                SubdivisionCoeff(version=version, subdivision=sub, goods_id=c.goods_id, type_coeff_id=c.type_coeff_id, segment_id=c.segment_id,
+                                 motivation_coeff=c.motivation_coeff, manager_coeff=c.manager_coeff,
+                                 variation_calculate_id=c.variation_calculate_id)
+                for c in version.coefficients.filter(type_coeff_id__in=type_ids)
+            ])
+        if 'directors' in selected:
+            from .directors import copy_directors
+            copy_directors(version.pk, subdivision=sub, employee=employee, from_global=True)
 
 
 @transaction.atomic
@@ -116,16 +129,21 @@ def copy_from_version(destination_id, source_id, subdivision=None):
     model = SubdivisionCoeff if subdivision else GlobalCoeff
     scope = {'subdivision': subdivision} if subdivision else {}
     rows = list(model.objects.filter(version=source, **scope))
-    if not rows:
+    directors = list(GlobalDirectorCoeff.objects.filter(version=source)) if not subdivision else []
+    if not rows and not directors:
         raise ValidationError('В выбранной версии нет коэффициентов для этой страницы.')
     model.objects.filter(version=destination, **scope).delete()
     model.objects.bulk_create([model(version=destination, **scope, goods_id=c.goods_id,
         type_coeff_id=c.type_coeff_id, segment_id=c.segment_id,
         motivation_coeff=c.motivation_coeff, manager_coeff=c.manager_coeff,
         variation_calculate_id=c.variation_calculate_id) for c in rows])
+    if not subdivision:
+        GlobalDirectorCoeff.objects.filter(version=destination).delete()
+        GlobalDirectorCoeff.objects.bulk_create([GlobalDirectorCoeff(version=destination, goods_id=row.goods_id,
+            **{f'k{i}': getattr(row, f'k{i}') for i in range(5)}) for row in directors])
     if subdivision:
         managers = list(SubdivisionManagerCoeff.objects.filter(version=source, subdivision=subdivision))
         SubdivisionManagerCoeff.objects.filter(version=destination, subdivision=subdivision).delete()
         SubdivisionManagerCoeff.objects.bulk_create([SubdivisionManagerCoeff(version=destination,
             subdivision=subdivision, kind_id=c.kind_id, coeff=c.coeff) for c in managers])
-    return len(rows)
+    return len(rows) + 5 * len(directors)

@@ -97,11 +97,14 @@
             error.hidden = true;
             const action = event.submitter?.value;
             let warning;
-            if (action === 'copy_from_global') warning = 'Заменить все коэффициенты этого подразделения глобальными значениями выбранной версии? Текущие индивидуальные значения и несохранённые правки будут заменены.';
+            if (action === 'copy_from_global') { const group = form.querySelector('[name=copy_groups]')?.selectedOptions?.[0]?.textContent || 'Политики и продажи'; warning = `Заменить коэффициенты группы «${group}» глобальными значениями выбранной версии? Остальные группы сохраняются. Несохранённые правки будут потеряны.`; }
             if (action === 'apply_sub') {
                 const selected = form.querySelectorAll('input[name=selected_subdivisions]:checked').length;
                 if (!selected) { event.preventDefault(); fail('Выберите подразделения для копирования.'); return; }
-                warning = `Заменить коэффициенты выбранных подразделений (${selected}) сохранёнными глобальными значениями? Несохранённые правки таблицы не копируются.`;
+                const groups = form.querySelectorAll('input[name=copy_groups]:checked');
+                if (!groups.length) { event.preventDefault(); fail('Выберите группы коэффициентов для копирования.'); return; }
+                if ([...groups].some(input => input.value === 'directors') && !form.querySelector('[name=director_employee]')?.value) { event.preventDefault(); fail('Выберите сотрудника-директора для копирования.'); return; }
+                warning = `Заменить выбранные группы коэффициентов выбранных подразделений (${selected}) сохранёнными глобальными значениями? Несохранённые правки таблицы не копируются.`;
             }
             if (action === 'file_load' && !form.querySelector('input[type=file]')?.files.length) {
                 event.preventDefault(); fail('Сначала выберите файл для импорта.'); return;

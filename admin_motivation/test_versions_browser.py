@@ -442,12 +442,13 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         def cancel(dialog): dialogs.append(dialog.message); dialog.dismiss()
         self.page.on('dialog', cancel)
         self.page.get_by_role('button', name='Копировать из глобальных', exact=True).click()
+        self.page.get_by_role('button', name='Скопировать выбранную группу', exact=True).click()
         self.assertEqual(len(dialogs), 1)
-        self.assertIn('Заменить все коэффициенты', dialogs[0])
+        self.assertIn('Заменить коэффициенты группы', dialogs[0])
         self.assertEqual(self.db(lambda: SubdivisionCoeff.objects.get(pk=row).motivation_coeff), .15)
         self.page.remove_listener('dialog', cancel)
         self.page.once('dialog', lambda dialog: dialog.accept())
-        with self.page.expect_navigation(): self.page.get_by_role('button', name='Копировать из глобальных', exact=True).click()
+        with self.page.expect_navigation(): self.page.get_by_role('button', name='Скопировать выбранную группу', exact=True).click()
         self.assertEqual(self.db(lambda: SubdivisionCoeff.objects.get(version=self.first, subdivision_id=sub).motivation_coeff), .123456)
         expect(self.page.locator('#editor-dirty-count')).to_have_text('Изменено: 0')
         self.assertEqual(self.errors, [])
@@ -467,7 +468,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             return sub.pk, employee.pk, other.pk
         sub, employee, other = self.db(setup)
         self.page.goto(self.live_server_url + reverse('motivation_directors_global'))
-        expect(self.page.locator('[name="coeff-0-k0"]')).to_have_value('12.3456')
+        expect(self.page.get_by_label('Директор K0', exact=True)).to_have_value('12.3456%')
         self.page.goto(self.live_server_url + reverse('motivation_directors_local') + f'?subdivision={sub}&employee={employee}')
         self.page.once('dialog', lambda dialog: dialog.accept())
         with self.page.expect_navigation():
@@ -480,4 +481,42 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.db(lambda: SubdivisionDirectorCoeff.objects.get(employee_id=employee).k0), Decimal('.25'))
         self.assertFalse(self.db(lambda: SubdivisionDirectorCoeff.objects.filter(employee_id=other).exists()))
         self.assertEqual(self.db(lambda: GlobalDirectorCoeff.objects.get().k0), Decimal('.123456'))
+        self.assertEqual(self.errors, [])
+
+    def test_shared_director_columns_visibility_and_copy_group_choice(self):
+        from playwright.sync_api import expect
+        from decimal import Decimal
+        from .models import GlobalDirectorCoeff, SubdivisionDirectorCoeff, DirectorEmployee
+        def setup():
+            channel = Chanel.objects.create(chanel_name='Group copy channel')
+            sub = Subdivision.objects.create(subdivision_key='Group copy branch', subdivision_name='Group copy branch', subdivision_global='Group copy branch', chanel=channel)
+            employee = DirectorEmployee.objects.create(full_name='Директор группы', employee_code='GROUP-DIR')
+            employee.subdivisions.add(sub)
+            GlobalDirectorCoeff.objects.create(version=self.first, goods=self.coeff.goods, k0=Decimal('.03'))
+            return sub.pk, employee.pk
+        sub, employee = self.db(setup)
+        url = self.live_server_url + reverse('global_coeff_admin_motivation')
+        self.page.goto(url)
+        expect(self.page.get_by_label('Директор K0', exact=True)).to_have_value('3%')
+        self.page.locator('[data-coefficient-group-toggle="directors"]').uncheck()
+        expect(self.page.get_by_label('Директор K0', exact=True)).not_to_be_visible()
+        self.page.reload()
+        expect(self.page.locator('[data-coefficient-group-toggle="directors"]')).not_to_be_checked()
+        self.page.locator('[data-coefficient-group-toggle="directors"]').check()
+        self.page.get_by_label('Директор K0', exact=True).fill('7%')
+        self.page.get_by_label('Директор K0', exact=True).dispatch_event('change')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Сохранить изменения', exact=True).click()
+        self.assertEqual(self.db(lambda: GlobalDirectorCoeff.objects.get().k0), Decimal('.07'))
+        self.page.goto(self.live_server_url + reverse('coeff_subdivisions_admin_motivation', args=[sub]))
+        self.page.locator('#coefficient-tools > summary').click()
+        self.page.get_by_role('button', name='Копировать из глобальных', exact=True).click()
+        expect(self.page.locator('#copy-global-dialog')).to_be_visible()
+        self.page.locator('#copy-coefficient-group').select_option('directors')
+        self.page.locator('#copy-director-select').select_option(str(employee))
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Скопировать выбранную группу', exact=True).click()
+        self.assertEqual(self.db(lambda: SubdivisionDirectorCoeff.objects.get(employee_id=employee).k0), Decimal('.07'))
+        self.assertIn(reverse('motivation_directors_local'), self.page.url)
         self.assertEqual(self.errors, [])

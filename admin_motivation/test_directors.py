@@ -44,9 +44,9 @@ class DirectorCoefficientTests(TestCase):
         self.assertFalse(bad.is_valid())
 
     def test_global_and_local_forms_render(self):
-        global_page = self.client.get(self.global_url)
-        self.assertContains(global_page, 'Глобальные коэффициенты директоров')
-        self.assertContains(global_page, 'coeff-0-k0')
+        global_page = self.client.get(self.global_url, follow=True)
+        self.assertContains(global_page, 'Директор K0')
+        self.assertContains(global_page, f'director_coeff={self.goods.pk}=0')
         page = self.client.get(self.local_url, {'subdivision': self.sub.pk})
         self.assertContains(page, 'Первый директор')
         self.assertContains(page, 'Второй директор')
@@ -160,3 +160,52 @@ class DirectorCoefficientTests(TestCase):
         self.assertEqual(GlobalDirectorCoeff.objects.filter(version=self.version).count(), 2)
         self.assertEqual(GlobalDirectorCoeff.objects.get(goods=other).k0, 0)
         self.assertEqual(GlobalDirectorCoeff.objects.get(goods=self.goods).k0, Decimal('.01'))
+
+    def test_global_directors_save_in_shared_form_and_old_page_redirects(self):
+        response = self.client.get(self.global_url)
+        self.assertRedirects(response, reverse('global_coeff_admin_motivation'))
+        response = self.client.post(reverse('gb_act'), {'version': self.version.pk, 'action_button': 'save_coeff',
+            f'director_coeff={self.goods.pk}=0': '25%', f'director_coeff={self.goods.pk}=4': '10%'})
+        self.assertEqual(response.status_code, 302)
+        self.global_row.refresh_from_db()
+        self.assertEqual(self.global_row.k0, Decimal('.25'))
+        self.assertEqual(self.global_row.k4, Decimal('.10'))
+        page = self.client.get(reverse('global_coeff_admin_motivation'))
+        self.assertContains(page, 'data-coefficient-group-toggle="directors"')
+        self.assertContains(page, f'director_coeff={self.goods.pk}=0')
+
+    def test_selected_copy_preserves_other_groups_and_other_directors(self):
+        from .models import TypeCoeff, SegmentCoeff, VariationCalculate, GlobalCoeff, SubdivisionCoeff
+        policy = TypeCoeff.objects.create(type_coeff_name='Политики')
+        sales = TypeCoeff.objects.create(type_coeff_name='Продажи')
+        segment = SegmentCoeff.objects.create(segment_name='K0')
+        variation = VariationCalculate.objects.create(variation_name='Подразделение')
+        data = {'version': self.version, 'goods': self.goods, 'segment': segment,
+                'manager_coeff': 1, 'variation_calculate': variation}
+        GlobalCoeff.objects.create(**data, type_coeff=policy, motivation_coeff=.02)
+        GlobalCoeff.objects.create(**data, type_coeff=sales, motivation_coeff=.03)
+        local_policy = SubdivisionCoeff.objects.create(**data, subdivision=self.sub, type_coeff=policy, motivation_coeff=.05)
+        local_sales = SubdivisionCoeff.objects.create(**data, subdivision=self.sub, type_coeff=sales, motivation_coeff=.07)
+        for employee in (self.first, self.second):
+            SubdivisionDirectorCoeff.objects.create(version=self.version, goods=self.goods, subdivision=self.sub, employee=employee, k0=Decimal('.4'))
+        url = reverse('sub_act', args=[self.sub.pk])
+        self.client.post(url, {'version': self.version.pk, 'action_button': 'copy_from_global', 'copy_groups': ['policies']})
+        self.assertEqual(SubdivisionCoeff.objects.get(subdivision=self.sub, type_coeff=policy).motivation_coeff, .02)
+        local_sales.refresh_from_db()
+        self.assertEqual(local_sales.motivation_coeff, .07)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.4'))
+        self.client.post(url, {'version': self.version.pk, 'action_button': 'copy_from_global', 'copy_groups': ['sales']})
+        self.assertEqual(SubdivisionCoeff.objects.get(subdivision=self.sub, type_coeff=sales).motivation_coeff, .03)
+        self.client.post(url, {'version': self.version.pk, 'action_button': 'copy_from_global',
+            'copy_groups': ['directors'], 'director_employee': self.first.pk})
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.01'))
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.second).k0, Decimal('.4'))
+        self.assertEqual(SubdivisionCoeff.objects.get(subdivision=self.sub, type_coeff=policy).motivation_coeff, .02)
+
+    def test_global_copy_uses_saved_values_not_unsaved_director_inputs(self):
+        self.client.post(reverse('gb_act'), {'version': self.version.pk, 'action_button': 'apply_sub',
+            'selected_subdivisions': [self.sub.pk], 'copy_groups': ['directors'], 'director_employee': self.first.pk,
+            f'director_coeff={self.goods.pk}=0': '90%'})
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.01'))
+        self.global_row.refresh_from_db()
+        self.assertEqual(self.global_row.k0, Decimal('.01'))

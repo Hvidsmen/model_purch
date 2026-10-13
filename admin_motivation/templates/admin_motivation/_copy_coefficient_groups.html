@@ -1,0 +1,12 @@
+<dialog id="copy-global-dialog" class="coefficient-copy-dialog">
+<form method="post" action="{% url 'sub_act' sub.pk %}">
+{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+<h2>Копировать из глобальных</h2>
+<p>Выберите группу коэффициентов. Остальные группы и сотрудники сохранят свои настройки.</p>
+<label for="copy-coefficient-group">Группа коэффициентов</label>
+<select id="copy-coefficient-group" name="copy_groups" class="form-select" required>
+<option value="policies">Политики</option><option value="sales">Продажи</option><option value="directors">Директор</option>
+</select>
+<div id="copy-director-employee" hidden><label for="copy-director-select">Сотрудник-директор</label><select id="copy-director-select" name="director_employee" class="form-select"><option value="">Выберите сотрудника</option>{% for employee in director_employees %}<option value="{{ employee.pk }}">{{ employee }}</option>{% endfor %}</select><p class="small">Если сотрудника нет в списке, добавьте его на странице <a href="{% url 'motivation_directors_local' %}?subdivision={{ sub.pk }}&version={{ selected_version.pk }}">директоров по филиалам</a>.</p></div>
+<div class="director-copy-tools mt-3"><button type="button" class="btn btn-outline-secondary" id="copy-global-cancel">Отмена</button><button type="submit" class="btn btn-primary" name="action_button" value="copy_from_global">Скопировать выбранную группу</button></div>
+</form></dialog>

@@ -176,3 +176,12 @@ body{background:#f4f6fa!important;color:#334155}
 .director-table th, .director-table td { padding: 8px !important; }
 .director-table .form-control { min-width: 75px; width: 100%; }
 .director-table th:not(:nth-child(-n+3)), .director-table input[type=number] { text-align: right; }
+
+.coefficient-group-visibility { display: flex; gap: 14px; flex-wrap: wrap; align-items: center; padding: 8px 0 14px; font-size: 13px; }
+.coefficient-group-visibility label { display: inline-flex; gap: 6px; align-items: center; margin: 0; }
+.content-wrapper .coefficient-table .header-directors { background: #fff8e6; color: #835b15; }
+.content-wrapper .coefficient-table .director-start { border-left: 2px solid #ead9ac; }
+.coefficient-copy-dialog { border: 1px solid #dce2ed; border-radius: 10px; padding: 24px; max-width: min(520px, 92vw); }
+.coefficient-copy-dialog::backdrop { background: #17243b66; }
+.coefficient-copy-dialog h2 { font-size: 20px; }
+.coefficient-copy-dialog label { display: block; margin: 12px 0 4px; }

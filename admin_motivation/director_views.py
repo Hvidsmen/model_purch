@@ -15,7 +15,7 @@ from .services.version_context import version_context
 
 
 def director_route(subdivision=None, employee=None):
-    route = reverse('motivation_directors_local') if subdivision else reverse('motivation_directors_global')
+    route = reverse('motivation_directors_local') if subdivision else reverse('global_coeff_admin_motivation')
     params = []
     if subdivision:
         params.append(f'subdivision={subdivision.pk}')
@@ -26,6 +26,10 @@ def director_route(subdivision=None, employee=None):
 
 @require_http_methods(['GET', 'POST'])
 def director_coefficients(request, local=False, version_form=None):
+    if not local and request.method == 'GET':
+        route = reverse('global_coeff_admin_motivation')
+        query = request.GET.urlencode()
+        return redirect(route + ('?' + query if query else ''))
     context = version_context(request, version_form)
     version = context['selected_version']
     params = request.POST if request.method == 'POST' else request.GET

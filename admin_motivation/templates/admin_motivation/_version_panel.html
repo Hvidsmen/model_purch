@@ -64,7 +64,7 @@
     {% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
     <label>Версия-источник<select name="copy_source" class="form-select" required><option value="">Выберите версию</option>{% for version in versions %}{% if version.pk != selected_version.pk %}<option value="{{ version.pk }}">{{ version }} · {{ version.get_status_display }}</option>{% endif %}{% endfor %}</select></label>
     <button class="btn btn-outline-primary" type="submit">Копировать коэффициенты</button>
-    <p class="small text-muted">{% if sub %}Копируются коэффициенты выбранного подразделения и его руководителей.{% else %}Копируются глобальные коэффициенты. Настройки подразделений сохраняются.{% endif %}</p>
+    <p class="small text-muted">{% if sub %}Копируются коэффициенты выбранного подразделения и его руководителей.{% else %}Копируются глобальные коэффициенты политик, продаж и директоров. Настройки подразделений сохраняются.{% endif %}</p>
     </form></details>
     {% endif %}
     <details id="version-history"><summary>История версий ({{ versions|length }})</summary>

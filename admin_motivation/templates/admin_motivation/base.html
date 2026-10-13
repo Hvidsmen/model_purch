@@ -204,6 +204,7 @@
 
     <link rel="stylesheet" href="{% static 'admin_motivation/workspace.css' %}">
     <script src="{% static 'admin_motivation/workspace.js' %}" defer></script>
+    <script src="{% static 'admin_motivation/coefficient_groups.js' %}" defer></script>
 
 {% endblock %}
 {% block module_navigation %}
@@ -216,7 +217,6 @@
             </a>
         </li>
 
-        <li class="nav-item"><a class="nav-link {% if director_page and not local %}active{% endif %}" href="{% url 'motivation_directors_global' %}">Директора · глобальные</a></li>
         <li class="nav-item"><a class="nav-link {% if director_page and local %}active{% endif %}" href="{% url 'motivation_directors_local' %}">Директора · по филиалам</a></li>
         <li class="nav-item">
             <details class="subdivision-nav" id="subdivision-nav">

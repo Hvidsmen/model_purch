@@ -38,8 +38,9 @@ def gloabal_coeff(request, version_form=None):
     context = version_context(request, version_form)
     selected = context['selected_version']
     example = ExampleFiles.objects.filter(pk=1).first()
+    from .services.coefficient_groups import global_matrix
     return render(request, 'admin_motivation/gloabal_coeff.html', {
-        **context, 'goods': GlobalCoeff.get_matrix_str(selected) if selected else {},
+        **context, 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.all(),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
@@ -78,7 +79,7 @@ def upsert_product(version, group_sales, group, brand, variation_id, policies, s
 def coefficient_return_route(request, subdivision=None):
     if request.POST.get('return_directors') in ('global', 'local'):
         mode = request.POST['return_directors']
-        route = reverse('motivation_directors_local' if mode == 'local' else 'motivation_directors_global')
+        route = reverse('motivation_directors_local' if mode == 'local' else 'global_coeff_admin_motivation')
         params = []
         if mode == 'local' and subdivision:
             params.append(f'subdivision={subdivision.pk}')
@@ -173,7 +174,17 @@ def gloabal_coeff_action(request):
                 for _, row in df.iterrows():
                     values = row.tolist()[1:]
                     upsert_product(version, *values[:3], variation.pk, values[3:3+count], values[3+count:])
-            elif action in {'save_coeff', 'apply_sub'}:
+            elif action == 'apply_sub':
+                subdivisions = Subdivision.objects.filter(pk__in=request.POST.getlist('selected_subdivisions'))
+                if not subdivisions.exists():
+                    raise ValidationError('Выберите подразделения.')
+                from .services.coefficient_groups import selected_groups
+                groups = selected_groups(request.POST.getlist('copy_groups'), default=() if request.POST.get('copy_group_selection') == 'yes' else ('policies', 'sales'))
+                if 'directors' in groups and not request.POST.get('director_employee'):
+                    raise ValidationError('Выберите сотрудника-директора.')
+                employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee')) if 'directors' in groups else None
+                apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee)
+            elif action == 'save_coeff':
                 ids = [key.split('=', 1)[1] for key in request.POST if key.startswith('select_var_calc=')]
                 deleted = [key.split('=', 1)[1] for key in request.POST if key.startswith('delete_coeff=')]
                 # Update existing cells only; never delete cells just because a POST is partial.
@@ -185,12 +196,9 @@ def gloabal_coeff_action(request):
                         coeff.manager_coeff = 1
                         coeff.save()
                 version.coefficients.filter(goods_id__in=deleted).delete()
+                from .services.coefficient_groups import save_global_directors
+                save_global_directors(version, request.POST, deleted)
                 # Keep Goods and previous versions' coefficients intact.
-                if action == 'apply_sub':
-                    subdivisions = Subdivision.objects.filter(pk__in=request.POST.getlist('selected_subdivisions'))
-                    if not subdivisions.exists():
-                        raise ValidationError('Выберите подразделения.')
-                    apply_to_subdivisions(version, subdivisions)
             else:
                 raise ValidationError('Неизвестное действие.')
     except (ValidationError, ValueError, TypeError) as error:
@@ -212,7 +220,7 @@ def coef_one_sub(request, subdivision, version_form=None):
     managers = [existing.get(kind.pk) or SubdivisionManagerCoeff(version=selected, subdivision=sub, kind=kind, coeff=1) for kind in kinds]
     example = ExampleFiles.objects.filter(pk=1).first()
     return render(request, 'admin_motivation/coef_one_sub.html', {
-        **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds,
+        **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': sub.directors.all(),
         'goods': SubdivisionCoeff.get_matrix_str(sub, selected),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
@@ -248,7 +256,15 @@ def sub_act(request, subdivision):
                         coeff.manager_coeff = 1
                         coeff.save()
             elif action == 'copy_from_global':
-                apply_to_subdivisions(version, [sub])
+                from .services.coefficient_groups import selected_groups
+                groups = selected_groups(request.POST.getlist('copy_groups'), default=() if request.POST.get('copy_group_selection') == 'yes' else ('policies', 'sales'))
+                if 'directors' in groups and not request.POST.get('director_employee'):
+                    raise ValidationError('Выберите сотрудника-директора.')
+                employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee')) if 'directors' in groups else None
+                apply_to_subdivisions(version, [sub], groups=groups, employee=employee)
+                if groups == {'directors'}:
+                    messages.success(request, 'Глобальные коэффициенты директора скопированы выбранному сотруднику.')
+                    return redirect(reverse('motivation_directors_local') + f'?version={version.pk}&subdivision={sub.pk}&employee={employee.pk}')
             elif action == 'file_load':
                 if 'myfile' not in request.FILES:
                     raise ValidationError('Выберите Excel-файл.')

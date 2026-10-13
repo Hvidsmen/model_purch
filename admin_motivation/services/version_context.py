@@ -23,7 +23,7 @@ def version_context(request, version_form=None):
     counts = {}
     for model in (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff):
         for row in model.objects.order_by().values('version_id').annotate(n=Count('pk')):
-            counts[row['version_id']] = counts.get(row['version_id'], 0) + row['n']
+            counts[row['version_id']] = counts.get(row['version_id'], 0) + row['n'] * (5 if model in (GlobalDirectorCoeff, SubdivisionDirectorCoeff) else 1)
     for i, version in enumerate(versions):
         next_version = next((v for v in approved if v.effective_from > version.effective_from), None)
         version.effective_until = next_version.effective_from - timedelta(days=1) if next_version and version.status == 'approved' else None

@@ -772,15 +772,15 @@
                             <th rowspan="2" class="header-base" style="width: 12%;">Группа планов продаж <span class="required-mark">*</span></th>
                             <th rowspan="2" class="header-base" style="width: 12%;">Группа <span class="required-mark">*</span></th>
                             <th rowspan="2" class="header-base" style="width: 10%;">Марка и уровень <span class="required-mark">*</span></th>
-                            <th colspan="{{ segments|length }}" class="header-policies" style="width: 33%;">Политики <span class="required-mark">*</span></th>
-                            <th colspan="{{ segments|length }}" class="header-sales" style="width: 33%;">Продажи <span class="required-mark">*</span></th>
+                            <th colspan="{{ segments|length }}" class="header-policies" data-coefficient-group="policies" style="width: 33%;">Политики <span class="required-mark">*</span></th>
+                            <th colspan="{{ segments|length }}" class="header-sales" data-coefficient-group="sales" style="width: 33%;">Продажи <span class="required-mark">*</span></th>
                         </tr>
                         <tr>
                             {% for segment in segments %}
-                            <th scope="col" class="header-policies">{{ segment }}</th>
+                            <th scope="col" class="header-policies" data-coefficient-group="policies">{{ segment }}</th>
                             {% endfor %}
                             {% for segment in segments %}
-                            <th scope="col" class="header-sales">{{ segment }}</th>
+                            <th scope="col" class="header-sales" data-coefficient-group="sales">{{ segment }}</th>
                             {% endfor %}
                         </tr>
                         </thead>
@@ -821,7 +821,7 @@
                             {% endfor %}
 
                             {% for segment in segments %}
-                            <td{% if forloop.first %} class="sales-start"{% endif %}>
+                            <td data-coefficient-group="sales"{% if forloop.first %} class="sales-start"{% endif %}>
                                 <input type="text" name="s{{ forloop.counter0 }}" class="coeff-input sales-input coeff-validate required-field" placeholder="0.00%" maxlength="25" data-type="percent" required>
                             </td>
                             {% endfor %}
@@ -851,6 +851,7 @@
     </div>
     <div class="row">
         {% include 'admin_motivation/_coefficient_filters.html' %}
+        {% include 'admin_motivation/_coefficient_visibility.html' %}
         <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
             <fieldset {% if not version_editable %}disabled{% endif %}>
@@ -866,7 +867,12 @@
                             <span class="dropdown-arrow">▼</span>
                         </button>
                         <div class="dropdown-menu" id="subdivisionDropdown">
-                            <div class="dropdown-header">Выберите подразделения:</div>
+                            <input type="hidden" name="copy_group_selection" value="yes"><div class="dropdown-header">1. Выберите группы коэффициентов:</div>
+                            <label class="dropdown-item"><input type="checkbox" name="copy_groups" value="policies" checked> Политики</label>
+                            <label class="dropdown-item"><input type="checkbox" name="copy_groups" value="sales" checked> Продажи</label>
+                            <label class="dropdown-item"><input type="checkbox" name="copy_groups" value="directors"> Директор</label>
+                            <label class="dropdown-item">Сотрудник-директор<select name="director_employee" class="form-select"><option value="">Выберите сотрудника</option>{% for employee in director_employees %}<option value="{{ employee.pk }}">{{ employee }}</option>{% endfor %}</select></label>
+                            <div class="dropdown-header">2. Выберите подразделения:</div>
                             <div class="dropdown-body">
                                 <!-- ЗАМЕНИТЕ subdivisions НА ВАШУ ПЕРЕМЕННУЮ КОНТЕКСТА С ПОДРАЗДЕЛЕНИЯМИ -->
                                 {% for sub in subdivisions %}
@@ -908,16 +914,18 @@
                             <th rowspan="2" class="header-base">Группа планов продаж</th>
                             <th rowspan="2" class="header-base">Группа ERP</th>
                             <th rowspan="2" class="header-base">Марка / настройки</th>
-                            <th colspan="{{ segments|length }}" class="header-policies">Политики</th>
-                            <th colspan="{{ segments|length }}" class="header-sales">Продажи</th>
+                            <th colspan="{{ segments|length }}" class="header-policies" data-coefficient-group="policies">Политики</th>
+                            <th colspan="{{ segments|length }}" class="header-sales" data-coefficient-group="sales">Продажи</th>
+                            <th colspan="5" class="header-directors" data-coefficient-group="directors">Директор</th>
                         </tr>
                         <tr>
                             {% for segment in segments %}
-                            <th scope="col" class="header-policies">{{ segment }}</th>
+                            <th scope="col" class="header-policies" data-coefficient-group="policies">{{ segment }}</th>
                             {% endfor %}
                             {% for segment in segments %}
-                            <th scope="col" class="header-sales">{{ segment }}</th>
+                            <th scope="col" class="header-sales" data-coefficient-group="sales">{{ segment }}</th>
                             {% endfor %}
+                            {% for i in '01234' %}<th class="header-directors" data-coefficient-group="directors">K{{ i }}</th>{% endfor %}
                         </tr>
                         </thead>
                         <tbody>
@@ -936,18 +944,19 @@
                             {% for sgb in gb_coefs %}
                                 {% if forloop.counter0 == 0 %}
                                     {% for gb in sgb %}
-                                    <td>
+                                    <td data-coefficient-group="policies">
                                         <input type="text" class="coeff-input policy-input coeff-validate" name="global_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% else %}
                                     {% for gb in sgb %}
-                                    <td{% if forloop.first %} class="sales-start"{% endif %}>
+                                    <td data-coefficient-group="sales"{% if forloop.first %} class="sales-start"{% endif %}>
                                         <input type="text" class="coeff-input sales-input coeff-validate" name="global_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% endif %}
                             {% endfor %}
+                            {% for cell in good.director_cells %}<td data-coefficient-group="directors" {% if forloop.first %}class="director-start"{% endif %}><input type="text" class="coeff-input director-input coeff-validate" name="director_coeff={{ good.pk }}={{ cell.index }}" data-value="{{ cell.value|unlocalize }}" required value="{{ cell.value|unlocalize }}" maxlength="25" data-type="percent" aria-label="Директор K{{ cell.index }}"></td>{% endfor %}
                         </tr>
                         {% endfor %}
                         {% endfor %}

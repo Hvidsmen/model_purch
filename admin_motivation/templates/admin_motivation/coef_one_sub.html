@@ -720,13 +720,14 @@
     </div>
     <div class="row">
         {% include 'admin_motivation/_coefficient_filters.html' %}
+        {% include 'admin_motivation/_coefficient_visibility.html' %}
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
             <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="actions">
                     <details class="editor-tools" id="coefficient-tools"><summary>Ещё: импорт, копирование и справочники</summary><div class="tool-options">
-                    <button type="submit" class="btn btn-warning" name="action_button" value="copy_from_global">Копировать из глобальных</button>
+                    <button type="button" class="btn btn-warning" id="copy-global-open">Копировать из глобальных</button>
 
                     <div class="file-upload-wrapper">
                         <label class="file-input-label" id="fileLabel" for="fileInput">
@@ -751,15 +752,15 @@
                             <th rowspan="2" class="header-base">Группа планов продаж</th>
                             <th rowspan="2" class="header-base">Группа ERP</th>
                             <th rowspan="2" class="header-base">Марка / настройки</th>
-                            <th colspan="{{ segments|length }}" class="header-policies">Политики</th>
-                            <th colspan="{{ segments|length }}" class="header-sales">Продажи</th>
+                            <th colspan="{{ segments|length }}" class="header-policies" data-coefficient-group="policies">Политики</th>
+                            <th colspan="{{ segments|length }}" class="header-sales" data-coefficient-group="sales">Продажи</th>
                         </tr>
                         <tr>
                             {% for segment in segments %}
-                            <th scope="col" class="header-policies">{{ segment }}</th>
+                            <th scope="col" class="header-policies" data-coefficient-group="policies">{{ segment }}</th>
                             {% endfor %}
                             {% for segment in segments %}
-                            <th scope="col" class="header-sales">{{ segment }}</th>
+                            <th scope="col" class="header-sales" data-coefficient-group="sales">{{ segment }}</th>
                             {% endfor %}
                         </tr>
                         </thead>
@@ -779,7 +780,7 @@
                             {% for sgb in gb_coefs %}
                                 {% if forloop.counter0 == 0 %}
                                     {% for gb in sgb %}
-                                    <td>
+                                    <td data-coefficient-group="policies">
                                         <input type="text" class="coeff-input policy-input coeff-validate"
                                                name="sub_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
                                                value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
@@ -787,7 +788,7 @@
                                     {% endfor %}
                                 {% else %}
                                     {% for gb in sgb %}
-                                    <td {% if forloop.first %} class="sales-start"{% endif %}>
+                                    <td data-coefficient-group="sales" {% if forloop.first %} class="sales-start"{% endif %}>
                                         <input type="text" class="coeff-input sales-input coeff-validate"
                                                name="sub_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
                                                value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
@@ -808,6 +809,7 @@
     </div>
 </div>
 
+{% include 'admin_motivation/_copy_coefficient_groups.html' %}
 <script>
     function toggleRowDelete(checkbox) {
         const row = checkbox.closest('tr');
