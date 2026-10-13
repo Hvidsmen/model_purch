@@ -15,10 +15,8 @@ from .services.version_context import version_context
 
 
 def director_route(subdivision=None, employee=None):
-    route = reverse('motivation_directors_local') if subdivision else reverse('global_coeff_admin_motivation')
+    route = reverse('coeff_subdivisions_admin_motivation', args=[subdivision.pk]) if subdivision else reverse('global_coeff_admin_motivation')
     params = []
-    if subdivision:
-        params.append(f'subdivision={subdivision.pk}')
     if employee:
         params.append(f'employee={employee.pk}')
     return route, params
@@ -30,6 +28,14 @@ def director_coefficients(request, local=False, version_form=None):
         route = reverse('global_coeff_admin_motivation')
         query = request.GET.urlencode()
         return redirect(route + ('?' + query if query else ''))
+    if local and request.method == 'GET':
+        if request.GET.get('subdivision'):
+            sub = get_object_or_404(Subdivision, pk=request.GET['subdivision'])
+            query = request.GET.copy()
+            query.pop('subdivision', None)
+            return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + ('?' + query.urlencode() if query else ''))
+        sub = Subdivision.objects.order_by('pk').first()
+        return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) if sub else reverse('global_coeff_admin_motivation'))
     context = version_context(request, version_form)
     version = context['selected_version']
     params = request.POST if request.method == 'POST' else request.GET

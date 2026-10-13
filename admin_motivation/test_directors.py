@@ -47,10 +47,10 @@ class DirectorCoefficientTests(TestCase):
         global_page = self.client.get(self.global_url, follow=True)
         self.assertContains(global_page, 'Директор K0')
         self.assertContains(global_page, f'director_coeff={self.goods.pk}=0')
-        page = self.client.get(self.local_url, {'subdivision': self.sub.pk})
+        page = self.client.get(self.local_url, {'subdivision': self.sub.pk}, follow=True)
         self.assertContains(page, 'Первый директор')
         self.assertContains(page, 'Второй директор')
-        self.assertNotContains(page, 'name="copy_source"')
+        self.assertContains(page, 'id="director-employee-choice"')
 
     def test_each_employee_has_independent_coefficients(self):
         self.local_post('copy_global', confirm_copy='yes')
@@ -130,7 +130,7 @@ class DirectorCoefficientTests(TestCase):
             'source_version': self.version.pk, 'effective_from': '2026-01-01', 'title': 'Next',
             'return_directors': 'local', 'return_subdivision': self.sub.pk, 'return_employee': self.first.pk})
         latest = GlobalCoeffVersion.objects.latest('pk')
-        self.assertRedirects(response, self.local_url + f'?subdivision={self.sub.pk}&employee={self.first.pk}&version={latest.pk}')
+        self.assertRedirects(response, reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk]) + f'?employee={self.first.pk}&version={latest.pk}')
 
     def test_formset_saves_percent_values_and_preserves_other_scopes(self):
         self.local_post('copy_global', confirm_copy='yes')
@@ -209,3 +209,55 @@ class DirectorCoefficientTests(TestCase):
         self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.01'))
         self.global_row.refresh_from_db()
         self.assertEqual(self.global_row.k0, Decimal('.01'))
+
+    def test_unified_local_form_saves_selected_director_only(self):
+        self.local_post('copy_global', confirm_copy='yes')
+        self.local_post('copy_global', self.second, confirm_copy='yes')
+        url = reverse('sub_act', args=[self.sub.pk])
+        response = self.client.post(url, {'version': self.version.pk, 'action_button': 'save_coeff',
+            'employee': self.first.pk, f'director_coeff={self.goods.pk}=0': '30%'})
+        self.assertRedirects(response, reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk]) + f'?version={self.version.pk}&employee={self.first.pk}')
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.3'))
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.second).k0, Decimal('.01'))
+        page = self.client.get(reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk]), {'employee': self.first.pk})
+        self.assertContains(page, f'director_coeff={self.goods.pk}=0')
+        self.assertContains(page, 'Справочник сотрудников-директоров')
+
+    def test_copy_to_other_director_keeps_source_and_other_branch(self):
+        self.local_post('copy_global', confirm_copy='yes')
+        self.local_post('copy_global', self.second, confirm_copy='yes')
+        source = SubdivisionDirectorCoeff.objects.get(employee=self.first)
+        source.k0 = Decimal('.6')
+        source.save()
+        url = reverse('sub_act', args=[self.sub.pk])
+        self.client.post(url, {'version': self.version.pk, 'action_button': 'copy_to_director',
+            'employee': self.first.pk, 'copy_to_employee': self.second.pk})
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.second).k0, Decimal('.01'))
+        response = self.client.post(url, {'version': self.version.pk, 'action_button': 'copy_to_director',
+            'employee': self.first.pk, 'copy_to_employee': self.second.pk, 'confirm_copy': 'yes'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.second).k0, Decimal('.6'))
+        source.refresh_from_db()
+        self.assertEqual(source.k0, Decimal('.6'))
+
+    def test_director_version_copy_preserves_other_employee(self):
+        from .services.versions import copy_from_version
+        self.local_post('copy_global', confirm_copy='yes')
+        self.local_post('copy_global', self.second, confirm_copy='yes')
+        draft = create_version(date(2026, 1, 1), 'Next', self.version.pk)
+        first = SubdivisionDirectorCoeff.objects.get(version=draft, employee=self.first)
+        first.k0 = Decimal('.8')
+        first.save()
+        second = SubdivisionDirectorCoeff.objects.get(version=draft, employee=self.second)
+        second.k0 = Decimal('.9')
+        second.save()
+        copy_from_version(draft.pk, self.version.pk, self.sub, employee=self.first)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(version=draft, employee=self.first).k0, Decimal('.01'))
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(version=draft, employee=self.second).k0, Decimal('.9'))
+
+    def test_shared_directory_adds_employee_and_opens_them(self):
+        response = self.client.post(reverse('sub_act', args=[self.sub.pk]), {'version': self.version.pk,
+            'action_button': 'employee_save', 'full_name': 'Новый директор', 'employee_code': 'NEW-DIR',
+            'subdivisions': [self.sub.pk]})
+        employee = DirectorEmployee.objects.get(employee_code='NEW-DIR')
+        self.assertRedirects(response, reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk]) + f'?version={self.version.pk}&employee={employee.pk}')

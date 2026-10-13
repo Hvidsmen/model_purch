@@ -96,7 +96,9 @@
             const form = event.target;
             error.hidden = true;
             const action = event.submitter?.value;
+            if (form.id === 'director-employee-picker') { leaving = true; queueMicrotask(() => { if (event.defaultPrevented) leaving = false; }); return; }
             let warning;
+            if (action === 'copy_to_director') warning = 'Заменить коэффициенты выбранного получателя сохранёнными значениями текущего директора? Остальные сотрудники и группы сохранятся.';
             if (action === 'copy_from_global') { const group = form.querySelector('[name=copy_groups]')?.selectedOptions?.[0]?.textContent || 'Политики и продажи'; warning = `Заменить коэффициенты группы «${group}» глобальными значениями выбранной версии? Остальные группы сохраняются. Несохранённые правки будут потеряны.`; }
             if (action === 'apply_sub') {
                 const selected = form.querySelectorAll('input[name=selected_subdivisions]:checked').length;

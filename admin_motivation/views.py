@@ -77,18 +77,11 @@ def upsert_product(version, group_sales, group, brand, variation_id, policies, s
 
 
 def coefficient_return_route(request, subdivision=None):
-    if request.POST.get('return_directors') in ('global', 'local'):
-        mode = request.POST['return_directors']
-        route = reverse('motivation_directors_local' if mode == 'local' else 'global_coeff_admin_motivation')
-        params = []
-        if mode == 'local' and subdivision:
-            params.append(f'subdivision={subdivision.pk}')
-        employee = request.POST.get('return_employee', '')
-        if mode == 'local' and employee.isdigit():
-            params.append(f'employee={employee}')
-        return route + ('?' + '&'.join(params) + '&' if params else '?')
+    if request.POST.get('return_directors') == 'global':
+        return reverse('global_coeff_admin_motivation') + '?'
     route = reverse('coeff_subdivisions_admin_motivation', args=[subdivision.pk]) if subdivision else reverse('global_coeff_admin_motivation')
-    return route + '?'
+    employee = request.POST.get('return_employee', '')
+    return route + (f'?employee={employee}&' if subdivision and employee.isdigit() else '?')
 
 
 @require_POST
@@ -101,12 +94,13 @@ def gloabal_coeff_action(request):
         try:
             if request.POST.get('confirm_copy') != 'yes':
                 raise ValidationError('Подтвердите замену текущих коэффициентов.')
-            count = copy_from_version(destination.pk, int(request.POST.get('copy_source', '')), sub)
+            employee = get_object_or_404(DirectorEmployee, pk=request.POST['return_employee']) if sub and request.POST.get('return_employee') else None
+            count = copy_from_version(destination.pk, int(request.POST.get('copy_source', '')), sub, employee=employee)
             messages.success(request, f'Скопировано коэффициентов: {count}. Дата и статус черновика сохранены.')
         except (ValidationError, ValueError) as error:
             messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Выберите версию-источник.')
-        route = reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) if sub else reverse('global_coeff_admin_motivation')
-        return redirect(route + f'?version={destination.pk}')
+        route = coefficient_return_route(request, sub)
+        return redirect(route + f'version={destination.pk}')
     if action == 'delete_version':
         from .services.versions import delete_draft
         destination = get_object_or_404(Subdivision, pk=request.POST['return_subdivision']) if request.POST.get('return_subdivision') else None
@@ -211,17 +205,33 @@ def gloabal_coeff_action(request):
     return redirect(reverse('global_coeff_admin_motivation') + f'?version={version.pk}')
 
 
-def coef_one_sub(request, subdivision, version_form=None):
+def coef_one_sub(request, subdivision, version_form=None, employee_form_override=None):
     sub = get_object_or_404(Subdivision, pk=subdivision)
     context = version_context(request, version_form)
     selected = context['selected_version']
     kinds = list(KindManagerCoeff.objects.order_by('pk'))
     existing = {row.kind_id: row for row in SubdivisionManagerCoeff.objects.filter(version=selected, subdivision=sub).select_related('kind')}
     managers = [existing.get(kind.pk) or SubdivisionManagerCoeff(version=selected, subdivision=sub, kind=kind, coeff=1) for kind in kinds]
+    from django.db.models import Q
+    from .services.coefficient_groups import coefficient_matrix
+    from .director_forms import DirectorEmployeeForm
+    employees = DirectorEmployee.objects.filter(Q(subdivisions=sub) | Q(subdivisiondirectorcoeff__subdivision=sub,
+        subdivisiondirectorcoeff__version=selected)).distinct()
+    employee_id = request.GET.get('employee')
+    employee = get_object_or_404(employees, pk=employee_id) if employee_id else None
+    employee_form = DirectorEmployeeForm(initial={'subdivisions': [sub.pk]})
+    if request.GET.get('edit_employee'):
+        employee_form = DirectorEmployeeForm(instance=get_object_or_404(DirectorEmployee, pk=request.GET['edit_employee']))
+    if employee_form_override is not None:
+        employee_form = employee_form_override
+    employee_bound = bool(employee and employee.subdivisions.filter(pk=sub.pk).exists())
     example = ExampleFiles.objects.filter(pk=1).first()
     return render(request, 'admin_motivation/coef_one_sub.html', {
-        **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': sub.directors.all(),
-        'goods': SubdivisionCoeff.get_matrix_str(sub, selected),
+        **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
+        'director_editable': bool(context['version_editable'] and employee_bound),
+        'employee_form': employee_form, 'all_employees': DirectorEmployee.objects.prefetch_related('subdivisions'),
+        'copy_employee_options': sub.directors.exclude(pk=employee.pk) if employee else sub.directors.all(),
+        'goods': coefficient_matrix(selected, sub, employee),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
@@ -234,6 +244,7 @@ def sub_act(request, subdivision):
     sub = get_object_or_404(Subdivision, pk=subdivision)
     version = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
     action = request.POST.get('action_button')
+    employee = None
     try:
         with transaction.atomic():
             latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
@@ -246,6 +257,7 @@ def sub_act(request, subdivision):
                         SubdivisionManagerCoeff.objects.update_or_create(version=version, subdivision=sub, kind=kind,
                             defaults={'coeff': coefficient_number(request.POST[key])})
             elif action == 'save_coeff':
+                employee = get_object_or_404(DirectorEmployee, pk=request.POST['employee']) if request.POST.get('employee') else None
                 for coeff in SubdivisionCoeff.objects.filter(version=version, subdivision=sub):
                     key = f'sub_coeff={coeff.pk}'
                     if key in request.POST:
@@ -255,6 +267,25 @@ def sub_act(request, subdivision):
                             coeff.variation_calculate = get_object_or_404(VariationCalculate, pk=request.POST[select])
                         coeff.manager_coeff = 1
                         coeff.save()
+                from .services.coefficient_groups import save_global_directors
+                save_global_directors(version, request.POST, subdivision=sub, employee=employee)
+            elif action == 'copy_to_director':
+                from .services.directors import copy_to_employee
+                if request.POST.get('confirm_copy') != 'yes':
+                    raise ValidationError('Подтвердите замену коэффициентов другого директора.')
+                employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('employee'))
+                target = get_object_or_404(DirectorEmployee, pk=request.POST.get('copy_to_employee'))
+                copy_to_employee(version.pk, sub, employee, target)
+                employee = target
+            elif action == 'employee_save':
+                from .director_forms import DirectorEmployeeForm
+                existing = get_object_or_404(DirectorEmployee, pk=request.POST['employee_edit']) if request.POST.get('employee_edit') else None
+                form = DirectorEmployeeForm(request.POST, instance=existing)
+                if not form.is_valid():
+                    return coef_one_sub(request, sub.pk, employee_form_override=form)
+                employee = form.save()
+                if not employee.subdivisions.filter(pk=sub.pk).exists():
+                    employee = None
             elif action == 'copy_from_global':
                 from .services.coefficient_groups import selected_groups
                 groups = selected_groups(request.POST.getlist('copy_groups'), default=() if request.POST.get('copy_group_selection') == 'yes' else ('policies', 'sales'))
@@ -264,7 +295,7 @@ def sub_act(request, subdivision):
                 apply_to_subdivisions(version, [sub], groups=groups, employee=employee)
                 if groups == {'directors'}:
                     messages.success(request, 'Глобальные коэффициенты директора скопированы выбранному сотруднику.')
-                    return redirect(reverse('motivation_directors_local') + f'?version={version.pk}&subdivision={sub.pk}&employee={employee.pk}')
+                    return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + f'?version={version.pk}&employee={employee.pk}')
             elif action == 'file_load':
                 if 'myfile' not in request.FILES:
                     raise ValidationError('Выберите Excel-файл.')
@@ -282,7 +313,10 @@ def sub_act(request, subdivision):
         messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Некорректное число или формат файла.')
     else:
         messages.success(request, 'Настройки подразделения сохранены в выбранной версии.')
-    return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + f'?version={version.pk}')
+    chosen = employee.pk if employee else request.POST.get('employee', '')
+    allowed = str(chosen).isdigit() and (DirectorEmployee.objects.filter(pk=chosen, subdivisions=sub).exists() or SubdivisionDirectorCoeff.objects.filter(version=version, subdivision=sub, employee_id=chosen).exists())
+    suffix = f'&employee={chosen}' if allowed else ''
+    return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + f'?version={version.pk}' + suffix)
 
 
 from .conns import *

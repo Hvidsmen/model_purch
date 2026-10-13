@@ -39,3 +39,14 @@ def copy_directors(version_id, source_id=None, subdivision=None, employee=None, 
             raise ValidationError('Выберите другую версию-источник.')
         rows = model.objects.filter(version_id=source_id, **scope)
     return copy_rows(rows, model, version, **scope)
+
+
+@transaction.atomic
+def copy_to_employee(version_id, subdivision, source_employee, target_employee):
+    version = lock_editable(version_id)
+    if not source_employee or source_employee.pk == target_employee.pk:
+        raise ValidationError('Выберите другого директора.')
+    if not all(employee.subdivisions.filter(pk=subdivision.pk).exists() for employee in (source_employee, target_employee)):
+        raise ValidationError('Оба сотрудника должны быть привязаны к этому филиалу.')
+    source = SubdivisionDirectorCoeff.objects.filter(version=version, subdivision=subdivision, employee=source_employee)
+    return copy_rows(source, SubdivisionDirectorCoeff, version, subdivision=subdivision, employee=target_employee)

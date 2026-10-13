@@ -23,9 +23,9 @@
         {% if selected_version.status == 'draft' %}
         {% if director_page %}<a class="btn btn-primary" href="{% url 'global_coeff_admin_motivation' %}?version={{ selected_version.pk }}">Утверждение общего набора…</a>{% else %}<button type="button" class="btn btn-primary" id="approval-review">Утвердить версию…</button>{% endif %}
         {% if selected_version.effective_from|date:'Y-m-d' != '2001-01-01' %}
-        <form method="post" action="{% url 'gb_act' %}" onsubmit="return confirm('Удалить этот черновик вместе с глобальными коэффициентами, коэффициентами подразделений и руководителей? Восстановить его будет нельзя.');" class="m-0">
+        <form method="post" action="{% url 'gb_act' %}" onsubmit="return confirm('Удалить этот черновик вместе с глобальными коэффициентами, коэффициентами подразделений, руководителей и директоров? Восстановить его будет нельзя.');" class="m-0">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="confirm_delete" value="yes">
-            {% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
+            {% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if employee and not director_page %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
             <button type="submit" class="btn btn-outline-danger" name="action_button" value="delete_version">Удалить черновик</button>
         </form>
         {% endif %}
@@ -37,7 +37,7 @@
         {% endif %}
     </div>
     <div class="version-controls">
-    <form method="get">{% if director_page and local %}{% if sub %}<input type="hidden" name="subdivision" value="{{ sub.pk }}">{% endif %}{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}{% endif %}
+    <form method="get">{% if not director_page and employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}{% if director_page and local %}{% if sub %}<input type="hidden" name="subdivision" value="{{ sub.pk }}">{% endif %}{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}{% endif %}
         <div class="version-picker"><label for="coefficient-version">Версия коэффициентов</label>
         <select id="coefficient-version" name="version" class="form-select">
             {% for version in versions %}<option value="{{ version.pk }}" {% if version.pk == selected_version.pk %}selected{% endif %}>{{ version }} · {{ version.get_status_display }}{% if version.pk == effective_version.pk %} — действует сейчас{% endif %}</option>{% endfor %}
@@ -46,7 +46,7 @@
     <details id="create-version-details" class="secondary-block" {% if version_form.is_bound %}open{% endif %}>
     <summary>Создать версию</summary>
     <form method="post" action="{% url 'gb_act' %}" id="createVersionForm" title="Новая версия копирует глобальные коэффициенты и настройки всех подразделений">
-        {% csrf_token %}{{ version_form.source_version }}{% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
+        {% csrf_token %}{{ version_form.source_version }}{% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if employee and not director_page %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
         <div class="d-flex gap-2 flex-wrap align-items-start">
             <div>{{ version_form.effective_from.label_tag }} {{ version_form.effective_from }}
                 {% for error in version_form.effective_from.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}</div>
@@ -61,14 +61,14 @@
     <details class="secondary-block"><summary>Копировать коэффициенты из версии</summary>
     <form method="post" action="{% url 'gb_act' %}" onsubmit="return confirm('Заменить сохранённые коэффициенты этой страницы значениями выбранной версии? Несохранённые изменения будут потеряны. Дата версии не меняется.');">
     {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="action_button" value="copy_version"><input type="hidden" name="confirm_copy" value="yes">
-    {% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
+    {% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if employee and not director_page %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
     <label>Версия-источник<select name="copy_source" class="form-select" required><option value="">Выберите версию</option>{% for version in versions %}{% if version.pk != selected_version.pk %}<option value="{{ version.pk }}">{{ version }} · {{ version.get_status_display }}</option>{% endif %}{% endfor %}</select></label>
     <button class="btn btn-outline-primary" type="submit">Копировать коэффициенты</button>
-    <p class="small text-muted">{% if sub %}Копируются коэффициенты выбранного подразделения и его руководителей.{% else %}Копируются глобальные коэффициенты политик, продаж и директоров. Настройки подразделений сохраняются.{% endif %}</p>
+    <p class="small text-muted">{% if sub %}Копируются коэффициенты выбранного подразделения и его руководителей{% if employee %}, а также выбранного директора{% endif %}.{% else %}Копируются глобальные коэффициенты политик, продаж и директоров. Настройки подразделений сохраняются.{% endif %}</p>
     </form></details>
     {% endif %}
     <details id="version-history"><summary>История версий ({{ versions|length }})</summary>
         <div class="table-wrapper mt-2"><table class="table"><thead><tr><th class="header-base">Версия</th><th class="header-base">Статус / замена</th><th class="header-base">Начало действия</th><th class="header-base">Окончание действия</th><th class="header-base">Создана</th><th class="header-base">Коэффициентов</th></tr></thead>
-        <tbody>{% for version in versions %}<tr><td><a href="?version={{ version.pk }}{% if director_page and local %}{% if sub %}&subdivision={{ sub.pk }}{% endif %}{% if employee %}&employee={{ employee.pk }}{% endif %}{% endif %}">{{ version.title|default:'Версия' }}</a></td><td>{{ version.get_status_display }}{% if version.replaced_by %}<br>Заменена: <a href="?version={{ version.replaced_by_id }}">{{ version.replaced_by }}</a>{% endif %}</td><td>{{ version.effective_from|date:'d.m.Y' }}</td><td>{% if version.status == 'approved' %}{{ version.effective_until|date:'d.m.Y'|default:'Без ограничения' }}{% elif version.status == 'superseded' %}Исключена из действующей цепочки{% else %}Не утверждена{% endif %}</td><td>{% timezone 'Europe/Moscow' %}{{ version.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ version.coefficient_count }}</td></tr>{% endfor %}</tbody></table></div>
+        <tbody>{% for version in versions %}<tr><td><a href="?version={{ version.pk }}{% if director_page and local %}{% if sub %}&subdivision={{ sub.pk }}{% endif %}{% endif %}{% if employee %}&employee={{ employee.pk }}{% endif %}">{{ version.title|default:'Версия' }}</a></td><td>{{ version.get_status_display }}{% if version.replaced_by %}<br>Заменена: <a href="?version={{ version.replaced_by_id }}">{{ version.replaced_by }}</a>{% endif %}</td><td>{{ version.effective_from|date:'d.m.Y' }}</td><td>{% if version.status == 'approved' %}{{ version.effective_until|date:'d.m.Y'|default:'Без ограничения' }}{% elif version.status == 'superseded' %}Исключена из действующей цепочки{% else %}Не утверждена{% endif %}</td><td>{% timezone 'Europe/Moscow' %}{{ version.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ version.coefficient_count }}</td></tr>{% endfor %}</tbody></table></div>
     </details>
 </div>

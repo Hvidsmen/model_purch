@@ -36,3 +36,28 @@
   }
  }, true);
 })();
+
+(() => {
+ const picker = document.getElementById('director-employee-picker');
+ if (!picker) return;
+ const choice = document.getElementById('director-employee-choice');
+ let original = choice.value;
+ let reverting = false;
+ const changeEmployee = () => {
+  if (reverting) return;
+  const dirty = document.querySelector('.editor-changed');
+  if (dirty && !window.confirm('Есть несохранённые изменения. Сменить директора и потерять эти правки?')) {
+   choice.value = original;
+   reverting = true; choice.dispatchEvent(new Event('change', {bubbles: true})); reverting = false;
+   return;
+  }
+  original = choice.value;
+  // Use the normal submit event so the existing editor marks navigation as intentional.
+  picker.requestSubmit();
+ };
+ choice.addEventListener('change', changeEmployee);
+ picker.addEventListener('submit', event => {
+  if (document.querySelector('.editor-changed') && event.submitter &&
+      !window.confirm('Есть несохранённые изменения. Открыть директора и потерять эти правки?')) event.preventDefault();
+ });
+})();

@@ -117,7 +117,7 @@ def delete_draft(version_id):
 
 
 @transaction.atomic
-def copy_from_version(destination_id, source_id, subdivision=None):
+def copy_from_version(destination_id, source_id, subdivision=None, employee=None):
     versions = list(GlobalCoeffVersion.objects.select_for_update().order_by('pk'))
     destination = next((v for v in versions if v.pk == destination_id), None)
     source = next((v for v in versions if v.pk == source_id), None)
@@ -129,7 +129,11 @@ def copy_from_version(destination_id, source_id, subdivision=None):
     model = SubdivisionCoeff if subdivision else GlobalCoeff
     scope = {'subdivision': subdivision} if subdivision else {}
     rows = list(model.objects.filter(version=source, **scope))
-    directors = list(GlobalDirectorCoeff.objects.filter(version=source)) if not subdivision else []
+    director_model = SubdivisionDirectorCoeff if subdivision else GlobalDirectorCoeff
+    director_scope = {'subdivision': subdivision, 'employee': employee} if subdivision else {}
+    if subdivision and employee and not employee.subdivisions.filter(pk=subdivision.pk).exists():
+        raise ValidationError('Сотрудник должен быть привязан к выбранному филиалу.')
+    directors = list(director_model.objects.filter(version=source, **director_scope)) if not subdivision or employee else []
     if not rows and not directors:
         raise ValidationError('В выбранной версии нет коэффициентов для этой страницы.')
     model.objects.filter(version=destination, **scope).delete()
@@ -137,9 +141,9 @@ def copy_from_version(destination_id, source_id, subdivision=None):
         type_coeff_id=c.type_coeff_id, segment_id=c.segment_id,
         motivation_coeff=c.motivation_coeff, manager_coeff=c.manager_coeff,
         variation_calculate_id=c.variation_calculate_id) for c in rows])
-    if not subdivision:
-        GlobalDirectorCoeff.objects.filter(version=destination).delete()
-        GlobalDirectorCoeff.objects.bulk_create([GlobalDirectorCoeff(version=destination, goods_id=row.goods_id,
+    if not subdivision or employee:
+        director_model.objects.filter(version=destination, **director_scope).delete()
+        director_model.objects.bulk_create([director_model(version=destination, goods_id=row.goods_id, **director_scope,
             **{f'k{i}': getattr(row, f'k{i}') for i in range(5)}) for row in directors])
     if subdivision:
         managers = list(SubdivisionManagerCoeff.objects.filter(version=source, subdivision=subdivision))

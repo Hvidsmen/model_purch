@@ -1,6 +1,6 @@
 from decimal import Decimal
 from django.core.exceptions import ValidationError
-from ..models import (GlobalCoeff, GlobalDirectorCoeff, Goods, TypeCoeff, SegmentCoeff)
+from ..models import (GlobalCoeff, GlobalDirectorCoeff, SubdivisionCoeff, SubdivisionDirectorCoeff, Goods, TypeCoeff, SegmentCoeff)
 
 GROUP_NAMES = {'policies': 'Политики', 'sales': 'Продажи', 'directors': 'Директор'}
 
@@ -12,9 +12,12 @@ def selected_groups(values, default=('policies', 'sales')):
     return groups
 
 
-def global_matrix(version):
-    matrix = GlobalCoeff.get_matrix_str(version) if version else {}
-    directors = {row.goods_id: row for row in GlobalDirectorCoeff.objects.filter(version=version).select_related('goods')}
+def coefficient_matrix(version, subdivision=None, employee=None):
+    matrix = SubdivisionCoeff.get_matrix_str(subdivision, version) if subdivision else (GlobalCoeff.get_matrix_str(version) if version else {})
+    model = SubdivisionDirectorCoeff if subdivision else GlobalDirectorCoeff
+    scope = {'subdivision': subdivision, 'employee': employee} if subdivision else {}
+    queryset = model.objects.filter(version=version, **scope) if not subdivision or employee else model.objects.none()
+    directors = {row.goods_id: row for row in queryset.select_related('goods')}
     types = list(TypeCoeff.objects.order_by('pk'))
     segments = list(SegmentCoeff.objects.order_by('pk'))
     for row in directors.values():
@@ -29,8 +32,14 @@ def global_matrix(version):
     return matrix
 
 
-def save_global_directors(version, data, deleted=()):
+def global_matrix(version):
+    return coefficient_matrix(version)
+
+
+def save_global_directors(version, data, deleted=(), subdivision=None, employee=None):
     from ..views import coefficient_number
+    model = SubdivisionDirectorCoeff if subdivision else GlobalDirectorCoeff
+    scope = {'subdivision': subdivision, 'employee': employee} if subdivision else {}
     changes = {}
     for key in data:
         if not key.startswith('director_coeff='):
@@ -42,11 +51,13 @@ def save_global_directors(version, data, deleted=()):
         if str(pk) in {str(value) for value in deleted}:
             continue
         changes.setdefault(pk, {})[f'k{parts[2]}'] = Decimal(str(coefficient_number(data[key])))
+    if subdivision and changes and (not employee or not employee.subdivisions.filter(pk=subdivision.pk).exists()):
+        raise ValidationError('Выберите директора, привязанного к этому филиалу.')
     if len(set(Goods.objects.filter(pk__in=changes).values_list('pk', flat=True))) != len(changes):
         raise ValidationError('Товарная матрица не найдена.')
     for goods_id, values in changes.items():
-        row, _ = GlobalDirectorCoeff.objects.get_or_create(version=version, goods_id=goods_id)
+        row, _ = model.objects.get_or_create(version=version, goods_id=goods_id, **scope)
         for key, value in values.items():
             setattr(row, key, value)
         row.save()
-    GlobalDirectorCoeff.objects.filter(version=version, goods_id__in=deleted).delete()
+    model.objects.filter(version=version, goods_id__in=deleted, **scope).delete()
