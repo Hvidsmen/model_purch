@@ -560,3 +560,31 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.db(lambda: SubdivisionDirectorCoeff.objects.get(employee_id=first).k0), Decimal('.2'))
         expect(self.page.locator('#director-employee-choice')).to_have_value(str(first))
         self.assertEqual(self.errors, [])
+
+    def test_native_reports_render_manager_and_lazy_subdivision_tree(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .test_reports import NativeMotivationReportTests
+        from .services.reports import manager_report, subdivision_report
+        manager=manager_report(NativeMotivationReportTests.manager_rows())
+        division=subdivision_report(NativeMotivationReportTests.division_rows())
+        with patch('admin_motivation.report_views.choices',return_value=[]), patch('admin_motivation.report_views.load_report',return_value=manager):
+            self.page.goto(self.live_server_url + reverse('motivation_report',args=['manager']) + '?run=1&type=Политики&subdivision=Филиал&author=Менеджер&quarter=1+Квартал')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера')
+            expect(self.page.locator('.manager-section').nth(1)).not_to_have_attribute('open','')
+            self.page.locator('.manager-section').nth(1).locator('summary').click()
+            expect(self.page.get_by_text('4. VENT',exact=True)).to_be_visible()
+            expect(self.page.locator('.manager-grid.report-total-row')).to_contain_text('360')
+            self.page.screenshot(path='/tmp/native-manager-report.png',full_page=True)
+        with patch('admin_motivation.report_views.choices',return_value=[]), patch('admin_motivation.report_views.load_report',return_value=division):
+            self.page.goto(self.live_server_url + reverse('motivation_report',args=['subdivisions']) + '?run=1')
+            self.assertEqual(self.page.locator('.native-division-node').count(),1)
+            self.assertEqual(self.page.locator('.native-division-leaf').count(),0)
+            self.page.get_by_role('button',name='Развернуть всё',exact=True).click()
+            expect(self.page.locator('.native-division-leaf')).to_be_visible()
+            expect(self.page.locator('.native-division-leaf')).to_contain_text('Brand')
+            self.page.locator('#native-report-period-detail').check()
+            expect(self.page.locator('.native-division-leaf [data-period-detail]').first).to_be_visible()
+            self.page.get_by_role('button',name='Свернуть всё',exact=True).click()
+            self.assertEqual(self.page.locator('.native-division-node[open]').count(),0)
+        self.assertEqual(self.errors,[])

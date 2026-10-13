@@ -1,0 +1,22 @@
+{% extends 'admin_motivation/base.html' %}
+{% load static report_format %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}">
+<section class="content native-report">
+<a href="{% url 'motivation_reports' %}">← Все отчёты</a>
+<h1 class="report-title">{{ definition.title }}</h1>
+<details class="report-filter-panel" {% if not data %}open{% endif %}><summary>Параметры отчёта</summary>
+<form method="get" id="native-report-filters" class="native-report-filters filters-card">
+{% if kind == 'deals' %}<label>Период начала<input type="date" class="form-control" name="start" value="{{ query.start }}"></label><label>Период окончания<input type="date" class="form-control" name="end" value="{{ query.end }}"></label>{% endif %}
+{% for filter in filters %}<label>{{ filter.label }}<select class="form-select" name="{{ filter.name }}" {% if filter.multiple %}multiple size="3"{% endif %}>{% if not filter.multiple %}<option value="">Выберите значение</option>{% endif %}{% for option in filter.options %}<option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.value|default:'Без значения' }}</option>{% endfor %}</select></label>{% endfor %}
+{% if kind == 'subdivisions' %}<label>Детализация<select name="scope" class="form-select"><option value="subdivisions" {% if scope != 'matrix' %}selected{% endif %}>По подразделениям</option><option value="matrix" {% if scope == 'matrix' %}selected{% endif %}>По товарной матрице</option></select></label>{% endif %}
+<div class="report-buttons"><button class="btn btn-primary" type="submit" name="run" value="1">Сформировать отчёт</button><button class="btn btn-outline-secondary" type="submit" id="report-filter-refresh" name="refresh_choices" value="1">Обновить списки</button><a class="btn btn-outline-secondary" href="{% url 'motivation_report' kind %}">Сбросить</a></div>
+<p class="report-filter-hint">Пустые списки с несколькими значениями означают «Все». Для выбора нескольких значений удерживайте Ctrl. После выбора типа и подразделения обновите список сотрудников.</p>
+</form></details>
+{% for error in errors %}<div class="alert alert-danger mt-3" role="alert">{{ error }}</div>{% endfor %}
+{% if data %}
+{% if kind == 'manager' %}{% include 'admin_motivation/reports/manager.html' %}{% elif kind == 'deals' %}{% include 'admin_motivation/reports/deals.html' %}{% else %}{% include 'admin_motivation/reports/subdivisions.html' %}{% endif %}
+{% elif not errors %}<p class="report-empty">Выберите параметры и нажмите «Сформировать отчёт».</p>{% endif %}
+</section>
+<script src="{% static 'admin_motivation/reports.js' %}" defer></script>
+{% endblock %}

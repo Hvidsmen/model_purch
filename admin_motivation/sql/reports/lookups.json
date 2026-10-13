@@ -1,0 +1,29 @@
+{
+  "manager": {
+    "Sub": "SELECT DISTINCT\nПодразделение \nFROM \nDataWH.motivation.ReportMotivationByDealAuthor\n",
+    "DA": "SELECT DISTINCT\nАвторСделки \nFROM \nDataWH.motivation.ReportMotivationByDealAuthor\nWHERE \nПодразделение IN (@Subdivision)\nAND ТипКоэф = @TypeCoeff_",
+    "TPK": "SELECT DISTINCT\nТипКоэф\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "DataSet3": "SELECT DISTINCT\nIIF(ТипКоэф='Политики','политику','базовому') ТипКоэф\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor\nWHERE \nТипКоэф=@TypeCoeff_",
+    "PGSales": "SELECT DISTINCT \nГруппаПлановПродаж\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "GPGoods": "SELECT DISTINCT\nГруппаТоваров\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "Brend": "SELECT DISTINCT\nМарка\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "Quar": "SELECT DISTINCT\nКварталМотивации\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor\nWHERE \nКварталМотивации<>'Год'"
+  },
+  "deals": {
+    "Sub": "SELECT DISTINCT\n\tПодразделение\nFROM \n\tDataWH.motivation.Fact",
+    "Chanel": "SELECT DISTINCT\n\tКанал\nFROM \n\tDataWH.motivation.Fact",
+    "DataSet1": "SELECT DISTINCT\n\tАвторСделки\nFROM \n\tDataWH.motivation.Fact\nWHERE\nПодразделение =@Division\nAND ТипКоэф = @TypeCoeff",
+    "TC": "SELECT DISTINCT\n\tTRIM(ТипКоэф) ТипКоэф\nFROM \n\tDataWH.motivation.Fact",
+    "GPSales": "SELECT DISTINCT\n\tГруппаПлановПродаж\nFROM \n\tDataWH.motivation.Fact",
+    "GPGoods": "SELECT DISTINCT\n\tГруппаТоваров\nFROM \n\tDataWH.motivation.Fact",
+    "Brend": "SELECT DISTINCT\n\tМарка\nFROM \n\tDataWH.motivation.Fact",
+    "Partner": "SELECT DISTINCT\n\tПартнер\nFROM \n\tDataWH.motivation.Fact\n"
+  },
+  "subdivisions": {
+    "Sub": "SELECT DISTINCT\nПодразделение \nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "GPsales": "SELECT DISTINCT \nГруппаПлановПродаж\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "GPGoods": "SELECT DISTINCT \nCOALESCE(ГруппаТоваров,'') ГруппаТоваров\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "Brend": "SELECT DISTINCT \nМарка\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "TypeCoeff": "SELECT DISTINCT \nТипКоэф\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor"
+  }
+}

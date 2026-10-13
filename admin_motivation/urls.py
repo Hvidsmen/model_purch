@@ -1,7 +1,9 @@
-from . import views, plan_views, comparison_views, director_views
+from . import views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path("reports/", report_views.report_index, name="motivation_reports"),
+    path("reports/<str:kind>/", report_views.report_page, name="motivation_report"),
     path("director_coefficients/global", director_views.director_coefficients, name="motivation_directors_global"),
     path("director_coefficients/local", director_views.director_coefficients, {"local": True}, name="motivation_directors_local"),
     path("coefficient_comparison", comparison_views.comparison_action, name="motivation_coefficient_comparison"),
