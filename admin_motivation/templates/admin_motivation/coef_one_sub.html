@@ -723,6 +723,7 @@
             <input type="hidden" name="version" value="{{ selected_version.pk }}">
             <label for="director-employee-choice">Сотрудник-директор<select id="director-employee-choice" name="employee" class="form-select"><option value="">Выберите сотрудника</option>{% for item in director_employees %}<option value="{{ item.pk }}" {% if item.pk == employee.pk %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
             <button class="btn btn-outline-primary" type="submit">Открыть директора</button>
+            <a class="btn btn-outline-primary" href="{% url 'motivation_director_directory' %}">Справочник директоров</a>
             <span class="small text-muted">Политики и продажи общие для филиала. K0–K4 директора — для выбранного сотрудника.</span>
         </form>
         {% include 'admin_motivation/_coefficient_filters.html' %}

@@ -232,6 +232,10 @@
                 </div>
             </details>
         </li>
+        <li class="nav-item"><details {% if request.resolver_match.url_name == 'motivation_director_directory' %}open{% endif %}>
+            <summary class="nav-link">Директоры</summary>
+            <a class="nav-link {% if request.resolver_match.url_name == 'motivation_director_directory' %}active{% endif %}" href="{% url 'motivation_director_directory' %}">Справочник директоров</a>
+        </details></li>
          <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}"
                href="{% url 'loader_motive' %}">

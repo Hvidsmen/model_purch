@@ -13,6 +13,25 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_standalone_directory_create_edit_and_validation(self):
+        url = reverse('motivation_director_directory')
+        response = self.client.get(url)
+        self.assertContains(response, 'Справочник директоров')
+        self.assertContains(response, 'Первый директор')
+        response = self.client.post(url, {'full_name': 'Новый директор', 'employee_code': 'D3', 'subdivisions': [self.sub.pk, self.other_sub.pk]})
+        self.assertRedirects(response, url)
+        employee = DirectorEmployee.objects.get(employee_code='D3')
+        self.assertEqual(employee.subdivisions.count(), 2)
+        response = self.client.post(url, {'edit_employee': employee.pk, 'full_name': 'Обновлён', 'employee_code': 'D3', 'subdivisions': [self.sub.pk]})
+        self.assertRedirects(response, url)
+        employee.refresh_from_db()
+        self.assertEqual(employee.full_name, 'Обновлён')
+        self.assertEqual(employee.subdivisions.count(), 1)
+        response = self.client.post(url, {'full_name': 'Дубликат', 'employee_code': 'D3'})
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.context['employee_form'].errors)
+        self.assertEqual(DirectorEmployee.objects.filter(employee_code='D3').count(), 1)
+
     def setUp(self):
         authorize_test_case(self)
         self.version = GlobalCoeffVersion.objects.get(effective_from=date(2001, 1, 1))

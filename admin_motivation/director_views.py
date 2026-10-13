@@ -14,6 +14,23 @@ from .services.directors import lock_editable, copy_directors
 from .services.version_context import version_context
 
 
+@require_http_methods(['GET', 'POST'])
+def director_directory(request):
+    data = request.POST if request.method == 'POST' else request.GET
+    employee_id = data.get('edit_employee')
+    employee = get_object_or_404(DirectorEmployee, pk=employee_id) if employee_id else None
+    form = DirectorEmployeeForm(request.POST if request.method == 'POST' else None, instance=employee)
+    if request.method == 'POST' and form.is_valid():
+        form.save()
+        messages.success(request, 'Директор сохранён.')
+        return redirect('motivation_director_directory')
+    return render(request, 'admin_motivation/director_directory.html', {
+        'employee_form': form,
+        'all_employees': DirectorEmployee.objects.order_by('full_name').prefetch_related('subdivisions'),
+        'subdivisions': Subdivision.objects.all(),
+    })
+
+
 def director_route(subdivision=None, employee=None):
     route = reverse('coeff_subdivisions_admin_motivation', args=[subdivision.pk]) if subdivision else reverse('global_coeff_admin_motivation')
     params = []
