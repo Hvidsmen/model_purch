@@ -6,6 +6,7 @@ from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.http import HttpResponse
+from django.core.exceptions import PermissionDenied
 from django.views.decorators.http import require_http_methods
 from .models import (Subdivision, DirectorEmployee, GlobalDirectorCoeff,
                      SubdivisionDirectorCoeff, Goods)
@@ -13,6 +14,41 @@ from .director_forms import (DirectorEmployeeForm, GlobalDirectorForm, LocalDire
                              GlobalDirectorAddForm, LocalDirectorAddForm)
 from .services.directors import lock_editable, copy_directors
 from .services.version_context import version_context
+
+
+@require_http_methods(['GET', 'POST'])
+def coefficient_group_copy(request):
+    from base.access import can_access
+    from .models import GlobalCoeffVersion, CoefficientGroupCopyLog
+    from .services.group_copy import copy_group
+    from .services.coefficient_groups import GROUP_NAMES
+    data = request.POST if request.method == 'POST' else request.GET
+    version = get_object_or_404(GlobalCoeffVersion, pk=data.get('version'))
+    sub = get_object_or_404(Subdivision, pk=data['subdivision']) if data.get('subdivision') else None
+    employee = get_object_or_404(DirectorEmployee, pk=data['employee']) if data.get('employee') else None
+    if not can_access(request.user, 'admin') and not version.is_editable:
+        raise PermissionDenied
+    if request.method == 'POST':
+        try:
+            if data.get('confirm') != 'yes':
+                raise ValidationError('Подтвердите замену коэффициентов.')
+            count = copy_group(request.user, version.pk, data.get('revision'), data.get('source'), data.get('target'), sub, employee)
+            messages.success(request, f'Коэффициенты скопированы. Изменено записей: {count}.')
+            route, params = director_route(sub, employee)
+            params.append(f'version={version.pk}')
+            return redirect(route + '?' + '&'.join(params))
+        except ValidationError as error:
+            messages.error(request, '; '.join(error.messages))
+            version.refresh_from_db()
+    history = list(CoefficientGroupCopyLog.objects.filter(version=version, subdivision=sub).order_by('-pk')[:20])
+    for log in history:
+        log.source_label = GROUP_NAMES.get(log.source_group, log.source_group)
+        log.target_label = GROUP_NAMES.get(log.target_group, log.target_group)
+    return render(request, 'admin_motivation/group_copy.html', {
+        'selected_version': version, 'sub': sub, 'employee': employee, 'groups': GROUP_NAMES,
+        'subdivisions': Subdivision.objects.all(),
+        'copy_history': history,
+    })
 
 
 @require_http_methods(['GET', 'POST'])

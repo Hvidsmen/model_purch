@@ -13,6 +13,48 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_admin_group_copy_approved_audited_and_guarded(self):
+        from django.db import models
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+        from .models import GlobalCoeff, TypeCoeff, SegmentCoeff, VariationCalculate, CoefficientGroupCopyLog
+        from .services.group_copy import copy_group
+        from django.core.exceptions import PermissionDenied
+        policies = TypeCoeff.objects.create(type_coeff_name='Политики')
+        sales = TypeCoeff.objects.create(type_coeff_name='Продажи')
+        variation = VariationCalculate.objects.create(variation_name='Группа планов продаж')
+        for i in range(5):
+            segment = SegmentCoeff.objects.create(segment_name=f'K{i}')
+            for kind in (policies, sales):
+                GlobalCoeff.objects.create(version=self.version, goods=self.goods, type_coeff=kind,
+                    segment=segment, motivation_coeff=(i + 1) / (50 if kind == sales else 100), manager_coeff=.5, variation_calculate=variation)
+        models.QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
+        self.version.refresh_from_db()
+        user = get_user_model().objects.get(pk=self.client.session['_auth_user_id'])
+        count = copy_group(user, self.version.pk, self.version.revision, 'sales', 'directors')
+        self.assertEqual(count, 1)
+        self.global_row.refresh_from_db()
+        self.assertEqual(self.global_row.k4, Decimal('.10'))
+        self.assertEqual(CoefficientGroupCopyLog.objects.count(), 1)
+        log = CoefficientGroupCopyLog.objects.get()
+        self.assertEqual(log.changes[0]['before']['k0'], '0.010000')
+        with self.assertRaises(ValidationError):
+            copy_group(user, self.version.pk, self.version.revision, 'sales', 'directors')
+        self.version.refresh_from_db()
+        copy_group(user, self.version.pk, self.version.revision, 'directors', 'policies')
+        updated = GlobalCoeff.objects.get(version=self.version, goods=self.goods, type_coeff=policies, segment__segment_name='K4')
+        self.assertEqual(updated.manager_coeff, .5)
+        self.assertEqual(updated.motivation_coeff, .10)
+        self.version.refresh_from_db()
+        copy_group(user, self.version.pk, self.version.revision, 'policies', 'sales')
+        director_user = get_user_model().objects.create_user('role-director')
+        director_user.groups.add(Group.objects.get_or_create(name='Генеральный директор')[0])
+        self.version.refresh_from_db()
+        with self.assertRaises(PermissionDenied):
+            copy_group(director_user, self.version.pk, self.version.revision, 'sales', 'directors')
+        response = self.client.get(reverse('motivation_copy_group'), {'version': self.version.pk})
+        self.assertContains(response, 'Изменяется историческая версия')
+
     def test_directory_name_and_branch_filters(self):
         url = reverse('motivation_director_directory')
         response = self.client.get(url, {'name': 'ПЕРВЫЙ'})

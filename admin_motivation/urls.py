@@ -2,6 +2,7 @@ from . import views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path("copy_group/", director_views.coefficient_group_copy, name="motivation_copy_group"),
     path("directors/", director_views.director_directory, name="motivation_director_directory"),
     path("reports/", report_views.report_index, name="motivation_reports"),
     path("reports/<str:kind>/", report_views.report_page, name="motivation_report"),

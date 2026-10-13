@@ -112,7 +112,7 @@ def delete_draft(version_id):
         models.QuerySet.delete(SubdivisionDirectorCoeff.objects.filter(version=version))
         models.QuerySet.delete(GlobalCoeffVersion.objects.filter(pk=version.pk))
     except ProtectedError:
-        raise ValidationError('Версия используется в результатах расчёта или как базовая для утверждения. Удаление запрещено.')
+        raise ValidationError('Версия используется в результатах расчёта, утверждения или истории копирования. Удаление запрещено.')
     return latest_version()
 
 

@@ -4,3 +4,4 @@
 <label><input type="checkbox" data-coefficient-group-toggle="sales" checked> Продажи</label>
 <label><input type="checkbox" data-coefficient-group-toggle="directors" checked> Директор</label>
 </div>
+{% if portal_is_admin or version_editable %}<p class="small mt-2"><a href="{% url 'motivation_copy_group' %}?version={{ selected_version.pk }}{% if sub %}&subdivision={{ sub.pk }}{% endif %}{% if employee %}&employee={{ employee.pk }}{% endif %}">Копировать между группами коэффициентов</a></p>{% endif %}

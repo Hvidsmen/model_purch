@@ -521,6 +521,17 @@ def director_employee_code():
     return 'DIR-' + uuid4().hex
 
 
+class CoefficientGroupCopyLog(models.Model):
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    actor = models.CharField(max_length=255)
+    source_group = models.CharField(max_length=16)
+    target_group = models.CharField(max_length=16)
+    subdivision = models.ForeignKey(Subdivision, null=True, on_delete=models.PROTECT)
+    employee_id_snapshot = models.PositiveBigIntegerField(null=True)
+    changes = models.JSONField()
+
+
 class DirectorEmployee(models.Model):
     full_name = models.CharField('ФИО сотрудника', max_length=255)
     position = models.CharField('Должность', max_length=255, blank=True)
