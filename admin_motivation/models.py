@@ -1,4 +1,5 @@
 import pandas as pd
+from uuid import uuid4
 from django.db import models, transaction
 from django.utils.translation.template import dot_re
 from sqlalchemy import ForeignKey
@@ -516,9 +517,13 @@ class MotivationApproval(models.Model):
         raise ValidationError('История утверждений не удаляется.')
 
 
+def director_employee_code():
+    return 'DIR-' + uuid4().hex
+
+
 class DirectorEmployee(models.Model):
     full_name = models.CharField('ФИО сотрудника', max_length=255)
-    employee_code = models.CharField('Код сотрудника', max_length=64, unique=True)
+    employee_code = models.CharField('Код сотрудника', max_length=64, unique=True, default=director_employee_code)
     subdivisions = models.ManyToManyField(Subdivision, related_name='directors', verbose_name='Филиалы')
 
     class Meta:

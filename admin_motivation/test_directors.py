@@ -13,6 +13,37 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_excel_import_atomic_update_and_auto_code(self):
+        from io import BytesIO
+        from openpyxl import Workbook
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from .services.director_import import import_directors
+        def upload(rows):
+            book = Workbook()
+            book.active.append(['ФИО', 'Филиалы'])
+            for row in rows:
+                book.active.append(row)
+            output = BytesIO()
+            book.save(output)
+            return SimpleUploadedFile('directors.xlsx', output.getvalue())
+        self.assertEqual(import_directors(upload([['Импорт директор', 'A;B']])), 1)
+        employee = DirectorEmployee.objects.get(full_name='Импорт директор')
+        code = employee.employee_code
+        self.assertTrue(code.startswith('DIR-'))
+        self.assertEqual(employee.subdivisions.count(), 2)
+        import_directors(upload([['Импорт директор', 'B']]))
+        employee.refresh_from_db()
+        self.assertEqual(employee.employee_code, code)
+        self.assertEqual(list(employee.subdivisions.values_list('pk', flat=True)), [self.other_sub.pk])
+        with self.assertRaises(ValidationError):
+            import_directors(upload([['Не сохранять', 'A'], ['Ошибка', 'unknown']]))
+        self.assertFalse(DirectorEmployee.objects.filter(full_name='Не сохранять').exists())
+        url = reverse('motivation_director_directory')
+        self.assertEqual(self.client.get(url + '?template=1')['Content-Type'], 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response = self.client.post(url, {'action': 'import', 'file': upload([['Из формы', 'A']])})
+        self.assertRedirects(response, url)
+        self.assertTrue(DirectorEmployee.objects.filter(full_name='Из формы').exists())
+
     def test_standalone_directory_create_edit_and_validation(self):
         url = reverse('motivation_director_directory')
         response = self.client.get(url)
@@ -20,17 +51,17 @@ class DirectorCoefficientTests(TestCase):
         self.assertContains(response, 'Первый директор')
         response = self.client.post(url, {'full_name': 'Новый директор', 'employee_code': 'D3', 'subdivisions': [self.sub.pk, self.other_sub.pk]})
         self.assertRedirects(response, url)
-        employee = DirectorEmployee.objects.get(employee_code='D3')
+        employee = DirectorEmployee.objects.get(full_name='Новый директор')
         self.assertEqual(employee.subdivisions.count(), 2)
         response = self.client.post(url, {'edit_employee': employee.pk, 'full_name': 'Обновлён', 'employee_code': 'D3', 'subdivisions': [self.sub.pk]})
         self.assertRedirects(response, url)
         employee.refresh_from_db()
         self.assertEqual(employee.full_name, 'Обновлён')
         self.assertEqual(employee.subdivisions.count(), 1)
-        response = self.client.post(url, {'full_name': 'Дубликат', 'employee_code': 'D3'})
+        response = self.client.post(url, {'full_name': ''})
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context['employee_form'].errors)
-        self.assertEqual(DirectorEmployee.objects.filter(employee_code='D3').count(), 1)
+        self.assertTrue(employee.employee_code.startswith('DIR-'))
 
     def setUp(self):
         authorize_test_case(self)
@@ -141,7 +172,7 @@ class DirectorCoefficientTests(TestCase):
         response = self.client.post(self.local_url, {'version': self.version.pk, 'action': 'employee_save',
             'full_name': 'Третий директор', 'employee_code': 'D3', 'subdivisions': [self.sub.pk, self.other_sub.pk]})
         self.assertEqual(response.status_code, 302)
-        third = DirectorEmployee.objects.get(employee_code='D3')
+        third = DirectorEmployee.objects.get(full_name='Третий директор')
         self.assertEqual(third.subdivisions.count(), 2)
 
     def test_new_version_returns_to_director_page(self):
@@ -278,5 +309,5 @@ class DirectorCoefficientTests(TestCase):
         response = self.client.post(reverse('sub_act', args=[self.sub.pk]), {'version': self.version.pk,
             'action_button': 'employee_save', 'full_name': 'Новый директор', 'employee_code': 'NEW-DIR',
             'subdivisions': [self.sub.pk]})
-        employee = DirectorEmployee.objects.get(employee_code='NEW-DIR')
+        employee = DirectorEmployee.objects.get(full_name='Новый директор')
         self.assertRedirects(response, reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk]) + f'?version={self.version.pk}&employee={employee.pk}')

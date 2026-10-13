@@ -3,11 +3,16 @@
 <section class="content">
 <h1>Справочник директоров</h1>
 <p>К филиалу можно привязать нескольких директоров. Индивидуальные коэффициенты редактируются на странице подразделения.</p>
+<details class="mb-3"><summary><strong>Загрузить из Excel</strong></summary>
+<p>Колонки: ФИО и Филиалы. Филиалы указываются по коду или названию через точку с запятой. Существующий директор определяется по ФИО; его список филиалов заменяется. Новым директорам код присваивается автоматически.</p>
+<a href="?template=1">Скачать шаблон Excel</a>
+<form method="post" enctype="multipart/form-data" class="mt-3">{% csrf_token %}<input type="hidden" name="action" value="import"><input type="file" name="file" accept=".xlsx" required><button class="btn btn-primary">Загрузить</button></form></details>
 <details {% if employee_form.is_bound or employee_form.instance.pk %}open{% endif %}>
 <summary><strong>{% if employee_form.instance.pk %}Изменить директора{% else %}Добавить директора{% endif %}</strong></summary>
 <form method="post" class="mt-3">{% csrf_token %}
 {% if employee_form.instance.pk %}<input type="hidden" name="edit_employee" value="{{ employee_form.instance.pk }}">{% endif %}
 {{ employee_form.as_p }}
+<p class="small text-muted">Код сотрудника присваивается автоматически и сохраняется при редактировании.</p>
 <p class="small text-muted">Для выбора нескольких филиалов удерживайте Ctrl.</p>
 <button class="btn btn-primary">Сохранить</button>
 {% if employee_form.instance.pk %}<a class="btn btn-outline-primary" href="{% url 'motivation_director_directory' %}">Отмена</a>{% endif %}

@@ -26,6 +26,7 @@
         <h2>{% block project_name %}Рабочие разделы{% endblock %}</h2>
         {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы">{% if portal_can_purchases %}<a href="{% url 'scenario_list' %}">Модель закупок</a>{% endif %}{% if portal_can_motivation %}<a href="{% url 'global_coeff_admin_motivation' %}">Мотивация</a>{% endif %}</nav>{% endblock %}
         {% if portal_is_admin %}<a class="portal-admin" href="{% url 'admin:index' %}">Администрирование</a>{% endif %}
+        {% block module_administration %}{% endblock %}
     </aside>
     <main class="portal-main" id="portal-main" tabindex="-1">{% block portal_content %}{% block content %}{% endblock %}{% endblock %}</main>
 </div>

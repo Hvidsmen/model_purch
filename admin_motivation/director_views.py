@@ -5,6 +5,7 @@ from django.db.models import Q
 from django.forms import modelformset_factory
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.http import HttpResponse
 from django.views.decorators.http import require_http_methods
 from .models import (Subdivision, DirectorEmployee, GlobalDirectorCoeff,
                      SubdivisionDirectorCoeff, Goods)
@@ -16,6 +17,18 @@ from .services.version_context import version_context
 
 @require_http_methods(['GET', 'POST'])
 def director_directory(request):
+    from .services.director_import import template, import_directors
+    if request.method == 'GET' and request.GET.get('template'):
+        response = HttpResponse(template(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = 'attachment; filename="directors.xlsx"'
+        return response
+    if request.method == 'POST' and request.POST.get('action') == 'import':
+        try:
+            count = import_directors(request.FILES.get('file'))
+            messages.success(request, f'Загружено директоров: {count}.')
+        except ValidationError as error:
+            messages.error(request, '; '.join(error.messages))
+        return redirect('motivation_director_directory')
     data = request.POST if request.method == 'POST' else request.GET
     employee_id = data.get('edit_employee')
     employee = get_object_or_404(DirectorEmployee, pk=employee_id) if employee_id else None

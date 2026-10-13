@@ -232,10 +232,6 @@
                 </div>
             </details>
         </li>
-        <li class="nav-item"><details {% if request.resolver_match.url_name == 'motivation_director_directory' %}open{% endif %}>
-            <summary class="nav-link">Директоры</summary>
-            <a class="nav-link {% if request.resolver_match.url_name == 'motivation_director_directory' %}active{% endif %}" href="{% url 'motivation_director_directory' %}">Справочник директоров</a>
-        </details></li>
          <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}"
                href="{% url 'loader_motive' %}">
@@ -245,6 +241,12 @@
         <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
         <li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
     </ul>
+{% endblock %}
+{% block module_administration %}
+<details class="portal-section-nav" {% if request.resolver_match.url_name == 'motivation_director_directory' %}open{% endif %}>
+<summary class="nav-link">Справочники</summary>
+<a class="nav-link {% if request.resolver_match.url_name == 'motivation_director_directory' %}active{% endif %}" href="{% url 'motivation_director_directory' %}">Справочник директоров</a>
+</details>
 {% endblock %}
 {% block portal_content %}
 <div class="content-wrapper">
