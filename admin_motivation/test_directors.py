@@ -13,6 +13,17 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_directory_name_and_branch_filters(self):
+        url = reverse('motivation_director_directory')
+        response = self.client.get(url, {'name': 'ПЕРВЫЙ'})
+        self.assertEqual([item.pk for item in response.context['all_employees']], [self.first.pk])
+        self.first.subdivisions.add(self.other_sub)
+        response = self.client.get(url, {'branch': self.other_sub.pk, 'name': 'директор'})
+        self.assertEqual([item.pk for item in response.context['all_employees']], [self.first.pk])
+        response = self.client.get(url, {'branch': self.other_sub.pk, 'name': 'Второй'})
+        self.assertContains(response, 'Директоры не найдены')
+        self.assertEqual(len(self.client.get(url).context['all_employees']), 2)
+
     def test_director_position_form_and_excel(self):
         from io import BytesIO
         from openpyxl import Workbook, load_workbook

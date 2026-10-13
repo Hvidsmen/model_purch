@@ -37,10 +37,22 @@ def director_directory(request):
         form.save()
         messages.success(request, 'Директор сохранён.')
         return redirect('motivation_director_directory')
+    name_query = request.GET.get('name', '').strip()
+    branch_id = request.GET.get('branch', '')
+    branches = list(Subdivision.objects.all())
+    selected_branch = next((branch for branch in branches if str(branch.pk) == branch_id), None)
+    employees = DirectorEmployee.objects.order_by('full_name').prefetch_related('subdivisions')
+    if selected_branch:
+        employees = employees.filter(subdivisions=selected_branch).distinct()
+    # SQLite does not implement case-insensitive matching for Cyrillic.
+    employees = [item for item in employees if name_query.casefold() in item.full_name.casefold()]
     return render(request, 'admin_motivation/director_directory.html', {
         'employee_form': form,
-        'all_employees': DirectorEmployee.objects.order_by('full_name').prefetch_related('subdivisions'),
-        'subdivisions': Subdivision.objects.all(),
+        'all_employees': employees,
+        'subdivisions': branches,
+        'name_query': name_query,
+        'selected_branch': selected_branch,
+        'directory_filtered': bool(name_query or selected_branch),
     })
 
 
