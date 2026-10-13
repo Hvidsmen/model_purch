@@ -282,6 +282,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.page.locator('.report-leaf').count(), 0)
         self.page.get_by_role('button', name='Развернуть всё', exact=True).click()
         self.assertEqual(self.page.locator('.report-leaf').count(), 2)
+        self.page.get_by_role('button', name='Свернуть всё', exact=True).click()
         self.assertEqual(self.page.locator('#period-report details[open]').count(), 0)
         self.choose_filter('select[name=subdivision]', 'A')
         with self.page.expect_navigation():
@@ -449,4 +450,34 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation(): self.page.get_by_role('button', name='Копировать из глобальных', exact=True).click()
         self.assertEqual(self.db(lambda: SubdivisionCoeff.objects.get(version=self.first, subdivision_id=sub).motivation_coeff), .123456)
         expect(self.page.locator('#editor-dirty-count')).to_have_text('Изменено: 0')
+        self.assertEqual(self.errors, [])
+
+    def test_director_forms_copy_global_and_save_individual_percentages(self):
+        from playwright.sync_api import expect
+        from decimal import Decimal
+        from .models import GlobalDirectorCoeff, SubdivisionDirectorCoeff, DirectorEmployee
+        def setup():
+            channel = Chanel.objects.create(chanel_name='Director channel')
+            sub = Subdivision.objects.create(subdivision_key='Director branch', subdivision_name='Director branch', subdivision_global='Director branch', chanel=channel)
+            employee = DirectorEmployee.objects.create(full_name='Директор один', employee_code='DIR-1')
+            other = DirectorEmployee.objects.create(full_name='Директор два', employee_code='DIR-2')
+            employee.subdivisions.add(sub)
+            other.subdivisions.add(sub)
+            GlobalDirectorCoeff.objects.create(version=self.first, goods=self.coeff.goods, k0=Decimal('.123456'), k1=Decimal('.02'))
+            return sub.pk, employee.pk, other.pk
+        sub, employee, other = self.db(setup)
+        self.page.goto(self.live_server_url + reverse('motivation_directors_global'))
+        expect(self.page.locator('[name="coeff-0-k0"]')).to_have_value('12.3456')
+        self.page.goto(self.live_server_url + reverse('motivation_directors_local') + f'?subdivision={sub}&employee={employee}')
+        self.page.once('dialog', lambda dialog: dialog.accept())
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Копировать из глобальных', exact=True).click()
+        expect(self.page.locator('[name="coeff-0-k0"]')).to_have_value('12.3456')
+        self.page.locator('[name="coeff-0-k0"]').fill('25')
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Сохранить коэффициенты', exact=True).click()
+        expect(self.page.locator('[name="coeff-0-k0"]')).to_have_value('25.0000')
+        self.assertEqual(self.db(lambda: SubdivisionDirectorCoeff.objects.get(employee_id=employee).k0), Decimal('.25'))
+        self.assertFalse(self.db(lambda: SubdivisionDirectorCoeff.objects.filter(employee_id=other).exists()))
+        self.assertEqual(self.db(lambda: GlobalDirectorCoeff.objects.get().k0), Decimal('.123456'))
         self.assertEqual(self.errors, [])

@@ -5,7 +5,7 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db import models, transaction
 from django.utils import timezone
-from ..models import GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff, SalesPlanScenario, MotivationApproval, Goods, Subdivision, TypeCoeff, SegmentCoeff
+from ..models import GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff, SalesPlanScenario, MotivationApproval, Goods, Subdivision, TypeCoeff, SegmentCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 from .comparison import compare_plan, proposed_changes
 
 SALT = 'motivation-approval-v1'
@@ -31,7 +31,7 @@ def review_approval(version, plan=None, baseline=None, subdivision=None, changes
     if version.status != 'draft':
         raise ValidationError('Утвердить можно только черновик.')
     normalized, deleted = proposed_changes(version, subdivision, changes, deleted)
-    if not (version.coefficients.exists() or version.subdivision_coefficients.exists()):
+    if not (version.coefficients.exists() or version.subdivision_coefficients.exists() or GlobalDirectorCoeff.objects.filter(version=version).exists() or SubdivisionDirectorCoeff.objects.filter(version=version).exists()):
         raise ValidationError('Нельзя утвердить пустой набор коэффициентов.')
     before_state = state_digest(version, plan)
     summary = {}

@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
-from ..models import GlobalCoeff, GlobalCoeffVersion, SubdivisionCoeff, SubdivisionManagerCoeff, KindManagerCoeff
+from ..models import GlobalCoeff, GlobalCoeffVersion, SubdivisionCoeff, SubdivisionManagerCoeff, KindManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 
 
 def today():
@@ -48,6 +48,12 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
                 SubdivisionManagerCoeff(version=version, subdivision_id=c.subdivision_id, kind_id=c.kind_id, coeff=c.coeff)
                 for c in latest.manager_coefficients.all()
             ])
+            for model in (GlobalDirectorCoeff, SubdivisionDirectorCoeff):
+                scope_fields = ['subdivision_id', 'employee_id'] if model is SubdivisionDirectorCoeff else []
+                model.objects.bulk_create([model(version=version, goods_id=row.goods_id,
+                    **{field: getattr(row, field) for field in scope_fields},
+                    **{f'k{i}': getattr(row, f'k{i}') for i in range(5)})
+                    for row in model.objects.filter(version=latest)])
         return version
 
 
@@ -89,6 +95,8 @@ def delete_draft(version_id):
         models.QuerySet.delete(version.coefficients.all())
         models.QuerySet.delete(version.subdivision_coefficients.all())
         models.QuerySet.delete(version.manager_coefficients.all())
+        models.QuerySet.delete(GlobalDirectorCoeff.objects.filter(version=version))
+        models.QuerySet.delete(SubdivisionDirectorCoeff.objects.filter(version=version))
         models.QuerySet.delete(GlobalCoeffVersion.objects.filter(pk=version.pk))
     except ProtectedError:
         raise ValidationError('Версия используется в результатах расчёта или как базовая для утверждения. Удаление запрещено.')

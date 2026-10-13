@@ -514,3 +514,69 @@ class MotivationApproval(models.Model):
     def delete(self, *args, **kwargs):
         from django.core.exceptions import ValidationError
         raise ValidationError('История утверждений не удаляется.')
+
+
+class DirectorEmployee(models.Model):
+    full_name = models.CharField('ФИО сотрудника', max_length=255)
+    employee_code = models.CharField('Код сотрудника', max_length=64, unique=True)
+    subdivisions = models.ManyToManyField(Subdivision, related_name='directors', verbose_name='Филиалы')
+
+    class Meta:
+        ordering = ['full_name', 'employee_code']
+        verbose_name = 'Директор'
+        verbose_name_plural = 'Директора'
+
+    def __str__(self):
+        return f'{self.full_name} ({self.employee_code})'
+
+
+class DirectorCoefficientBase(models.Model):
+    objects = GlobalCoeffQuerySet.as_manager()
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
+    goods = models.ForeignKey(Goods, on_delete=models.PROTECT)
+    k0 = models.DecimalField('K0', max_digits=9, decimal_places=6, default=0)
+    k1 = models.DecimalField('K1', max_digits=9, decimal_places=6, default=0)
+    k2 = models.DecimalField('K2', max_digits=9, decimal_places=6, default=0)
+    k3 = models.DecimalField('K3', max_digits=9, decimal_places=6, default=0)
+    k4 = models.DecimalField('K4', max_digits=9, decimal_places=6, default=0)
+
+    class Meta:
+        abstract = True
+
+    check_editable = GlobalCoeff.check_editable
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        self.check_editable()
+        result = super().save(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        self.check_editable()
+        result = super().delete(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
+
+
+class GlobalDirectorCoeff(DirectorCoefficientBase):
+    class Meta:
+        verbose_name = 'Глобальные коэффициенты директоров'
+        verbose_name_plural = 'Глобальные коэффициенты директоров'
+        constraints = [
+            models.UniqueConstraint(fields=['version', 'goods'], name='unique_global_director_goods'),
+            models.CheckConstraint(condition=models.Q(**{f'k{i}__gte': -1 for i in range(5)}, **{f'k{i}__lte': 1 for i in range(5)}), name='global_director_coeff_range'),
+        ]
+
+
+class SubdivisionDirectorCoeff(DirectorCoefficientBase):
+    subdivision = models.ForeignKey(Subdivision, on_delete=models.PROTECT)
+    employee = models.ForeignKey(DirectorEmployee, on_delete=models.PROTECT)
+
+    class Meta:
+        verbose_name = 'Коэффициенты директора филиала'
+        verbose_name_plural = 'Коэффициенты директоров филиалов'
+        constraints = [
+            models.UniqueConstraint(fields=['version', 'subdivision', 'employee', 'goods'], name='unique_local_director_goods'),
+            models.CheckConstraint(condition=models.Q(**{f'k{i}__gte': -1 for i in range(5)}, **{f'k{i}__lte': 1 for i in range(5)}), name='local_director_coeff_range'),
+        ]

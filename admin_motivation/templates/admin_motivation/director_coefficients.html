@@ -1,0 +1,52 @@
+{% extends 'admin_motivation/base.html' %}
+{% load static %}
+{% block title %}Коэффициенты директоров{% endblock %}
+{% block content %}
+{% include 'admin_motivation/_version_panel.html' %}
+<section class="content">
+<h1>{% if local %}Коэффициенты директоров по филиалам{% else %}Глобальные коэффициенты директоров{% endif %}</h1>
+<p>Один набор K0–K4 по товарной матрице. Значения вводятся в процентах. Пока используются для настройки и хранения версий.</p>
+{% if local %}
+<form method="get" class="plan-actions director-selection filters-card">
+<input type="hidden" name="version" value="{{ selected_version.pk }}">
+<label>Филиал<select name="subdivision" class="form-select" onchange="this.form.elements.employee.value=''; this.form.submit()"><option value="">Выберите филиал</option>{% for item in subdivisions %}<option value="{{ item.pk }}" {% if item.pk == sub.pk %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+<label>Сотрудник<select name="employee" class="form-select" onchange="this.form.submit()"><option value="">Выберите директора</option>{% for item in employees %}<option value="{{ item.pk }}" {% if item.pk == employee.pk %}selected{% endif %}>{{ item }}</option>{% endfor %}</select></label>
+<button class="btn btn-outline-primary" type="submit">Открыть</button>
+</form>
+{% if sub and not employee %}<p class="mt-3">Выберите сотрудника. Если его нет в списке, добавьте его в справочник и привяжите к филиалу ниже.</p>{% endif %}
+{% endif %}
+{% if not local or employee %}
+{% if version_editable %}
+<div class="director-copy-tools">
+{% if not local %}<form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><button class="btn btn-outline-primary" name="action" value="seed_matrix">Заполнить по товарной матрице</button></form>{% endif %}
+
+{% if local %}<form method="post" onsubmit="return confirm('Заменить все коэффициенты выбранного директора глобальными коэффициентами директоров этой версии?');">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="subdivision" value="{{ sub.pk }}"><input type="hidden" name="employee" value="{{ employee.pk }}"><input type="hidden" name="confirm_copy" value="yes"><button class="btn btn-outline-primary" name="action" value="copy_global">Копировать из глобальных</button></form>{% endif %}
+<form method="post" onsubmit="return confirm('Заменить текущие коэффициенты директоров значениями выбранной версии?');">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if local %}<input type="hidden" name="subdivision" value="{{ sub.pk }}"><input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}<input type="hidden" name="confirm_copy" value="yes"><label>Версия-источник<select class="form-select" name="source_version" required><option value="">Выберите версию</option>{% for item in versions %}{% if item.pk != selected_version.pk %}<option value="{{ item.pk }}">{{ item }} · {{ item.get_status_display }}</option>{% endif %}{% endfor %}</select></label><button class="btn btn-outline-primary" name="action" value="copy_version">Копировать из версии</button></form>
+</div>
+{% endif %}
+<label class="d-block mt-3">Поиск по товарной матрице<input id="director-matrix-search" type="search" class="form-control" placeholder="Группа планов, группа товаров или бренд" value="{{ search }}"></label>
+<form method="post" id="director-coefficients-form">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if local %}<input type="hidden" name="subdivision" value="{{ sub.pk }}"><input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
+{{ formset.management_form }}{{ formset.non_form_errors }}
+<div class="table-wrapper mt-3"><table class="table director-table"><thead><tr><th>Группа планов продаж</th><th>Группа товаров</th><th>Марка / бренд</th><th>K0, %</th><th>K1, %</th><th>K2, %</th><th>K3, %</th><th>K4, %</th>{% if version_editable %}<th>Удалить</th>{% endif %}</tr></thead><tbody>
+{% for row in formset %}<tr data-director-row><td>{{ row.id }}{{ row.instance.goods.planning_group_sales }}{{ row.non_field_errors }}</td><td>{{ row.instance.goods.group }}</td><td>{{ row.instance.goods.brand }}</td><td>{{ row.k0 }}{{ row.k0.errors }}</td><td>{{ row.k1 }}{{ row.k1.errors }}</td><td>{{ row.k2 }}{{ row.k2.errors }}</td><td>{{ row.k3 }}{{ row.k3.errors }}</td><td>{{ row.k4 }}{{ row.k4.errors }}</td>{% if version_editable %}<td>{{ row.DELETE }}</td>{% endif %}</tr>{% empty %}<tr><td colspan="9">Коэффициенты директоров ещё не настроены. {% if local %}Скопируйте из глобальных или добавьте строку.{% else %}Добавьте строку товарной матрицы.{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if version_editable %}<button class="btn btn-primary" name="action" value="save">Сохранить коэффициенты</button>{% endif %}
+</form>
+{% if version_editable %}<details class="secondary-block mt-3" {% if add_form.is_bound %}open{% endif %}><summary>Добавить строку товарной матрицы</summary><form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if local %}<input type="hidden" name="subdivision" value="{{ sub.pk }}"><input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}{{ add_form.as_p }}<button class="btn btn-primary" name="action" value="add">Добавить коэффициенты</button></form></details>{% endif %}
+{% endif %}
+</section>
+{% if local %}
+<section class="content"><h1>Справочник директоров</h1><p>К одному филиалу можно привязать несколько директоров. Сотрудник выбирается отдельно от филиала.</p>
+{% if version_editable %}<details class="secondary-block" {% if employee_form.is_bound or employee_form.instance.pk %}open{% endif %}><summary>{% if employee_form.instance.pk %}Редактировать сотрудника{% else %}Добавить сотрудника{% endif %}</summary><form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if sub %}<input type="hidden" name="subdivision" value="{{ sub.pk }}">{% endif %}{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}{% if employee_form.instance.pk %}<input type="hidden" name="employee_edit" value="{{ employee_form.instance.pk }}">{% endif %}{{ employee_form.as_p }}<p class="small text-muted">Для выбора нескольких филиалов удерживайте Ctrl.</p><button class="btn btn-primary" name="action" value="employee_save">Сохранить сотрудника</button></form></details>{% endif %}
+<div class="table-wrapper mt-3"><table class="table"><thead><tr><th>ФИО</th><th>Код</th><th>Филиалы</th>{% if version_editable %}<th></th>{% endif %}</tr></thead><tbody>{% for item in all_employees %}<tr><td>{{ item.full_name }}</td><td>{{ item.employee_code }}</td><td>{% for branch in item.subdivisions.all %}{{ branch }}{% if not forloop.last %}, {% endif %}{% empty %}Не привязан{% endfor %}</td>{% if version_editable %}<td><a href="?version={{ selected_version.pk }}&edit_employee={{ item.pk }}{% if sub %}&subdivision={{ sub.pk }}{% endif %}{% if employee %}&employee={{ employee.pk }}{% endif %}">Изменить</a></td>{% endif %}</tr>{% empty %}<tr><td colspan="4">Сотрудников пока нет.</td></tr>{% endfor %}</tbody></table></div>
+</section>
+{% endif %}
+<script>
+(() => {
+ const search = document.getElementById('director-matrix-search');
+ const filter = () => { const query = search.value.trim().toLocaleLowerCase(); document.querySelectorAll('[data-director-row]').forEach(row => { row.hidden = ![...row.querySelectorAll('td')].slice(0,3).map(cell => cell.textContent).join(' ').toLocaleLowerCase().includes(query); }); };
+ if (search) { search.addEventListener('input', filter); filter(); }
+ {% if not version_editable %}document.querySelectorAll('#director-coefficients-form input:not([type="hidden"])').forEach(input => { input.disabled = true; });{% endif %}
+})();
+</script>
+{% endblock %}

@@ -216,6 +216,8 @@
             </a>
         </li>
 
+        <li class="nav-item"><a class="nav-link {% if director_page and not local %}active{% endif %}" href="{% url 'motivation_directors_global' %}">Директора · глобальные</a></li>
+        <li class="nav-item"><a class="nav-link {% if director_page and local %}active{% endif %}" href="{% url 'motivation_directors_local' %}">Директора · по филиалам</a></li>
         <li class="nav-item">
             <details class="subdivision-nav" id="subdivision-nav">
                 <summary class="nav-link {% if sub %}active{% endif %}">Подразделения{% if sub %} · {{ sub }}{% endif %}</summary>

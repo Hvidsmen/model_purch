@@ -1,6 +1,6 @@
 from datetime import timedelta
 from django.db.models import Count
-from ..models import GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff
+from ..models import GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from ..models import GlobalCoeffVersion, SalesPlanScenario
@@ -21,7 +21,7 @@ def version_context(request, version_form=None):
     versions = list(GlobalCoeffVersion.objects.order_by('-effective_from', '-pk'))
     approved = sorted([v for v in versions if v.status == 'approved'], key=lambda v: v.effective_from)
     counts = {}
-    for model in (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff):
+    for model in (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff):
         for row in model.objects.order_by().values('version_id').annotate(n=Count('pk')):
             counts[row['version_id']] = counts.get(row['version_id'], 0) + row['n']
     for i, version in enumerate(versions):

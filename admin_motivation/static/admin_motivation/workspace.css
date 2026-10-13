@@ -167,3 +167,12 @@ body{background:#f4f6fa!important;color:#334155}
     margin-right: 0;
     box-sizing: border-box;
 }
+
+.director-selection, .director-copy-tools, .director-copy-tools form { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.director-selection label, .director-copy-tools label { min-width: 240px; }
+.director-copy-tools { margin-top: 16px; }
+.director-copy-tools form { margin: 0; }
+.director-table { width: 100%; }
+.director-table th, .director-table td { padding: 8px !important; }
+.director-table .form-control { min-width: 75px; width: 100%; }
+.director-table th:not(:nth-child(-n+3)), .director-table input[type=number] { text-align: right; }

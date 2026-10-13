@@ -59,3 +59,22 @@ admin.site.register(ExampleFiles)
 class MotivationApprovalAdmin(GlobalCoeffAdmin):
     list_display = ('version', 'created_at', 'plan', 'baseline')
     list_filter = ()
+
+
+@admin.register(DirectorEmployee)
+class DirectorEmployeeAdmin(admin.ModelAdmin):
+    list_display = ('full_name', 'employee_code')
+    search_fields = ('full_name', 'employee_code')
+    filter_horizontal = ('subdivisions',)
+
+
+@admin.register(GlobalDirectorCoeff)
+class GlobalDirectorAdmin(GlobalCoeffAdmin):
+    list_display = ('version', 'goods', 'k0', 'k1', 'k2', 'k3', 'k4')
+    list_filter = ('version',)
+
+
+@admin.register(SubdivisionDirectorCoeff)
+class LocalDirectorAdmin(GlobalCoeffAdmin):
+    list_display = ('version', 'subdivision', 'employee', 'goods', 'k0', 'k1', 'k2', 'k3', 'k4')
+    list_filter = ('version', 'subdivision', 'employee')

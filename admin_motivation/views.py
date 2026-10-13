@@ -75,6 +75,21 @@ def upsert_product(version, group_sales, group, brand, variation_id, policies, s
                 defaults={'variation_calculate': variation, 'motivation_coeff': coefficient_number(value), 'manager_coeff': 1})
 
 
+def coefficient_return_route(request, subdivision=None):
+    if request.POST.get('return_directors') in ('global', 'local'):
+        mode = request.POST['return_directors']
+        route = reverse('motivation_directors_local' if mode == 'local' else 'motivation_directors_global')
+        params = []
+        if mode == 'local' and subdivision:
+            params.append(f'subdivision={subdivision.pk}')
+        employee = request.POST.get('return_employee', '')
+        if mode == 'local' and employee.isdigit():
+            params.append(f'employee={employee}')
+        return route + ('?' + '&'.join(params) + '&' if params else '?')
+    route = reverse('coeff_subdivisions_admin_motivation', args=[subdivision.pk]) if subdivision else reverse('global_coeff_admin_motivation')
+    return route + '?'
+
+
 @require_POST
 def gloabal_coeff_action(request):
     action = request.POST.get('action_button')
@@ -103,8 +118,8 @@ def gloabal_coeff_action(request):
             messages.success(request, 'Черновик и его коэффициенты удалены. Другие версии сохранены.')
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
-        route = reverse('coeff_subdivisions_admin_motivation', args=[destination.pk]) if destination else reverse('global_coeff_admin_motivation')
-        return redirect(route + (f'?version={target.pk}' if target else ''))
+        route = coefficient_return_route(request, destination)
+        return redirect(route + (f'version={target.pk}' if target else ''))
     if action == 'create_version':
         destination = get_object_or_404(Subdivision, pk=request.POST['return_subdivision']) if request.POST.get('return_subdivision') else None
         form = GlobalCoeffVersionForm(request.POST)
@@ -116,8 +131,11 @@ def gloabal_coeff_action(request):
                     form.add_error('effective_from', message)
             else:
                 messages.success(request, f'Создана версия с {version.effective_from:%d.%m.%Y}. Коэффициенты скопированы.')
-                route = reverse('coeff_subdivisions_admin_motivation', args=[destination.pk]) if destination else reverse('global_coeff_admin_motivation')
-                return redirect(route + f'?version={version.pk}')
+                route = coefficient_return_route(request, destination)
+                return redirect(route + f'version={version.pk}')
+        if request.POST.get('return_directors') in ('global', 'local'):
+            messages.error(request, 'Версия не создана: ' + ' '.join(str(error) for errors in form.errors.values() for error in errors))
+            return redirect(coefficient_return_route(request, destination))
         return coef_one_sub(request, destination.pk, version_form=form) if destination else gloabal_coeff(request, version_form=form)
     version = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
     try:
