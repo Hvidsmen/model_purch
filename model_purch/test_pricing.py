@@ -7,6 +7,22 @@ from .services.pricing import apply_price, reprice_goods
 
 
 class ProductPricingTests(TestCase):
+    def test_erp_stock_fallback_merges_volumes_by_stock_quantity(self):
+        from unittest.mock import Mock
+        from .services.erp_plan_parameters import update_parameters, SQL
+        self.scenario.refresh_from_db()
+        connection, cursor = Mock(), Mock()
+        # The stock query returns one row per group and nomenclature volume.
+        cursor.fetchall.return_value = [('Unit', 100, .1, 10), ('Unit', 300, .5, 30)]
+        update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor)))
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.plan_ddp_usd, 250)
+        self.assertEqual(self.good.plan_volume, .4)
+        self.assertIn('StockOnToDayПервичаняСебестоимость', SQL)
+        self.assertIn('WHERE NOT EXISTS', SQL)
+        self.assertIn('t.PlanningGroup = n.Даичи_ГруппаПланирования', SQL)
+        self.assertIn('HAVING SUM(s.Qty) > 0', SQL)
+
     def test_erp_duplicate_group_variants_merge_weighted_by_quantity(self):
         from unittest.mock import Mock
         from .services.erp_plan_parameters import update_parameters

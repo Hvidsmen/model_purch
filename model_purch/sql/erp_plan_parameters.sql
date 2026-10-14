@@ -19,4 +19,16 @@
  HAVING SUM(p.Количество * d.P_) > 0
 )
 SELECT PlanningGroup AS [План. группа], AmountDDP / NULLIF(Quantity, 0) AS DDP_UNIT,
- Volume / NULLIF(Quantity, 0) AS VOLUME_UNIT, Quantity AS PLAN_QUANTITY FROM totals;
+ Volume / NULLIF(Quantity, 0) AS VOLUME_UNIT, Quantity AS PLAN_QUANTITY FROM totals
+UNION ALL
+SELECT n.Даичи_ГруппаПланирования,
+ SUM(s.AmountExwDDP_USD) / NULLIF(SUM(s.Qty), 0),
+ n.ОбъемЧислитель,
+ SUM(s.Qty)
+FROM DataWH.erp.StockOnToDayПервичаняСебестоимость s
+INNER JOIN DataWH.erp.[Справочники.Номенклатура] n ON s.Номенклатура = n.Наименование
+WHERE NOT EXISTS (
+ SELECT 1 FROM totals t WHERE t.PlanningGroup = n.Даичи_ГруппаПланирования
+)
+GROUP BY n.Даичи_ГруппаПланирования, n.ОбъемЧислитель
+HAVING SUM(s.Qty) > 0;

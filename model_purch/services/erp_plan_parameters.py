@@ -32,7 +32,7 @@ def update_parameters(scenario, sources=None, connector=None):
             quantity = Decimal(str(quantity))
             numbers = [Decimal(str(value)) if value is not None else None for value in (ddp, volume)]
             if not quantity.is_finite() or quantity <= 0 or any(value is not None and not value.is_finite() for value in numbers):
-                raise ValidationError('В плане есть некорректные DDP, объём или количество.')
+                raise ValidationError('В плане или остатках есть некорректные DDP, объём или количество.')
             aggregate = totals.setdefault(key, [Decimal(0), None, None])
             aggregate[0] += quantity
             for index, value in enumerate(numbers, 1):
@@ -41,11 +41,11 @@ def update_parameters(scenario, sources=None, connector=None):
         values = {key: [float(value / quantity) if value is not None else None for value in amounts]
                   for key, (quantity, *amounts) in totals.items()}
         if any(value is not None and not math.isfinite(value) for pair in values.values() for value in pair):
-            raise ValidationError('В плане есть слишком большие DDP или объём.')
+            raise ValidationError('В плане или остатках есть слишком большие DDP или объём.')
     finally:
         connection.close()
     if not values:
-        raise ValidationError('По выбранным планам нет групп с положительным количеством. Существующие значения сохранены.')
+        raise ValidationError('В выбранных планах и текущих остатках нет групп с положительным количеством. Существующие значения сохранены.')
     with transaction.atomic():
         locked = ScenarioModel.objects.select_for_update().get(pk=scenario.pk)
         if (locked.date_start_plan, locked.date_end_plan) != (scenario.date_start_plan, scenario.date_end_plan):
