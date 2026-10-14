@@ -13,6 +13,46 @@ from .services.versions import create_version
 
 
 class SalesPlanTests(TestCase):
+    def test_scenario_edit_reset_delete_and_active_operation(self):
+        self.load()
+        calculate_plan(self.scenario.pk)
+        url = reverse('motivation_sales_plan', args=[self.scenario.pk])
+        response = self.client.post(url, {'action': 'edit', 'title': 'Новое название', 'source_version': self.scenario.source_version})
+        self.assertRedirects(response, url)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.title, 'Новое название')
+        self.assertIsNotNone(self.scenario.calculated_at)
+        self.client.post(url, {'action': 'edit', 'title': 'Название', 'source_version': 'Другой план'})
+        self.scenario.refresh_from_db()
+        self.assertNotEqual(self.scenario.source_version, 'Другой план')
+        self.assertTrue(self.scenario.lines.exists())
+        self.client.post(url, {'action': 'edit', 'title': 'Название', 'source_version': 'Другой план', 'confirm_reset': 'yes'})
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.source_version, 'Другой план')
+        self.assertFalse(self.scenario.lines.exists())
+        self.assertIsNone(self.scenario.loaded_at)
+        from .services.plan_operations import scenario_operation
+        with scenario_operation(self.scenario.pk):
+            self.client.post(url, {'action': 'delete', 'confirm_delete': 'yes'})
+        self.assertTrue(SalesPlanScenario.objects.filter(pk=self.scenario.pk).exists())
+        self.client.post(url, {'action': 'delete'})
+        self.assertTrue(SalesPlanScenario.objects.filter(pk=self.scenario.pk).exists())
+        response = self.client.post(url, {'action': 'delete', 'confirm_delete': 'yes'})
+        self.assertRedirects(response, reverse('motivation_sales_plans'))
+        self.assertFalse(SalesPlanScenario.objects.filter(pk=self.scenario.pk).exists())
+
+    def test_scenario_used_in_approval_keeps_source_and_history(self):
+        from .models import MotivationApproval
+        MotivationApproval.objects.create(version=self.version, plan=self.scenario)
+        from .services.plan_scenarios import change_scenario, delete_scenario
+        with self.assertRaises(ValidationError):
+            delete_scenario(self.scenario.pk)
+        with self.assertRaises(ValidationError):
+            change_scenario(self.scenario.pk, 'Имя', 'Другой план', True)
+        change_scenario(self.scenario.pk, 'Разрешено переименовать', self.scenario.source_version)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.title, 'Разрешено переименовать')
+
     def test_ddp_import_global_subtotals_and_markup(self):
         self.cursor.description.append(('AmountDDP_USD',))
         self.cursor.fetchall.return_value = [(*row, Decimal('600') if row[0] == 'A' else Decimal('300')) for row in self.rows()]

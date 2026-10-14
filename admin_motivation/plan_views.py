@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 def sales_plans(request, scenario_id=None):
     scenario = get_object_or_404(SalesPlanScenario, pk=scenario_id) if scenario_id else None
     form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'create' else None)
+    edit_form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'edit' else None,
+        initial={'title': scenario.title, 'source_version': scenario.source_version} if scenario else None)
     versions = request.session.get('sales_plan_source_versions', [])
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -26,6 +28,18 @@ def sales_plans(request, scenario_id=None):
             if action == 'create' and form.is_valid():
                 created = SalesPlanScenario.objects.create(**form.cleaned_data)
                 return redirect('motivation_sales_plan', scenario_id=created.pk)
+            elif scenario and action == 'edit':
+                if edit_form.is_valid():
+                    from .services.plan_scenarios import change_scenario
+                    change_scenario(scenario.pk, **edit_form.cleaned_data, confirm_reset=request.POST.get('confirm_reset') == 'yes')
+                    messages.success(request, 'Сценарий обновлён.')
+            elif scenario and action == 'delete':
+                if request.POST.get('confirm_delete') != 'yes':
+                    raise ValidationError('Подтвердите удаление сценария.')
+                from .services.plan_scenarios import delete_scenario
+                delete_scenario(scenario.pk)
+                messages.success(request, 'Сценарий и его загруженные данные удалены.')
+                return redirect('motivation_sales_plans')
             elif action == 'refresh_sources':
                 versions = source_versions()
                 request.session['sales_plan_source_versions'] = versions
@@ -45,7 +59,7 @@ def sales_plans(request, scenario_id=None):
         except Exception:
             logger.exception('Sales plan operation failed')
             messages.error(request, 'Операция не выполнена. Проверьте подключение DWH_SQL_CONN_STR и журнал сервера. Сохранённые данные не изменены.')
-        if not (action == 'create' and form.errors):
+        if not ((action == 'create' and form.errors) or (action == 'edit' and edit_form.errors)):
             return redirect(reverse('motivation_sales_plan', args=[scenario.pk]) if scenario else reverse('motivation_sales_plans'))
     scope = 'subdivisions' if request.GET.get('scope') == 'subdivisions' else 'global'
     report = period_report(scenario, scope, request.GET) if scenario else {}
@@ -78,7 +92,7 @@ def sales_plans(request, scenario_id=None):
         return response
     return render(request, 'admin_motivation/sales_plans.html', {
         'preliminary': not GlobalCoeffVersion.objects.filter(status='approved').exists(),
-        'scenario': scenario, 'scenarios': SalesPlanScenario.objects.all(), 'form': form,
+        'scenario': scenario, 'scenarios': SalesPlanScenario.objects.all(), 'form': form, 'edit_form': edit_form,
         'source_versions': versions, 'scope': scope, 'subdivisions': Subdivision.objects.all(),
         **report,
     })
