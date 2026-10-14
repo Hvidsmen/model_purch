@@ -3,6 +3,7 @@ import argparse
 import json
 import os
 import sqlite3
+from contextlib import closing
 import sys
 from pathlib import Path
 
@@ -22,7 +23,7 @@ def main():
     if options.database and not selected.is_file():
         parser.error(f'Указанная база не существует: {selected}. Проверьте путь.')
     if selected.exists():
-        with sqlite3.connect(selected.as_uri() + '?mode=ro', uri=True) as database:
+        with closing(sqlite3.connect(selected.as_uri() + '?mode=ro', uri=True)) as database:
             if database.execute('PRAGMA quick_check').fetchone()[0] != 'ok':
                 raise RuntimeError('SQLite не прошла проверку целостности.')
     selected.parent.mkdir(parents=True, exist_ok=True)

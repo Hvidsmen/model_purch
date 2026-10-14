@@ -16,6 +16,28 @@ from .services.preflight import snapshot, fingerprint, validation_errors
 
 
 class LocalDatabaseTests(SimpleTestCase):
+    def test_backup_closes_connections_and_preserves_original_failure(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_path = root / 'source.sqlite3'
+            source_path.touch()
+            source, target = Mock(), Mock()
+            target.execute.return_value.fetchone.return_value = ('ok',)
+            with patch('model_purch.services.backups.sqlite3.connect', side_effect=[source, target]):
+                backup_sqlite(source_path, root / 'backups')
+            source.close.assert_called_once()
+            target.close.assert_called_once()
+            source.reset_mock()
+            target.reset_mock()
+            source.backup.side_effect = RuntimeError('Исходная ошибка копирования')
+            def locked_file(*args, **kwargs):
+                source.close.assert_called_once()
+                target.close.assert_called_once()
+                raise PermissionError('Файл занят сторонним процессом')
+            with patch('model_purch.services.backups.sqlite3.connect', side_effect=[source, target]), patch('model_purch.services.backups.Path.unlink', side_effect=locked_file):
+                with self.assertRaisesRegex(RuntimeError, 'Исходная ошибка копирования'):
+                    backup_sqlite(source_path, root / 'backups')
+
     def test_environment_persistent_config_and_default_resolve_same_path(self):
         with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
             root = Path(directory)
