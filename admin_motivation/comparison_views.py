@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
-from .models import GlobalCoeffVersion, SalesPlanScenario, Subdivision
+from .models import GlobalCoeffVersion, SalesPlanScenario, Subdivision, DirectorEmployee, Goods
 from .services.comparison import compare_plan, proposed_changes
 from .services.approval import review_approval, approve_review
 
@@ -25,6 +25,16 @@ def comparison_action(request):
         if baseline and baseline.is_editable:
             raise ValidationError('Базовой выберите утверждённую или историческую версию, которую нельзя редактировать.')
         changes, deleted = proposed_changes(version, sub, data.get('changes'), data.get('deleted'))
+        employee = get_object_or_404(DirectorEmployee, pk=data['employee']) if data.get('employee') else None
+        director_changes = data.get('director_changes') or {}
+        if not isinstance(director_changes, dict):
+            raise ValidationError('Некорректные изменения коэффициентов директора.')
+        if director_changes:
+            if not version.is_editable or (sub and (not employee or not employee.subdivisions.filter(pk=sub.pk).exists())):
+                raise ValidationError('Изменения директора недоступны для этой версии или филиала.')
+            director_changes = _normalize_director_changes(director_changes)
+            if action == 'review':
+                raise ValidationError('Перед утверждением сохраните изменения коэффициентов директоров.')
         for key, value in [('motivation_comparison_plan', plan.pk if plan else None), ('motivation_comparison_baseline', baseline.pk if baseline else None)]:
             if request.session.get(key) != value:
                 request.session[key] = value
@@ -32,8 +42,22 @@ def comparison_action(request):
             return JsonResponse(review_approval(version, plan, baseline, sub, changes, deleted))
         if action != 'compare' or plan is None:
             raise ValidationError('Выберите загруженный план продаж для сравнения.')
-        return JsonResponse(compare_plan(plan, version, baseline, sub, changes, deleted))
+        return JsonResponse(compare_plan(plan, version, baseline, sub, changes, deleted, director_changes=director_changes, employee=employee))
     except ValidationError as error:
         return JsonResponse({'error': ' '.join(error.messages)}, status=400)
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):
         return JsonResponse({'error': 'Некорректные параметры сравнения.'}, status=400)
+
+
+def _normalize_director_changes(changes):
+    from .services.comparison import coefficient_input
+    normalized = {}
+    for key, value in changes.items():
+        parts = key.split(':')
+        if len(parts) != 2 or not parts[0].isdigit() or parts[1] not in {'0', '1', '2', '3', '4'}:
+            raise ValidationError('Некорректная ячейка директора.')
+        normalized[key] = coefficient_input(value)
+    ids = {int(key.split(':')[0]) for key in normalized}
+    if Goods.objects.filter(pk__in=ids).count() != len(ids):
+        raise ValidationError('Товарная матрица директора не найдена.')
+    return normalized

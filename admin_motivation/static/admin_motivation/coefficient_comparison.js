@@ -25,12 +25,24 @@
     const summaryStatus = message => { const element = document.getElementById('editor-comparison-state'); if (element) element.textContent = message; };
     const signedMoney = value => value == null ? '—' : `${Number(value) > 0 && money(value) !== '0' ? '+' : ''}${money(value)}`;
     const prefix = panel.dataset.subdivision ? 'sub_coeff=' : 'global_coeff=';
+    const directorInputs = () => [...document.querySelectorAll('input[name^="director_coeff="]')];
+    const breakdownToggle = document.getElementById('comparison-breakdown-toggle');
+    breakdownToggle?.addEventListener('click', () => {
+        const open = breakdownToggle.getAttribute('aria-expanded') !== 'true';
+        breakdownToggle.setAttribute('aria-expanded', String(open));
+        breakdownToggle.textContent = `${open ? '▾' : '▸'} Всего`;
+        document.querySelectorAll('[data-motivation-breakdown]').forEach(row => row.hidden = !open);
+    });
     const inputs = () => [...document.querySelectorAll(`input[name^="${prefix}"]`)];
     function parameters(action) {
         const changes = {};
         inputs().filter(input => !input.matches(':disabled') && (!document.getElementById('editor-toolbar') || input.classList.contains('editor-changed'))).forEach(input => changes[input.name.split('=')[1]] = input.value);
         const deleted = [...document.querySelectorAll('input[name^="delete_coeff="]:checked')].map(input => input.name.split('=')[1]);
-        return {action, version: panel.dataset.version, subdivision: panel.dataset.subdivision || null,
+        const director_changes = {};
+        directorInputs().filter(input => !input.matches(':disabled') && input.classList.contains('editor-changed')).forEach(input => {
+            const [, goods, segment] = input.name.split('='); director_changes[`${goods}:${segment}`] = input.value;
+        });
+        return {employee: panel.dataset.employee || null, director_changes, action, version: panel.dataset.version, subdivision: panel.dataset.subdivision || null,
                 plan: plan.value || null, baseline: baseline.value || null, changes, deleted};
     }
     async function post(data, signal) {
@@ -74,7 +86,7 @@
             if (requestRevision !== revision) return;
             document.querySelectorAll('[data-amount], [data-summary-amount]').forEach(cell => {
                 const [variant, field] = (cell.dataset.amount || cell.dataset.summaryAmount).split('.');
-                cell.textContent = field === 'markup' ? (result.variants[variant][field] == null ? '—' : new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(Number(result.variants[variant][field]))) : money(result.variants[variant][field]);
+                cell.textContent = field === 'plan_percent' ? percent(result.variants[variant][field]) : field === 'markup' ? (result.variants[variant][field] == null ? '—' : new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(Number(result.variants[variant][field]))) : money(result.variants[variant][field]);
                 cell.title = result.variants[variant].error || '';
             });
             document.querySelectorAll('[data-delta], [data-summary-delta]').forEach(cell => {
@@ -106,7 +118,7 @@
         }
     }
     const schedule = () => { clearTimeout(timer); timer = setTimeout(compare, 600); };
-    inputs().forEach(input => input.addEventListener('input', schedule));
+    [...inputs(), ...directorInputs()].forEach(input => input.addEventListener('input', schedule));
     document.querySelectorAll('input[name^="delete_coeff="]').forEach(input => input.addEventListener('change', schedule));
     plan.addEventListener('change', compare);
     baseline.addEventListener('change', compare);

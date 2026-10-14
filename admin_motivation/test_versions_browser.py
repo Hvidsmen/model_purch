@@ -11,6 +11,34 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_comparison_directors_percent_and_collapsed_breakdown(self):
+        from playwright.sync_api import expect
+        from .test_sales_plans import SalesPlanTests
+        from .models import GlobalDirectorCoeff
+        fixture = SalesPlanTests()
+        def setup():
+            fixture.setUp()
+            fixture.load()
+            GlobalDirectorCoeff.objects.create(version=fixture.version, goods=fixture.good,
+                **{f'k{i}': '.01' for i in range(5)})
+            return fixture.scenario.pk, fixture.good.pk
+        plan, good = self.db(setup)
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        self.page.locator('#comparison-plan').select_option(str(plan))
+        expect(self.page.locator('[data-amount="current.total"]')).to_have_text('240')
+        expect(self.page.locator('[data-amount="current.plan_percent"]')).to_have_text('16%')
+        expect(self.page.locator('[data-motivation-breakdown]').first).not_to_be_visible()
+        self.assertEqual(self.page.locator('[data-amount="current.ddp"]').count(), 0)
+        self.page.locator('#comparison-breakdown-toggle').click()
+        expect(self.page.locator('[data-amount="current.directors"]')).to_have_text('15')
+        self.page.locator(f'input[name="director_coeff={good}=0"]').fill('2%')
+        self.page.locator(f'input[name="director_coeff={good}=0"]').press('Tab')
+        expect(self.page.locator('[data-amount="current.directors"]')).to_have_text('17')
+        expect(self.page.locator('[data-amount="current.total"]')).to_have_text('242')
+        self.page.locator('#comparison-breakdown-toggle').click()
+        expect(self.page.locator('[data-amount="current.directors"]')).not_to_be_visible()
+        self.assertEqual(self.errors, [])
+
     def test_global_copy_selects_employees_per_branch(self):
         from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
         from playwright.sync_api import expect

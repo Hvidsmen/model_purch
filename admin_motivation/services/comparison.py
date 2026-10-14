@@ -101,20 +101,24 @@ def coefficient_rows(version_ids, subdivision=None, current=None, changes=None, 
         yield (version, sub, pg, group, brand, kind, segment, value)
 
 
-def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, deleted=None, all_subdivisions=False, change_subdivision=None):
+def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, deleted=None, all_subdivisions=False, change_subdivision=None, director_changes=None, employee=None):
+    from .director_comparison import DirectorIndex
     approved = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
     before = [version for version in approved if version.effective_from < current.effective_from]
     proposed = [*before, current]
     use_subdivision = subdivision or all_subdivisions
     profiles = [('approved', approved), ('baseline', [baseline] if baseline else []), ('current', proposed)]
-    results, indexes, date_cache = {}, {}, {}
+    results, indexes, date_cache, director_indexes = {}, {}, {}, {}
     for name, versions in profiles:
         if not versions:
             results[name] = {'error': 'Нет утверждённых версий.' if name == 'approved' else 'Базовая версия не выбрана.'}
             continue
         indexes[name] = Index(coefficient_rows([version.pk for version in versions], use_subdivision,
             current=current if name == 'current' else None, changes=changes, deleted=deleted, changed_subdivision=change_subdivision or subdivision))
-        results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
+        director_indexes[name] = DirectorIndex([version.pk for version in versions], local=bool(use_subdivision),
+            current=current if name == 'current' else None, changes=director_changes if name == 'current' else None,
+            subdivision=subdivision, employee=employee, deleted=deleted if name == 'current' else None)
+        results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'directors': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
     lines = plan.lines.exclude(subdivision='') if use_subdivision else plan.lines.filter(subdivision='')
     if subdivision:
         lines = lines.filter(subdivision=subdivision.subdivision_key)
@@ -145,7 +149,9 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             sales = sum((value * amount for value, amount in zip(matrix[1], usd)), Decimal(0))
             results[name]['policies'] += policies
             results[name]['sales'] += sales
-            results[name]['total'] += policies + sales
+            directors = director_indexes[name].motivation(date_cache[date_key], sub, pg, group, brand, usd)
+            results[name]['directors'] += directors
+            results[name]['total'] += policies + sales + directors
             results[name]['fallbacks'] += fallbacks
     if not found:
         raise ValidationError('В выбранном плане нет строк для этого разреза. Сначала загрузите план.')
@@ -154,11 +160,12 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
         result['plan'] = costs['plan']
         result['ddp'] = costs['ddp']
         result['markup'] = motivation_markup(costs['plan'], costs['ddp'], result.get('total'))
+        result['plan_percent'] = result['total'] / costs['plan'] * 100 if costs['plan'] and 'total' in result else None
         output[name] = {key: str(value) if isinstance(value, Decimal) else value for key, value in result.items()}
     deltas = {}
     for name in ['approved', 'baseline']:
         deltas[name] = {}
-        for field in ['policies', 'sales', 'total']:
+        for field in ['policies', 'sales', 'directors', 'total']:
             if results[name].get('error') or results['current'].get('error'):
                 deltas[name][field] = {'amount': None, 'percent': None}
             else:
@@ -167,5 +174,5 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
                 percent = change / abs(old) * 100 if old else (Decimal(0) if new == 0 else None)
                 deltas[name][field] = {'amount': str(change), 'percent': str(percent) if percent is not None else None}
     return {'variants': output, 'deltas': deltas, 'current_date': current.effective_from.isoformat(), 'affected_plan_lines': affected_lines,
-            'unsaved': bool(changes or deleted), 'replaced_versions': [{'id': v.pk, 'title': str(v)} for v in approved if v.pk != current.pk and v.effective_from >= current.effective_from],
+            'unsaved': bool(changes or deleted or director_changes), 'replaced_versions': [{'id': v.pk, 'title': str(v)} for v in approved if v.pk != current.pk and v.effective_from >= current.effective_from],
             'baseline_replaced': bool(baseline and current.effective_from <= baseline.effective_from)}
