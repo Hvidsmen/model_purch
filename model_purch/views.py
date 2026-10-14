@@ -815,6 +815,29 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     if request.GET.get('incomplete') == '1':
         queryset = queryset.filter(pk__in=[row['id'] for row in incomplete])
 
+    from .services.plan_validation import plan_warnings
+    import math
+    try:
+        plan_threshold = float(str(request.GET.get('ddp_threshold', request.session.get('ddp_threshold', 10))).replace(',', '.'))
+    except (ValueError, TypeError, AttributeError):
+        plan_threshold = 10
+    if not math.isfinite(plan_threshold) or plan_threshold < 0:
+        plan_threshold = 10
+    request.session['ddp_threshold'] = str(plan_threshold)
+    warning_filter = request.GET.get('plan_warning', '')
+    warning_counts = dict.fromkeys(['ddp', 'volume', 'missing', 'any'], 0)
+    warning_map = {}
+    for good in queryset:
+        checks = plan_warnings(good, plan_threshold)
+        warning_map[good.pk] = checks
+        if checks:
+            warning_counts['any'] += 1
+        for kind, _ in checks:
+            warning_counts[kind] += 1
+    if warning_filter in warning_counts:
+        queryset = queryset.filter(pk__in=[pk for pk, checks in warning_map.items()
+            if checks and (warning_filter == 'any' or any(kind == warning_filter for kind, _ in checks))])
+
     # --- Сортировка ---
     sort_by = request.GET.get('sort', None)
     sort_dir = request.GET.get('dir', 'asc')
@@ -841,6 +864,8 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
 
     paginator = Paginator(queryset, 25)
     page_obj = paginator.get_page(page_number)
+    for good in page_obj:
+        good.plan_warnings = warning_map.get(good.pk, [])
 
     # --- Уникальные значения для фильтров (только для текущего сценария!) ---
     planning_sales_list = queryset.exclude(planning_sales__isnull=True).exclude(planning_sales='').values_list(
@@ -868,6 +893,9 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     return render(request, 'model_purch/pggoods_list.html', {
         **pricing_context(current_scenario),
         'incomplete_goods': incomplete,
+        'plan_threshold': plan_threshold,
+        'warning_filter': warning_filter,
+        'warning_counts': warning_counts,
         'freight_form': freight_form,
         'freight_sources': all_scenarios.exclude(pk=current_scenario.pk) if current_scenario else all_scenarios.none(),
         'page_obj': page_obj,

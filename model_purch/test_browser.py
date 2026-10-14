@@ -199,7 +199,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.visit('pggoods_list')
         self.select(self.source)
         names = self.page.locator('.filters-card [name]').evaluate_all('(fields) => fields.map(field => field.name).filter(name => name !== "scenario")')
-        self.assertEqual(names, ['search', 'planning_group', 'planning_sales', 'group_goods', 'brand', 'purch', 'kind_purch'])
+        self.assertEqual(names, ['search', 'planning_group', 'planning_sales', 'group_goods', 'brand', 'purch', 'kind_purch', 'plan_warning', 'ddp_threshold'])
         row = self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
         self.assertEqual(row.locator('[name="exw_usd"]').input_value(), '1234.57')
         self.page.locator('#toggle-ddp-details').click()

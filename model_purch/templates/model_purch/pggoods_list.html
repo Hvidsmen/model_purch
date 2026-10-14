@@ -265,6 +265,20 @@ body .product-table th:last-child{width:64px!important}
                     {% for kp in kind_purch_list %}<option value="{{ kp.id }}" {% if kp.id|stringformat:'s' == kind_purch_id %}selected{% endif %}>{{ kp }}</option>{% endfor %}
                 </select>
             </div>
+            <div class="col-8 col-lg-4">
+                <label class="form-label small text-muted mb-1">Проверка по плану</label>
+                <select name="plan_warning" class="form-select form-select-sm">
+                    <option value="">Все товары</option>
+                    <option value="any" {% if warning_filter == 'any' %}selected{% endif %}>Любое предупреждение ({{ warning_counts.any }})</option>
+                    <option value="ddp" {% if warning_filter == 'ddp' %}selected{% endif %}>Отклонение DDP ({{ warning_counts.ddp }})</option>
+                    <option value="volume" {% if warning_filter == 'volume' %}selected{% endif %}>Отклонение объёма ({{ warning_counts.volume }})</option>
+                    <option value="missing" {% if warning_filter == 'missing' %}selected{% endif %}>Нет плановых значений ({{ warning_counts.missing }})</option>
+                </select>
+            </div>
+            <div class="col-4 col-lg-2">
+                <label class="form-label small text-muted mb-1" title="Абсолютная разница DDP / модуль планового DDP × 100">Порог DDP, %</label>
+                <input type="number" name="ddp_threshold" min="0" step="any" value="{{ plan_threshold|unlocalize }}" class="form-control form-control-sm">
+            </div>
             <div class="col-12 col-lg-4 d-flex gap-2 mt-2 mt-lg-0">
                 <button type="submit" class="btn btn-primary btn-sm flex-grow-1"><i aria-hidden="true" class="bi bi-funnel"></i> Применить</button>
                 <a href="{% url 'pggoods_list' %}" class="btn btn-outline-secondary btn-sm" title="Сбросить"><i aria-hidden="true" class="bi bi-x-lg"></i></a>
@@ -273,6 +287,7 @@ body .product-table th:last-child{width:64px!important}
     </div>
 </div>
 
+<div class="hint-text mb-2">Проверка по плану — предупреждения по сохранённым значениям; сохранение не блокируется. Объём сравнивается без округления. DDP: |расчётный − плановый| / |плановый| × 100.</div>
 <div class="hint-text mb-2"><i aria-hidden="true" class="bi bi-info-circle"></i> <span class="editable-number-label">Зелёные заголовки — числа, которые можно менять.</span> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
 
 <div class="card shadow-sm">
@@ -304,7 +319,8 @@ body .product-table th:last-child{width:64px!important}
     <input type="hidden" name="query_string" value="{{ clean_query_string }}">
                         </form>
                         <td class="text-muted">{{ item.id }}</td>
-                        <td class="product-planning-group"><input type="text" class="inline-input" value="{{ item.planning_group }}" title="{{ item.planning_group }}" readonly></td>
+                        <td class="product-planning-group"><input type="text" class="inline-input" value="{{ item.planning_group }}" title="{{ item.planning_group }}" readonly>
+                        {% for kind, warning in item.plan_warnings %}<div class="small mt-1 px-2 py-1 rounded {% if kind == 'missing' %}bg-light text-secondary border{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %}" data-plan-warning="{{ kind }}">⚠ {{ warning }}</div>{% endfor %}</td>
                         <td class="product-classification"><label class="product-classification-field"><span>Группа планов продаж</span><select class="inline-input editable-field" name="planning_sales" aria-label="Группа планов продаж" data-original="{{ item.planning_sales|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.planning_sales %}<option value="{{ value }}" {% if value == item.planning_sales %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Группа товаров</span><select class="inline-input editable-field" name="group_goods" aria-label="Группа товаров" data-original="{{ item.group_goods|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.group_goods %}<option value="{{ value }}" {% if value == item.group_goods %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Марка</span><select class="inline-input editable-field" name="brand" aria-label="Марка" data-original="{{ item.brand|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.brand %}<option value="{{ value }}" {% if value == item.brand %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Закупка</span><input type="text" class="inline-input editable-field" value="{{ item.purch|default:'' }}" name="purch" aria-label="Закупка" list="purchase-options" data-original="{{ item.purch|default:'' }}"></label><label class="product-classification-field"><span>Вид закупки</span><select class="inline-input editable-field" name="kind_purch" aria-label="Вид закупки" data-original="{{ item.kind_purch.id|default:'' }}">
                                 <option value="">— Не выбран —</option>
                                 {% for kp in kind_purch_list %}

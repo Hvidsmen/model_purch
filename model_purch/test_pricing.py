@@ -7,6 +7,31 @@ from .services.pricing import apply_price, reprice_goods
 
 
 class ProductPricingTests(TestCase):
+    def test_plan_validation_threshold_missing_values_and_filters(self):
+        from .services.plan_validation import plan_warnings
+        self.good.plan_ddp_usd = 100
+        self.good.ddp_usd = 110
+        self.good.plan_volume = self.good.volume
+        self.assertEqual(plan_warnings(self.good), [])
+        self.good.ddp_usd = 111
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp'])
+        self.assertEqual(plan_warnings(self.good, 12), [])
+        self.good.plan_volume = None
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp', 'missing'])
+        self.good.plan_ddp_usd = 0
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp', 'missing'])
+        PGGoods.objects.filter(pk=self.good.pk).update(plan_ddp_usd=1, plan_volume=3)
+        url = reverse('pggoods_list')
+        for kind in ['ddp', 'volume', 'any']:
+            response = self.client.get(url, {'scenario': self.scenario.pk, 'plan_warning': kind})
+            self.assertEqual([good.pk for good in response.context['page_obj']], [self.good.pk])
+        response = self.client.get(url, {'scenario': self.scenario.pk, 'plan_warning': 'missing'})
+        self.assertEqual(list(response.context['page_obj']), [])
+        PGGoods.objects.filter(pk=self.good.pk).update(plan_ddp_usd=None, plan_volume=None)
+        response = self.client.get(url, {'scenario': self.scenario.pk, 'plan_warning': 'missing', 'ddp_threshold': 'NaN'})
+        self.assertEqual(response.context['plan_threshold'], 10)
+        self.assertContains(response, 'Не загружены плановые значения')
+
     def test_erp_stock_fallback_merges_volumes_by_stock_quantity(self):
         from unittest.mock import Mock
         from .services.erp_plan_parameters import update_parameters, SQL
