@@ -13,6 +13,18 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_global_copy_skips_branches_without_directors(self):
+        from .services.versions import apply_to_subdivisions
+        skipped = apply_to_subdivisions(self.version, [self.sub, self.other_sub], groups=['directors'],
+            employees_by_subdivision={self.sub.pk: [self.first, self.second], self.other_sub.pk: []})
+        self.assertEqual(skipped, [str(self.other_sub)])
+        self.assertEqual(SubdivisionDirectorCoeff.objects.filter(subdivision=self.sub).count(), 2)
+        self.assertFalse(SubdivisionDirectorCoeff.objects.filter(subdivision=self.other_sub).exists())
+        with self.assertRaises(ValidationError):
+            apply_to_subdivisions(self.version, [self.sub], groups=['directors'], employees_by_subdivision={self.sub.pk: []})
+        with self.assertRaises(ValidationError):
+            apply_to_subdivisions(self.version, [self.other_sub], groups=['directors'], employees_by_subdivision={self.other_sub.pk: []})
+
     def test_global_copy_multiple_employees_per_branch_and_atomic_validation(self):
         from .services.versions import apply_to_subdivisions
         self.second.subdivisions.add(self.other_sub)

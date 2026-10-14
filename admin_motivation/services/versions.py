@@ -68,11 +68,17 @@ def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, emp
     type_ids = [kind.pk for kind in TypeCoeff.objects.all() if kind.type_coeff_name.strip().casefold() in {names[group] for group in selected if group in names}]
     subdivisions = list(subdivisions)
     recipients = {}
+    skipped = []
     if 'directors' in selected:
         for sub in subdivisions:
             recipients[sub.pk] = list(employees_by_subdivision.get(sub.pk, [])) if employees_by_subdivision is not None else ([employee] if employee else [])
+            if employees_by_subdivision is not None and not recipients[sub.pk] and not sub.directors.exists():
+                skipped.append(str(sub))
+                continue
             if not recipients[sub.pk] or any(not item.subdivisions.filter(pk=sub.pk).exists() for item in recipients[sub.pk]):
                 raise ValidationError(f'Выберите директоров, привязанных к филиалу {sub}.')
+        if not type_ids and not any(recipients.values()):
+            raise ValidationError('В выбранных подразделениях нет директоров для копирования. Добавьте их в справочник или выберите другие подразделения.')
     for sub in subdivisions:
         if type_ids:
             for kind in KindManagerCoeff.objects.all():
@@ -89,6 +95,7 @@ def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, emp
             from .directors import copy_directors
             for recipient in recipients[sub.pk]:
                 copy_directors(version.pk, subdivision=sub, employee=recipient, from_global=True)
+    return skipped
 
 
 @transaction.atomic

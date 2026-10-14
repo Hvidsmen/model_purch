@@ -107,9 +107,9 @@
                 if (!groups.length) { event.preventDefault(); fail('Выберите группы коэффициентов для копирования.'); return; }
                 if ([...groups].some(input => input.value === 'directors')) {
                     if (form.querySelector('[name=branch_employee_selection]')?.value === 'yes') {
-                        const missing = [...form.querySelectorAll('[name=selected_subdivisions]:checked')].some(branch =>
-                            !form.querySelector(`input[name="director_employees_${branch.value}"]:checked`));
-                        if (missing) { event.preventDefault(); fail('Выберите директоров для каждого выбранного подразделения.'); return; }
+                        const missing = [...form.querySelectorAll('[name=selected_subdivisions]:checked')].filter(branch =>
+                            form.querySelector(`input[name="director_employees_${branch.value}"]`) && !form.querySelector(`input[name="director_employees_${branch.value}"]:checked`));
+                        if (missing.length) { event.preventDefault(); fail('Не выбраны директора: ' + missing.map(branch => branch.closest('label').textContent.trim()).join(', ') + '. Раскройте выбор сотрудников рядом с филиалом.'); return; }
                     } else if (!form.querySelector('[name=director_employee]')?.value) {
                         event.preventDefault(); fail('Выберите сотрудника-директора для копирования.'); return;
                     }

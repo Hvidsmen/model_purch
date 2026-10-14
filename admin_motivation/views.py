@@ -189,7 +189,9 @@ def gloabal_coeff_action(request):
                         if not request.POST.get('director_employee'):
                             raise ValidationError('Выберите сотрудника-директора.')
                         employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee'))
-                apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee, employees_by_subdivision=recipients)
+                skipped = apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee, employees_by_subdivision=recipients)
+                if skipped:
+                    messages.warning(request, 'Коэффициенты директоров пропущены в филиалах без сотрудников: ' + ', '.join(skipped) + '. Политики и продажи скопированы, если были выбраны.')
             elif action == 'save_coeff':
                 ids = [key.split('=', 1)[1] for key in request.POST if key.startswith('select_var_calc=')]
                 deleted = [key.split('=', 1)[1] for key in request.POST if key.startswith('delete_coeff=')]

@@ -880,7 +880,7 @@
                                 <label><input type="checkbox" name="selected_subdivisions" value="{{ sub.pk }}"> {{ sub }}</label>
                                 <details><summary>Директора: выбраны все ({{ sub.directors.all|length }})</summary>
                                 <label><input type="checkbox" class="copy-all-employees" checked> Выбрать всех</label>
-                                {% for item in sub.directors.all %}<label style="display:block"><input type="checkbox" name="director_employees_{{ sub.pk }}" value="{{ item.pk }}" checked class="copy-employee"> {{ item.full_name }}{% if item.position %} · {{ item.position }}{% endif %}</label>{% empty %}<p class="small">Нет привязанных директоров. <a href="{% url 'motivation_director_directory' %}">Справочник</a></p>{% endfor %}
+                                {% for item in sub.directors.all %}<label style="display:block"><input type="checkbox" name="director_employees_{{ sub.pk }}" value="{{ item.pk }}" checked class="copy-employee"> {{ item.full_name }}{% if item.position %} · {{ item.position }}{% endif %}</label>{% empty %}<p class="small">Нет директоров — группа «Директор» будет пропущена. <a href="{% url 'motivation_director_directory' %}">Справочник</a></p>{% endfor %}
                                 </details></div>
                                 {% empty %}<p>Подразделения не найдены</p>{% endfor %}
                             </div>
@@ -1258,7 +1258,7 @@
  rows.forEach(row => {
   const all = row.querySelector('.copy-all-employees');
   const choices = [...row.querySelectorAll('.copy-employee')];
-  const update = () => { const count = choices.filter(item => item.checked).length; all.checked = count > 0 && count === choices.length; all.indeterminate = count > 0 && count < choices.length; row.querySelector('summary').textContent = `Директора: выбрано ${count} из ${choices.length}`; };
+  const update = () => { const count = choices.filter(item => item.checked).length; all.checked = count > 0 && count === choices.length; all.indeterminate = count > 0 && count < choices.length; row.querySelector('summary').textContent = choices.length ? `Директора: выбрано ${count} из ${choices.length}` : 'Нет директоров — будут пропущены'; };
   all.disabled = !choices.length;
   all.addEventListener('change', () => { choices.forEach(item => item.checked = all.checked); update(); });
   choices.forEach(item => item.addEventListener('change', update));

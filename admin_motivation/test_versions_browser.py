@@ -20,6 +20,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             employees = [DirectorEmployee.objects.create(full_name=name) for name in ['Первый', 'Второй']]
             for employee in employees:
                 employee.subdivisions.add(*branches)
+            branches.append(Subdivision.objects.create(subdivision_key='Recipient C empty', subdivision_name='Recipient C empty', subdivision_global='Recipient C empty', chanel=channel))
             GlobalDirectorCoeff.objects.create(version=self.first, goods=self.coeff.goods, k0='.01')
             return [item.pk for item in branches], [item.pk for item in employees]
         branches, employees = self.db(fixture)
@@ -40,6 +41,8 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(row.locator('.copy-employee').nth(0)).not_to_be_checked()
         row.locator('.copy-all-employees').check()
         row.locator(f'.copy-employee[value="{employees[1]}"]').uncheck()
+        self.page.locator('#copy-branch-search').fill('')
+        self.page.locator(f'[name=selected_subdivisions][value="{branches[2]}"]').check()
         self.page.on('dialog', lambda dialog: dialog.accept())
         with self.page.expect_navigation():
             self.page.locator('[name=action_button][value=apply_sub]').click()
