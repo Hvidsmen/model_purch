@@ -32,5 +32,7 @@ if ($Database) { $prepareArguments += @('--database', $Database) }
 if ($LASTEXITCODE -ne 0) { throw 'Подготовка не завершена. Сервер не запущен.' }
 $config = Get-Content -LiteralPath '.local/config.json' -Raw -Encoding UTF8 | ConvertFrom-Json
 $env:DJANGO_DB_PATH = $config.database_path
+& $pythonExecutable manage.py collectstatic --noinput --settings=portal.settings_local
+if ($LASTEXITCODE -ne 0) { throw 'Не удалось обновить статические файлы. Сервер не запущен.' }
 & $pythonExecutable manage.py runserver "${BindAddress}:$Port" --settings=portal.settings_local --noreload
 if ($LASTEXITCODE -ne 0) { throw 'Сервер остановился с ошибкой. Проверьте вывод, в том числе занятость порта.' }
