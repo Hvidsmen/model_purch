@@ -185,3 +185,18 @@ body{background:#f4f6fa!important;color:#334155}
 .coefficient-copy-dialog::backdrop { background: #17243b66; }
 .coefficient-copy-dialog h2 { font-size: 20px; }
 .coefficient-copy-dialog label { display: block; margin: 12px 0 4px; }
+
+/* Compact coefficient controls shared by global and branch pages. */
+.coefficient-controls-bar{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0;padding:10px 12px;border:1px solid #dce3ec;border-radius:8px;background:#f7f9fc}
+.coefficient-controls-bar .coefficient-group-visibility{margin:0;flex:1;display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.coefficient-group-visibility{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:12px 0}
+.coefficient-group-visibility>span{font-size:12px;color:#64748b}
+.coefficient-group-visibility>label{display:inline-flex;align-items:center;gap:5px;margin:0;padding:4px 8px;border:1px solid #dce3ec;border-radius:5px;background:#fff;font-size:12px;white-space:nowrap}
+.coefficient-group-visibility>label:has(input:checked){border-color:#c4b5fd;background:#f1edff;color:#4338ca}
+.coefficient-group-visibility input{margin:0;accent-color:#5b4bc4}
+.coefficient-copy-between{margin-left:auto;white-space:nowrap;text-decoration:none!important}
+#globalBranchCopyForm{margin:0;flex:0 0 auto}
+#globalBranchCopyForm>fieldset{margin:0;padding:0;border:0;min-width:0}
+#globalBranchCopyForm .dropdown-wrapper{margin:0}
+#globalBranchCopyForm .dropdown-toggle-btn{padding:6px 12px;font-size:12px;border:1px solid #c4b5fd;border-radius:5px;background:#fff;color:#4338ca}
+@media(max-width:850px){.coefficient-copy-between{margin-left:0}.coefficient-controls-bar .coefficient-group-visibility{flex-basis:100%}}

@@ -851,10 +851,11 @@
     </div>
     <div class="row">
         {% include 'admin_motivation/_coefficient_filters.html' %}
+        <div class="coefficient-controls-bar">
         {% include 'admin_motivation/_coefficient_visibility.html' %}
         <form method="post" action="{% url 'gb_act' %}" id="globalBranchCopyForm">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
         <fieldset {% if not version_editable and not portal_is_admin %}disabled{% endif %}>
-        {% if not version_editable and portal_is_admin %}<p class="alert alert-warning">Копирование изменит коэффициенты филиалов в исторической версии. Прежние значения сохранятся в журнале. Повторите расчёт и выгрузку после изменения.</p>{% endif %}
+
                     <!-- Выпадающий список с чекбоксами подразделений -->
                     <div class="dropdown-wrapper">
                         <button type="button" class="btn btn-secondary dropdown-toggle-btn" id="subdivisionDropdownBtn">
@@ -862,7 +863,7 @@
                             <span class="dropdown-arrow">▼</span>
                         </button>
                         <div class="dropdown-menu" id="subdivisionDropdown" style="width:min(700px,85vw);max-width:85vw">
-                            <input type="hidden" name="copy_group_selection" value="yes"><div class="dropdown-header">1. Выберите группы коэффициентов:</div>
+                            {% if not version_editable and portal_is_admin %}<p class="alert alert-warning">Копирование изменит коэффициенты филиалов в исторической версии. Прежние значения сохранятся в журнале. Повторите расчёт и выгрузку после изменения.</p>{% endif %}<input type="hidden" name="copy_group_selection" value="yes"><div class="dropdown-header">1. Выберите группы коэффициентов:</div>
                             <label class="dropdown-item"><input type="checkbox" name="copy_groups" value="policies" checked> Политики</label>
                             <label class="dropdown-item"><input type="checkbox" name="copy_groups" value="sales" checked> Продажи</label>
                             <label class="dropdown-item"><input type="checkbox" name="copy_groups" value="directors"> Директор</label>
@@ -888,6 +889,7 @@
                     </div>
 
         </fieldset></form>
+        </div>
         <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
             <fieldset {% if not version_editable %}disabled{% endif %}>
