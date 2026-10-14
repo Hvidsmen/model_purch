@@ -67,10 +67,14 @@
         margin-right: 2px;
     }
 
+.purchase-payment-table{font-size:12px}.purchase-payment-table thead th{background:#f7f9fc;font-weight:500;color:#64748b;padding:4px 8px}.purchase-payment-table td{padding:5px 8px;vertical-align:top}.purchase-payment-table tbody tr:last-child td{border-bottom:0}
 </style>
 {% endblock %}
 
 {% block content %}
+<div class="card card-body mb-3"><div class="d-flex align-items-center gap-3 flex-wrap"><a class="btn btn-outline-success" href="{% url 'export_purchases' %}">Выгрузить закупки и платежи в Excel</a><details><summary>Загрузить из Excel</summary>
+<p class="small mt-2">Используйте выгрузку как шаблон: листы «Закупки» и «Платежи». Для новой закупки оставьте ID пустым, в платежах укажите её название. Типы лага перечислены на листе «Точки отсчёта».</p>
+<form method="post" action="{% url 'import_purchases' %}" enctype="multipart/form-data">{% csrf_token %}<input type="file" name="file" accept=".xlsx" required><p class="mt-2"><label><input type="checkbox" name="confirm" value="yes" required> Обновить перечисленные закупки и заменить их графики платежей во всех сценариях</label></p><p class="small">Закупки вне файла сохраняются. Пустой график на листе «Платежи» удаляет платежи соответствующей закупки.</p><button class="btn btn-primary">Загрузить</button></form></details></div></div>
 <!-- Красивая шапка страницы -->
 <div class="page-header mb-4">
     <div class="d-flex justify-content-between align-items-center">
@@ -197,8 +201,8 @@
                     <tr>
                         <th style="width: 50px;">#</th>
                         <th>Название закупки</th>
-                        <th style="width: 150px;">Лаг доставки (дней)</th>
-                        <th style="width: 46%;">График платежей</th>
+                        <th style="width:130px">Тип поставки</th><th style="width:100px">Доставка, дни</th><th style="width:110px">Производство, дни</th>
+                        <th>График платежей — все параметры</th>
                         <th style="width: 150px;" class="text-center">Действия</th>
                     </tr>
                 </thead>
@@ -206,20 +210,15 @@
                     {% for purch in purch_list %}
                         <tr id="purchase-{{ purch.pk }}" data-payment-valid="{% if purch.payment_valid %}true{% else %}false{% endif %}">
                             <td class="text-muted">{{ purch.id }}</td>
-                            <td><strong>{{ purch.name }}<span class="badge bg-light text-dark">{{ purch.get_supply_type_display }}</span></strong></td>
+                            <td><strong>{{ purch.name }}</strong></td><td>{{ purch.get_supply_type_display }}</td>
                             <td>
                                 <span class="badge bg-secondary">{{ purch.lag_income }}</span>
-                            </td>
+                            </td><td>{{ purch.lage_make|default_if_none:"0" }}</td>
                             <td>
                                 {% if purch.payment_schedule %}
-                                    <details>
-                                        <summary class="payment-summary">{% for pay in purch.payment_schedule %}{{ pay.percent_pay|floatformat:"-2" }}% · {{ pay.name|truncatechars:24 }}{% if not forloop.last %} / {% endif %}{% endfor %}</summary>
-                                        <ul class="payment-details">
-                                            {% for pay in purch.payment_schedule %}
-                                                <li>{{ pay.percent_pay|floatformat:"-2" }}% — {{ pay.name }}; лаг {{ pay.lag_day_pay }} дн.; {{ pay.kind_lag_pay.name|default:"точка отсчёта не указана" }}</li>
-                                            {% endfor %}
-                                        </ul>
-                                    </details>
+                                    <table class="table table-sm mb-0 purchase-payment-table"><thead><tr><th>Платёж</th><th class="text-end">Оплата, %</th><th class="text-end">Лаг, дни</th><th>Точка отсчёта</th></tr></thead><tbody>{% for pay in purch.payment_schedule %}<tr><td>{{ pay.name }}</td><td class="text-end">{{ pay.percent_pay|floatformat:"-2" }}%</td><td class="text-end">{{ pay.lag_day_pay }}</td><td>{{ pay.kind_lag_pay.name|default:"Не указана" }}</td></tr>{% endfor %}</tbody></table>
+                                    <div class="small text-muted mt-1">Всего оплат: {{ purch.payment_total|floatformat:"-2" }}%</div>
+
                                     {% if not purch.payment_valid %}<div class="payment-warning">Сумма: {{ purch.payment_total|floatformat:"-2" }}% — требуется 100%. <a href="{% url 'purch_edit' purch.pk %}">Исправить</a></div>{% endif %}
                                 {% else %}
                                     <span class="payment-warning">Нет графика платежей. <a href="{% url 'purch_edit' purch.pk %}">Добавить</a></span>
@@ -243,7 +242,7 @@
                         </tr>
                     {% empty %}
                         <tr>
-                            <td colspan="5" class="text-center text-muted py-4">
+                            <td colspan="7" class="text-center text-muted py-4">
                                 <i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>
                                 Справочник закупок пуст. Создайте закупку и настройте график платежей.
                                 <br>

@@ -157,7 +157,8 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
             return purchase.pk
         invalid_id = self.db(create_invalid_purchase)
         self.visit('purch_list')
-        self.assertIn('100% · Payment', self.page.locator(f'#purchase-{self.purchase.pk}').inner_text())
+        self.assertIn('100%', self.page.locator(f'#purchase-{self.purchase.pk}').inner_text())
+        self.assertIn('Payment', self.page.locator(f'#purchase-{self.purchase.pk}').inner_text())
         root = self.page.locator('#purchPaymentFilter').locator('xpath=following-sibling::div[1]')
         root.locator(':scope > button').click()
         text = self.page.locator('#purchPaymentFilter option[value="invalid"]').text_content()
