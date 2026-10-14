@@ -18,4 +18,4 @@
  HAVING SUM(p.Количество * d.P_) > 0
 )
 SELECT PlanningGroup AS [План. группа], AmountDDP / NULLIF(Quantity, 0) AS DDP_UNIT,
- Volume / NULLIF(Quantity, 0) AS VOLUME_UNIT FROM totals;
+ Volume / NULLIF(Quantity, 0) AS VOLUME_UNIT, Quantity AS PLAN_QUANTITY FROM totals;

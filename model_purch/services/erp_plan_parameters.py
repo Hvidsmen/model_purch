@@ -1,5 +1,6 @@
 from pathlib import Path
 import math
+from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
@@ -25,15 +26,22 @@ def update_parameters(scenario, sources=None, connector=None):
     try:
         connection.timeout = 120
         cursor.execute(SQL.replace('/*SCENARIOS*/', ','.join('?' for _ in sources)), *sources)
-        values = {}
-        for group, ddp, volume in cursor.fetchall():
+        totals = {}
+        for group, ddp, volume, quantity in cursor.fetchall():
             key = planning_group_key(group or '')
-            if key in values:
-                raise ValidationError('Неоднозначная плановая группа в результате SQL.')
-            numbers = [float(value) if value is not None else None for value in (ddp, volume)]
-            if any(value is not None and not math.isfinite(value) for value in numbers):
-                raise ValidationError('В плане есть некорректные DDP или объём.')
-            values[key] = numbers
+            quantity = Decimal(str(quantity))
+            numbers = [Decimal(str(value)) if value is not None else None for value in (ddp, volume)]
+            if not quantity.is_finite() or quantity <= 0 or any(value is not None and not value.is_finite() for value in numbers):
+                raise ValidationError('В плане есть некорректные DDP, объём или количество.')
+            aggregate = totals.setdefault(key, [Decimal(0), None, None])
+            aggregate[0] += quantity
+            for index, value in enumerate(numbers, 1):
+                if value is not None:
+                    aggregate[index] = (aggregate[index] or Decimal(0)) + value * quantity
+        values = {key: [float(value / quantity) if value is not None else None for value in amounts]
+                  for key, (quantity, *amounts) in totals.items()}
+        if any(value is not None and not math.isfinite(value) for pair in values.values() for value in pair):
+            raise ValidationError('В плане есть слишком большие DDP или объём.')
     finally:
         connection.close()
     if not values:

@@ -7,6 +7,22 @@ from .services.pricing import apply_price, reprice_goods
 
 
 class ProductPricingTests(TestCase):
+    def test_erp_duplicate_group_variants_merge_weighted_by_quantity(self):
+        from unittest.mock import Mock
+        from .services.erp_plan_parameters import update_parameters
+        self.scenario.refresh_from_db()
+        connection, cursor = Mock(), Mock()
+        cursor.fetchall.return_value = [('Unit', 100, .1, 10), (' unit ', 300, .5, 30)]
+        self.assertEqual(update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor))), (1, 0))
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.plan_ddp_usd, 250)
+        self.assertEqual(self.good.plan_volume, .4)
+        cursor.fetchall.return_value = [('Unit', None, None, 10), ('UNIT', None, None, 30)]
+        update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor)))
+        self.good.refresh_from_db()
+        self.assertIsNone(self.good.plan_ddp_usd)
+        self.assertIsNone(self.good.plan_volume)
+
     def test_erp_parameters_use_scenario_plans_and_reject_changes_during_load(self):
         from unittest.mock import Mock
         from .models import ScenarioPlanSales
@@ -21,7 +37,7 @@ class ProductPricingTests(TestCase):
         ScenarioPlanSales.objects.create(scenario_model=self.scenario, name='План 2026', flag_order_in_purch=False)
         connection, cursor = Mock(), Mock()
         connector.return_value = (connection, cursor)
-        cursor.fetchall.return_value = [('Unit', 200, .5)]
+        cursor.fetchall.return_value = [('Unit', 200, .5, 1)]
         update_parameters(self.scenario, connector=connector)
         self.assertEqual(cursor.execute.call_args.args[-2:], ('План 2027', 'План 2026'))
         self.good.refresh_from_db()
@@ -32,7 +48,7 @@ class ProductPricingTests(TestCase):
         def change_plans():
             first.name = 'Изменённый план'
             first.save()
-            return [('Unit', 999, .9)]
+            return [('Unit', 999, .9, 1)]
         cursor.fetchall.side_effect = change_plans
         with self.assertRaises(ValidationError):
             update_parameters(self.scenario, connector=connector)
@@ -43,7 +59,7 @@ class ProductPricingTests(TestCase):
         from unittest.mock import Mock, patch
         from .services.erp_plan_parameters import update_parameters, SQL
         connection, cursor = Mock(), Mock()
-        cursor.fetchall.return_value = [(' unit ', 123.456789, .987654321)]
+        cursor.fetchall.return_value = [(' unit ', 123.456789, .987654321, 1)]
         connector = Mock(return_value=(connection, cursor))
         self.scenario.refresh_from_db()
         original = (self.good.ddp_usd, self.good.volume)
