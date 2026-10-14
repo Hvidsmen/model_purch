@@ -454,6 +454,7 @@ class ExampleFiles(models.Model):
     file = models.FileField(null=True, upload_to='excel')
 
 class SalesPlanScenario(models.Model):
+    is_deleted = models.BooleanField('Удалён из рабочих списков', default=False)
     title = models.CharField('Название сценария', max_length=255)
     source_version = models.CharField('Версия плана в MS SQL', max_length=255)
     created_at = models.DateTimeField(auto_now_add=True)

@@ -14,6 +14,8 @@ SALT = 'motivation-approval-v1'
 def state_digest(version, plan):
     versions = list(GlobalCoeffVersion.objects.order_by('pk').values('pk', 'effective_from', 'status', 'revision', 'replaced_by_id', 'title'))
     plan = SalesPlanScenario.objects.get(pk=plan.pk) if plan else None
+    if plan and plan.is_deleted:
+        raise ValidationError('Сценарий плана удалён. Выберите другой сценарий.')
     payload = {'versions': versions, 'version': version.pk, 'plan': plan.pk if plan else None,
                'loaded_at': plan.loaded_at if plan else None, 'source_version': plan.source_version if plan else None,
                'references': {model._meta.label: list(model.objects.order_by('pk').values_list(*fields)) for model, fields in [
@@ -63,6 +65,8 @@ def approve_review(token, confirm_overwrite=False):
     list(GlobalCoeffVersion.objects.select_for_update().order_by('pk'))
     version = GlobalCoeffVersion.objects.get(pk=payload['version'])
     plan = SalesPlanScenario.objects.select_for_update().get(pk=payload['plan']) if payload['plan'] else None
+    if plan and plan.is_deleted:
+        raise ValidationError('Сценарий плана удалён. Повторите подготовку утверждения с другим сценарием.')
     if version.status != 'draft' or state_digest(version, plan) != payload['state']:
         raise ValidationError('Версии, коэффициенты или план изменились после просмотра. Повторите сравнение.')
     affected = list(affected_versions(version))

@@ -36,7 +36,7 @@ def version_context(request, version_form=None):
     return {'versions': versions, 'selected_version': selected, 'latest_version': latest,
             'effective_version': effective_version(), 'version_form': form,
             'version_editable': bool(selected and selected.is_editable),
-            'comparison_plans': SalesPlanScenario.objects.all(),
+            'comparison_plans': SalesPlanScenario.objects.filter(is_deleted=False),
             'comparison_plan': request.session.get('motivation_comparison_plan'),
             'comparison_baselines': [v for v in versions if not v.is_editable],
             'comparison_baseline': request.session.get('motivation_comparison_baseline')}

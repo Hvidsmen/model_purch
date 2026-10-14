@@ -46,12 +46,22 @@ class SalesPlanTests(TestCase):
         MotivationApproval.objects.create(version=self.version, plan=self.scenario)
         from .services.plan_scenarios import change_scenario, delete_scenario
         with self.assertRaises(ValidationError):
-            delete_scenario(self.scenario.pk)
-        with self.assertRaises(ValidationError):
             change_scenario(self.scenario.pk, 'Имя', 'Другой план', True)
         change_scenario(self.scenario.pk, 'Разрешено переименовать', self.scenario.source_version)
         self.scenario.refresh_from_db()
         self.assertEqual(self.scenario.title, 'Разрешено переименовать')
+        self.load()
+        count = self.scenario.lines.count()
+        url = reverse('motivation_sales_plan', args=[self.scenario.pk])
+        response = self.client.post(url, {'action': 'delete', 'confirm_delete': 'yes'})
+        self.assertRedirects(response, reverse('motivation_sales_plans'))
+        self.scenario.refresh_from_db()
+        self.assertTrue(self.scenario.is_deleted)
+        self.assertEqual(self.scenario.lines.count(), count)
+        self.assertEqual(MotivationApproval.objects.get(version=self.version).plan_id, self.scenario.pk)
+        self.assertEqual(self.client.get(url).status_code, 404)
+        self.assertNotIn(self.scenario, self.client.get(reverse('motivation_sales_plans')).context['scenarios'])
+        self.assertNotIn(self.scenario, self.client.get(reverse('global_coeff_admin_motivation')).context['comparison_plans'])
 
     def test_ddp_import_global_subtotals_and_markup(self):
         self.cursor.description.append(('AmountDDP_USD',))

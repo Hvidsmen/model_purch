@@ -19,7 +19,7 @@ def comparison_action(request):
             version = approve_review(data.get('token', ''), data.get('confirm_overwrite') is True)
             return JsonResponse({'approved': version.pk, 'message': 'Весь набор коэффициентов утверждён. Заменённые версии сохранены в истории.'})
         version = get_object_or_404(GlobalCoeffVersion, pk=int(data['version']))
-        plan = get_object_or_404(SalesPlanScenario, pk=int(data['plan'])) if data.get('plan') else None
+        plan = get_object_or_404(SalesPlanScenario, pk=int(data['plan']), is_deleted=False) if data.get('plan') else None
         baseline = get_object_or_404(GlobalCoeffVersion, pk=int(data['baseline'])) if data.get('baseline') else None
         sub = get_object_or_404(Subdivision, pk=int(data['subdivision'])) if data.get('subdivision') else None
         if baseline and baseline.is_editable:

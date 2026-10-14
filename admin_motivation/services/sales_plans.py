@@ -78,7 +78,7 @@ def classification(value, column, row_number):
 
 def load_plan(scenario_id, connector=None, progress=None):
     report(progress, 'Запрос плана и распределения сегментов в MS SQL', None)
-    scenario = SalesPlanScenario.objects.get(pk=scenario_id)
+    scenario = SalesPlanScenario.objects.get(pk=scenario_id, is_deleted=False)
     connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
     try:
         cursor.execute(SQL, scenario.source_version)
@@ -112,7 +112,7 @@ def load_plan(scenario_id, connector=None, progress=None):
     subdivision_count = len(lines)
     lines.extend(aggregate_lines(lines, global_plan=True))
     with transaction.atomic():
-        locked = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id)
+        locked = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id, is_deleted=False)
         if locked.source_version != scenario.source_version:
             raise ValidationError('Источник сценария изменился во время загрузки.')
         locked.lines.all().delete()
@@ -161,7 +161,7 @@ def aggregate_lines(lines, global_plan=False):
 
 @transaction.atomic
 def calculate_plan(scenario_id, progress=None):
-    scenario = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id)
+    scenario = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id, is_deleted=False)
     total_lines = scenario.lines.count()
     if not total_lines:
         raise ValidationError('Сначала загрузите план продаж.')

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 def sales_plans(request, scenario_id=None):
-    scenario = get_object_or_404(SalesPlanScenario, pk=scenario_id) if scenario_id else None
+    scenario = get_object_or_404(SalesPlanScenario, pk=scenario_id, is_deleted=False) if scenario_id else None
     form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'create' else None)
     edit_form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'edit' else None,
         initial={'title': scenario.title, 'source_version': scenario.source_version} if scenario else None)
@@ -38,7 +38,7 @@ def sales_plans(request, scenario_id=None):
                     raise ValidationError('Подтвердите удаление сценария.')
                 from .services.plan_scenarios import delete_scenario
                 delete_scenario(scenario.pk)
-                messages.success(request, 'Сценарий и его загруженные данные удалены.')
+                messages.success(request, 'Сценарий удалён из рабочих списков. Данные, связанные с историей утверждения, сохранены.')
                 return redirect('motivation_sales_plans')
             elif action == 'refresh_sources':
                 versions = source_versions()
@@ -92,7 +92,7 @@ def sales_plans(request, scenario_id=None):
         return response
     return render(request, 'admin_motivation/sales_plans.html', {
         'preliminary': not GlobalCoeffVersion.objects.filter(status='approved').exists(),
-        'scenario': scenario, 'scenarios': SalesPlanScenario.objects.all(), 'form': form, 'edit_form': edit_form,
+        'scenario': scenario, 'scenarios': SalesPlanScenario.objects.filter(is_deleted=False), 'form': form, 'edit_form': edit_form,
         'source_versions': versions, 'scope': scope, 'subdivisions': Subdivision.objects.all(),
         **report,
     })

@@ -7,7 +7,7 @@ from .plan_operations import scenario_operation
 
 def change_scenario(pk, title, source_version, confirm_reset=False):
     with scenario_operation(pk), transaction.atomic():
-        scenario = SalesPlanScenario.objects.select_for_update().get(pk=pk)
+        scenario = SalesPlanScenario.objects.select_for_update().get(pk=pk, is_deleted=False)
         if source_version != scenario.source_version:
             if scenario.motivationapproval_set.exists():
                 raise ValidationError('Сценарий использован при утверждении коэффициентов. Создайте новый сценарий с другим источником.')
@@ -23,8 +23,9 @@ def change_scenario(pk, title, source_version, confirm_reset=False):
 
 def delete_scenario(pk):
     with scenario_operation(pk), transaction.atomic():
-        scenario = SalesPlanScenario.objects.select_for_update().get(pk=pk)
+        scenario = SalesPlanScenario.objects.select_for_update().get(pk=pk, is_deleted=False)
         try:
             scenario.delete()
         except ProtectedError:
-            raise ValidationError('Сценарий использован при утверждении коэффициентов. Его удаление запрещено для сохранения истории.')
+            scenario.is_deleted = True
+            scenario.save(update_fields=['is_deleted'])
