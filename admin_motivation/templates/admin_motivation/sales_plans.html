@@ -39,6 +39,7 @@
 {% if pending_count %}<div class="alert alert-warning">Не рассчитано строк: {{ pending_count }}. План показан полностью, суммы мотивации — по рассчитанным строкам.</div>{% endif %}
 {{ report_nodes|json_script:"report-tree-data" }}
 {% if scenario.loaded_at and totals.ddp == None %}<p class="small text-muted">DDP отсутствует в части строк. Загрузите план повторно из MS SQL, чтобы рассчитать наценку с учётом мотивации.</p>{% endif %}
+{% if scenario.loaded_at and totals.ddp == 0 %}<p class="alert alert-warning">Сумма загруженного DDP равна нулю. Проверьте AmountDDP_USD выбранной версии плана в MS SQL. Наценка сейчас рассчитана с нулевым DDP.</p>{% endif %}
 <div class="table-responsive"><div id="period-report" data-scope="{{ scope }}">
 <div class="report-grid report-heading"><span>Подразделение / группа планов / группа ERP / марка</span><span>План</span><span>Политики</span><span>Продажи</span><span>Мотивация</span><span>DDP</span><span title="План / (DDP + мотивация)">Наценка с мотивацией</span></div>
 {% for node in report_nodes %}{% include 'admin_motivation/_report_node.html' %}{% empty %}<p class="p-3">{% if scenario.loaded_at %}Нет данных по выбранным фильтрам.{% else %}План ещё не загружен.{% endif %}</p>{% endfor %}
@@ -47,6 +48,6 @@
 
 {% endif %}
 <script src="{% static 'admin_motivation/sales_plan_progress.js' %}" defer></script>
-<script src="{% static 'admin_motivation/plan_report.js' %}" defer></script>
+<script src="{% static 'admin_motivation/plan_report.js' %}?v=ddp-20261014" defer></script>
 {% endlanguage %}
 {% endblock %}
