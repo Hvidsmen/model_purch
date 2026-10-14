@@ -71,8 +71,8 @@ class ProductPricingTests(TestCase):
         self.scenario.refresh_from_db()
         self.assertEqual(self.scenario.erp_sales_plan_sources, ["Plan ' one", 'Plan two'])
         args = cursor.execute.call_args.args
-        self.assertEqual(args[1:], ("Plan ' one", 'Plan two'))
-        self.assertNotIn('BETWEEN', SQL)
+        self.assertEqual(args[1:], (self.scenario.date_start_plan, self.scenario.date_end_plan, "Plan ' one", 'Plan two'))
+        self.assertIn('d.FullDateAlternateKey BETWEEN ? AND ?', SQL)
         self.assertNotIn("Plan ' one", args[0])
         self.assertIn('HAVING SUM(p.Количество * d.P_) > 0', SQL)
         self.assertNotIn('DROP', SQL)

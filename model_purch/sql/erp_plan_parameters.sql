@@ -12,7 +12,8 @@
  INNER JOIN DataWH.dbo.ModelCodeERP mce ON n.Наименование = mce.ModelCode
  INNER JOIN DataWH.erp.[Справочники.СтруктураПредприятия] sub ON p.ПодразделениеСсылка = sub.Ссылка
  INNER JOIN work_days d ON YEAR(CAST(p.Период AS date)) = d.CalendarYear AND MONTH(CAST(p.Период AS date)) = d.MonthNumberOfYear
- WHERE p.Сценарий IN (/*SCENARIOS*/)
+ WHERE d.FullDateAlternateKey BETWEEN ? AND ?
+  AND p.Сценарий IN (/*SCENARIOS*/)
   AND p.Количество + p.Сумма + p.даичи_СуммаДДП != 0
  GROUP BY n.Даичи_ГруппаПланирования
  HAVING SUM(p.Количество * d.P_) > 0
