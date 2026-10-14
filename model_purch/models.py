@@ -81,6 +81,8 @@ class ResultCalc(models.Model):
 
 
 class ScenarioModel(models.Model):
+    erp_sales_plan_sources = models.JSONField(default=list, blank=True, editable=False)
+    plan_parameters_loaded_at = models.DateTimeField(null=True, blank=True, editable=False)
     id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=255, verbose_name='Название')
     date_start_plan = models.DateField(verbose_name='Дата начала')
@@ -182,6 +184,8 @@ class PGGoods(models.Model):
     duty_rate = models.FloatField('Пошлина, %', default=0,
                                     validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     exw_usd = models.FloatField()
+    plan_ddp_usd = models.FloatField('DDP по плану за единицу, USD', null=True, blank=True, editable=False)
+    plan_volume = models.FloatField('Объём по плану за единицу, м³', null=True, blank=True, editable=False)
     freight_usd = models.FloatField('Фрахт за товар', default=0, editable=False)
     cif_usd = models.FloatField('CIF', default=0, editable=False)
     customs_payment_usd = models.FloatField('Таможенный платёж', default=0, editable=False)

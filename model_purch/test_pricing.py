@@ -7,6 +7,44 @@ from .services.pricing import apply_price, reprice_goods
 
 
 class ProductPricingTests(TestCase):
+    def test_erp_plan_parameters_match_group_preserve_prices_and_use_bound_filters(self):
+        from unittest.mock import Mock, patch
+        from .services.erp_plan_parameters import update_parameters, SQL
+        connection, cursor = Mock(), Mock()
+        cursor.fetchall.return_value = [(' unit ', 123.456789, .987654321)]
+        connector = Mock(return_value=(connection, cursor))
+        self.scenario.refresh_from_db()
+        original = (self.good.ddp_usd, self.good.volume)
+        matched, missing = update_parameters(self.scenario, ["Plan ' one", 'Plan two'], connector)
+        self.assertEqual((matched, missing), (1, 0))
+        self.good.refresh_from_db()
+        self.assertEqual((self.good.plan_ddp_usd, self.good.plan_volume), (123.456789, .987654321))
+        self.assertEqual((self.good.ddp_usd, self.good.volume), original)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.erp_sales_plan_sources, ["Plan ' one", 'Plan two'])
+        args = cursor.execute.call_args.args
+        self.assertEqual(args[1:], (self.scenario.date_start_plan, self.scenario.date_end_plan, "Plan ' one", 'Plan two'))
+        self.assertNotIn("Plan ' one", args[0])
+        self.assertIn('HAVING SUM(p.Количество * d.P_) > 0', SQL)
+        self.assertNotIn('DROP', SQL)
+        cursor.fetchall.return_value = []
+        from django.core.exceptions import ValidationError
+        with self.assertRaises(ValidationError):
+            update_parameters(self.scenario, ['Plan'], connector)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.plan_ddp_usd, 123.456789)
+        url = reverse('goods_plan_parameters', args=[self.scenario.pk])
+        self.assertContains(self.client.get(url), 'Поиск сценария плана продаж')
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk})
+        self.assertContains(page, 'name="plan_ddp_usd"')
+        self.assertContains(page, 'name="plan_volume"')
+        with patch('model_purch.views_plan_parameters.update_parameters', return_value=(1, 0)) as update:
+            self.client.post(url, {'action': 'load', 'sources': ['Plan']})
+            update.assert_not_called()
+            response = self.client.post(url, {'action': 'load', 'confirm': 'yes', 'sources': ['Plan']})
+            self.assertEqual(response.status_code, 302)
+            update.assert_called_once()
+
     def test_duty_accepts_float_precision_in_product_and_group(self):
         value = 7.123456789123
         response = self.client.post(reverse('edit_pggoods', args=[self.good.pk]), {'scenario': self.scenario.pk, 'duty_rate': str(value)})

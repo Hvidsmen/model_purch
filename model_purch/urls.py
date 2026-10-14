@@ -1,7 +1,9 @@
 from django.urls import path
 from . import views, views_freight
 from . import  views_graph
+from . import views_plan_parameters
 urlpatterns = [
+    path('goods-plan-parameters/<int:scenario_id>/', views_plan_parameters.plan_parameters, name='goods_plan_parameters'),
     path('goods-groups/', views.goods_groups, name='goods_groups'),
     path("freight/", views_freight.freight_page, name="freight"),
     path("freight/copy/", views_freight.copy_freight, name="copy_freight"),
