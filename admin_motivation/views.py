@@ -44,7 +44,7 @@ def gloabal_coeff(request, version_form=None):
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
-        'subdivisions': Subdivision.objects.all(), 'templates_file': example.file if example else None,
+        'subdivisions': Subdivision.objects.prefetch_related('directors'), 'templates_file': example.file if example else None,
     })
 
 
@@ -174,10 +174,22 @@ def gloabal_coeff_action(request):
                     raise ValidationError('Выберите подразделения.')
                 from .services.coefficient_groups import selected_groups
                 groups = selected_groups(request.POST.getlist('copy_groups'), default=() if request.POST.get('copy_group_selection') == 'yes' else ('policies', 'sales'))
-                if 'directors' in groups and not request.POST.get('director_employee'):
-                    raise ValidationError('Выберите сотрудника-директора.')
-                employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee')) if 'directors' in groups else None
-                apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee)
+                recipients = None
+                employee = None
+                if 'directors' in groups:
+                    if request.POST.get('branch_employee_selection') == 'yes':
+                        recipients = {}
+                        for branch in subdivisions:
+                            ids = set(request.POST.getlist(f'director_employees_{branch.pk}'))
+                            employees = list(DirectorEmployee.objects.filter(pk__in=ids))
+                            if len(employees) != len(ids):
+                                raise ValidationError('Выбранный сотрудник не найден.')
+                            recipients[branch.pk] = employees
+                    else:
+                        if not request.POST.get('director_employee'):
+                            raise ValidationError('Выберите сотрудника-директора.')
+                        employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee'))
+                apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee, employees_by_subdivision=recipients)
             elif action == 'save_coeff':
                 ids = [key.split('=', 1)[1] for key in request.POST if key.startswith('select_var_calc=')]
                 deleted = [key.split('=', 1)[1] for key in request.POST if key.startswith('delete_coeff=')]

@@ -11,6 +11,41 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_global_copy_selects_employees_per_branch(self):
+        from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+        from playwright.sync_api import expect
+        def fixture():
+            channel = Chanel.objects.create(chanel_name='Recipients')
+            branches = [Subdivision.objects.create(subdivision_key=key, subdivision_name=key, subdivision_global=key, chanel=channel) for key in ['Recipient A', 'Recipient B']]
+            employees = [DirectorEmployee.objects.create(full_name=name) for name in ['Первый', 'Второй']]
+            for employee in employees:
+                employee.subdivisions.add(*branches)
+            GlobalDirectorCoeff.objects.create(version=self.first, goods=self.coeff.goods, k0='.01')
+            return [item.pk for item in branches], [item.pk for item in employees]
+        branches, employees = self.db(fixture)
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        self.page.locator('#coefficient-tools > summary').click()
+        self.page.locator('#subdivisionDropdownBtn').click()
+        self.page.locator('[name=copy_groups][value=policies]').uncheck()
+        self.page.locator('[name=copy_groups][value=sales]').uncheck()
+        self.page.locator('[name=copy_groups][value=directors]').check()
+        self.page.locator('#copy-branch-search').fill('Recipient A')
+        expect(self.page.locator('.copy-branch-row').nth(1)).not_to_be_visible()
+        row = self.page.locator('.copy-branch-row').nth(0)
+        row.locator('[name=selected_subdivisions]').check()
+        row.locator('summary').click()
+        expect(row.locator('.copy-employee').nth(0)).to_be_checked()
+        expect(row.locator('.copy-employee').nth(1)).to_be_checked()
+        row.locator('.copy-all-employees').uncheck()
+        expect(row.locator('.copy-employee').nth(0)).not_to_be_checked()
+        row.locator('.copy-all-employees').check()
+        row.locator(f'.copy-employee[value="{employees[1]}"]').uncheck()
+        self.page.on('dialog', lambda dialog: dialog.accept())
+        with self.page.expect_navigation():
+            self.page.locator('[name=action_button][value=apply_sub]').click()
+        self.assertEqual(self.db(lambda: list(SubdivisionDirectorCoeff.objects.values_list('subdivision_id', 'employee_id'))), [(branches[0], employees[0])])
+        self.assertEqual(self.errors, [])
+
     def setUp(self):
         authorize_test_case(self)
         self.first, _ = GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001, 1, 1))

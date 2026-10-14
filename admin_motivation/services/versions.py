@@ -58,7 +58,7 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
 
 
 @transaction.atomic
-def apply_to_subdivisions(version, subdivisions, groups=None, employee=None):
+def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, employees_by_subdivision=None):
     if not version.is_editable:
         raise ValidationError('Историческая версия доступна только для просмотра.')
     from .coefficient_groups import selected_groups
@@ -67,9 +67,12 @@ def apply_to_subdivisions(version, subdivisions, groups=None, employee=None):
     names = {'policies': 'политики', 'sales': 'продажи'}
     type_ids = [kind.pk for kind in TypeCoeff.objects.all() if kind.type_coeff_name.strip().casefold() in {names[group] for group in selected if group in names}]
     subdivisions = list(subdivisions)
+    recipients = {}
     if 'directors' in selected:
-        if not employee or any(not employee.subdivisions.filter(pk=sub.pk).exists() for sub in subdivisions):
-            raise ValidationError('Выберите сотрудника-директора, привязанного к выбранным филиалам.')
+        for sub in subdivisions:
+            recipients[sub.pk] = list(employees_by_subdivision.get(sub.pk, [])) if employees_by_subdivision is not None else ([employee] if employee else [])
+            if not recipients[sub.pk] or any(not item.subdivisions.filter(pk=sub.pk).exists() for item in recipients[sub.pk]):
+                raise ValidationError(f'Выберите директоров, привязанных к филиалу {sub}.')
     for sub in subdivisions:
         if type_ids:
             for kind in KindManagerCoeff.objects.all():
@@ -84,7 +87,8 @@ def apply_to_subdivisions(version, subdivisions, groups=None, employee=None):
             ])
         if 'directors' in selected:
             from .directors import copy_directors
-            copy_directors(version.pk, subdivision=sub, employee=employee, from_global=True)
+            for recipient in recipients[sub.pk]:
+                copy_directors(version.pk, subdivision=sub, employee=recipient, from_global=True)
 
 
 @transaction.atomic

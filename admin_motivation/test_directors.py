@@ -13,6 +13,35 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_global_copy_multiple_employees_per_branch_and_atomic_validation(self):
+        from .services.versions import apply_to_subdivisions
+        self.second.subdivisions.add(self.other_sub)
+        third = DirectorEmployee.objects.create(full_name='Не выбран')
+        third.subdivisions.add(self.sub)
+        preserved = SubdivisionDirectorCoeff.objects.create(version=self.version, subdivision=self.sub,
+            employee=third, goods=self.goods, k0=Decimal('.9'))
+        recipients = {self.sub.pk: [self.first, self.second], self.other_sub.pk: [self.second]}
+        apply_to_subdivisions(self.version, [self.sub, self.other_sub], groups=['directors'], employees_by_subdivision=recipients)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.filter(version=self.version, employee=self.second).count(), 2)
+        preserved.refresh_from_db()
+        self.assertEqual(preserved.k0, Decimal('.9'))
+        self.global_row.k0 = Decimal('.7')
+        self.global_row.save()
+        with self.assertRaises(ValidationError):
+            apply_to_subdivisions(self.version, [self.sub, self.other_sub], groups=['directors'],
+                employees_by_subdivision={self.sub.pk: [self.first], self.other_sub.pk: [self.first]})
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.01'))
+        response = self.client.post(reverse('gb_act'), {'version': self.version.pk, 'action_button': 'apply_sub',
+            'copy_group_selection': 'yes', 'copy_groups': ['directors'], 'branch_employee_selection': 'yes',
+            'selected_subdivisions': [self.sub.pk, self.other_sub.pk],
+            f'director_employees_{self.sub.pk}': [self.first.pk, self.second.pk],
+            f'director_employees_{self.other_sub.pk}': [self.second.pk]})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.7'))
+        page = self.client.get(reverse('global_coeff_admin_motivation'), {'version': self.version.pk})
+        self.assertContains(page, 'copy-branch-search')
+        self.assertContains(page, f'name="director_employees_{self.sub.pk}"')
+
     def test_admin_group_copy_approved_audited_and_guarded(self):
         from django.db import models
         from django.contrib.auth import get_user_model
