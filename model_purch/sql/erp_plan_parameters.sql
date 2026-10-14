@@ -6,7 +6,7 @@
  SELECT n.Даичи_ГруппаПланирования AS PlanningGroup,
   SUM(p.Количество * d.P_) AS Quantity,
   SUM(p.даичи_СуммаДДП * d.P_) AS AmountDDP,
-  SUM(p.Количество * d.P_ * mce.Volume) AS Volume
+  SUM(p.Количество * d.P_ * n.ОбъемЧислитель) AS Volume
  FROM DataWH.erp.[РегистрыНакопления.ПланыПродаж] p
  INNER JOIN DataWH.erp.[Справочники.Номенклатура] n ON p.НоменклатураСсылка = n.Ссылка
  INNER JOIN DataWH.dbo.ModelCodeERP mce ON n.Наименование = mce.ModelCode
