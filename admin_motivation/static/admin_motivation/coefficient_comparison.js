@@ -74,7 +74,7 @@
             if (requestRevision !== revision) return;
             document.querySelectorAll('[data-amount], [data-summary-amount]').forEach(cell => {
                 const [variant, field] = (cell.dataset.amount || cell.dataset.summaryAmount).split('.');
-                cell.textContent = money(result.variants[variant][field]);
+                cell.textContent = field === 'markup' ? (result.variants[variant][field] == null ? '—' : new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}).format(Number(result.variants[variant][field]))) : money(result.variants[variant][field]);
                 cell.title = result.variants[variant].error || '';
             });
             document.querySelectorAll('[data-delta], [data-summary-delta]').forEach(cell => {

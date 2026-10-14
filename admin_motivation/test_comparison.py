@@ -14,6 +14,20 @@ from .services.sql_export import export_motivation
 
 
 class ComparisonTests(TestCase):
+    def test_markup_uses_each_variant_motivation_and_missing_ddp(self):
+        current = self.draft(date(2026, 1, 1), .2, True)
+        self.plan.lines.filter(subdivision='').update(amount_ddp_usd=Decimal('900'))
+        result = compare_plan(self.plan, current, self.first)
+        for variant in result['variants'].values():
+            self.assertEqual(Decimal(variant['markup']), Decimal(variant['plan']) / (Decimal(variant['ddp']) + Decimal(variant['total'])))
+        self.assertNotEqual(result['variants']['approved']['markup'], result['variants']['current']['markup'])
+        self.plan.lines.filter(subdivision='').order_by('pk').first().delete()
+        line = self.plan.lines.filter(subdivision='').first()
+        line.amount_ddp_usd = None
+        line.save()
+        result = compare_plan(self.plan, current, self.first)
+        self.assertIsNone(result['variants']['current']['markup'])
+
     def setUp(self):
         authorize_test_case(self)
         from .test_sales_plans import SalesPlanTests

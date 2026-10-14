@@ -13,6 +13,24 @@ from .services.versions import create_version
 
 
 class SalesPlanTests(TestCase):
+    def test_ddp_import_global_subtotals_and_markup(self):
+        self.cursor.description.append(('AmountDDP_USD',))
+        self.cursor.fetchall.return_value = [(*row, Decimal('600') if row[0] == 'A' else Decimal('300')) for row in self.rows()]
+        self.load()
+        global_line = self.scenario.lines.get(subdivision='')
+        self.assertEqual(global_line.amount_ddp_usd, Decimal('900'))
+        calculate_plan(self.scenario.pk)
+        from .services.plan_report import period_report
+        from .services.markup import motivation_markup
+        result = period_report(self.scenario, 'global', {})
+        self.assertEqual(result['totals']['markup'], Decimal('1500') / Decimal('1125'))
+        self.assertEqual(result['report_nodes'][0]['markup'], result['totals']['markup'])
+        local = period_report(self.scenario, 'subdivisions', {'subdivision': 'A'})
+        self.assertEqual(local['totals']['ddp'], Decimal('600'))
+        self.assertEqual(local['totals']['markup'], Decimal('1000') / Decimal('830'))
+        self.assertIsNone(motivation_markup(Decimal(100), Decimal(0), Decimal(0)))
+        self.scenario.lines.filter(subdivision='').update(amount_ddp_usd=None)
+        self.assertIsNone(period_report(self.scenario, 'global', {})['totals']['markup'])
     def setUp(self):
         authorize_test_case(self)
         self.version = GlobalCoeffVersion.objects.get(effective_from=date(2001, 1, 1))
@@ -444,7 +462,7 @@ class SalesPlanTests(TestCase):
         rows = list(csv.reader(io.StringIO(export), delimiter=';'))
         self.assertEqual(len(rows), 2)
         self.assertEqual(rows[1][:4], ['A', 'Other Sales', 'ERP & Group', 'Brand X'])
-        self.assertEqual(Decimal(rows[1][-1]), Decimal('23'))
+        self.assertEqual(Decimal(rows[1][-3]), Decimal('23'))
         self.assertNotIn('Дата', rows[0])
         self.assertNotIn('2026-10-01', export)
         self.assertNotIn('\ufeff', export)

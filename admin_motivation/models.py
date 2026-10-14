@@ -475,6 +475,7 @@ class SalesPlanLine(models.Model):
     group = models.CharField(max_length=255)
     brand = models.CharField(max_length=255)
     amount_usd = models.DecimalField(max_digits=24, decimal_places=6)
+    amount_ddp_usd = models.DecimalField('DDP, USD', max_digits=24, decimal_places=6, null=True, blank=True)
     segment_amounts = models.JSONField(default=dict)
     coefficient_version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, null=True, blank=True)
     calculation = models.JSONField(default=dict)

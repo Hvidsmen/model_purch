@@ -3,6 +3,8 @@ from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from ..models import GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff
 from .sales_plans import KINDS, SEGMENTS, number
+from django.db.models import Sum, Count
+from .markup import motivation_markup
 
 
 def coefficient_input(value):
@@ -116,6 +118,9 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
     lines = plan.lines.exclude(subdivision='') if use_subdivision else plan.lines.filter(subdivision='')
     if subdivision:
         lines = lines.filter(subdivision=subdivision.subdivision_key)
+    costs = lines.aggregate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), rows=Count('pk'), ddp_rows=Count('amount_ddp_usd'))
+    if costs['rows'] != costs['ddp_rows']:
+        costs['ddp'] = None
     found = False
     affected_lines = 0
     for on_date, sub, pg, group, brand, amounts in lines.order_by('pk').values_list(
@@ -146,6 +151,9 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
         raise ValidationError('В выбранном плане нет строк для этого разреза. Сначала загрузите план.')
     output = {}
     for name, result in results.items():
+        result['plan'] = costs['plan']
+        result['ddp'] = costs['ddp']
+        result['markup'] = motivation_markup(costs['plan'], costs['ddp'], result.get('total'))
         output[name] = {key: str(value) if isinstance(value, Decimal) else value for key, value in result.items()}
     deltas = {}
     for name in ['approved', 'baseline']:

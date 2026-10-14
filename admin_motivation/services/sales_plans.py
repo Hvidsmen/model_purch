@@ -94,12 +94,13 @@ def load_plan(scenario_id, connector=None, progress=None):
             try:
                 amounts = {segment: str(number(values[f'usd_{segment.lower()}'])) for segment in SEGMENTS}
                 amount = number(values['amountusd'])
+                ddp = number(values['amountddp_usd']) if values.get('amountddp_usd') is not None else None
             except ValidationError as error:
                 raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): ' + ' '.join(error.messages)) from error
             if abs(sum(map(Decimal, amounts.values())) - amount) > max(Decimal('0.0001'), abs(amount)*Decimal('0.00000001')):
                 raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): сумма сегментов O0–O4 не совпадает с AmountUSD.')
             lines.append(SalesPlanLine(scenario_id=scenario_id, plan_date=on_date, subdivision=sub,
-                planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, segment_amounts=amounts))
+                planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, amount_ddp_usd=ddp, segment_amounts=amounts))
     finally:
         connection.close()
     if not lines:
@@ -143,13 +144,16 @@ def aggregate_lines(lines, global_plan=False):
         if key not in aggregates:
             aggregates[key] = SalesPlanLine(scenario_id=line.scenario_id, plan_date=line.plan_date, subdivision=sub,
                 planning_group_sales=line.planning_group_sales, group=line.group, brand=line.brand,
-                amount_usd=Decimal(0), segment_amounts={segment: '0' for segment in SEGMENTS})
+                amount_usd=Decimal(0), amount_ddp_usd=Decimal(0), segment_amounts={segment: '0' for segment in SEGMENTS})
         total = aggregates[key]
         total.amount_usd += line.amount_usd
+        total.amount_ddp_usd = total.amount_ddp_usd + line.amount_ddp_usd if total.amount_ddp_usd is not None and line.amount_ddp_usd is not None else None
         for segment in SEGMENTS:
             total.segment_amounts[segment] = str(Decimal(total.segment_amounts[segment]) + Decimal(line.segment_amounts[segment]))
     for total in aggregates.values():
         number(total.amount_usd)
+        if total.amount_ddp_usd is not None:
+            number(total.amount_ddp_usd)
         for amount in total.segment_amounts.values():
             number(amount)
     return list(aggregates.values())

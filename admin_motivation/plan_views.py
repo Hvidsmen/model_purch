@@ -56,11 +56,11 @@ def sales_plans(request, scenario_id=None):
         response.write('\ufeff')
         writer = csv.writer(response, delimiter=';')
         if request.GET.get('export') == 'csv':
-            writer.writerow(['Подразделение', 'Группа планов продаж', 'Группа планов ERP', 'Марка / бренд', 'План USD', 'Политики USD', 'Продажи USD', 'Итого мотивация USD'])
+            writer.writerow(['Подразделение', 'Группа планов продаж', 'Группа планов ERP', 'Марка / бренд', 'План USD', 'Политики USD', 'Продажи USD', 'Итого мотивация USD', 'DDP USD', 'Наценка с учётом мотивации'])
             for row in report['report_rows']:
                 labels = [row[field] or 'Глобальный план' for field in ['subdivision', 'planning_group_sales', 'group', 'brand']]
                 labels = ["'" + label if label.lstrip().startswith(('=', '+', '-', '@')) else label for label in labels]
-                writer.writerow([*labels, row['plan'], row['policies'], row['sales'], row['total']])
+                writer.writerow([*labels, row['plan'], row['policies'], row['sales'], row['total'], row['ddp'], row['markup']])
             return response
         # Optional audit export retains original dated coefficient snapshots.
         lines = lines.select_related('coefficient_version')

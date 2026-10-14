@@ -31,7 +31,7 @@ DECLARE @params_scenario nvarchar(255) = ?;
  SELECT s.SubdivisionName Subdivision, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date) Date_,
  CASE WHEN g.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN g.GroupERP ELSE '*' END GroupERP,
  CASE WHEN g.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN g.BrandName ELSE '*' END Brand,
- SUM(ps.AmountUSD) AmountUSD
+ SUM(ps.AmountUSD) AmountUSD, SUM(ps.AmountDDP_USD) AmountDDP_USD
  FROM DataWH.planning.PlanSales ps
  INNER JOIN DataWH.dbo.Subdivisions s ON s.SubdivisionKey = ps.Subdivision
  INNER JOIN DataWH.planning.Goods g ON ps.GoodsKey = g.PlanningKey
@@ -45,7 +45,7 @@ DECLARE @params_scenario nvarchar(255) = ?;
 SELECT plan_.Subdivision,
  COALESCE(NULLIF(LTRIM(RTRIM(plan_.PlanningGroupSalesERP)), ''), '9. OTHER') AS PlanningGroupSalesERP,
  plan_.GroupERP,
- plan_.Brand AS [Марка(Бренд)], plan_.Date_, plan_.AmountUSD,
+ plan_.Brand AS [Марка(Бренд)], plan_.Date_, plan_.AmountUSD, plan_.AmountDDP_USD,
  plan_.AmountUSD*COALESCE(f.O0,1) USD_O0, plan_.AmountUSD*COALESCE(f.O1,0) USD_O1,
  plan_.AmountUSD*COALESCE(f.O2,0) USD_O2, plan_.AmountUSD*COALESCE(f.O3,0) USD_O3,
  plan_.AmountUSD*COALESCE(f.O4,0) USD_O4
