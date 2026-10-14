@@ -1,7 +1,7 @@
 <dialog id="copy-global-dialog" class="coefficient-copy-dialog">
 <form method="post" action="{% url 'sub_act' sub.pk %}">
 {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
-<h2>Копировать из глобальных</h2>
+<h2>Копировать из глобальных</h2>{% if not version_editable %}<p class="alert alert-warning">Изменяются коэффициенты исторической версии. Прежние значения сохраняются в журнале. Повторите расчёт и выгрузку после изменения.</p>{% endif %}
 <p>Выберите группу коэффициентов. Остальные группы и сотрудники сохранят свои настройки.</p>
 <label for="copy-coefficient-group">Группа коэффициентов</label>
 <select id="copy-coefficient-group" name="copy_groups" class="form-select" required>

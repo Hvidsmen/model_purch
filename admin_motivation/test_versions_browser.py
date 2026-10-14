@@ -22,10 +22,11 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
                 employee.subdivisions.add(*branches)
             branches.append(Subdivision.objects.create(subdivision_key='Recipient C empty', subdivision_name='Recipient C empty', subdivision_global='Recipient C empty', chanel=channel))
             GlobalDirectorCoeff.objects.create(version=self.first, goods=self.coeff.goods, k0='.01')
+            from django.db import models
+            models.QuerySet(model=GlobalCoeffVersion).filter(pk=self.first.pk).update(status='approved')
             return [item.pk for item in branches], [item.pk for item in employees]
         branches, employees = self.db(fixture)
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
-        self.page.locator('#coefficient-tools > summary').click()
         self.page.locator('#subdivisionDropdownBtn').click()
         self.page.locator('[name=copy_groups][value=policies]').uncheck()
         self.page.locator('[name=copy_groups][value=sales]').uncheck()

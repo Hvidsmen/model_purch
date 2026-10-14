@@ -42,8 +42,8 @@ def coefficient_group_copy(request):
             version.refresh_from_db()
     history = list(CoefficientGroupCopyLog.objects.filter(version=version, subdivision=sub).order_by('-pk')[:20])
     for log in history:
-        log.source_label = GROUP_NAMES.get(log.source_group, log.source_group)
-        log.target_label = GROUP_NAMES.get(log.target_group, log.target_group)
+        log.source_label = {**GROUP_NAMES, 'global': 'Глобальные'}.get(log.source_group, log.source_group)
+        log.target_label = {**GROUP_NAMES, 'branch': 'Филиал'}.get(log.target_group, log.target_group)
     return render(request, 'admin_motivation/group_copy.html', {
         'selected_version': version, 'sub': sub, 'employee': employee, 'groups': GROUP_NAMES,
         'subdivisions': Subdivision.objects.all(),

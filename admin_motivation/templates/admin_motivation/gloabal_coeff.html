@@ -852,14 +852,9 @@
     <div class="row">
         {% include 'admin_motivation/_coefficient_filters.html' %}
         {% include 'admin_motivation/_coefficient_visibility.html' %}
-        <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">
-            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
-            <fieldset {% if not version_editable %}disabled{% endif %}>
-            <div class="col-12">
-                <div class="actions">
-                    <details class="editor-tools" id="coefficient-tools"><summary>Ещё: импорт, копирование и справочники</summary><div class="tool-options">
-                    <button type="submit" class="btn btn-secondary" name="action_button" value="sync_references">Обновить справочники из DWH</button>
-
+        <form method="post" action="{% url 'gb_act' %}" id="globalBranchCopyForm">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+        <fieldset {% if not version_editable and not portal_is_admin %}disabled{% endif %}>
+        {% if not version_editable and portal_is_admin %}<p class="alert alert-warning">Копирование изменит коэффициенты филиалов в исторической версии. Прежние значения сохранятся в журнале. Повторите расчёт и выгрузку после изменения.</p>{% endif %}
                     <!-- Выпадающий список с чекбоксами подразделений -->
                     <div class="dropdown-wrapper">
                         <button type="button" class="btn btn-secondary dropdown-toggle-btn" id="subdivisionDropdownBtn">
@@ -891,6 +886,15 @@
                             </div>
                         </div>
                     </div>
+
+        </fieldset></form>
+        <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">
+            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+            <fieldset {% if not version_editable %}disabled{% endif %}>
+            <div class="col-12">
+                <div class="actions">
+                    <details class="editor-tools" id="coefficient-tools"><summary>Ещё: импорт, копирование и справочники</summary><div class="tool-options">
+                    <button type="submit" class="btn btn-secondary" name="action_button" value="sync_references">Обновить справочники из DWH</button>
 
                     <div class="file-upload-wrapper">
                         <label class="file-input-label" id="fileLabel">

@@ -728,13 +728,14 @@
         </form>
         {% include 'admin_motivation/_coefficient_filters.html' %}
         {% include 'admin_motivation/_coefficient_visibility.html' %}
+<button type="button" class="btn btn-warning" id="copy-global-open" {% if not version_editable and not portal_is_admin %}disabled{% endif %}>Копировать из глобальных</button>
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
             <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="actions">
                     <details class="editor-tools" id="coefficient-tools"><summary>Ещё: импорт, копирование и справочники</summary><div class="tool-options">
-                    <button type="button" class="btn btn-warning" id="copy-global-open">Копировать из глобальных</button>{% if employee and director_editable %}<button type="button" class="btn btn-outline-primary" onclick="document.getElementById('copy-director-dialog').showModal()">Копировать другому директору</button>{% endif %}
+                    {% if employee and director_editable %}<button type="button" class="btn btn-outline-primary" onclick="document.getElementById('copy-director-dialog').showModal()">Копировать другому директору</button>{% endif %}
 
                     <div class="file-upload-wrapper">
                         <label class="file-input-label" id="fileLabel" for="fileInput">

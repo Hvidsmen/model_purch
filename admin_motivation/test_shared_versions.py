@@ -106,6 +106,11 @@ class SharedMotivationVersionTests(TestCase):
 
     def test_history_blocks_all_actions_and_direct_mutations(self):
         self.create()
+        from django.contrib.auth import get_user_model
+        from django.contrib.auth.models import Group
+        user = get_user_model().objects.create_user('history-reader')
+        user.groups.add(Group.objects.get_or_create(name='Генеральный директор')[0])
+        self.client.force_login(user)
         for action in ['save_coeff', 'update_motive_coeff', 'copy_from_global', 'file_load']:
             response = self.post(self.first, action, **{f'sub_coeff={self.local_coeff.pk}': '0.9', f'kind_coeff={self.manager_kind.pk}': '0.9'})
             self.assertEqual(response.status_code, 302)

@@ -58,8 +58,10 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
 
 
 @transaction.atomic
-def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, employees_by_subdivision=None):
-    if not version.is_editable:
+def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, employees_by_subdivision=None, user=None):
+    from base.access import can_access
+    historical = not version.is_editable
+    if historical and not (user and can_access(user, 'admin')):
         raise ValidationError('Историческая версия доступна только для просмотра.')
     from .coefficient_groups import selected_groups
     from ..models import TypeCoeff
@@ -79,6 +81,10 @@ def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, emp
                 raise ValidationError(f'Выберите директоров, привязанных к филиалу {sub}.')
         if not type_ids and not any(recipients.values()):
             raise ValidationError('В выбранных подразделениях нет директоров для копирования. Добавьте их в справочник или выберите другие подразделения.')
+    if historical:
+        from .historical_global_copy import copy_to_branches
+        copy_to_branches(version, subdivisions, type_ids, recipients, user)
+        return skipped
     for sub in subdivisions:
         if type_ids:
             for kind in KindManagerCoeff.objects.all():

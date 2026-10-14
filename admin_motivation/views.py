@@ -29,6 +29,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_POST
 from .forms import GlobalCoeffVersionForm
 from .services.versions import latest_version, effective_version, create_version, apply_to_subdivisions, effective_coefficients, today
+from base.access import can_access
 
 
 from .services.version_context import version_context
@@ -136,7 +137,7 @@ def gloabal_coeff_action(request):
     try:
         with transaction.atomic():
             latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
-            if version.status != 'draft' or version.pk != latest.pk:
+            if (version.status != 'draft' or version.pk != latest.pk) and not (action == 'apply_sub' and can_access(request.user, 'admin')):
                 raise ValidationError('Историческая версия доступна только для просмотра. Для изменений создайте новую версию.')
             if action == 'sync_references':
                 PlanningGroupSales.create_from_dwh()
@@ -189,7 +190,7 @@ def gloabal_coeff_action(request):
                         if not request.POST.get('director_employee'):
                             raise ValidationError('Выберите сотрудника-директора.')
                         employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee'))
-                skipped = apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee, employees_by_subdivision=recipients)
+                skipped = apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee, employees_by_subdivision=recipients, user=request.user)
                 if skipped:
                     messages.warning(request, 'Коэффициенты директоров пропущены в филиалах без сотрудников: ' + ', '.join(skipped) + '. Политики и продажи скопированы, если были выбраны.')
             elif action == 'save_coeff':
@@ -262,7 +263,7 @@ def sub_act(request, subdivision):
     try:
         with transaction.atomic():
             latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
-            if version.status != 'draft' or version.pk != latest.pk:
+            if (version.status != 'draft' or version.pk != latest.pk) and not (action == 'copy_from_global' and can_access(request.user, 'admin')):
                 raise ValidationError('Историческая версия доступна только для просмотра.')
             if action == 'update_motive_coeff':
                 for kind in KindManagerCoeff.objects.all():
@@ -306,7 +307,7 @@ def sub_act(request, subdivision):
                 if 'directors' in groups and not request.POST.get('director_employee'):
                     raise ValidationError('Выберите сотрудника-директора.')
                 employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee')) if 'directors' in groups else None
-                apply_to_subdivisions(version, [sub], groups=groups, employee=employee)
+                apply_to_subdivisions(version, [sub], groups=groups, employee=employee, user=request.user)
                 if groups == {'directors'}:
                     messages.success(request, 'Глобальные коэффициенты директора скопированы выбранному сотруднику.')
                     return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + f'?version={version.pk}&employee={employee.pk}')

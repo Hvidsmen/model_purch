@@ -13,6 +13,37 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_admin_copies_approved_globals_to_branch_with_audit(self):
+        from django.db import models
+        from django.contrib.auth import get_user_model
+        from .models import CoefficientGroupCopyLog, GlobalCoeff, SubdivisionCoeff, TypeCoeff, SegmentCoeff, VariationCalculate
+        from .services.versions import apply_to_subdivisions
+        kind = TypeCoeff.objects.create(type_coeff_name='Политики')
+        segment = SegmentCoeff.objects.create(segment_name='K0')
+        variation = VariationCalculate.objects.create(variation_name='Copy history level')
+        GlobalCoeff.objects.create(version=self.version, goods=self.goods, type_coeff=kind, segment=segment,
+            motivation_coeff=.02, manager_coeff=1, variation_calculate=variation)
+        SubdivisionDirectorCoeff.objects.create(version=self.version, goods=self.goods, subdivision=self.sub, employee=self.first, k0='.9')
+        models.QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
+        self.version.refresh_from_db()
+        user = get_user_model().objects.get(pk=self.client.session['_auth_user_id'])
+        with self.assertRaises(ValidationError):
+            apply_to_subdivisions(self.version, [self.sub], groups=['directors'], employee=self.first)
+        apply_to_subdivisions(self.version, [self.sub], groups=['policies', 'directors'], employee=self.first, user=user)
+        self.assertEqual(SubdivisionCoeff.objects.get(version=self.version, subdivision=self.sub).motivation_coeff, .02)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first).k0, Decimal('.01'))
+        self.assertEqual(CoefficientGroupCopyLog.objects.filter(version=self.version, subdivision=self.sub).count(), 1)
+        self.assertIn('0.900000', str(CoefficientGroupCopyLog.objects.get().changes))
+        self.version.refresh_from_db()
+        self.assertEqual(self.version.status, 'approved')
+        response = self.client.post(reverse('gb_act'), {'version': self.version.pk, 'action_button': 'apply_sub',
+            'copy_groups': ['directors'], 'selected_subdivisions': [self.sub.pk], 'director_employee': self.second.pk})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(SubdivisionDirectorCoeff.objects.filter(employee=self.second).exists())
+        response = self.client.post(reverse('sub_act', args=[self.sub.pk]), {'version': self.version.pk,
+            'action_button': 'copy_from_global', 'copy_groups': ['directors'], 'director_employee': self.first.pk})
+        self.assertEqual(response.status_code, 302)
+
     def test_global_copy_skips_branches_without_directors(self):
         from .services.versions import apply_to_subdivisions
         skipped = apply_to_subdivisions(self.version, [self.sub, self.other_sub], groups=['directors'],
