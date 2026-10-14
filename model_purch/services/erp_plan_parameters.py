@@ -24,7 +24,7 @@ def update_parameters(scenario, sources=None, connector=None):
     connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
     try:
         connection.timeout = 120
-        cursor.execute(SQL.replace('/*SCENARIOS*/', ','.join('?' for _ in sources)), scenario.date_start_plan, scenario.date_end_plan, *sources)
+        cursor.execute(SQL.replace('/*SCENARIOS*/', ','.join('?' for _ in sources)), *sources)
         values = {}
         for group, ddp, volume in cursor.fetchall():
             key = planning_group_key(group or '')
@@ -37,11 +37,9 @@ def update_parameters(scenario, sources=None, connector=None):
     finally:
         connection.close()
     if not values:
-        raise ValidationError('За период сценария план не найден. Существующие значения сохранены.')
+        raise ValidationError('По выбранным планам нет групп с положительным количеством. Существующие значения сохранены.')
     with transaction.atomic():
         locked = ScenarioModel.objects.select_for_update().get(pk=scenario.pk)
-        if (locked.date_start_plan, locked.date_end_plan) != (scenario.date_start_plan, scenario.date_end_plan):
-            raise ValidationError('Период сценария изменился. Повторите загрузку.')
         if use_attached and attached_sources(locked) != sources:
             raise ValidationError('Планы продаж сценария изменились во время загрузки. Повторите обновление.')
         goods = list(PGGoods.objects.filter(scenario_plan=locked))
