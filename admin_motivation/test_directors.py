@@ -27,7 +27,7 @@ class DirectorCoefficientTests(TestCase):
             segment = SegmentCoeff.objects.create(segment_name=f'K{i}')
             for kind in (policies, sales):
                 GlobalCoeff.objects.create(version=self.version, goods=self.goods, type_coeff=kind,
-                    segment=segment, motivation_coeff=(i + 1) / (50 if kind == sales else 100), manager_coeff=.5, variation_calculate=variation)
+                    segment=segment, motivation_coeff=(0.0015999999999999999 if kind == sales and i == 0 else (i + 1) / (50 if kind == sales else 100)), manager_coeff=.5, variation_calculate=variation)
         models.QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
         self.version.refresh_from_db()
         user = get_user_model().objects.get(pk=self.client.session['_auth_user_id'])
@@ -35,9 +35,11 @@ class DirectorCoefficientTests(TestCase):
         self.assertEqual(count, 1)
         self.global_row.refresh_from_db()
         self.assertEqual(self.global_row.k4, Decimal('.10'))
+        self.assertEqual(self.global_row.k0, Decimal('0.001600'))
         self.assertEqual(CoefficientGroupCopyLog.objects.count(), 1)
         log = CoefficientGroupCopyLog.objects.get()
         self.assertEqual(log.changes[0]['before']['k0'], '0.010000')
+        self.assertEqual(log.changes[0]['after']['k0'], '0.001600')
         with self.assertRaises(ValidationError):
             copy_group(user, self.version.pk, self.version.revision, 'sales', 'directors')
         self.version.refresh_from_db()

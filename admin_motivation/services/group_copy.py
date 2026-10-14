@@ -1,4 +1,4 @@
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import models, transaction
 from base.access import can_access
@@ -55,6 +55,12 @@ def copy_group(user, version_id, revision, source, target, subdivision=None, emp
     if target == 'directors':
         targets = {row.goods_id: row for row in director.objects.filter(version=version, **director_scope)}
         for goods_id, cells in source_cells.items():
+            # FloatField can return 0.0015999999999999999. Director fields
+            # store six decimal places; normalize before Decimal validation.
+            if any(not value.is_finite() or abs(value) > 1 for value in cells.values()):
+                raise ValidationError('Коэффициенты источника должны быть от -100% до 100%.')
+            cells = {index: value.quantize(Decimal('0.000001'), rounding=ROUND_HALF_UP)
+                     for index, value in cells.items()}
             row = targets.get(goods_id)
             before = {f'k{i}': str(getattr(row, f'k{i}')) for i in range(5)} if row else None
             row = row or director(version=version, goods_id=goods_id, **director_scope)
