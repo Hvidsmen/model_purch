@@ -82,11 +82,13 @@ class GoodsEditorTests(TestCase):
         sheet = workbook.active
         self.assertEqual(sheet.cell(1, 15).value, 'Объём контейнера, м³')
         sheet.cell(2, 15).value = 80
+        sheet.cell(2, 16).value = 7.123456789123
         stream = io.BytesIO()
         workbook.save(stream)
         self.client.post(reverse('import_from_excel'), {'scenario': self.scenario.pk, 'excel_file': SimpleUploadedFile('goods.xlsx', stream.getvalue())})
         self.good.refresh_from_db()
         self.assertEqual(self.good.container_volume, 80)
+        self.assertEqual(self.good.duty_rate, 7.123456789123)
         sheet.delete_cols(15, 8)
         stream = io.BytesIO()
         workbook.save(stream)
@@ -115,7 +117,7 @@ class GoodsEditorTests(TestCase):
         self.assertIn('[container_volume] = ?', update.args[0])
         self.assertIn(72.5, update.args[1:])
         self.assertIn('[duty_rate] = ?', update.args[0])
-        self.assertIn('7.25', update.args[1:])
+        self.assertIn(7.25, update.args[1:])
         self.assertTrue(any("COL_LENGTH(N'portal.PGGoods', N'duty_rate')" in call.args[0] for call in calls))
         connection.rollback.assert_not_called()
 
@@ -128,7 +130,7 @@ class GoodsEditorTests(TestCase):
         self.good.refresh_from_db()
         self.assertEqual(self.good.duty_rate, Decimal('7.25'))
         bulk_url = reverse('bulk_update_pggoods') + f'?scenario={self.scenario.pk}'
-        for value in ('-1', '101', 'nan', '', '1.234'):
+        for value in ('-1', '101', 'nan', ''):
             response = self.client.post(self.url, dict(self.data, duty_rate=value))
             self.assertEqual(response.status_code, 200)
             self.assertIn('duty_rate', response.context['form'].errors)

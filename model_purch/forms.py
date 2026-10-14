@@ -43,7 +43,7 @@ class PGGoodsEditForm(forms.ModelForm):
             'kind_purch': forms.Select(attrs={'class': 'form-select'}),
             'volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.000001', 'class': 'form-control'}),
             'container_volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.001', 'class': 'form-control'}),
-            'duty_rate': forms.NumberInput(attrs={'step': '0.01', 'min': '0', 'max': '100', 'class': 'form-control'}),
+            'duty_rate': forms.NumberInput(attrs={'step': 'any', 'min': '0', 'max': '100', 'class': 'form-control'}),
             'exw_usd': forms.NumberInput(attrs={'step': 'any', 'min': '0', 'class': 'form-control'}),
             'stock_cnt_day': forms.NumberInput(attrs={'min': '0', 'class': 'form-control'}),
         }
@@ -292,4 +292,4 @@ class GoodsGroupForm(forms.ModelForm):
         model = GoodsGroup
         fields = ['name', 'duty_rate', 'container_volume']
         widgets = {'container_volume': forms.NumberInput(attrs={'class': 'form-control', 'min': '0.001', 'step': '0.001'}), 'name': forms.TextInput(attrs={'class': 'form-control'}),
-                   'duty_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': '0.01'})}
+                   'duty_rate': forms.NumberInput(attrs={'class': 'form-control', 'min': '0', 'max': '100', 'step': 'any'})}

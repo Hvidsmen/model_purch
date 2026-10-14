@@ -1211,9 +1211,9 @@ def import_from_excel(request):
                             }
                             if duty_rate is not None:
                                 from decimal import Decimal
-                                duty_value = Decimal(str(duty_rate).replace(',', '.'))
-                                if not duty_value.is_finite() or not 0 <= duty_value <= 100 or duty_value != duty_value.quantize(Decimal('0.01')):
-                                    raise ValueError('Пошлина должна быть от 0 до 100%, не более двух знаков после запятой.')
+                                duty_value = float(str(duty_rate).replace(',', '.'))
+                                if not math.isfinite(duty_value) or not 0 <= duty_value <= 100:
+                                    raise ValueError('Пошлина должна быть конечным числом от 0 до 100%.')
                                 defaults['duty_rate'] = duty_value
                             if container_volume is not None:
                                 container_value = float(str(container_volume).replace(',', '.'))

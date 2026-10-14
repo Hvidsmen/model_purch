@@ -7,6 +7,17 @@ from .services.pricing import apply_price, reprice_goods
 
 
 class ProductPricingTests(TestCase):
+    def test_duty_accepts_float_precision_in_product_and_group(self):
+        value = 7.123456789123
+        response = self.client.post(reverse('edit_pggoods', args=[self.good.pk]), {'scenario': self.scenario.pk, 'duty_rate': str(value)})
+        self.assertEqual(response.status_code, 302)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate, value)
+        self.assertAlmostEqual(self.good.customs_payment_usd, 140 * .1 * (1 + value / 100))
+        response = self.client.post(reverse('goods_groups'), {'name': 'Precise duty', 'duty_rate': str(value), 'container_volume': '65'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(GoodsGroup.objects.get(name='Precise duty').duty_rate, value)
+
     def setUp(self):
         authorize_admin(self.client)
         self.scenario = ScenarioModel.objects.create(name='Costs', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
