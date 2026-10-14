@@ -276,7 +276,7 @@ body .product-table th:last-child{width:64px!important}
                 </select>
             </div>
             <div class="col-4 col-lg-2">
-                <label class="form-label small text-muted mb-1" title="Абсолютная разница DDP / модуль планового DDP × 100">Порог DDP, %</label>
+                <label class="form-label small text-muted mb-1" title="Для DDP и объёма: абсолютная разница / модуль планового значения × 100">Порог отклонения, %</label>
                 <input type="number" name="ddp_threshold" min="0" step="any" value="{{ plan_threshold|unlocalize }}" class="form-control form-control-sm">
             </div>
             <div class="col-12 col-lg-4 d-flex gap-2 mt-2 mt-lg-0">
@@ -287,7 +287,7 @@ body .product-table th:last-child{width:64px!important}
     </div>
 </div>
 
-<div class="hint-text mb-2">Проверка по плану — предупреждения по сохранённым значениям; сохранение не блокируется. Объём сравнивается без округления. DDP: |расчётный − плановый| / |плановый| × 100.</div>
+<div class="hint-text mb-2">Проверка по плану — предупреждения по сохранённым значениям; сохранение не блокируется. Единый порог для DDP и объёма: |текущее − плановое| / |плановое| × 100. Предупреждение появляется при превышении порога.</div>
 <div class="hint-text mb-2"><i aria-hidden="true" class="bi bi-info-circle"></i> <span class="editable-number-label">Зелёные заголовки — числа, которые можно менять.</span> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
 
 <div class="card shadow-sm">

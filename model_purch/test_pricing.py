@@ -16,6 +16,17 @@ class ProductPricingTests(TestCase):
         self.good.ddp_usd = 111
         self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp'])
         self.assertEqual(plan_warnings(self.good, 12), [])
+        self.good.plan_volume = 1
+        self.good.volume = 1.1
+        self.assertEqual(plan_warnings(self.good, 12), [])
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp'])
+        self.good.volume = 1.11
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp', 'volume'])
+        self.assertEqual(plan_warnings(self.good, 12), [])
+        self.good.volume = .89
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp', 'volume'])
+        self.good.plan_volume = 0
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp', 'volume'])
         self.good.plan_volume = None
         self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['ddp', 'missing'])
         self.good.plan_ddp_usd = 0

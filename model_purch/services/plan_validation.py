@@ -17,7 +17,12 @@ def plan_warnings(good, threshold=10):
     if good.plan_volume is None:
         missing.append('объём')
     elif not math.isclose(good.volume or 0, good.plan_volume, rel_tol=1e-9, abs_tol=1e-9):
-        warnings.append(('volume', f'Объём отличается от плана: {good.volume:g} / {good.plan_volume:g} м³'))
+        deviation = abs((good.volume or 0) - good.plan_volume)
+        if good.plan_volume == 0:
+            warnings.append(('volume', 'Объём отличается от нулевого плана'))
+        elif deviation / abs(good.plan_volume) * 100 > threshold + 1e-9:
+            percent = deviation / abs(good.plan_volume) * 100
+            warnings.append(('volume', f'Объём отличается от плана на {percent:.1f}% (порог {threshold:g}%)'))
     if missing:
         warnings.append(('missing', 'Не загружены плановые значения: ' + ', '.join(missing)))
     return warnings
