@@ -7,6 +7,38 @@ from .services.pricing import apply_price, reprice_goods
 
 
 class ProductPricingTests(TestCase):
+    def test_erp_parameters_use_scenario_plans_and_reject_changes_during_load(self):
+        from unittest.mock import Mock
+        from .models import ScenarioPlanSales
+        from .services.erp_plan_parameters import update_parameters
+        from django.core.exceptions import ValidationError
+        self.scenario.refresh_from_db()
+        connector = Mock()
+        with self.assertRaises(ValidationError):
+            update_parameters(self.scenario, connector=connector)
+        connector.assert_not_called()
+        first = ScenarioPlanSales.objects.create(scenario_model=self.scenario, name=' План 2027 ', flag_order_in_purch=True)
+        ScenarioPlanSales.objects.create(scenario_model=self.scenario, name='План 2026', flag_order_in_purch=False)
+        connection, cursor = Mock(), Mock()
+        connector.return_value = (connection, cursor)
+        cursor.fetchall.return_value = [('Unit', 200, .5)]
+        update_parameters(self.scenario, connector=connector)
+        self.assertEqual(cursor.execute.call_args.args[-2:], ('План 2027', 'План 2026'))
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.plan_ddp_usd, 200)
+        page = self.client.get(reverse('goods_plan_parameters', args=[self.scenario.pk]))
+        self.assertContains(page, 'План 2027')
+        self.assertNotContains(page, 'name="sources"')
+        def change_plans():
+            first.name = 'Изменённый план'
+            first.save()
+            return [('Unit', 999, .9)]
+        cursor.fetchall.side_effect = change_plans
+        with self.assertRaises(ValidationError):
+            update_parameters(self.scenario, connector=connector)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.plan_ddp_usd, 200)
+
     def test_erp_plan_parameters_match_group_preserve_prices_and_use_bound_filters(self):
         from unittest.mock import Mock, patch
         from .services.erp_plan_parameters import update_parameters, SQL
@@ -34,7 +66,7 @@ class ProductPricingTests(TestCase):
         self.good.refresh_from_db()
         self.assertEqual(self.good.plan_ddp_usd, 123.456789)
         url = reverse('goods_plan_parameters', args=[self.scenario.pk])
-        self.assertContains(self.client.get(url), 'Поиск сценария плана продаж')
+        self.assertContains(self.client.get(url), 'Планы продаж текущего сценария')
         page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk})
         self.assertContains(page, 'name="plan_ddp_usd"')
         self.assertContains(page, 'name="plan_volume"')

@@ -4,26 +4,23 @@ from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
 from ..conns import connect_database
-from ..models import PGGoods, ScenarioModel
+from ..models import PGGoods, ScenarioModel, ScenarioPlanSales
 from ..goods_identity import planning_group_key
 
 SQL = (Path(__file__).resolve().parents[1] / 'sql' / 'erp_plan_parameters.sql').read_text(encoding='utf-8')
 
 
-def source_versions(connector=None):
-    connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
-    try:
-        connection.timeout = 30
-        cursor.execute('SELECT DISTINCT Сценарий FROM DataWH.erp.[РегистрыНакопления.ПланыПродаж] WHERE Сценарий IS NOT NULL ORDER BY Сценарий')
-        return [str(row[0]) for row in cursor.fetchall()]
-    finally:
-        connection.close()
+def attached_sources(scenario):
+    return list(dict.fromkeys(name.strip() for name in ScenarioPlanSales.objects.filter(scenario_model=scenario).order_by('pk').values_list('name', flat=True) if name.strip()))
 
 
-def update_parameters(scenario, sources, connector=None):
+def update_parameters(scenario, sources=None, connector=None):
+    use_attached = sources is None
+    if use_attached:
+        sources = attached_sources(scenario)
     sources = list(dict.fromkeys(str(value).strip() for value in sources if str(value).strip()))
     if not sources or len(sources) > 100 or any(len(value) > 255 for value in sources):
-        raise ValidationError('Выберите от 1 до 100 сценариев плана продаж.')
+        raise ValidationError('В сценарии закупок должны быть указаны от 1 до 100 непустых планов продаж. Добавьте планы в настройках сценария.')
     connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
     try:
         connection.timeout = 120
@@ -45,6 +42,8 @@ def update_parameters(scenario, sources, connector=None):
         locked = ScenarioModel.objects.select_for_update().get(pk=scenario.pk)
         if (locked.date_start_plan, locked.date_end_plan) != (scenario.date_start_plan, scenario.date_end_plan):
             raise ValidationError('Период сценария изменился. Повторите загрузку.')
+        if use_attached and attached_sources(locked) != sources:
+            raise ValidationError('Планы продаж сценария изменились во время загрузки. Повторите обновление.')
         goods = list(PGGoods.objects.filter(scenario_plan=locked))
         matched = 0
         for good in goods:
