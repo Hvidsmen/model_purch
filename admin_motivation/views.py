@@ -233,7 +233,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     employees = DirectorEmployee.objects.filter(Q(subdivisions=sub) | Q(subdivisiondirectorcoeff__subdivision=sub,
         subdivisiondirectorcoeff__version=selected)).distinct()
     employee_id = request.GET.get('employee')
-    employee = get_object_or_404(employees, pk=employee_id) if employee_id else None
+    employee = get_object_or_404(employees, pk=employee_id) if employee_id else employees.first()
     employee_form = DirectorEmployeeForm(initial={'subdivisions': [sub.pk]})
     if request.GET.get('edit_employee'):
         employee_form = DirectorEmployeeForm(instance=get_object_or_404(DirectorEmployee, pk=request.GET['edit_employee']))

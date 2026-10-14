@@ -13,6 +13,17 @@ from .director_forms import GlobalDirectorAddForm
 
 
 class DirectorCoefficientTests(TestCase):
+    def test_branch_selects_first_director_by_default_and_keeps_explicit_choice(self):
+        url = reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk])
+        response = self.client.get(url)
+        self.assertEqual(response.context['employee'], response.context['director_employees'].first())
+        response = self.client.get(url, {'employee': self.second.pk})
+        self.assertEqual(response.context['employee'], self.second)
+        self.second.subdivisions.remove(self.sub)
+        self.assertEqual(self.client.get(url).context['employee'], self.first)
+        self.first.subdivisions.remove(self.sub)
+        self.assertIsNone(self.client.get(url).context['employee'])
+
     def test_admin_copies_approved_globals_to_branch_with_audit(self):
         from django.db import models
         from django.contrib.auth import get_user_model
