@@ -26,6 +26,14 @@
             display('foreign_delivery_usd', isRussian ? 0 : ratio * Number(options.foreign_delivery_cost || 0));
             display('nr_customs_vat_usd', suppliers.get(key(field('purch')?.value)) === 'p2' ? customs * Number(options.nr_customs_vat_rate || 0) / 100 : 0);
             display('warehouse_delivery_usd', delivery); display('ddp_usd', ddp);
+            const planQuantity = Number(row.dataset.planQuantity);
+            const stockQuantity = Number(row.dataset.stockQuantity || 0);
+            const stockDdp = row.dataset.stockDdp;
+            if (field('weighted_ddp_usd')) {
+                const weighted = planQuantity > 0 && (!stockQuantity || stockDdp !== '')
+                    ? (ddp * (planQuantity - stockQuantity) + Number(stockDdp || 0) * stockQuantity) / planQuantity : NaN;
+                field('weighted_ddp_usd').value = Number.isFinite(weighted) ? weighted.toFixed(2) : '—';
+            }
             if (exw > 0) display('kddp', ddp / exw);
             else if (field('kddp')) field('kddp').value = previousKddp;
         }

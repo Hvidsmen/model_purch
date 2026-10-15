@@ -43,33 +43,88 @@ class ProductPricingTests(TestCase):
         self.assertEqual(response.context['plan_threshold'], 10)
         self.assertContains(response, 'Не загружены плановые значения')
 
+    def test_fact_discrepancy_warnings_use_threshold_and_separate_filters(self):
+        from .services.plan_validation import plan_warnings
+        self.good.plan_ddp_usd = self.good.ddp_usd
+        self.good.plan_volume = self.good.volume
+        self.good.fact_ddp_usd = self.good.ddp_usd / 1.1
+        self.good.fact_volume = self.good.volume / 1.1
+        self.assertEqual(plan_warnings(self.good), [])
+        self.good.fact_ddp_usd = self.good.ddp_usd / 1.11
+        self.good.fact_volume = self.good.volume / 1.11
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['fact_ddp', 'fact_volume'])
+        self.assertEqual(plan_warnings(self.good, 12), [])
+        PGGoods.objects.filter(pk=self.good.pk).update(fact_ddp_usd=self.good.fact_ddp_usd, fact_volume=self.good.fact_volume)
+        url = reverse('pggoods_list')
+        for kind in ['fact_ddp', 'fact_volume']:
+            page = self.client.get(url, {'scenario': self.scenario.pk, 'plan_warning': kind})
+            self.assertEqual([good.pk for good in page.context['page_obj']], [self.good.pk])
+            self.assertContains(page, 'отличается от факта')
+        self.good.fact_ddp_usd = self.good.fact_volume = None
+        self.assertEqual(plan_warnings(self.good), [])
+        self.good.fact_ddp_usd = self.good.fact_volume = 0
+        self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['fact_ddp', 'fact_volume'])
+
+    def test_fact_stock_parameters_and_weighted_ddp(self):
+        from unittest.mock import Mock
+        from .services.erp_plan_parameters import update_parameters
+        from django.core.exceptions import ValidationError
+        self.scenario.refresh_from_db()
+        connection, cursor = Mock(), Mock()
+        cursor.fetchall.return_value = [('Unit', 200, .5, 100, 80, .4, 25, 90, .3, 200)]
+        update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor)))
+        self.good.refresh_from_db()
+        self.assertEqual((self.good.fact_ddp_usd, self.good.fact_volume, self.good.fact_quantity), (90, .3, 200))
+        self.assertEqual((self.good.plan_quantity, self.good.stock_quantity, self.good.stock_ddp_usd), (100, 25, 80))
+        self.good.ddp_usd = 120
+        self.assertEqual(self.good.weighted_ddp_usd, 110)
+        self.good.stock_quantity = None
+        self.assertEqual(self.good.weighted_ddp_usd, 120)
+        self.good.plan_quantity = 0
+        self.assertIsNone(self.good.weighted_ddp_usd)
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk})
+        for name in ['fact_volume', 'fact_ddp_usd', 'weighted_ddp_usd']:
+            self.assertContains(page, f'name="{name}"')
+        cursor.fetchall.return_value = [('Unit', 200, .5, 100, 80, .4, -1, 90, .3, 200)]
+        with self.assertRaises(ValidationError):
+            update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor)))
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.stock_quantity, 25)
+        cursor.fetchall.return_value = [('Other', 200, .5, 100, None, None, None, None, None, None)]
+        update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor)))
+        self.good.refresh_from_db()
+        self.assertIsNone(self.good.fact_ddp_usd)
+        self.assertIsNone(self.good.stock_quantity)
+
     def test_erp_stock_fallback_merges_volumes_by_stock_quantity(self):
         from unittest.mock import Mock
         from .services.erp_plan_parameters import update_parameters, SQL
         self.scenario.refresh_from_db()
         connection, cursor = Mock(), Mock()
-        # The stock query returns one row per group and nomenclature volume.
-        cursor.fetchall.return_value = [('Unit', 100, .1, 10), ('Unit', 300, .5, 30)]
+        # Stock-only groups retain fallback plan parameters without inventing plan quantity.
+        cursor.fetchall.return_value = [('Unit', 100, .1, None, 100, .1, 10, None, None, None), ('Unit', 300, .5, None, 300, .5, 30, None, None, None)]
         update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor)))
         self.good.refresh_from_db()
         self.assertEqual(self.good.plan_ddp_usd, 250)
         self.assertEqual(self.good.plan_volume, .4)
-        self.assertIn('StockOnToDayПервичаняСебестоимость', SQL)
-        self.assertIn('WHERE NOT EXISTS', SQL)
-        self.assertIn('t.PlanningGroup = n.Даичи_ГруппаПланирования', SQL)
-        self.assertIn('HAVING SUM(s.Qty) > 0', SQL)
+        self.assertIsNone(self.good.plan_quantity)
+        self.assertEqual(self.good.stock_quantity, 40)
+        self.assertIsNone(self.good.weighted_ddp_usd)
+        self.assertIn('t_Даичи_ПервичнаяСебестоимостьOnDate', SQL)
+        self.assertIn('LEFT JOIN sales', SQL)
+        self.assertIn('SUM(s.DDP_USD) AS DDPStock', SQL)
 
     def test_erp_duplicate_group_variants_merge_weighted_by_quantity(self):
         from unittest.mock import Mock
         from .services.erp_plan_parameters import update_parameters
         self.scenario.refresh_from_db()
         connection, cursor = Mock(), Mock()
-        cursor.fetchall.return_value = [('Unit', 100, .1, 10), (' unit ', 300, .5, 30)]
+        cursor.fetchall.return_value = [('Unit', 100, .1, 10, None, None, None, None, None, None), (' unit ', 300, .5, 30, None, None, None, None, None, None)]
         self.assertEqual(update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor))), (1, 0))
         self.good.refresh_from_db()
         self.assertEqual(self.good.plan_ddp_usd, 250)
         self.assertEqual(self.good.plan_volume, .4)
-        cursor.fetchall.return_value = [('Unit', None, None, 10), ('UNIT', None, None, 30)]
+        cursor.fetchall.return_value = [('Unit', None, None, 10, None, None, None, None, None, None), ('UNIT', None, None, 30, None, None, None, None, None, None)]
         update_parameters(self.scenario, ['Plan'], Mock(return_value=(connection, cursor)))
         self.good.refresh_from_db()
         self.assertIsNone(self.good.plan_ddp_usd)
@@ -89,7 +144,7 @@ class ProductPricingTests(TestCase):
         ScenarioPlanSales.objects.create(scenario_model=self.scenario, name='План 2026', flag_order_in_purch=False)
         connection, cursor = Mock(), Mock()
         connector.return_value = (connection, cursor)
-        cursor.fetchall.return_value = [('Unit', 200, .5, 1)]
+        cursor.fetchall.return_value = [('Unit', 200, .5, 1, None, None, None, None, None, None)]
         update_parameters(self.scenario, connector=connector)
         self.assertEqual(cursor.execute.call_args.args[-2:], ('План 2027', 'План 2026'))
         self.good.refresh_from_db()
@@ -100,7 +155,7 @@ class ProductPricingTests(TestCase):
         def change_plans():
             first.name = 'Изменённый план'
             first.save()
-            return [('Unit', 999, .9, 1)]
+            return [('Unit', 999, .9, 1, None, None, None, None, None, None)]
         cursor.fetchall.side_effect = change_plans
         with self.assertRaises(ValidationError):
             update_parameters(self.scenario, connector=connector)
@@ -111,7 +166,7 @@ class ProductPricingTests(TestCase):
         from unittest.mock import Mock, patch
         from .services.erp_plan_parameters import update_parameters, SQL
         connection, cursor = Mock(), Mock()
-        cursor.fetchall.return_value = [(' unit ', 123.456789, .987654321, 1)]
+        cursor.fetchall.return_value = [(' unit ', 123.456789, .987654321, 1, None, None, None, None, None, None)]
         connector = Mock(return_value=(connection, cursor))
         self.scenario.refresh_from_db()
         original = (self.good.ddp_usd, self.good.volume)
@@ -124,9 +179,9 @@ class ProductPricingTests(TestCase):
         self.assertEqual(self.scenario.erp_sales_plan_sources, ["Plan ' one", 'Plan two'])
         args = cursor.execute.call_args.args
         self.assertEqual(args[1:], (self.scenario.date_start_plan, self.scenario.date_end_plan, "Plan ' one", 'Plan two'))
-        self.assertIn('d.FullDateAlternateKey BETWEEN ? AND ?', SQL)
+        self.assertIn('d.FullDateAlternateKey BETWEEN (SELECT DateFrom FROM parameters) AND (SELECT DateTo FROM parameters)', SQL)
         self.assertNotIn("Plan ' one", args[0])
-        self.assertIn('HAVING SUM(p.Количество * d.P_) > 0', SQL)
+        self.assertIn('HAVING SUM(p.Количество * d.P_ * mce.FlagAccountingQtyBA) > 0', SQL)
         self.assertNotIn('DROP', SQL)
         cursor.fetchall.return_value = []
         from django.core.exceptions import ValidationError

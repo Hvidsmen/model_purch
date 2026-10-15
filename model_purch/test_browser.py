@@ -218,6 +218,20 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator(f'tr[data-row-id="{self.good.pk}"]')).to_be_visible()
         self.assertEqual(self.errors, [])
 
+    def test_fact_fields_and_weighted_ddp_follow_price_edits(self):
+        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(
+            plan_quantity=100, stock_quantity=25, stock_ddp_usd=80, fact_ddp_usd=90, fact_volume=.3))
+        self.visit('pggoods_list')
+        self.select(self.source)
+        row = self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
+        self.assertEqual(row.locator('[name="fact_ddp_usd"]').input_value(), '90.00')
+        self.assertEqual(row.locator('[name="fact_volume"]').input_value(), '0.30')
+        row.locator('[name="exw_usd"]').fill('120')
+        ddp = float(row.locator('[name="ddp_usd"]').input_value())
+        weighted = float(row.locator('[name="weighted_ddp_usd"]').input_value())
+        self.assertAlmostEqual(weighted, (ddp * 75 + 80 * 25) / 100, places=2)
+        self.assertEqual(self.errors, [])
+
     def test_common_purchase_settings_collapse_and_remember_state(self):
         from playwright.sync_api import expect
         self.visit('pggoods_list')

@@ -27,25 +27,44 @@ def update_parameters(scenario, sources=None, connector=None):
         connection.timeout = 120
         cursor.execute(SQL.replace('/*SCENARIOS*/', ','.join('?' for _ in sources)), scenario.date_start_plan, scenario.date_end_plan, *sources)
         totals = {}
-        for group, ddp, volume, quantity in cursor.fetchall():
+        fields = ['plan_ddp_usd', 'plan_volume', 'plan_quantity',
+                  'stock_ddp_usd', 'stock_volume', 'stock_quantity',
+                  'fact_ddp_usd', 'fact_volume', 'fact_quantity']
+        for group, *raw in cursor.fetchall():
+            if len(raw) != 9:
+                raise ValidationError('Запрос должен вернуть план, сток и факт с количествами.')
             key = planning_group_key(group or '')
-            quantity = Decimal(str(quantity))
-            numbers = [Decimal(str(value)) if value is not None else None for value in (ddp, volume)]
-            if not quantity.is_finite() or quantity <= 0 or any(value is not None and not value.is_finite() for value in numbers):
-                raise ValidationError('В плане или остатках есть некорректные DDP, объём или количество.')
-            aggregate = totals.setdefault(key, [Decimal(0), None, None])
-            aggregate[0] += quantity
-            for index, value in enumerate(numbers, 1):
-                if value is not None:
-                    aggregate[index] = (aggregate[index] or Decimal(0)) + value * quantity
-        values = {key: [float(value / quantity) if value is not None else None for value in amounts]
-                  for key, (quantity, *amounts) in totals.items()}
-        if any(value is not None and not math.isfinite(value) for pair in values.values() for value in pair):
-            raise ValidationError('В плане или остатках есть слишком большие DDP или объём.')
+            numbers = [Decimal(str(value)) if value is not None else None for value in raw]
+            if any(value is not None and not value.is_finite() for value in numbers):
+                raise ValidationError('В плане, стоке или факте есть некорректные значения.')
+            if any(numbers[index] is not None and numbers[index] <= 0 for index in (2, 5, 8)):
+                raise ValidationError('Количество плана, стока и факта должно быть положительным.')
+            aggregate = totals.setdefault(key, [[None, Decimal(0)] for _ in fields])
+            for index, value in enumerate(numbers):
+                if value is None:
+                    continue
+                total = aggregate[index]
+                if index in (2, 5, 8):
+                    total[0] = (total[0] or Decimal(0)) + value
+                else:
+                    quantity_index = (index // 3) * 3 + 2
+                    quantity = numbers[quantity_index]
+                    if index < 2 and quantity is None:
+                        quantity = numbers[5]  # Plan parameters fall back to stock.
+                    if quantity is None:
+                        raise ValidationError('Для расчёта DDP и объёма отсутствует количество.')
+                    total[0] = (total[0] or Decimal(0)) + value * quantity
+                    total[1] += quantity
+        values = {}
+        for key, aggregate in totals.items():
+            values[key] = [None if total is None else float(total if index in (2, 5, 8) else total / weight)
+                           for index, (total, weight) in enumerate(aggregate)]
+        if any(value is not None and not math.isfinite(value) for row in values.values() for value in row):
+            raise ValidationError('В плане, стоке или факте есть слишком большие значения.')
     finally:
         connection.close()
     if not values:
-        raise ValidationError('В выбранных планах и текущих остатках нет групп с положительным количеством. Существующие значения сохранены.')
+        raise ValidationError('В выбранных планах, остатках и фактических продажах нет групп с положительным количеством. Существующие значения сохранены.')
     with transaction.atomic():
         locked = ScenarioModel.objects.select_for_update().get(pk=scenario.pk)
         if (locked.date_start_plan, locked.date_end_plan) != (scenario.date_start_plan, scenario.date_end_plan):
@@ -56,9 +75,10 @@ def update_parameters(scenario, sources=None, connector=None):
         matched = 0
         for good in goods:
             pair = values.get(good.planning_group_key)
-            good.plan_ddp_usd, good.plan_volume = pair if pair else (None, None)
+            for field, value in zip(fields, pair if pair else [None] * len(fields)):
+                setattr(good, field, value)
             matched += pair is not None
-        PGGoods.objects.bulk_update(goods, ['plan_ddp_usd', 'plan_volume'], batch_size=500)
+        PGGoods.objects.bulk_update(goods, fields, batch_size=500)
         locked.erp_sales_plan_sources = sources
         locked.plan_parameters_loaded_at = timezone.now()
         locked.save(update_fields=['erp_sales_plan_sources', 'plan_parameters_loaded_at'])

@@ -23,6 +23,18 @@ def plan_warnings(good, threshold=10):
         elif deviation / abs(good.plan_volume) * 100 > threshold + 1e-9:
             percent = deviation / abs(good.plan_volume) * 100
             warnings.append(('volume', f'Объём отличается от плана на {percent:.1f}% (порог {threshold:g}%)'))
+    for kind, label, current, actual in (
+        ('fact_ddp', 'DDP', good.ddp_usd, good.fact_ddp_usd),
+        ('fact_volume', 'Объём', good.volume, good.fact_volume),
+    ):
+        if actual is None or math.isclose(current or 0, actual, rel_tol=1e-9, abs_tol=1e-9):
+            continue
+        if actual == 0:
+            warnings.append((kind, f'{label} отличается от нулевого факта'))
+        else:
+            percent = abs((current or 0) - actual) / abs(actual) * 100
+            if percent > threshold + 1e-9:
+                warnings.append((kind, f'{label} отличается от факта на {percent:.1f}% (порог {threshold:g}%)'))
     if missing:
         warnings.append(('missing', 'Не загружены плановые значения: ' + ', '.join(missing)))
     return warnings

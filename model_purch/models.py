@@ -186,6 +186,13 @@ class PGGoods(models.Model):
     exw_usd = models.FloatField()
     plan_ddp_usd = models.FloatField('DDP по плану за единицу, USD', null=True, blank=True, editable=False)
     plan_volume = models.FloatField('Объём по плану за единицу, м³', null=True, blank=True, editable=False)
+    fact_ddp_usd = models.FloatField('Факт DDP за единицу, USD', null=True, blank=True, editable=False)
+    fact_volume = models.FloatField('Факт объём за единицу, м³', null=True, blank=True, editable=False)
+    plan_quantity = models.FloatField('Количество плана', null=True, blank=True, editable=False)
+    stock_ddp_usd = models.FloatField('DDP стока за единицу, USD', null=True, blank=True, editable=False)
+    stock_volume = models.FloatField('Объём стока за единицу, м³', null=True, blank=True, editable=False)
+    stock_quantity = models.FloatField('Количество стока', null=True, blank=True, editable=False)
+    fact_quantity = models.FloatField('Количество фактических продаж', null=True, blank=True, editable=False)
     freight_usd = models.FloatField('Фрахт за товар', default=0, editable=False)
     cif_usd = models.FloatField('CIF', default=0, editable=False)
     customs_payment_usd = models.FloatField('Таможенный платёж', default=0, editable=False)
@@ -199,6 +206,18 @@ class PGGoods(models.Model):
     percent_stock_end = models.FloatField()
 
     scenario_plan = models.ForeignKey(ScenarioModel, on_delete=models.CASCADE, null=True)
+
+    @property
+    def weighted_ddp_usd(self):
+        if not self.plan_quantity or self.plan_quantity <= 0:
+            return None
+        stock_quantity = self.stock_quantity or 0
+        if stock_quantity and self.stock_ddp_usd is None:
+            return None
+        result = (self.ddp_usd * (self.plan_quantity - stock_quantity)
+                  + (self.stock_ddp_usd or 0) * stock_quantity) / self.plan_quantity
+        import math
+        return result if math.isfinite(result) else None
 
     class Meta:
         constraints = [

@@ -825,7 +825,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
         plan_threshold = 10
     request.session['ddp_threshold'] = str(plan_threshold)
     warning_filter = request.GET.get('plan_warning', '')
-    warning_counts = dict.fromkeys(['ddp', 'volume', 'missing', 'any'], 0)
+    warning_counts = dict.fromkeys(['ddp', 'volume', 'fact_ddp', 'fact_volume', 'missing', 'any'], 0)
     warning_map = {}
     for good in queryset:
         checks = plan_warnings(good, plan_threshold)
