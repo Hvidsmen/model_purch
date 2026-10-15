@@ -5,13 +5,19 @@
     const key = value => String(value || '').normalize('NFC').trim().toLocaleLowerCase();
     const russian = new Set(options.russian_suppliers.map(key));
     const suppliers = new Map(Object.entries(options.supplier_types || {}).map(([name, type]) => [key(name), type]));
+    const purchaseUrls = new Map(Object.entries(options.purchase_urls || {}).map(([name, url]) => [key(name), url]));
     const duties = new Map(Object.entries(options.group_duties).map(([name, value]) => [key(name), value]));
     document.querySelectorAll('.pricing-row').forEach(row => {
         const field = name => row.querySelector(`[name="${name}"]`);
         const numeric = name => Number((field(name)?.value || '0').replace(',', '.'));
         const previousKddp = field('kddp')?.value || '1';
         const display = (name, value) => { if (field(name)) field(name).value = Number.isFinite(value) ? value.toFixed(2) : ''; };
+        const purchaseLink = row.querySelector('[data-purchase-link]');
+        const purchaseListUrl = purchaseLink?.href;
         function calculate() {
+            if (purchaseLink) {
+                purchaseLink.href = purchaseUrls.get(key(field('purch')?.value)) || purchaseListUrl;
+            }
             const exw = numeric('exw_usd');
             const ratio = numeric('volume') / numeric('container_volume');
             const duty = numeric('duty_rate') / 100;

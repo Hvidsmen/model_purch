@@ -1377,6 +1377,7 @@ def pricing_context(scenario):
                 'foreign_delivery_cost': str(freight.foreign_delivery_cost) if freight else '0',
                 'nr_customs_vat_rate': str(freight.nr_customs_vat_rate) if freight else '10',
                 'supplier_types': dict(Purch.objects.values_list('name', 'supply_type')),
+                'purchase_urls': {purchase.name: reverse('purch_edit', args=[purchase.pk]) for purchase in Purch.objects.all()},
                 'customs_rate': str(freight.customs_rate) if freight else '0',
                 'delivery_cost': str(freight.warehouse_delivery_cost) if freight else '0',
                 'russian_suppliers': list(Purch.objects.filter(supply_type='russian').values_list('name', flat=True)),
