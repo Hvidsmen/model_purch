@@ -188,7 +188,9 @@ class ComparisonTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'Коэффициенты выгружены')
         self.assertContains(response, '01.01.2001')
-        self.assertTrue(all(call.args[1] == date(2001, 1, 1) for call in cursor.execute.call_args_list))
+        deletes = [call for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE')]
+        self.assertEqual(len(deletes), 3)
+        self.assertTrue(all(call.args[1] == date(2001, 1, 1) for call in deletes))
 
     def test_api_rejects_foreign_cells_and_requires_csrf(self):
         current = self.draft(date(2026, 9, 1), .4)

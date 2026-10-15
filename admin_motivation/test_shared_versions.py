@@ -184,16 +184,68 @@ class SharedMotivationVersionTests(TestCase):
         coefficients = [call.args[1] for call in batches if 'SubdivisionMotiveCoeff' in call.args[0]]
         managers = [call.args[1] for call in batches if 'SubdivisionManagerCoeff' in call.args[0]]
         self.assertEqual(coefficients[0][0][0], self.first.effective_from)
-        self.assertEqual(coefficients[0][0][-1], 0.15)
+        self.assertEqual(coefficients[0][0][6], 0.15)
         self.assertEqual(coefficients[1][0][0], date(2026, 10, 8))
-        self.assertEqual(coefficients[1][0][-1], 0.4)
+        self.assertEqual(coefficients[1][0][6], 0.4)
         self.assertEqual(managers[0][0][-1], 0.8)
         self.assertEqual(managers[1][0][-1], 0.9)
         connection.commit.assert_called_once()
         connection.rollback.assert_not_called()
         connection.close.assert_called_once()
-        self.assertEqual(cursor.execute.call_count, 3)
-        self.assertTrue(all(call.args[1] == self.first.effective_from for call in cursor.execute.call_args_list))
+        self.assertEqual(cursor.execute.call_count, 4)
+        self.assertTrue(all(call.args[1] == self.first.effective_from for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE')))
+
+    def test_directors_export_individually_with_all_segments_and_director_only_goods(self):
+        from decimal import Decimal
+        from .models import DirectorEmployee, SubdivisionDirectorCoeff
+        employee = DirectorEmployee.objects.create(full_name="Иванов 'Иван'", employee_code="DIR-'one")
+        another = DirectorEmployee.objects.create(full_name="Иванов 'Иван'", employee_code='DIR-two')
+        employee.subdivisions.add(self.sub, self.other)
+        another.subdivisions.add(self.sub)
+        only_director = Goods.objects.create(goods_key='Director-only', planning_group_sales='1. RAC', group='Group', brand='Brand')
+        SubdivisionDirectorCoeff.objects.create(version=self.first, subdivision=self.sub, goods=self.good,
+            employee=employee, k0='.012345', k1='-.000001', k2='0', k3='.03', k4='.04')
+        SubdivisionDirectorCoeff.objects.create(version=self.first, subdivision=self.sub, goods=self.good,
+            employee=another, k0='.2', k4='.4')
+        SubdivisionDirectorCoeff.objects.create(version=self.first, subdivision=self.other, goods=only_director,
+            employee=employee, k0='.5')
+        approve_review(review_approval(self.first)['token'])
+        draft = self.create()
+        SubdivisionDirectorCoeff.objects.filter(version=draft).update(k0='.99')
+        connector, connection, cursor = self.connector()
+        export_motivation(connector)
+        calls = [call for call in cursor.executemany.call_args_list if 'SubdivisionMotiveCoeff' in call.args[0]]
+        self.assertEqual(len(calls), 1)
+        statement, rows = calls[0].args
+        directors = [row for row in rows if row[3] == 'Директора']
+        self.assertEqual(len(directors), 15)
+        first_rows = [row for row in directors if row[1] == 'A' and row[7] == employee.employee_code]
+        self.assertEqual([row[4] for row in first_rows], [f'K{i}' for i in range(5)])
+        self.assertEqual([row[6] for row in first_rows], [Decimal('.012345'), Decimal('-.000001'), Decimal('0'), Decimal('.03'), Decimal('.04')])
+        self.assertTrue(all(row[0] == self.first.effective_from and row[8] == employee.full_name for row in first_rows))
+        self.assertEqual({row[7] for row in directors}, {employee.employee_code, another.employee_code})
+        self.assertTrue(all(row[7:] == (None, None) for row in rows if row[3] != 'Директора'))
+        self.assertTrue(all(row[5] == 'Группа планов продаж' for row in directors if row[2] == only_director.goods_key))
+        self.assertNotIn(employee.employee_code, statement)
+        self.assertNotIn(employee.full_name, statement)
+        goods = [row for call in cursor.executemany.call_args_list if 'GoodsMotivation' in call.args[0] for row in call.args[1]]
+        self.assertIn(only_director.goods_key, [row[1] for row in goods])
+        self.assertIn('EmployeeCode', cursor.execute.call_args_list[0].args[0])
+        self.assertIn('EmployeeName', cursor.execute.call_args_list[0].args[0])
+        connection.commit.assert_called_once()
+        connection.rollback.assert_not_called()
+
+    def test_employee_schema_failure_does_not_delete_existing_sql_data(self):
+        approve_review(review_approval(self.first)['token'])
+        connector, connection, cursor = self.connector()
+        cursor.execute.side_effect = RuntimeError('Schema permission denied')
+        with self.assertRaises(RuntimeError):
+            export_motivation(connector)
+        self.assertEqual(cursor.execute.call_count, 1)
+        cursor.executemany.assert_not_called()
+        connection.commit.assert_not_called()
+        connection.rollback.assert_called_once()
+        connection.close.assert_called_once()
 
     def test_failed_sql_export_rolls_back_and_closes_connection(self):
         approve_review(review_approval(self.first)['token'])
