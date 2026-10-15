@@ -25,6 +25,11 @@ def copy_goods(source, target):
                     'container_volume': sg.container_volume,
                     'duty_rate': sg.duty_rate,
                     'exw_usd': sg.exw_usd,
+                    **{name: getattr(sg, name) for name in (
+                        'plan_ddp_usd', 'plan_volume', 'plan_quantity',
+                        'fact_ddp_usd', 'fact_volume', 'fact_quantity',
+                        'stock_ddp_usd', 'stock_volume', 'stock_quantity',
+                    )},
                     'stock_cnt_day': sg.stock_cnt_day,
                     'percent_stock_end': sg.percent_stock_end,
                 }

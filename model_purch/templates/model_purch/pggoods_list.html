@@ -394,7 +394,7 @@ body .product-table th:last-child{width:64px!important}
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        Скопирует все товары из выбранного сценария в "<strong>{{ current_scenario.name }}</strong>".
+                        Скопирует все товары из выбранного сценария в "<strong>{{ current_scenario.name }}</strong>": EXW, объёмы товара и контейнера, плановые, фактические и складские значения. Расчётный DDP пересчитается по настройкам текущего сценария. План и факт копируются как сохранённые значения источника; для периода текущего сценария обновите их из MS SQL.
                         <br><span class="text-info"><i aria-hidden="true" class="bi bi-info-circle"></i> Если товар с такой плановой группой уже существует (без учёта регистра), его данные будут <strong>обновлены</strong> (дубликаты не создаются).</span>
                     </p>
                     <label class="form-label fw-semibold">Сценарий-источник:</label>

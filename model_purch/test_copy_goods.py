@@ -66,6 +66,24 @@ class CopyGoodsTests(TestCase):
         self.assertEqual(PGGoods.objects.filter(scenario_plan=self.target).count(), 3)
         self.assertTrue(PGGoods.objects.filter(pk=unrelated.pk).exists())
 
+    def test_copy_preserves_exw_and_all_volume_parameters_for_new_and_existing_goods(self):
+        values = dict(exw_usd=127.941234, volume=.231234, container_volume=66,
+            plan_volume=.22, fact_volume=.23, stock_volume=.21,
+            plan_ddp_usd=179.13, fact_ddp_usd=182.30, stock_ddp_usd=170,
+            plan_quantity=100, stock_quantity=25, fact_quantity=200)
+        PGGoods.objects.filter(pk=self.source_goods.pk).update(**values)
+        for existing in (False, True):
+            if not existing:
+                PGGoods.objects.filter(scenario_plan=self.target).delete()
+            else:
+                PGGoods.objects.filter(scenario_plan=self.target).update(exw_usd=0, volume=0, container_volume=65,
+                    plan_volume=None, fact_volume=None, stock_volume=None)
+            response = self.copy()
+            self.assertEqual(response.status_code, 302)
+            copied = PGGoods.objects.get(scenario_plan=self.target)
+            for name, value in values.items():
+                self.assertEqual(getattr(copied, name), value, name)
+
     def test_invalid_or_missing_scenarios_do_not_copy_to_default_scenario(self):
         for name in ['scenario', 'source_scenario_id']:
             for invalid in ['', 'not-an-id', '999999']:
