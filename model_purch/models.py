@@ -80,7 +80,16 @@ class ResultCalc(models.Model):
 # Create your models here.
 
 
+class ActiveScenarioManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(archived_at__isnull=True)
+
+
 class ScenarioModel(models.Model):
+    objects = ActiveScenarioManager()
+    all_objects = models.Manager()
+    archived_at = models.DateTimeField('В архиве с', null=True, blank=True, editable=False)
+
     erp_sales_plan_sources = models.JSONField(default=list, blank=True, editable=False)
     plan_parameters_loaded_at = models.DateTimeField(null=True, blank=True, editable=False)
     id = models.AutoField(primary_key=True)

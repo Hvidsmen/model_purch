@@ -104,6 +104,18 @@ class SelectedScenarioCalculationTests(SimpleTestCase):
         self.assertEqual(cursor.executemany.call_args.args[1][0][-1], "Plan's")
         connection.commit.assert_called_once()
 
+    def test_active_batch_preserves_archived_sql_results(self):
+        connection, cursor = Mock(), Mock()
+        fixture = PurchaseCalculationTests().group_frames()
+        with patch('model_purch.calc_purch.connect_database', return_value=(connection, cursor)), patch(
+            'model_purch.calc_purch.pd.read_sql', side_effect=[pd.DataFrame({'СценарийМодели': ["Active's"]}), *fixture],
+        ) as read:
+            calc_purch(scenario_names=["Active's"])
+        self.assertEqual(read.call_args_list[0].kwargs['params'], ["Active's"])
+        self.assertIn('WHERE СценарийМодели IN (?)', read.call_args_list[0].args[0])
+        cursor.execute.assert_called_once_with('DELETE FROM [dbo].[PlanIncome] WHERE [Scenario] IN (?)', "Active's")
+        connection.commit.assert_called_once()
+
     def test_missing_selected_sql_data_leaves_existing_results_untouched(self):
         connection, cursor = Mock(), Mock()
         with patch('model_purch.calc_purch.connect_database', return_value=(connection, cursor)), patch(

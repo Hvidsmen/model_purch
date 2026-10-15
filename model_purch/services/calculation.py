@@ -27,8 +27,9 @@ def run_step(order, run_id, connector):
         from ..calc_purch import calc_purch
         run = AlgorithmRun.objects.get(pk=run_id)
         if run.parameters.get('scope') == 'all':
-            calc_purch()
-            return {'message': 'Заказ рассчитан по всем сценариям'}
+            names = [entry['parameters']['scenario']['name'] for entry in run.parameters['scenarios']]
+            calc_purch(scenario_names=names)
+            return {'message': 'Заказ рассчитан по всем активным сценариям'}
         # Preserve the scope of older runs already started before this update.
         if not run.scenario_id:
             raise ValueError('Не зафиксированы параметры расчёта.')

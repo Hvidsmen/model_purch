@@ -1,13 +1,25 @@
 import pandas as pd
 from .conns import connect_database
 
-def calc_purch(scenario_name=None):
+def calc_purch(scenario_name=None, scenario_names=None):
+    if scenario_name is not None and scenario_names is not None:
+        raise ValueError('Укажите один способ выбора сценариев.')
+    if scenario_names is not None:
+        scenario_names = list(dict.fromkeys(scenario_names))
+        if not scenario_names:
+            raise ValueError('Не выбраны активные сценарии для расчёта.')
     sql_scenarion = """SELECT DISTINCT СценарийМодели FROM ModelPurch.dbo.TableForCalcPlanIncomes"""
     con, cur = connect_database('vm-dwh', 'ModelPurch')
 
     try:
         result = {'PlanningGroupOZP': [], 'Date_': [], 'Qty': [], 'Scenario': []}
-        if scenario_name is None:
+        if scenario_names is not None:
+            placeholders = ','.join('?' for _ in scenario_names)
+            df_sc = pd.read_sql(sql_scenarion + f' WHERE СценарийМодели IN ({placeholders})', con=con, params=scenario_names)
+            missing = set(scenario_names) - set(df_sc['СценарийМодели'])
+            if missing:
+                raise ValueError('Нет подготовленных SQL-данных для сценариев: ' + ', '.join(sorted(missing)))
+        elif scenario_name is None:
             df_sc = pd.read_sql(sql_scenarion, con=con)
         else:
             df_sc = pd.read_sql(sql_scenarion + ' WHERE СценарийМодели = ?', con=con, params=[scenario_name])
@@ -112,7 +124,9 @@ def calc_purch(scenario_name=None):
             )
             for row in df_result.to_numpy()
         ]
-        if scenario_name is None:
+        if scenario_names is not None:
+            cur.execute(f'DELETE FROM [dbo].[PlanIncome] WHERE [Scenario] IN ({placeholders})', *scenario_names)
+        elif scenario_name is None:
             cur.execute("TRUNCATE TABLE [dbo].[PlanIncome]")
         else:
             cur.execute("DELETE FROM [dbo].[PlanIncome] WHERE [Scenario] = ?", scenario_name)

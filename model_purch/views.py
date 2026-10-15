@@ -726,10 +726,29 @@ def scenario_delete(request, pk):
     scenario = get_object_or_404(ScenarioModel, pk=pk)
     if request.method == 'POST':
         scenario_name = scenario.name
-        scenario.delete()  # CASCADE удалит связанные Purch и PGGoods
-        messages.success(request, f'Сценарий "{scenario_name}" удалён!')
+        from django.utils import timezone
+        scenario.archived_at = timezone.now()
+        scenario.save(update_fields=['archived_at'])
+        from .services.scenarios import SESSION_KEY
+        if str(request.session.get(SESSION_KEY)) == str(scenario.pk):
+            request.session.pop(SESSION_KEY, None)
+        messages.success(request, f'Сценарий "{scenario_name}" перемещён в архив. Его можно восстановить.')
         return redirect('scenario_list')
     return render(request, 'model_purch/scenario_confirm_delete.html', {'scenario': scenario})
+
+
+@require_POST
+def scenario_restore(request, pk):
+    scenario = get_object_or_404(ScenarioModel.all_objects, pk=pk, archived_at__isnull=False)
+    scenario.archived_at = None
+    scenario.save(update_fields=['archived_at'])
+    messages.success(request, f'Сценарий «{scenario.name}» восстановлен вместе с товарами и настройками.')
+    return redirect('scenario_list')
+
+
+def scenario_archive(request):
+    scenarios = ScenarioModel.all_objects.filter(archived_at__isnull=False).order_by('-archived_at')
+    return render(request, 'model_purch/scenario_archive.html', {'archived_scenarios': scenarios})
 
 
 # ==============================================================================

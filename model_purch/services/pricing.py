@@ -59,7 +59,7 @@ def calculate_instance(good):
 def reprice_goods(scenario=None, strict=True, goods=None):
     from ..models import Freight, Purch, PGGoods
     if goods is None:
-        goods = PGGoods.objects.all()
+        goods = PGGoods.objects.filter(scenario_plan__archived_at__isnull=True)
     if scenario is not None:
         goods = goods.filter(scenario_plan=scenario)
     freights = {row.scenario_id: row for row in Freight.objects.all()}
@@ -89,7 +89,7 @@ def apply_group_duty(group_id):
     """Explicitly replace overrides for this group across every scenario."""
     from ..models import GoodsGroup, PGGoods
     group = GoodsGroup.objects.select_for_update().get(pk=group_id)
-    ids = [pk for pk, name in PGGoods.objects.values_list('pk', 'group_goods').iterator(chunk_size=500)
+    ids = [pk for pk, name in PGGoods.objects.filter(scenario_plan__archived_at__isnull=True).values_list('pk', 'group_goods').iterator(chunk_size=500)
            if planning_group_key(name or '') == group.name_key]
     goods = PGGoods.objects.filter(pk__in=ids)
     count = goods.update(duty_rate=group.duty_rate)
@@ -107,7 +107,7 @@ def apply_group_parameters(group_ids, parameter):
         raise ValidationError('Выберите существующие группы товаров.')
     mapping = {group.name_key: group for group in groups}
     batch = []
-    for pk, name in PGGoods.objects.values_list('pk', 'group_goods').iterator():
+    for pk, name in PGGoods.objects.filter(scenario_plan__archived_at__isnull=True).values_list('pk', 'group_goods').iterator():
         group = mapping.get(planning_group_key(name or ''))
         if group:
             batch.append((pk, group))

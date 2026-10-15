@@ -26,6 +26,11 @@ body .product-table .pricing-row .product-duty input.inline-input{min-width:0}
 body .product-table .pricing-row .product-classification-field input.inline-input{min-width:0;width:100%;flex:1}
 body .product-table .product-ddp .product-classification-field>span{flex-basis:48px}
 body .product-table .product-ddp input[name="ddp_usd"]{font-weight:700}
+body .product-table .product-volumes .product-classification-field,
+body .product-table .product-ddp .product-classification-field{height:28px;min-height:28px}
+body .product-table .product-volumes .product-classification-field input,
+body .product-table .product-ddp .product-classification-field input{height:28px;box-sizing:border-box}
+body .product-table .product-volumes::after{content:"";display:block;height:28px}
 body .product-table thead th:nth-child(6){white-space:nowrap}
 body .product-table th:last-child{width:64px!important}
 .product-duty .duty-value>span{color:#64748b;font-size:12px;flex:0 0 auto}

@@ -1,4 +1,4 @@
-{% extends 'model_purch\base.html' %}
+{% extends 'model_purch/base.html' %}
 
 {% block content %}
 <div class="container mt-4">
@@ -6,18 +6,18 @@
         <div class="col-md-6">
             <div class="card border-danger">
                 <div class="card-header bg-danger text-white">
-                    <h5 class="mb-0">Подтверждение удаления</h5>
+                    <h5 class="mb-0">Перенос в архив</h5>
                 </div>
                 <div class="card-body">
                     <p class="mb-3">
-                        Вы уверены, что хотите удалить сценарий 
+                        Вы уверены, что хотите поместить в архив сценарий
                         <strong>"{{ scenario.name }}"</strong>?
                     </p>
                     <p class="text-danger">
                         <i class="fas fa-exclamation-triangle"></i>
-                        Все связанные планы продаж также будут удалены!
+                        Товары, планы продаж, настройки и история сохранятся. Сценарий исчезнет из рабочих списков и проверки расчёта. Его можно восстановить из архива.
                     </p>
-                    
+
                     <form method="post">
                         {% csrf_token %}
                         <div class="d-flex justify-content-end gap-2">
@@ -25,7 +25,7 @@
                                 <i class="fas fa-times"></i> Отмена
                             </a>
                             <button type="submit" class="btn btn-danger">
-                                <i class="fas fa-trash"></i> Удалить
+                                <i class="fas fa-archive"></i> В архив
                             </button>
                         </div>
                     </form>

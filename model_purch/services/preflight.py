@@ -40,7 +40,7 @@ def validation_errors(scenario):
     errors = []
     if scenario.date_start_plan > scenario.date_end_plan:
         errors.append('Дата начала сценария позже даты окончания.')
-    names = list(ScenarioModel.objects.exclude(pk=scenario.pk).values_list('name', flat=True))
+    names = list(ScenarioModel.all_objects.exclude(pk=scenario.pk).values_list('name', flat=True))
     if not scenario.name.strip() or scenario.name.strip().casefold() in {name.strip().casefold() for name in names}:
         errors.append('Название сценария должно быть заполнено и уникально для экспорта в MS SQL.')
     goods = list(PGGoods.objects.filter(scenario_plan=scenario))
@@ -130,6 +130,8 @@ def run_inputs_unchanged(run):
         current = {scenario.pk: snapshot(scenario) for scenario in scenarios}
         return all(fingerprint(current[entry['scenario_id']]) == fingerprint(entry['parameters']) for entry in entries)
     if run.scenario_id:
+        if run.scenario.archived_at is not None:
+            return False
         return fingerprint(snapshot(run.scenario)) == fingerprint(run.parameters)
     return True
 

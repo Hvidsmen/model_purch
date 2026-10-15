@@ -224,6 +224,7 @@
 
         <!-- ИЗМЕНЕНИЕ ЗДЕСЬ: добавлен d-flex gap-2 и кнопка "Рассчитать" -->
         <div class="page-actions d-flex gap-2">
+            <a href="{% url 'scenario_archive' %}" class="btn btn-outline-secondary"><i class="bi bi-archive" aria-hidden="true"></i> Архив</a>
             <a href="{% url 'results_page' %}" class="btn btn-success">
                 <i aria-hidden="true" class="bi bi-calculator"></i> Рассчитать
             </a>
@@ -294,8 +295,8 @@
                             <!-- Кнопка удаления -->
                             <a href="{% url 'scenario_delete' scenario.pk %}"
                                class="btn-action btn-delete"
-                               title="Удалить">
-                                <i aria-hidden="true" class="bi bi-trash"></i>
+                               title="Переместить в архив">
+                                <i aria-hidden="true" class="bi bi-archive"></i>
                             </a>
                         </td>
                     </tr>

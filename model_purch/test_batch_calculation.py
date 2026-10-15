@@ -36,7 +36,7 @@ class BatchCalculationTests(TestCase):
         run = AlgorithmRun.objects.get()
         with patch('model_purch.calc_purch.calc_purch') as calculate:
             run_step(3, run.pk, None)
-            calculate.assert_called_once_with()
+            calculate.assert_called_once_with(scenario_names=['Plan A', 'Plan B'])
 
     def test_stale_unselected_scenario_blocks_entire_batch(self):
         PGGoods.objects.filter(scenario_plan=self.scenarios[1]).update(exw_usd=12)
