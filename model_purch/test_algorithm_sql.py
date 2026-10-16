@@ -31,11 +31,26 @@ class AlgorithmSqlTests(SimpleTestCase):
             connection.cursor.return_value = cursor
             cursor.nextset.side_effect = [True, False]
             connect.return_value = connection
-            step(1)
+            with patch('model_purch.services.calculation.time.sleep') as wait:
+                result = step(1)
+                if step is step_5_olap_cube:
+                    wait.assert_called_once_with(60)
+                    self.assertIn('60 секунд', result['message'])
+                else:
+                    wait.assert_not_called()
             connect.assert_called_with('configured-connection')
             connection.commit.assert_called_once()
             connection.close.assert_called_once()
             connection.rollback.assert_not_called()
+
+    def test_failed_olap_start_does_not_wait(self):
+        from .services.calculation import run_step
+        with patch('model_purch.services.calculation.execute_sql', side_effect=RuntimeError('job start failed')), patch(
+            'model_purch.services.calculation.time.sleep',
+        ) as wait:
+            with self.assertRaisesRegex(RuntimeError, 'job start failed'):
+                run_step(5, 1, Mock())
+        wait.assert_not_called()
 
     @patch('model_purch.views.connect_database')
     def test_error_in_later_procedure_rolls_back_and_closes(self, connect):

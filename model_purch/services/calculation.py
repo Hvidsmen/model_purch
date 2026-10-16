@@ -1,3 +1,5 @@
+import time
+
 def execute_sql(sql, connector):
     connection, cursor = connector('vm-dwh', 'ModelPurch')
     try:
@@ -37,4 +39,9 @@ def run_step(order, run_id, connector):
         return {'message': 'Заказ рассчитан'}
     sql, message = statements[order]
     execute_sql(sql, connector)
+    if order == 5:
+        # sp_start_job returns before OLAP processing has finished.
+        # Keep this step running for the requested minute after dispatch.
+        time.sleep(60)
+        message = 'Куб отправлен на обсчёт. Ожидание 60 секунд завершено.'
     return {'message': message}
