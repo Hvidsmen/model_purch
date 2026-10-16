@@ -45,7 +45,7 @@ def calc_purch(scenario_name=None, scenario_names=None):
 
                 SELECT [PlanningGroupOZP]
                       ,[CoeffEnd]
-                     ,IIF(SUM([Количество])<SUM([ПланПродаж]*[CoeffEnd]),SUM([ПланПродаж]*[CoeffEnd]/100)-SUM([Количество]),0) QtyALLOrder
+                     ,IIF(SUM([Количество])<SUM([ПланПродаж]*[CoeffEnd]),SUM([ПланПродаж]*[CoeffEnd])-SUM([Количество]),0) QtyALLOrder
                   FROM [ModelPurch].[dbo].[TableForCalcPlanIncomes]
                   WHERE
                     [PlanningGroupOZP] = ?
