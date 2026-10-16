@@ -58,6 +58,46 @@ class NativeMotivationReportTests(TestCase):
            'СуммаМотивацииUSDУчетПроцентаQ':10, 'СуммаМотивацииUSDQ_Y':40,'СуммаМотивацииUSDУчетПроцентаQ_Y':40,
            'СуммаОтгрузокUSD_S_Q':900,'СуммаПланUSD_S_Q':1000,'СуммаОтгрузокUSD_S_Y':4200,'СуммаПланUSD_S_Y':4000}]
 
+    def test_manager_currency_uses_rur_source_fields_without_changing_plan_metrics(self):
+        from .services.reports import SQL_ROOT, manager_currency_sql
+        source = (SQL_ROOT / 'manager.sql').read_text()
+        rub = manager_currency_sql(source, 'RUB')
+        self.assertIn('[СуммаМотивацииRUR]', rub)
+        self.assertIn('[СуммаМотивацииRURУчетПроцента]', rub)
+        self.assertIn('[ОстатокRUR] AS [Остаток]', rub)
+        self.assertNotIn('[СуммаМотивацииUSD]', rub)
+        self.assertNotIn('[СуммаМотивацииUSDУчетПроцента]', rub)
+        for field in ['СуммаПланUSDКварталValue', 'СуммаОтгрузокUSDКварталValue', 'СуммаМотивацииUSDQ', 'СуммаМотивацииUSDУчетПроцентаY_Y']:
+            self.assertEqual(source.count('[' + field + ']'), rub.count('[' + field + ']'))
+        self.assertEqual(manager_currency_sql(source, 'USD'), source)
+        self.assertEqual(parameters('manager', QueryDict('currency=RUB'))['Currency'], 'RUB')
+        with self.assertRaises(ValidationError):
+            parameters('manager', QueryDict('currency=EUR'))
+        connection, cursor = Mock(), Mock()
+        values = {'Currency': 'RUB', 'TypeCoeff_': 'Директора', 'Subdivision': 'A', 'DealAuthor': 'Иванов', 'qm': '1 Квартал', 'gp_sales': []}
+        with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch(
+            'admin_motivation.services.reports.fetch', side_effect=[self.manager_rows(), [{'Год': 2024}]],
+        ) as read:
+            data = load_report('manager', values)
+        self.assertIn('[СуммаМотивацииRUR]', read.call_args_list[0].args[1])
+        self.assertEqual(data['currency'], 'RUB')
+
+    def test_manager_header_years_come_from_filtered_source_data(self):
+        connection, cursor = Mock(), Mock()
+        values = {'TypeCoeff_': 'Директора', 'Subdivision': "Branch's", 'DealAuthor': 'Иванов', 'qm': '1 Квартал', 'gp_sales': []}
+        with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch(
+            'admin_motivation.services.reports.fetch', side_effect=[self.manager_rows(), [{'Год': 2025}, {'Год': 2024}, {'Год': 2025}]],
+        ) as read:
+            data = load_report('manager', values)
+        self.assertEqual(data['years'], ['2024', '2025'])
+        query, args = read.call_args.args[1:3]
+        self.assertNotIn("Branch's", query)
+        self.assertEqual(args, ["Branch's", 'Директора', 'Иванов'])
+        connection.close.assert_called_once()
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=data):
+            page = self.client.get(reverse('motivation_report', args=['manager']), {'run': 1})
+        self.assertContains(page, 'Мотивация менеджера · 2024, 2025')
+
     def test_manager_sums_and_default_collapse_match_rdl(self):
         report=manager_report(self.manager_rows())
         self.assertEqual(report['totals'][0],110)

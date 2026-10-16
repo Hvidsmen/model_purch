@@ -40,6 +40,11 @@ def parameters(kind, query):
         if len(items) > 100 or any(len(value) > 255 for value in items):
             raise ValidationError('Слишком много значений фильтра или слишком длинное значение.')
         values[parameter] = list(dict.fromkeys(items)) if multi else (items[0] if items else None)
+    if kind == 'manager':
+        currency = query.get('currency', 'USD')
+        if currency not in ('USD', 'RUB'):
+            raise ValidationError('Выберите валюту USD или RUB.')
+        values['Currency'] = currency
     if kind == 'deals':
         try:
             start, end = date.fromisoformat(query.get('start', '')), date.fromisoformat(query.get('end', ''))
@@ -85,6 +90,9 @@ def choices(kind, values, refresh=False):
         connection.timeout = 30
         result = []
         for name, parameter, caption, dataset, multiple in FILTERS[kind]:
+            if kind == 'manager' and dataset == 'DA' and (not values.get('TypeCoeff_') or not values.get('Subdivision')):
+                result.append({'name': name, 'label': caption, 'multiple': multiple, 'options': []})
+                continue
             if kind == 'deals' and dataset not in ('Sub', 'TC') and not values.get('Division'):
                 result.append({'name': name, 'label': caption, 'multiple': multiple, 'options': []})
                 continue
@@ -196,6 +204,17 @@ def subdivision_report(rows, scope='subdivisions'):
             'summary_totals': summary(rows)}
 
 
+def manager_currency_sql(sql, currency):
+    if currency not in ('USD', 'RUB'):
+        raise ValidationError('Выберите валюту USD или RUB.')
+    if currency == 'RUB':
+        # Keep derived aliases stable for the shared renderer; replace source amounts only.
+        sql = sql.replace('[СуммаМотивацииUSD]', '[СуммаМотивацииRUR]')
+        sql = sql.replace('[СуммаМотивацииUSDУчетПроцента]', '[СуммаМотивацииRURУчетПроцента]')
+        sql = sql.replace(',Остаток\n', ',[ОстатокRUR] AS [Остаток]\n')
+    return sql
+
+
 def load_report(kind, values, page=1, scope='subdivisions'):
     if kind == 'manager' and any(not values.get(key) for key in ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')):
         raise ValidationError('Выберите вид работника, подразделение, автора сделки и квартал.')
@@ -205,7 +224,10 @@ def load_report(kind, values, page=1, scope='subdivisions'):
     try:
         connection, cursor = connect_database('vm-dwh', 'DataWH')
         connection.timeout = 60
-        sql, args = bind_sql((SQL_ROOT / f'{kind}.sql').read_text(encoding='utf-8'), values)
+        source_sql = (SQL_ROOT / f'{kind}.sql').read_text(encoding='utf-8')
+        if kind == 'manager':
+            source_sql = manager_currency_sql(source_sql, values.get('Currency', 'USD'))
+        sql, args = bind_sql(source_sql, values)
         if kind == 'deals':
             source = '(' + sql + ') AS report_source'
             sums = 'SUM([СуммаОтгрузокUSD]) AS shipments, SUM([СуммаКвМотивацииUSD]) AS quarterly, SUM([СуммаМотивацииUSDГод]) AS annual, SUM([СуммаМотивацииUSD]) AS possible'
@@ -225,6 +247,13 @@ def load_report(kind, values, page=1, scope='subdivisions'):
         required = ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')
         if any(not values.get(key) for key in required): raise ValidationError('Выберите вид работника, подразделение, автора сделки и квартал.')
         rows = fetch(cursor, sql, args)
-        return manager_report(rows)
+        report = manager_report(rows)
+        # Read years from the source table: the legacy presentation view may omit Год.
+        year_sql, year_args = bind_sql('SELECT DISTINCT [Год] FROM DataWH.motivation.ReportMotivationByDealAuthor '
+            'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ '
+            'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales)', values)
+        report['currency'] = values.get('Currency', 'USD')
+        report['years'] = sorted({str(row['Год']) for row in fetch(cursor, year_sql, year_args) if row.get('Год') is not None})
+        return report
     finally:
         if connection is not None: connection.close()

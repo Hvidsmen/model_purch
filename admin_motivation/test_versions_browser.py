@@ -11,6 +11,44 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_manager_authors_refresh_automatically_with_type_and_branch(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .test_reports import NativeMotivationReportTests
+        from .services.reports import manager_report
+        def options(kind, values, **kwargs):
+            groups = [('type', 'TypeCoeff_', ['Политики', 'Директора']),
+                      ('subdivision', 'Subdivision', ['A', 'B']),
+                      ('author', 'DealAuthor', [values['TypeCoeff_'] + '-' + values['Subdivision']] if values.get('TypeCoeff_') and values.get('Subdivision') else []),
+                      ('quarter', 'qm', ['1 Квартал'])]
+            return [{'name': name, 'label': name, 'multiple': False, 'options': [{'value': value, 'selected': value == values.get(key)} for value in items]} for name, key, items in groups]
+        data = manager_report(NativeMotivationReportTests.manager_rows())
+        data['years'] = ['2024']
+        with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', return_value=data):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager']))
+            with self.page.expect_navigation():
+                self.choose_filter('select[name=type]', 'Директора')
+            with self.page.expect_navigation():
+                self.choose_filter('select[name=subdivision]', 'A')
+            expect(self.page.locator('select[name=author] option')).to_have_count(2)
+            self.choose_filter('select[name=author]', 'Директора-A')
+            with self.page.expect_navigation():
+                self.choose_filter('select[name=subdivision]', 'B')
+            expect(self.page.locator('select[name=author]')).to_have_value('')
+            expect(self.page.locator('select[name=author] option').last).to_have_text('Директора-B')
+            self.choose_filter('select[name=author]', 'Директора-B')
+            self.choose_filter('select[name=quarter]', '1 Квартал')
+            with self.page.expect_navigation():
+                self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера · 2024 · USD')
+            if self.page.locator('.report-filter-panel').get_attribute('open') is None:
+                self.page.locator('.report-filter-panel > summary').click()
+            self.choose_filter('select[name=currency]', 'RUB')
+            with self.page.expect_navigation():
+                self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера · 2024 · RUB')
+        self.assertEqual(self.errors, [])
+
     def test_plan_summary_expansion_and_independent_column_toggles(self):
         from playwright.sync_api import expect
         from .test_sales_plans import SalesPlanTests
@@ -686,7 +724,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         division=subdivision_report(NativeMotivationReportTests.division_rows())
         with patch('admin_motivation.report_views.choices',return_value=[]), patch('admin_motivation.report_views.load_report',return_value=manager):
             self.page.goto(self.live_server_url + reverse('motivation_report',args=['manager']) + '?run=1&type=Политики&subdivision=Филиал&author=Менеджер&quarter=1+Квартал')
-            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера · USD')
             expect(self.page.locator('.manager-section').nth(1)).not_to_have_attribute('open','')
             self.page.locator('.manager-section').nth(1).locator('summary').click()
             expect(self.page.get_by_text('4. VENT',exact=True)).to_be_visible()

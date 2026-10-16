@@ -3,6 +3,13 @@
  if (csv) csv.addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('run','1'); url.searchParams.set('export','csv'); location.href=url; });
  const detail = document.getElementById('deal-detail-toggle');
  if (detail) detail.addEventListener('change', () => document.querySelectorAll('[data-deal-detail]').forEach(cell => cell.hidden=!detail.checked));
+ const form = document.getElementById('native-report-filters');
+ if (form?.dataset.kind === 'manager') {
+  ['type', 'subdivision'].forEach(name => form.elements[name]?.addEventListener('change', () => {
+   form.elements.author.value = '';
+   form.requestSubmit(document.getElementById('report-filter-refresh'));
+  }));
+ }
  const root = document.getElementById('native-division-report');
  const data = document.getElementById('native-division-tree');
  if (!root || !data) return;
