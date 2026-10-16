@@ -131,7 +131,8 @@ class SalesPlanTests(TestCase):
         self.assertContains(self.client.get(reverse('motivation_reports')), url)
         landing = self.client.get(url)
         self.assertContains(landing, 'name="plan"')
-        self.assertNotContains(landing, 'id="plan-summary"')
+        self.assertEqual(landing.context['plan'], self.scenario)
+        self.assertContains(landing, 'id="plan-summary"')
         page = self.client.get(url, {'plan': self.scenario.pk})
         self.assertEqual(page.context['summary_nodes'][0]['plan'], Decimal('1500'))
         for field in ['subdivision', 'planning_group_sales', 'type', 'director']:
@@ -143,6 +144,19 @@ class SalesPlanTests(TestCase):
         self.scenario.save(update_fields=['is_deleted'])
         self.assertEqual(self.client.get(url, {'plan': self.scenario.pk}).status_code, 404)
         self.assertNotContains(self.client.get(url), self.scenario.title)
+
+    def test_summary_defaults_to_latest_added_active_plan_and_keeps_explicit_choice(self):
+        url = reverse('motivation_plan_summary')
+        latest = SalesPlanScenario.objects.create(title='Latest', source_version='Latest source')
+        SalesPlanScenario.objects.create(title='Deleted latest', source_version='Deleted source', is_deleted=True)
+        page = self.client.get(url)
+        self.assertEqual(page.context['plan'], latest)
+        self.assertContains(page, f'value="{latest.pk}" selected')
+        self.assertEqual(self.client.get(url, {'plan': self.scenario.pk}).context['plan'], self.scenario)
+        SalesPlanScenario.objects.filter(is_deleted=False).update(is_deleted=True)
+        empty = self.client.get(url)
+        self.assertIsNone(empty.context['plan'])
+        self.assertContains(empty, 'Выберите план продаж')
 
     def test_summary_uses_dated_versions_and_handles_zero_plan_and_missing_coefficients(self):
         from .services.plan_summary import summary_report

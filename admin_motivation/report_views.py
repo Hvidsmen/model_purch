@@ -74,7 +74,7 @@ def report_page(request, kind):
 
 def plan_summary(request):
     from .services.plan_summary import summary_report, summary_filters
-    plans = SalesPlanScenario.objects.filter(is_deleted=False)
+    plans = SalesPlanScenario.objects.filter(is_deleted=False).order_by('-pk')
     plan = None
     summary = {}
     selected = request.GET.get('plan', '').strip()
@@ -82,6 +82,9 @@ def plan_summary(request):
         if not selected.isdecimal():
             raise Http404('План продаж не найден.')
         plan = get_object_or_404(plans, pk=selected)
+    else:
+        plan = plans.first()
+    if plan:
         try:
             summary = summary_report(plan, request.GET)
             summary['summary_filters'] = summary_filters(plan, request.GET)
