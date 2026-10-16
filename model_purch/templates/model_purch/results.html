@@ -269,7 +269,7 @@
     {% if readiness_errors %}<div class="alert alert-warning"><strong>До запуска исправьте:</strong><ul>{% for issue in readiness_issues %}<li>{{ issue.message }} {% if issue.url %}<a href="{{ issue.url }}">Открыть данные</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
     {% if active_runs %}
         <div class="alert alert-info">
-            <p>Есть незавершённые расчёты. Перед новым запуском завершите их или отмените остановленные между шагами:</p>
+            <p>Есть незавершённые расчёты. Перед новым запуском завершите их или отмените остановленные, в том числе после перезагрузки сервера:</p>
             {% for active_run in active_runs %}
                 <div class="mb-2">#{{ active_run.pk }} — {% if active_run.parameters.scope == 'all' %}Все сценарии{% else %}{{ active_run.scenario.name|default:"старый запуск без сценария" }}{% endif %} — {{ active_run.started_at|date:"d.m.Y H:i:s" }}
                     <button class="btn btn-outline-danger btn-sm" onclick="cancelRun({{ active_run.pk }})">Отменить остановленный расчёт</button>

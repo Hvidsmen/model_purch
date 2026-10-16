@@ -167,10 +167,18 @@ class ScenarioReliabilityTests(TestCase):
         step.status = 'running'
         step.save()
         url = reverse('cancel_algorithm_api', args=[run_id])
-        self.assertEqual(self.client.post(url).status_code, 409)
-        step.status = 'pending'
-        step.save()
+        from .services.algorithm_lock import algorithm_lock
+        with algorithm_lock(run_id):
+            self.assertEqual(self.client.post(url).status_code, 409)
+            self.assertEqual(self.client.post(reverse('execute_next_step_api', args=[run_id])).status_code, 409)
+        # Simulates a dead worker: persisted status remains running, OS lock is free.
+        self.assertEqual(self.client.post(reverse('execute_next_step_api', args=[run_id])).status_code, 409)
         self.assertEqual(self.client.post(url).json()['status'], 'cancelled')
+        step.refresh_from_db()
+        self.assertEqual(step.status, 'failed')
+        self.assertIsNotNone(step.finished_at)
+        self.assertIn('прервано', step.error_message)
+        self.assertFalse(AlgorithmStep.objects.filter(algorithm_run_id=run_id, status='pending').exists())
         self.assertEqual(self.client.post(reverse('execute_next_step_api', args=[run_id])).status_code, 409)
         self.assertEqual(self.start().status_code, 200)
 

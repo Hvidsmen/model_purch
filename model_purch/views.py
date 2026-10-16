@@ -1,3 +1,4 @@
+from .services.algorithm_lock import locked_algorithm
 import math
 from .models import Freight
 import logging
@@ -195,6 +196,7 @@ def start_algorithm_api(request):
 # ==============================================================================
 
 @require_POST
+@locked_algorithm
 def execute_next_step_api(request, run_id):
     """Выполняет следующий ожидающий шаг алгоритма"""
     if request.method != 'POST':
@@ -205,6 +207,10 @@ def execute_next_step_api(request, run_id):
 
         if run.status in {'failed', 'cancelled'}:
             return JsonResponse({'error': 'Этот расчёт остановлен. Запустите новый расчёт.'}, status=409)
+        if run.status == 'completed':
+            return JsonResponse({'success': True, 'finished': True, 'message': 'Алгоритм полностью выполнен'})
+        if run.steps.filter(status='running').exists():
+            return JsonResponse({'error': 'Предыдущий шаг прерван. Отмените остановленный расчёт и запустите новый.'}, status=409)
         from .services.preflight import run_inputs_unchanged
         if not run_inputs_unchanged(run):
             run.status = 'failed'
@@ -1376,12 +1382,16 @@ def purch_delete(request, pk):
 
 
 @require_POST
+@locked_algorithm
 def cancel_algorithm_api(request, run_id):
     with transaction.atomic():
         run = get_object_or_404(AlgorithmRun, pk=run_id)
-        if run.steps.filter(status='running').exists():
-            return JsonResponse({'error': 'Шаг ещё выполняется. Дождитесь его окончания перед отменой.'}, status=409)
         if run.status == 'running':
+            # The OS lock is free: no worker is executing this run.
+            stopped_at = timezone.now()
+            run.steps.filter(status='running').update(status='failed', finished_at=stopped_at,
+                error_message='Выполнение прервано: процесс расчёта остановлен. Запуск отменён пользователем.')
+            run.steps.filter(status='pending').update(status='skipped', finished_at=stopped_at)
             run.status = 'cancelled'
             run.finished_at = timezone.now()
             run.save(update_fields=['status', 'finished_at'])
