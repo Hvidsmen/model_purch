@@ -11,6 +11,44 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_plan_summary_expansion_and_independent_column_toggles(self):
+        from playwright.sync_api import expect
+        from .test_sales_plans import SalesPlanTests
+        fixture = SalesPlanTests()
+        self.db(fixture.setUp)
+        self.db(fixture.load)
+        from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+        def directors():
+            employee = DirectorEmployee.objects.create(full_name='Иванов Иван')
+            GlobalDirectorCoeff.objects.create(version=fixture.version, goods=fixture.good,
+                **{f'k{i}': '.01' for i in range(5)})
+            SubdivisionDirectorCoeff.objects.create(version=fixture.version, goods=fixture.good,
+                subdivision=fixture.subs[0], employee=employee, **{f'k{i}': '.02' for i in range(5)})
+        self.db(directors)
+        self.page.goto(self.live_server_url + reverse('motivation_sales_plan', args=[fixture.scenario.pk]))
+        report = self.page.locator('#plan-summary')
+        self.assertEqual(report.locator('details[open]').count(), 0)
+        report.locator('summary').first.click()
+        expect(report.get_by_text('Политика', exact=True).first).to_be_visible()
+        report.locator('[data-summary-side=global]').uncheck()
+        expect(report.locator('.summary-heading .summary-global').first).to_be_hidden()
+        expect(report.locator('.summary-heading .summary-local').first).to_be_visible()
+        report.locator('[data-summary-side=local]').uncheck()
+        expect(report.locator('.summary-heading .summary-local').first).to_be_hidden()
+        expect(report.locator('.summary-heading > span').nth(1)).to_be_visible()
+        report.locator('[data-summary-side=global]').check()
+        expect(report.locator('.summary-heading .summary-global').first).to_be_visible()
+        report.locator('[data-summary-side=local]').check()
+        report.locator('[data-summary-expand]').click()
+        self.assertEqual(report.locator('details[open]').count(), report.locator('details').count())
+        expect(report.get_by_text('Иванов Иван', exact=True).first).to_be_visible()
+        self.page.screenshot(path='/tmp/plan-summary-desktop.png', full_page=True)
+        self.page.set_viewport_size({'width': 480, 'height': 850})
+        self.page.screenshot(path='/tmp/plan-summary-mobile.png', full_page=True)
+        report.locator('[data-summary-collapse]').click()
+        self.assertEqual(report.locator('details[open]').count(), 0)
+        self.assertEqual(self.errors, [])
+
     def test_comparison_directors_percent_and_collapsed_breakdown(self):
         from playwright.sync_api import expect
         from .test_sales_plans import SalesPlanTests

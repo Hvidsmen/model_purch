@@ -13,6 +13,59 @@ from .services.versions import create_version
 
 
 class SalesPlanTests(TestCase):
+    def test_summary_compares_same_plan_and_sums_individual_directors(self):
+        from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+        from .services.plan_summary import summary_report
+        self.load()
+        global_values = {f'k{i}': Decimal('.01') for i in range(5)}
+        GlobalDirectorCoeff.objects.create(version=self.version, goods=self.good, **global_values)
+        first = DirectorEmployee.objects.create(full_name='Иванов')
+        second = DirectorEmployee.objects.create(full_name='Петров')
+        for employee, sub, value in [(first, self.subs[0], '.02'), (second, self.subs[0], '.03'), (first, self.subs[1], '.04')]:
+            SubdivisionDirectorCoeff.objects.create(version=self.version, goods=self.good, subdivision=sub, employee=employee,
+                **{f'k{i}': Decimal(value) for i in range(5)})
+        nodes = summary_report(self.scenario, {})['summary_nodes']
+        company, branch_a, branch_b = nodes
+        self.assertEqual(company['plan'], Decimal('1500'))  # Global duplicate excluded.
+        self.assertEqual([n['name'] for n in company['children']], ['Политика', 'Продажи', 'Директор'])
+        self.assertEqual(company['global'], Decimal('250'))  # Policies 150 + sales 75 + directors 25.
+        self.assertEqual(company['local'], Decimal('415'))  # Policies 300 + sales 45 + directors 70.
+        self.assertEqual(branch_a['global'], Decimal('170'))
+        self.assertEqual(branch_b['local'], Decimal('135'))
+        staff = company['children'][2]['children']
+        self.assertEqual([(r['name'], r['plan'], r['global'], r['local']) for r in staff],
+            [('Иванов', Decimal('1500'), Decimal('15'), Decimal('40')),
+             ('Петров', Decimal('1000'), Decimal('10'), Decimal('30'))])
+        self.assertEqual(staff[1]['local_percent'], Decimal('3'))
+        filtered = summary_report(self.scenario, {'subdivision': 'B'})['summary_nodes']
+        self.assertEqual(filtered[0]['plan'], Decimal('500'))
+        self.assertEqual(len(filtered), 2)
+        self.assertEqual(summary_report(self.scenario, {'brand': 'Missing'})['summary_nodes'], [])
+        response = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk]))
+        self.assertContains(response, 'Сводный отчёт')
+        self.assertContains(response, 'data-summary-side="global"')
+        self.assertContains(response, 'data-summary-side="local"')
+        self.assertContains(response, 'Петров')
+        self.assertIsNone(self.scenario.lines.first().total_usd)  # Read-only, no snapshot mutation.
+
+    def test_summary_uses_dated_versions_and_handles_zero_plan_and_missing_coefficients(self):
+        from .services.plan_summary import summary_report
+        self.load()
+        future = create_version(date(2026, 11, 1), 'Summary future', self.version.pk)
+        GlobalCoeff.objects.filter(version=future).update(motivation_coeff=.5)
+        # Future coefficients must not affect October.
+        self.assertEqual(summary_report(self.scenario, {})['summary_nodes'][0]['global'], Decimal('225'))
+        self.scenario.lines.update(amount_usd=0)
+        total = summary_report(self.scenario, {})['summary_nodes'][0]
+        self.assertIsNone(total['global_percent'])
+        self.assertIsNone(total['local_percent'])
+        from django.db import models
+        models.QuerySet(model=GlobalCoeff).all().delete()
+        result = summary_report(self.scenario, {})
+        self.assertTrue(result['summary_missing'])
+        self.assertIsNone(result['summary_nodes'][0]['global'])
+        self.assertIsNotNone(result['summary_nodes'][0]['local'])
+
     def test_scenario_edit_reset_delete_and_active_operation(self):
         self.load()
         calculate_plan(self.scenario.pk)

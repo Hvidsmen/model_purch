@@ -43,11 +43,14 @@ class DirectorIndex:
             self.table_minimum[key] = min(self.table_minimum.get(key, minimum), minimum)
 
     def motivation(self, version, sub, pg, group, brand, amounts):
-        total = Decimal(0)
+        return sum(self.by_employee(version, sub, pg, group, brand, amounts).values(), Decimal(0))
+
+    def by_employee(self, version, sub, pg, group, brand, amounts):
+        result = {}
         for staff in self.employees.get((version, sub), ()):
             values = self.cells.get((version, sub, staff, pg, group, brand))
             if values is None:
                 value = self.minimum.get((version, sub, staff, pg), self.table_minimum.get((sub, staff), Decimal(0)))
                 values = [value] * 5
-            total += sum((value * amount for value, amount in zip(values, amounts)), Decimal(0))
-        return total
+            result[staff] = sum((value * amount for value, amount in zip(values, amounts)), Decimal(0))
+        return result
