@@ -1,4 +1,5 @@
 import csv
+import json
 import logging
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -70,15 +71,15 @@ def sales_plans(request, scenario_id=None):
         response.write('\ufeff')
         writer = csv.writer(response, delimiter=';')
         if request.GET.get('export') == 'csv':
-            writer.writerow(['Подразделение', 'Группа планов продаж', 'Группа планов ERP', 'Марка / бренд', 'План USD', 'Политики USD', 'Продажи USD', 'Итого мотивация USD', 'DDP USD', 'Наценка с учётом мотивации'])
+            writer.writerow(['Подразделение', 'Группа планов продаж', 'Группа планов ERP', 'Марка / бренд', 'План USD', 'Политики USD', 'Продажи USD', 'Директора USD', 'Итого мотивация USD', 'DDP USD', 'Наценка с учётом мотивации'])
             for row in report['report_rows']:
                 labels = [row[field] or 'Глобальный план' for field in ['subdivision', 'planning_group_sales', 'group', 'brand']]
                 labels = ["'" + label if label.lstrip().startswith(('=', '+', '-', '@')) else label for label in labels]
-                writer.writerow([*labels, row['plan'], row['policies'], row['sales'], row['total'], row['ddp'], row['markup']])
+                writer.writerow([*labels, row['plan'], row['policies'], row['sales'], row['directors'], row['total'], row['ddp'], row['markup']])
             return response
         # Optional audit export retains original dated coefficient snapshots.
         lines = lines.select_related('coefficient_version')
-        writer.writerow(['Дата', 'Подразделение', 'Группа планов', 'Группа', 'Марка', 'План USD', *[f'USD_O{i}' for i in range(5)], 'Версия коэффициентов', 'Политики USD', 'Продажи USD', 'Итого USD', *[f'{kind} {field} O{i}' for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['k', 'Мотивация', 'Источник', 'Версия источника', 'Подразделение источника', 'Группа планов источника']]])
+        writer.writerow(['Дата', 'Подразделение', 'Группа планов', 'Группа', 'Марка', 'План USD', *[f'USD_O{i}' for i in range(5)], 'Версия коэффициентов', 'Политики USD', 'Продажи USD', 'Итого USD', *[f'{kind} {field} O{i}' for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['k', 'Мотивация', 'Источник', 'Версия источника', 'Подразделение источника', 'Группа планов источника']], 'Директора USD', 'Директора: сохранённые коэффициенты и сотрудники'])
         for line in lines.iterator():
             details = [line.calculation.get(kind, {}).get(f'O{i}', {}).get(field, '') for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['coefficient', 'motivation', 'source', 'source_version', 'source_subdivision', 'source_planning_group']]
             values = [line.plan_date, line.subdivision or 'Глобальный план', line.planning_group_sales, line.group, line.brand, line.amount_usd, *[line.segment_amounts.get(f'O{i}', '') for i in range(5)], str(line.coefficient_version or ''), line.policies_usd, line.sales_usd, line.total_usd, *details]
@@ -88,6 +89,8 @@ def sales_plans(request, scenario_id=None):
                 value = str(values[index])
                 if value.lstrip().startswith(('=', '+', '-', '@')):
                     values[index] = "'" + value
+            # Append director audit data, preserving existing detail-column positions.
+            values += [line.directors_usd, json.dumps(line.calculation.get('Директора', {}), ensure_ascii=False)]
             writer.writerow(values)
         return response
     return render(request, 'admin_motivation/sales_plans.html', {

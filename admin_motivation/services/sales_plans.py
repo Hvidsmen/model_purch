@@ -196,9 +196,14 @@ def calculate_plan(scenario_id, progress=None):
         table_scope = (bool(subdivision), kind)
         if table_scope not in table_minimums or coefficient < table_minimums[table_scope][0]:
             table_minimums[table_scope] = (coefficient, key)
+    from .plan_directors import PlanDirectors
+    director_calculation = PlanDirectors(versions)
     version_cache, coefficient_cache = {}, {}
     pending, processed = [], 0
-    lines = scenario.lines.order_by('pk').iterator(chunk_size=1000)
+    from itertools import chain
+    # Local lines populate global director snapshots; global amounts count each director.
+    lines = chain(scenario.lines.exclude(subdivision='').order_by('pk').iterator(chunk_size=1000),
+                  scenario.lines.filter(subdivision='').order_by('pk').iterator(chunk_size=1000))
     for line in lines:
         if line.plan_date not in version_cache:
             version_cache[line.plan_date] = next((v for v in reversed(versions) if v.effective_from <= line.plan_date), None)
@@ -244,11 +249,12 @@ def calculate_plan(scenario_id, progress=None):
                 total += contribution
             result[kind] = details
             totals.append(total)
+        line.directors_usd, result['Директора'] = director_calculation.calculate(line, version_id)
         line.coefficient_version = version
         line.calculation = result
         line.policies_usd, line.sales_usd = totals
-        line.total_usd = sum(totals)
-        for amount in [*totals, line.total_usd]:
+        line.total_usd = sum(totals) + line.directors_usd
+        for amount in [*totals, line.directors_usd, line.total_usd]:
             number(amount)
         pending.append(line)
         processed += 1
@@ -273,7 +279,7 @@ def report(callback, stage, percent=None, processed=None, total=None):
 
 def save_calculations(lines):
     """Avoid constructing thousands of ORM CASE expression trees for large JSON rows."""
-    names = ['coefficient_version', 'calculation', 'policies_usd', 'sales_usd', 'total_usd']
+    names = ['coefficient_version', 'calculation', 'policies_usd', 'sales_usd', 'directors_usd', 'total_usd']
     fields = [SalesPlanLine._meta.get_field(name) for name in names]
     quote = connection.ops.quote_name
     table = quote(SalesPlanLine._meta.db_table)

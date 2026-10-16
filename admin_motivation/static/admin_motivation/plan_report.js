@@ -27,7 +27,7 @@
         const row = node.children.length ? document.createElement('summary') : parent;
         row.className = 'report-grid' + (node.children.length ? '' : ' report-leaf');
         row.style.setProperty('--level', node.level);
-        [node.name, ...['plan', 'policies', 'sales', 'total', 'ddp', 'markup'].map(key => node[key] == null ? (key === 'plan' ? '0' : '—') : (key === 'markup' ? new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : number).format(Number(node[key])))].forEach((value, index) => {
+        [node.name, ...['plan', 'policies', 'sales', 'directors', 'total', 'ddp', 'markup'].map(key => node[key] == null ? (key === 'plan' ? '0' : '—') : (key === 'markup' ? new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : number).format(Number(node[key])))].forEach((value, index) => {
             const span = document.createElement('span');
             if (!index) span.className = 'report-label';
             span.textContent = value;

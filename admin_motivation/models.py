@@ -482,6 +482,7 @@ class SalesPlanLine(models.Model):
     calculation = models.JSONField(default=dict)
     policies_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True)
     sales_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True)
+    directors_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True, blank=True)
     total_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True)
 
     class Meta:

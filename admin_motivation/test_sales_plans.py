@@ -13,6 +13,84 @@ from .services.versions import create_version
 
 
 class SalesPlanTests(TestCase):
+    def test_saved_plan_includes_directors_and_keeps_employee_coefficient_snapshots(self):
+        import csv, io, json
+        from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+        from .services.plan_report import period_report
+        from .services.plan_summary import summary_report
+        self.load()
+        GlobalDirectorCoeff.objects.create(version=self.version, goods=self.good, **{f'k{i}': '.01' for i in range(5)})
+        first = DirectorEmployee.objects.create(full_name='Иванов')
+        second = DirectorEmployee.objects.create(full_name='Петров')
+        for employee, sub, value in [(first, self.subs[0], '.02'), (second, self.subs[0], '.03'), (first, self.subs[1], '.04')]:
+            SubdivisionDirectorCoeff.objects.create(version=self.version, goods=self.good, employee=employee,
+                subdivision=sub, **{f'k{i}': value for i in range(5)})
+        calculate_plan(self.scenario.pk)
+        global_line = self.scenario.lines.get(subdivision='')
+        self.assertEqual(global_line.directors_usd, Decimal('25'))
+        self.assertEqual(global_line.total_usd, Decimal('250'))
+        self.assertEqual(self.scenario.lines.get(subdivision='A').directors_usd, Decimal('50'))
+        self.assertEqual(self.scenario.lines.get(subdivision='B').directors_usd, Decimal('20'))
+        snapshot = global_line.calculation['Директора']
+        self.assertEqual([employee['employee_name'] for employee in snapshot['employees']], ['Иванов', 'Петров'])
+        self.assertEqual(Decimal(snapshot['employees'][0]['motivation']), Decimal('15'))
+        summary = summary_report(self.scenario, {})['summary_nodes'][0]
+        self.assertEqual(period_report(self.scenario, 'global', {})['totals']['total'], summary['global'])
+        self.assertEqual(period_report(self.scenario, 'subdivisions', {})['totals']['total'], summary['local'])
+        # Editing the source must not rewrite the saved report or employee names.
+        GlobalDirectorCoeff.objects.filter(version=self.version).update(k0='.9')
+        first.full_name = 'Новое имя'
+        first.save()
+        self.assertEqual(period_report(self.scenario, 'global', {})['totals']['directors'], Decimal('25'))
+        url = reverse('motivation_sales_plan', args=[self.scenario.pk])
+        page = self.client.get(url)
+        self.assertContains(page, '<span>Директора</span>', html=True)
+        self.assertNotContains(page, 'Получить версии из MS SQL')
+        self.assertNotContains(page, 'Директора ещё не рассчитаны')
+        export = self.client.get(url, {'export': 'csv'})
+        rows = list(csv.DictReader(io.StringIO(export.content.decode('utf-8-sig')), delimiter=';'))
+        self.assertEqual(Decimal(rows[0]['Директора USD']), Decimal('25'))
+        export = self.client.get(url, {'export': 'details'})
+        rows = list(csv.DictReader(io.StringIO(export.content.decode('utf-8-sig')), delimiter=';'))
+        details = json.loads(rows[0]['Директора: сохранённые коэффициенты и сотрудники'])
+        self.assertEqual(details, snapshot)
+
+    def test_saved_directors_use_dated_coefficients_and_group_fallback(self):
+        from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+        self.load()
+        employee = DirectorEmployee.objects.create(full_name='Директор')
+        GlobalDirectorCoeff.objects.create(version=self.version, goods=self.good, **{f'k{i}': '.01' for i in range(5)})
+        SubdivisionDirectorCoeff.objects.create(version=self.version, goods=self.good, employee=employee,
+            subdivision=self.subs[0], **{f'k{i}': '-.02' for i in range(5)})
+        future = create_version(date(2026, 10, 8), 'Director changed rates', self.version.pk)
+        GlobalDirectorCoeff.objects.filter(version=future).update(**{f'k{i}': '.03' for i in range(5)})
+        SubdivisionDirectorCoeff.objects.filter(version=future).update(**{f'k{i}': '.04' for i in range(5)})
+        original = self.scenario.lines.get(subdivision='A')
+        # Deliberately different classification: the per-employee group minimum must apply.
+        for sub in ['A', '']:
+            SalesPlanLine.objects.create(scenario=self.scenario, plan_date=date(2026, 10, 10), subdivision=sub,
+                planning_group_sales=original.planning_group_sales, group='Other', brand='Other',
+                amount_usd=original.amount_usd, segment_amounts=original.segment_amounts)
+        calculate_plan(self.scenario.pk)
+        self.assertEqual(self.scenario.lines.get(subdivision='A', plan_date=date(2026, 10, 1)).directors_usd, Decimal('-20'))
+        later = self.scenario.lines.get(subdivision='A', plan_date=date(2026, 10, 10))
+        self.assertEqual(later.directors_usd, Decimal('40'))
+        self.assertEqual(later.calculation['Директора']['employees'][0]['source'], 'group_minimum')
+        self.assertEqual(self.scenario.lines.get(subdivision='', plan_date=date(2026, 10, 10)).directors_usd, Decimal('30'))
+
+    def test_old_plan_warns_until_directors_are_recalculated(self):
+        from .services.plan_report import period_report
+        self.load()
+        self.scenario.lines.update(total_usd=1, policies_usd=1, sales_usd=0)
+        report = period_report(self.scenario, 'global', {})
+        self.assertIsNone(report['totals']['directors'])
+        self.assertEqual(report['directors_pending'], 1)
+        self.assertContains(self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk])), 'Директора ещё не рассчитаны')
+        calculate_plan(self.scenario.pk)
+        report = period_report(self.scenario, 'global', {})
+        self.assertEqual(report['totals']['directors'], Decimal('0'))
+        self.assertEqual(report['directors_pending'], 0)
+
     def test_summary_compares_same_plan_and_sums_individual_directors(self):
         from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
         from .services.plan_summary import summary_report

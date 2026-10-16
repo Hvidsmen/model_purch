@@ -48,9 +48,16 @@ class DirectorIndex:
     def by_employee(self, version, sub, pg, group, brand, amounts):
         result = {}
         for staff in self.employees.get((version, sub), ()):
-            values = self.cells.get((version, sub, staff, pg, group, brand))
-            if values is None:
-                value = self.minimum.get((version, sub, staff, pg), self.table_minimum.get((sub, staff), Decimal(0)))
-                values = [value] * 5
+            values, _ = self.coefficients(version, sub, staff, pg, group, brand)
             result[staff] = sum((value * amount for value, amount in zip(values, amounts)), Decimal(0))
         return result
+
+    def coefficients(self, version, sub, staff, pg, group, brand):
+        values = self.cells.get((version, sub, staff, pg, group, brand))
+        if values is not None:
+            return values, 'exact'
+        value = self.minimum.get((version, sub, staff, pg))
+        if value is not None:
+            return [value] * 5, 'group_minimum'
+        value = self.table_minimum.get((sub, staff))
+        return [value if value is not None else Decimal(0)] * 5, 'table_minimum' if value is not None else 'missing'

@@ -456,9 +456,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('.report-leaf')).to_contain_text('225')
         for selector in ['.report-node[data-level="0"] > summary', '.report-node[data-level="1"] > summary', '.report-node[data-level="2"] > summary', '.report-leaf']:
             cells = self.page.locator(selector).locator('span')
-            self.assertEqual(cells.count(), 7)
-            expect(cells.nth(5)).to_have_text('900')
-            expect(cells.nth(6)).to_have_text('1,33')
+            self.assertEqual(cells.count(), 8)
+            expect(cells.nth(4)).to_have_text('0')
+            expect(cells.nth(6)).to_have_text('900')
+            expect(cells.nth(7)).to_have_text('1,33')
         self.page.get_by_role('button', name='Свернуть всё', exact=True).click()
         self.assertEqual(self.page.locator('#period-report details[open]').count(), 0)
         self.page.get_by_role('button', name='Развернуть всё', exact=True).click()
