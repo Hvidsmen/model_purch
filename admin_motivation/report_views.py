@@ -73,7 +73,7 @@ def report_page(request, kind):
 
 
 def plan_summary(request):
-    from .services.plan_summary import summary_report
+    from .services.plan_summary import summary_report, summary_filters
     plans = SalesPlanScenario.objects.filter(is_deleted=False)
     plan = None
     summary = {}
@@ -83,8 +83,8 @@ def plan_summary(request):
             raise Http404('План продаж не найден.')
         plan = get_object_or_404(plans, pk=selected)
         try:
-            # This report deliberately supports only the sales-plan selector.
-            summary = summary_report(plan, {})
+            summary = summary_report(plan, request.GET)
+            summary['summary_filters'] = summary_filters(plan, request.GET)
         except ValidationError as error:
             summary = {'summary_error': ' '.join(error.messages)}
     return render(request, 'admin_motivation/reports/plan_summary.html', {

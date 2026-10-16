@@ -62,7 +62,8 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
                 **{f'k{i}': '.01' for i in range(5)})
             SubdivisionDirectorCoeff.objects.create(version=fixture.version, goods=fixture.good,
                 subdivision=fixture.subs[0], employee=employee, **{f'k{i}': '.02' for i in range(5)})
-        self.db(directors)
+            return employee.pk
+        employee_id = self.db(directors)
         self.page.goto(self.live_server_url + reverse('motivation_reports'))
         self.page.get_by_role('link', name='Сводный отчёт по плану продаж', exact=False).click()
         self.page.locator('#summary-plan').select_option(str(fixture.scenario.pk))
@@ -90,6 +91,23 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.page.screenshot(path='/tmp/plan-summary-mobile.png', full_page=True)
         report.locator('[data-summary-collapse]').click()
         self.assertEqual(report.locator('details[open]').count(), 0)
+        self.page.set_viewport_size({'width': 1280, 'height': 900})
+        for field, values in [('subdivision', ['A', 'B']), ('type', ['policies', 'directors']),
+                              ('planning_group_sales', ['Sales']), ('director', [str(employee_id)])]:
+            dropdown = self.page.locator(f'[data-summary-filter="{field}"]')
+            dropdown.locator('summary').click()
+            for value in values:
+                dropdown.locator(f'input[type=checkbox][value="{value}"]').check()
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Показать', exact=True).click()
+        total = report.locator('.summary-company-total > summary')
+        expect(total.locator('.summary-global').first).to_have_text('110')
+        expect(total.locator('.summary-local').first).to_have_text('220')
+        self.assertEqual(report.locator('.summary-table > details').count(), 2)
+        expect(self.page.locator('[data-summary-filter=type] [data-filter-caption]')).to_have_text('Выбрано: 2')
+        with self.page.expect_navigation():
+            self.page.get_by_role('link', name='Сбросить фильтры', exact=True).click()
+        self.assertEqual(report.locator('.summary-table > details').count(), 3)
         self.assertEqual(self.errors, [])
 
     def test_comparison_directors_percent_and_collapsed_breakdown(self):

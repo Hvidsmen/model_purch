@@ -62,11 +62,13 @@ class Index:
             self.group_min[scope] = min(self.group_min.get(scope, value), value)
             self.table_min[kind] = min(self.table_min.get(kind, value), value)
 
-    def coefficients(self, version, sub, pg, group, brand):
+    def coefficients(self, version, sub, pg, group, brand, kinds=None):
+        kinds = tuple(KINDS if kinds is None else kinds)
         scope = (version, sub, pg, group, brand)
-        if scope not in self.cache:
+        cache_key = (scope, kinds)
+        if cache_key not in self.cache:
             matrix, fallback_count = [], 0
-            for kind in KINDS:
+            for kind in kinds:
                 values = []
                 for segment in SEGMENTS:
                     key = (*scope, kind, segment)
@@ -80,8 +82,8 @@ class Index:
                 matrix.append(values)
             if len(self.cache) >= 10000:
                 self.cache.clear()
-            self.cache[scope] = (matrix, fallback_count)
-        return self.cache[scope]
+            self.cache[cache_key] = (matrix, fallback_count)
+        return self.cache[cache_key]
 
 
 def coefficient_rows(version_ids, subdivision=None, current=None, changes=None, deleted=None, changed_subdivision=None):

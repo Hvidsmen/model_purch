@@ -40,6 +40,26 @@ class SalesPlanTests(TestCase):
             [('Иванов', Decimal('1500'), Decimal('15'), Decimal('40')),
              ('Петров', Decimal('1000'), Decimal('10'), Decimal('30'))])
         self.assertEqual(staff[1]['local_percent'], Decimal('3'))
+        from django.http import QueryDict
+        picked = QueryDict(mutable=True)
+        picked.setlist('subdivision', ['A', 'B'])
+        picked.setlist('planning_group_sales', ['Sales', 'Other'])
+        picked.setlist('type', ['directors'])
+        picked.setlist('director', [str(second.pk)])
+        selected = summary_report(self.scenario, picked)['summary_nodes']
+        self.assertEqual(len(selected), 2)  # Only branch A has this director.
+        self.assertEqual(selected[0]['plan'], Decimal('1000'))
+        self.assertEqual(selected[0]['global'], Decimal('10'))
+        self.assertEqual(selected[0]['local'], Decimal('30'))
+        self.assertEqual(selected[0]['difference'], Decimal('20'))
+        self.assertEqual([n['name'] for n in selected[0]['children']], ['Директор'])
+        self.assertEqual([n['name'] for n in selected[0]['children'][0]['children']], ['Петров'])
+        picked.setlist('director', [str(first.pk), str(second.pk)])
+        selected = summary_report(self.scenario, picked)['summary_nodes'][0]
+        self.assertEqual(selected['plan'], Decimal('1500'))  # Not multiplied by employee count.
+        self.assertEqual(selected['global'], Decimal('25'))
+        self.assertEqual(selected['local'], Decimal('70'))
+
         filtered = summary_report(self.scenario, {'subdivision': 'B'})['summary_nodes']
         self.assertEqual(filtered[0]['plan'], Decimal('500'))
         self.assertEqual(len(filtered), 2)
@@ -51,23 +71,71 @@ class SalesPlanTests(TestCase):
         self.assertContains(response, 'Петров')
         self.assertIsNone(self.scenario.lines.first().total_usd)  # Read-only, no snapshot mutation.
 
+    def test_summary_aggregates_repeated_dates_without_reading_calculation_snapshots(self):
+        from datetime import timedelta
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .services.plan_summary import summary_report
+        self.load()
+        original = self.scenario.lines.get(subdivision='A')
+        for day in range(1, 11):
+            SalesPlanLine.objects.create(scenario=self.scenario, plan_date=original.plan_date + timedelta(days=day),
+                subdivision='A', planning_group_sales=original.planning_group_sales, group=original.group, brand=original.brand,
+                amount_usd=original.amount_usd, segment_amounts=original.segment_amounts, calculation={'audit': 'x' * 10000})
+        with CaptureQueriesContext(connection) as queries:
+            result = summary_report(self.scenario, {})
+        self.assertEqual(result['summary_nodes'][0]['plan'], Decimal('11500'))
+        self.assertEqual(result['summary_nodes'][0]['global'], Decimal('1725'))
+        self.assertEqual(result['summary_nodes'][0]['local'], Decimal('2645'))
+        line_queries = [q['sql'] for q in queries if 'FROM "admin_motivation_salesplanline"' in q['sql']]
+        self.assertEqual(len(line_queries), 1)
+        self.assertNotIn('"calculation"', line_queries[0])
+        self.assertNotIn('"total_usd"', line_queries[0])
+
+    def test_summary_keeps_effective_versions_separate_when_grouping(self):
+        from .services.plan_summary import summary_report
+        self.load()
+        future = create_version(date(2026, 10, 8), 'Summary changed rates', self.version.pk)
+        GlobalCoeff.objects.filter(version=future).update(motivation_coeff=.5)
+        SubdivisionCoeff.objects.filter(version=future).update(motivation_coeff=.4)
+        original = self.scenario.lines.get(subdivision='A')
+        SalesPlanLine.objects.create(scenario=self.scenario, plan_date=date(2026, 10, 10), subdivision='A',
+            planning_group_sales=original.planning_group_sales, group=original.group, brand=original.brand,
+            amount_usd=original.amount_usd, segment_amounts=original.segment_amounts)
+        total = summary_report(self.scenario, {})['summary_nodes'][0]
+        self.assertEqual(total['plan'], Decimal('2500'))
+        self.assertEqual(total['global'], Decimal('1225'))
+        self.assertEqual(total['local'], Decimal('1145'))
+
+    def test_summary_type_filter_does_not_require_unselected_type(self):
+        from .services.plan_summary import summary_report
+        from django.db import models
+        self.load()
+        models.QuerySet(model=GlobalCoeff).filter(type_coeff__type_coeff_name='Продажи').delete()
+        only_policy = summary_report(self.scenario, {'type': ['policies']})
+        self.assertFalse(only_policy['summary_missing'])
+        self.assertEqual(only_policy['summary_nodes'][0]['global'], Decimal('150'))
+        self.assertEqual(only_policy['summary_nodes'][0]['local'], Decimal('300'))
+        with self.assertRaises(ValidationError):
+            summary_report(self.scenario, {'type': ['unknown']})
+
     def test_summary_difference_supports_negative_and_zero_values(self):
         from .services.plan_summary import row
         self.assertEqual(row('Test', Decimal('100'), Decimal('30'), Decimal('10'))['difference'], Decimal('-20'))
         self.assertEqual(row('Test', Decimal('0'), Decimal('10'), Decimal('10'))['difference'], Decimal('0'))
         self.assertIsNone(row('Test', Decimal('100'), None, Decimal('10'))['difference'])
 
-    def test_summary_report_lives_in_catalog_with_only_plan_filter(self):
+    def test_summary_report_lives_in_catalog_with_multiple_filters(self):
         self.load()
         url = reverse('motivation_plan_summary')
         self.assertContains(self.client.get(reverse('motivation_reports')), url)
         landing = self.client.get(url)
         self.assertContains(landing, 'name="plan"')
         self.assertNotContains(landing, 'id="plan-summary"')
-        page = self.client.get(url, {'plan': self.scenario.pk, 'subdivision': 'Missing', 'brand': 'Missing'})
+        page = self.client.get(url, {'plan': self.scenario.pk})
         self.assertEqual(page.context['summary_nodes'][0]['plan'], Decimal('1500'))
-        for field in ['subdivision', 'planning_group_sales', 'group', 'brand']:
-            self.assertNotContains(page, f'name="{field}"')
+        for field in ['subdivision', 'planning_group_sales', 'type', 'director']:
+            self.assertContains(page, f'data-summary-filter="{field}"')
         self.assertNotContains(self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk])), 'id="plan-summary"')
         self.assertEqual(self.client.get(url, {'plan': 'invalid'}).status_code, 404)
         self.assertEqual(self.client.get(url, {'plan': 999999}).status_code, 404)
