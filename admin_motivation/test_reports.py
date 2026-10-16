@@ -58,6 +58,40 @@ class NativeMotivationReportTests(TestCase):
            'СуммаМотивацииUSDУчетПроцентаQ':10, 'СуммаМотивацииUSDQ_Y':40,'СуммаМотивацииUSDУчетПроцентаQ_Y':40,
            'СуммаОтгрузокUSD_S_Q':900,'СуммаПланUSD_S_Q':1000,'СуммаОтгрузокUSD_S_Y':4200,'СуммаПланUSD_S_Y':4000}]
 
+    def test_author_lookup_binds_real_filters_and_does_not_cache_empty_results(self):
+        import sqlite3
+        from .services.reports import choices
+        database = sqlite3.connect(':memory:')
+        self.addCleanup(database.close)
+        database.execute('CREATE TABLE report (Подразделение, АвторСделки, ТипКоэф, ГруппаПлановПродаж, КварталМотивации)')
+        database.execute("INSERT INTO report VALUES ('Д-Астрахань', NULL, 'Директора', 'RAC', '1 Квартал')")
+        connection, cursor = Mock(), Mock()
+        calls = []
+        def read(cursor, sql, args=(), **kwargs):
+            calls.append((sql, args))
+            actual = database.execute(sql.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'report'), args)
+            return [dict(zip([c[0] for c in actual.description], row)) for row in actual.fetchall()]
+        values = parameters('manager', QueryDict('type=Директора&subdivision=Д-Астрахань'))
+        with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch(
+            'admin_motivation.services.reports.fetch', side_effect=read):
+            first = choices('manager', values, refresh=True)
+            self.assertEqual(next(f for f in first if f['name'] == 'author')['options'], [])
+            database.executemany('INSERT INTO report VALUES (?, ?, ?, ?, ?)', [
+                ('Д-Астрахань', 'Иванов', 'Директора', 'RAC', '1 Квартал'),
+                ('Д-Астрахань', '   ', 'Директора', 'RAC', '1 Квартал'),
+                ('Д-Астрахань', 'Другой тип', 'Продажи', 'RAC', '1 Квартал'),
+                ('Другой филиал', 'Другой директор', 'Директора', 'RAC', '1 Квартал')])
+            second = choices('manager', values)
+        self.assertEqual(next(f for f in second if f['name'] == 'author')['options'], [{'value': 'Иванов', 'selected': False}])
+        author_calls = [(sql, args) for sql, args in calls if 'АвторСделки' in sql]
+        self.assertEqual(len(author_calls), 2)
+        self.assertEqual(author_calls[-1][1], ['Д-Астрахань', 'Директора'])
+        self.assertNotIn('Д-Астрахань', author_calls[-1][0])
+        with patch('admin_motivation.report_views.choices', return_value=first):
+            page = self.client.get(reverse('motivation_report', args=['manager']), {'type': 'Директора', 'subdivision': 'Д-Астрахань'})
+        self.assertContains(page, 'В расчётных данных нет авторов сделки')
+        self.assertContains(page, '?v=manager-filters-20261016-2')
+
     def test_manager_currency_uses_rur_source_fields_without_changing_plan_metrics(self):
         from .services.reports import SQL_ROOT, manager_currency_sql
         source = (SQL_ROOT / 'manager.sql').read_text()

@@ -105,11 +105,15 @@ def choices(kind, values, refresh=False):
                 if values.get('TypeCoeff'):
                     sql += ' AND [ТипКоэф] = ?'; args.append(values['TypeCoeff'])
             cache_key = 'motivation-report-choices-' + hashlib.sha256((signature+sql+repr(args)).encode()).hexdigest()
-            options = None if refresh else cache.get(cache_key)
+            dynamic_authors = kind == 'manager' and dataset == 'DA'
+            options = None if refresh or dynamic_authors else cache.get(cache_key)
             if options is None:
                 rows = fetch(cursor, sql, args, limit=10000)
                 options = sorted({str(next(iter(row.values()))) for row in rows if next(iter(row.values())) is not None})
-                cache.set(cache_key, options, 300)
+                if dynamic_authors:
+                    options = [value for value in options if value.strip()]
+                if not dynamic_authors:
+                    cache.set(cache_key, options, 300)
             selected = values.get(parameter)
             selected = selected if isinstance(selected, list) else ([selected] if selected is not None else [])
             result.append({'name': name, 'label': caption, 'multiple': multiple,
