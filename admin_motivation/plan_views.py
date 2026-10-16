@@ -90,16 +90,9 @@ def sales_plans(request, scenario_id=None):
                     values[index] = "'" + value
             writer.writerow(values)
         return response
-    summary = {}
-    if scenario:
-        from .services.plan_summary import summary_report
-        try:
-            summary = summary_report(scenario, request.GET)
-        except ValidationError as error:
-            summary = {'summary_error': ' '.join(error.messages)}
     return render(request, 'admin_motivation/sales_plans.html', {
         'preliminary': not GlobalCoeffVersion.objects.filter(status='approved').exists(),
         'scenario': scenario, 'scenarios': SalesPlanScenario.objects.filter(is_deleted=False), 'form': form, 'edit_form': edit_form,
         'source_versions': versions, 'scope': scope, 'subdivisions': Subdivision.objects.all(),
-        **report, **summary,
+        **report,
     })

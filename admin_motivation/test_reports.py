@@ -133,6 +133,7 @@ class NativeMotivationReportTests(TestCase):
         from django.contrib.auth.models import User,Group
         user=User.objects.create_user('report-logistician');user.groups.add(Group.objects.get(name=LOGISTICIAN));self.client.force_login(user)
         self.assertEqual(self.client.get(reverse('motivation_reports')).status_code,403)
+        self.assertEqual(self.client.get(reverse('motivation_plan_summary')).status_code,403)
         self.assertEqual(self.client.get(reverse('motivation_report',args=['deals'])).status_code,403)
 
     def test_formatting_and_zero_ratio(self):

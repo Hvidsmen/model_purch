@@ -1,10 +1,10 @@
 <div class="plan-card" id="plan-summary">
 <div class="plan-actions mb-3"><h3 class="mb-0">Сводный отчёт</h3><label><input type="checkbox" data-summary-side="global" checked> Глобальная мотивация</label><label><input type="checkbox" data-summary-side="local" checked> Мотивация подразделений</label></div>
-<p class="small text-muted">За весь период сценария, с учётом фильтров ниже. Сводка рассчитывается при открытии по версиям коэффициентов на дату плана{% if summary_preliminary %} (предварительно, по черновикам){% endif %}; сохранённый расчёт ниже не меняется. Глобальные коэффициенты применяются к каждому директору отдельно. Суммы в USD; % = мотивация / план × 100.</p>
+<p class="small text-muted">За весь период выбранного плана продаж. Сводка рассчитывается при открытии по версиям коэффициентов на дату плана{% if summary_preliminary %} (предварительно, по черновикам){% endif %}; сохранённые результаты расчёта плана не меняются. Глобальные коэффициенты применяются к каждому директору отдельно. Суммы в USD; % = мотивация / план × 100.</p>
 {% if summary_error %}<div class="alert alert-warning">{{ summary_error }}</div>{% else %}
 {% if summary_missing %}<div class="alert alert-warning">Для части строк не найдены коэффициенты политик или продаж. Неполные суммы и их проценты показаны прочерком.</div>{% endif %}
 <div class="plan-actions mb-2"><button type="button" class="btn btn-sm btn-outline-secondary" data-summary-expand>Развернуть сводный отчёт</button><button type="button" class="btn btn-sm btn-outline-secondary" data-summary-collapse>Свернуть сводный отчёт</button></div>
 <div class="table-responsive"><div class="summary-table">
 <div class="summary-grid summary-heading"><span>Компания / подразделение / вид мотивации</span><span>План продаж</span><span class="summary-global">Мотивация глобальная</span><span class="summary-global">% от плана</span><span class="summary-local">Мотивация подразделений</span><span class="summary-local">% от плана</span></div>
-{% for node in summary_nodes %}{% include 'admin_motivation/_plan_summary_row.html' %}{% empty %}<p class="p-3">Нет загруженных строк подразделений по выбранным фильтрам.</p>{% endfor %}
+{% for node in summary_nodes %}{% include 'admin_motivation/_plan_summary_row.html' %}{% empty %}<p class="p-3">В выбранном плане нет загруженных строк подразделений.</p>{% endfor %}
 </div></div>{% endif %}</div>

@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}
 {% block content %}
 <section class="content"><h1>Отчёты мотивации</h1><p>Отчёты с данными, фильтрами и раскрываемой детализацией.</p>
-<div class="report-catalog">{% for key,item in reports.items %}<a class="report-catalog-card" href="{% url 'motivation_report' key %}"><strong>{{ item.title }}</strong><p>{{ item.description }}</p><span>Открыть отчёт →</span></a>{% endfor %}</div></section>
+<div class="report-catalog"><a class="report-catalog-card" href="{% url 'motivation_plan_summary' %}"><strong>Сводный отчёт по плану продаж</strong><p>План, глобальная мотивация и мотивация подразделений с детализацией по директорам.</p><span>Открыть отчёт →</span></a>{% for key,item in reports.items %}<a class="report-catalog-card" href="{% url 'motivation_report' key %}"><strong>{{ item.title }}</strong><p>{{ item.description }}</p><span>Открыть отчёт →</span></a>{% endfor %}</div></section>
 <style>.report-catalog{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}.report-catalog-card{padding:20px;border:1px solid #dce3ec;border-radius:10px;text-decoration:none;color:#1e3a5f;background:#f7f9fc}.report-catalog-card:hover{background:#e8eff8}.report-catalog-card strong{font-size:18px}.report-catalog-card p{margin:12px 0;color:#64748b}</style>
 {% endblock %}

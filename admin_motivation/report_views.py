@@ -2,11 +2,11 @@ import csv
 import logging
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
-from django.shortcuts import render
+from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from .services.reports import CATALOG, FILTERS, parameters, choices, load_report
 from .services.versions import today
-from .models import Subdivision
+from .models import Subdivision, SalesPlanScenario
 
 logger = logging.getLogger(__name__)
 
@@ -69,4 +69,24 @@ def report_page(request, kind):
         'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
         'subdivisions': Subdivision.objects.all(),
         'scope': query.get('scope','subdivisions'),
+    })
+
+
+def plan_summary(request):
+    from .services.plan_summary import summary_report
+    plans = SalesPlanScenario.objects.filter(is_deleted=False)
+    plan = None
+    summary = {}
+    selected = request.GET.get('plan', '').strip()
+    if selected:
+        if not selected.isdecimal():
+            raise Http404('План продаж не найден.')
+        plan = get_object_or_404(plans, pk=selected)
+        try:
+            # This report deliberately supports only the sales-plan selector.
+            summary = summary_report(plan, {})
+        except ValidationError as error:
+            summary = {'summary_error': ' '.join(error.messages)}
+    return render(request, 'admin_motivation/reports/plan_summary.html', {
+        'plans': plans, 'plan': plan, 'subdivisions': Subdivision.objects.all(), **summary,
     })

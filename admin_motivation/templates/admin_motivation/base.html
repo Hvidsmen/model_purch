@@ -238,7 +238,7 @@
                 Выгрузка в DWH
             </a>
         </li>
-        <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
+        <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
         <li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
     </ul>
 {% endblock %}

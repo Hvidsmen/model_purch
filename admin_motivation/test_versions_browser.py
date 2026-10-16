@@ -25,7 +25,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             SubdivisionDirectorCoeff.objects.create(version=fixture.version, goods=fixture.good,
                 subdivision=fixture.subs[0], employee=employee, **{f'k{i}': '.02' for i in range(5)})
         self.db(directors)
-        self.page.goto(self.live_server_url + reverse('motivation_sales_plan', args=[fixture.scenario.pk]))
+        self.page.goto(self.live_server_url + reverse('motivation_reports'))
+        self.page.get_by_role('link', name='Сводный отчёт по плану продаж', exact=False).click()
+        self.page.locator('#summary-plan').select_option(str(fixture.scenario.pk))
+        self.page.get_by_role('button', name='Показать', exact=True).click()
         report = self.page.locator('#plan-summary')
         self.assertEqual(report.locator('details[open]').count(), 0)
         report.locator('summary').first.click()

@@ -41,12 +41,31 @@ class SalesPlanTests(TestCase):
         self.assertEqual(filtered[0]['plan'], Decimal('500'))
         self.assertEqual(len(filtered), 2)
         self.assertEqual(summary_report(self.scenario, {'brand': 'Missing'})['summary_nodes'], [])
-        response = self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk]))
+        response = self.client.get(reverse('motivation_plan_summary'), {'plan': self.scenario.pk})
         self.assertContains(response, 'Сводный отчёт')
         self.assertContains(response, 'data-summary-side="global"')
         self.assertContains(response, 'data-summary-side="local"')
         self.assertContains(response, 'Петров')
         self.assertIsNone(self.scenario.lines.first().total_usd)  # Read-only, no snapshot mutation.
+
+    def test_summary_report_lives_in_catalog_with_only_plan_filter(self):
+        self.load()
+        url = reverse('motivation_plan_summary')
+        self.assertContains(self.client.get(reverse('motivation_reports')), url)
+        landing = self.client.get(url)
+        self.assertContains(landing, 'name="plan"')
+        self.assertNotContains(landing, 'id="plan-summary"')
+        page = self.client.get(url, {'plan': self.scenario.pk, 'subdivision': 'Missing', 'brand': 'Missing'})
+        self.assertEqual(page.context['summary_nodes'][0]['plan'], Decimal('1500'))
+        for field in ['subdivision', 'planning_group_sales', 'group', 'brand']:
+            self.assertNotContains(page, f'name="{field}"')
+        self.assertNotContains(self.client.get(reverse('motivation_sales_plan', args=[self.scenario.pk])), 'id="plan-summary"')
+        self.assertEqual(self.client.get(url, {'plan': 'invalid'}).status_code, 404)
+        self.assertEqual(self.client.get(url, {'plan': 999999}).status_code, 404)
+        self.scenario.is_deleted = True
+        self.scenario.save(update_fields=['is_deleted'])
+        self.assertEqual(self.client.get(url, {'plan': self.scenario.pk}).status_code, 404)
+        self.assertNotContains(self.client.get(url), self.scenario.title)
 
     def test_summary_uses_dated_versions_and_handles_zero_plan_and_missing_coefficients(self):
         from .services.plan_summary import summary_report

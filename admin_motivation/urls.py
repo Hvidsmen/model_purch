@@ -5,6 +5,7 @@ urlpatterns = [
     path("copy_group/", director_views.coefficient_group_copy, name="motivation_copy_group"),
     path("directors/", director_views.director_directory, name="motivation_director_directory"),
     path("reports/", report_views.report_index, name="motivation_reports"),
+    path("reports/plan-summary/", report_views.plan_summary, name="motivation_plan_summary"),
     path("reports/<str:kind>/", report_views.report_page, name="motivation_report"),
     path("director_coefficients/global", director_views.director_coefficients, name="motivation_directors_global"),
     path("director_coefficients/local", director_views.director_coefficients, {"local": True}, name="motivation_directors_local"),
