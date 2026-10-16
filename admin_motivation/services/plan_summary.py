@@ -62,6 +62,8 @@ def summary_report(scenario, params):
             for key in employee:
                 employee[key] += value[key]
     nodes = [node('Итого', company, names)] if buckets else []
+    if nodes:
+        nodes[0]['is_total'] = True
     nodes += [node(branches.get(key, key), bucket, names) for key, bucket in sorted(buckets.items())]
     return {'summary_nodes': nodes, 'summary_missing': bool(missing),
             'summary_preliminary': not any(v.status == 'approved' for v in versions)}
@@ -77,6 +79,7 @@ def empty_bucket():
 
 def row(name, plan, global_value, local_value, children=None):
     return {'name': name, 'plan': plan, 'global': global_value, 'local': local_value,
+            'difference': local_value - global_value if global_value is not None and local_value is not None else None,
             'global_percent': global_value / plan * 100 if plan and global_value is not None else None,
             'local_percent': local_value / plan * 100 if plan and local_value is not None else None,
             'children': children or []}

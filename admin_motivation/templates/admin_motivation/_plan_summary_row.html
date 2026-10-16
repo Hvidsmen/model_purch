@@ -1,5 +1,6 @@
-{% if node.children %}<details class="summary-node"><summary class="summary-grid">{% else %}<div class="summary-grid summary-leaf">{% endif %}
+{% if node.children %}<details class="summary-node{% if node.is_total %} summary-company-total{% endif %}"><summary class="summary-grid">{% else %}<div class="summary-grid summary-leaf">{% endif %}
 <span class="summary-label">{{ node.name }}</span><span>{{ node.plan|floatformat:'0g' }}</span>
 <span class="summary-global">{{ node.global|floatformat:'0g'|default:'—' }}</span><span class="summary-global">{% if node.global_percent != None %}{{ node.global_percent|floatformat:'2' }}%{% else %}—{% endif %}</span>
 <span class="summary-local">{{ node.local|floatformat:'0g'|default:'—' }}</span><span class="summary-local">{% if node.local_percent != None %}{{ node.local_percent|floatformat:'2' }}%{% else %}—{% endif %}</span>
+<span class="summary-difference {% if node.difference > 0 %}difference-increase{% elif node.difference < 0 %}difference-decrease{% endif %}">{% if node.difference != None %}{% if node.difference > 0 %}+{% endif %}{{ node.difference|floatformat:'0g' }}{% else %}—{% endif %}</span>
 {% if node.children %}</summary><div class="summary-children">{% for node in node.children %}{% include 'admin_motivation/_plan_summary_row.html' %}{% endfor %}</div></details>{% else %}</div>{% endif %}

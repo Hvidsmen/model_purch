@@ -29,6 +29,9 @@ class SalesPlanTests(TestCase):
         self.assertEqual(company['plan'], Decimal('1500'))  # Global duplicate excluded.
         self.assertEqual([n['name'] for n in company['children']], ['Политика', 'Продажи', 'Директор'])
         self.assertEqual(company['global'], Decimal('250'))  # Policies 150 + sales 75 + directors 25.
+        self.assertTrue(company['is_total'])
+        self.assertEqual(company['difference'], Decimal('165'))
+        self.assertEqual(branch_a['difference'], Decimal('110'))
         self.assertEqual(company['local'], Decimal('415'))  # Policies 300 + sales 45 + directors 70.
         self.assertEqual(branch_a['global'], Decimal('170'))
         self.assertEqual(branch_b['local'], Decimal('135'))
@@ -47,6 +50,12 @@ class SalesPlanTests(TestCase):
         self.assertContains(response, 'data-summary-side="local"')
         self.assertContains(response, 'Петров')
         self.assertIsNone(self.scenario.lines.first().total_usd)  # Read-only, no snapshot mutation.
+
+    def test_summary_difference_supports_negative_and_zero_values(self):
+        from .services.plan_summary import row
+        self.assertEqual(row('Test', Decimal('100'), Decimal('30'), Decimal('10'))['difference'], Decimal('-20'))
+        self.assertEqual(row('Test', Decimal('0'), Decimal('10'), Decimal('10'))['difference'], Decimal('0'))
+        self.assertIsNone(row('Test', Decimal('100'), None, Decimal('10'))['difference'])
 
     def test_summary_report_lives_in_catalog_with_only_plan_filter(self):
         self.load()
@@ -82,6 +91,7 @@ class SalesPlanTests(TestCase):
         models.QuerySet(model=GlobalCoeff).all().delete()
         result = summary_report(self.scenario, {})
         self.assertTrue(result['summary_missing'])
+        self.assertIsNone(result['summary_nodes'][0]['difference'])
         self.assertIsNone(result['summary_nodes'][0]['global'])
         self.assertIsNotNone(result['summary_nodes'][0]['local'])
 
