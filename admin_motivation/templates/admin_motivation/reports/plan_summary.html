@@ -3,12 +3,12 @@
 {% block title %}Сводный отчёт по плану продаж{% endblock %}
 {% block content %}
 {% language 'ru' %}
-<link rel="stylesheet" href="{% static 'admin_motivation/plan_summary.css' %}?v=filters-20261017">
+<link rel="stylesheet" href="{% static 'admin_motivation/plan_summary.css' %}?v=sticky-20261017">
 <div class="plan-card"><a href="{% url 'motivation_reports' %}">← Отчёты</a><h2 class="mt-3">Сводный отчёт по плану продаж</h2>
 <form method="get" class="plan-actions"><label for="summary-plan">План продаж<select id="summary-plan" name="plan" class="form-select" required><option value="">Выберите план</option>{% for item in plans %}<option value="{{ item.pk }}" {% if plan.pk == item.pk %}selected{% endif %}>{{ item.title }} · {{ item.source_version }}</option>{% endfor %}</select></label>
 {% for filter in summary_filters %}<div class="summary-filter-field"><span>{{ filter.label }}</span><details class="summary-filter" data-summary-filter="{{ filter.name }}"><summary><span data-filter-caption>Все</span></summary><div class="summary-filter-menu"><input type="search" class="form-control" placeholder="Поиск…" aria-label="Поиск: {{ filter.label }}"><div class="summary-filter-actions"><button type="button" data-filter-all>Выбрать найденные</button><button type="button" data-filter-clear>Снять все</button></div><div class="summary-filter-options">{% for option in filter.options %}<label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}" {% if option.selected %}checked{% endif %}> {{ option.label }}</label>{% empty %}<span>Нет значений</span>{% endfor %}</div></div></details></div>{% endfor %}
 <button class="btn btn-primary">Показать</button>{% if plan %}<a href="?plan={{ plan.pk }}" class="btn btn-outline-secondary">Сбросить фильтры</a>{% endif %}</form>{% if plan %}<p class="small text-muted mt-2 mb-0">Можно выбрать несколько значений в каждом фильтре. Пустой выбор означает «Все».</p>{% endif %}</div>
 {% if plan %}{% include 'admin_motivation/_plan_summary.html' %}{% else %}<div class="plan-card">Выберите план продаж, чтобы увидеть сводный отчёт.</div>{% endif %}
-<script src="{% static 'admin_motivation/plan_summary.js' %}?v=filters-20261017" defer></script>
+<script src="{% static 'admin_motivation/plan_summary.js' %}?v=sticky-20261017" defer></script>
 {% endlanguage %}
 {% endblock %}

@@ -4,3 +4,10 @@
 #plan-summary .summary-company-total>summary{background:#ede9fe;border:2px solid #8b5cf6;border-radius:8px;font-size:16px;font-weight:800;padding-top:16px;padding-bottom:16px;color:#312e81}#plan-summary .summary-company-total>summary:hover{background:#e4ddfc}.summary-difference{font-weight:700}.difference-increase{color:#9a3412}.difference-decrease{color:#047857}
 
 .summary-filter-field{min-width:165px;flex:1;max-width:250px}.summary-filter-field>span{display:block;font-size:13px;margin-bottom:4px}.summary-filter{position:relative}.summary-filter>summary{list-style:none;border:1px solid #cbd5e1;border-radius:5px;padding:7px 30px 7px 10px;background:white}.summary-filter>summary:after{content:'▾';position:absolute;right:10px}.summary-filter-menu{position:absolute;top:100%;left:0;z-index:50;background:white;border:1px solid #cbd5e1;border-radius:8px;padding:10px;min-width:270px;max-width:90vw;box-shadow:0 8px 24px #0f172a20}.summary-filter-options{max-height:240px;overflow:auto}.summary-filter-options label{display:block;padding:6px;cursor:pointer;font-size:13px}.summary-filter-options label[hidden]{display:none}.summary-filter-options label:hover{background:#f1f5f9}.summary-filter-actions{display:flex;gap:12px;margin:8px 0}.summary-filter-actions button{background:none;border:0;color:#5b46c6;font-size:12px;padding:0;cursor:pointer}
+
+/* One scroll viewport keeps horizontal columns and both pinned rows aligned. */
+.summary-scroll{max-height:72vh;overflow:auto;position:relative;isolation:isolate;--summary-heading-height:64px;scrollbar-gutter:stable}
+.summary-scroll .summary-heading{position:sticky;top:0;z-index:4}
+.summary-scroll .summary-company-total{display:contents}
+.summary-scroll .summary-company-total>summary{position:sticky;top:var(--summary-heading-height);z-index:3;box-shadow:0 3px 5px #312e811a}
+.summary-scroll:focus-visible{outline:2px solid #8b5cf6;outline-offset:3px}

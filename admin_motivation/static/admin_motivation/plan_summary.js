@@ -21,6 +21,13 @@
     }));
     const report = document.getElementById('plan-summary');
     if (!report) return;
+    const heading = report.querySelector('.summary-heading');
+    const viewport = report.querySelector('.summary-scroll');
+    if (heading && viewport) {
+        const updateHeadingHeight = () => viewport.style.setProperty('--summary-heading-height', `${heading.getBoundingClientRect().height}px`);
+        updateHeadingHeight();
+        new ResizeObserver(updateHeadingHeight).observe(heading);
+    }
     report.querySelectorAll('[data-summary-side]').forEach(input => {
         input.addEventListener('change', () => report.classList.toggle(`hide-${input.dataset.summarySide}`, !input.checked));
     });
