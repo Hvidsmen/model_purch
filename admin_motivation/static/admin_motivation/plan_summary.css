@@ -11,3 +11,9 @@
 .summary-scroll .summary-company-total{display:contents}
 .summary-scroll .summary-company-total>summary{position:sticky;top:var(--summary-heading-height);z-index:3;box-shadow:0 3px 5px #312e811a}
 .summary-scroll:focus-visible{outline:2px solid #8b5cf6;outline-offset:3px}
+
+/* Branch motivation is the final budget: keep both columns visually paired. */
+#plan-summary .summary-grid>.summary-local{background:#ecfdf5;color:#065f46;font-weight:700;align-self:stretch;display:flex;align-items:center;justify-content:flex-end;margin-top:-12px;margin-bottom:-12px;padding:12px 8px}
+#plan-summary .summary-heading>.summary-local{background:#d1fae5;color:#064e3b;font-weight:800;border-top:3px solid #059669}
+#plan-summary .summary-company-total>summary>.summary-local{background:#a7f3d0;color:#064e3b;font-weight:900;margin-top:-16px;margin-bottom:-16px;padding-top:16px;padding-bottom:16px}
+#plan-summary.hide-local .summary-grid>.summary-local{display:none}
