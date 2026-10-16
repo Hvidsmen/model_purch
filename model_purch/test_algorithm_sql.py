@@ -26,31 +26,16 @@ class AlgorithmSqlTests(SimpleTestCase):
     @override_settings(MS_SQL_CONN_STR='configured-connection')
     @patch('model_purch.conns.pyodbc.connect')
     def test_all_steps_use_runtime_settings_commit_and_close(self, connect):
-        for step in [step_2_prepare_data, step_4_update_tables, step_5_olap_cube]:
+        for step in [step_2_prepare_data, step_4_update_tables]:
             connection, cursor = Mock(), Mock()
             connection.cursor.return_value = cursor
             cursor.nextset.side_effect = [True, False]
             connect.return_value = connection
-            with patch('model_purch.services.calculation.time.sleep') as wait:
-                result = step(1)
-                if step is step_5_olap_cube:
-                    wait.assert_called_once_with(60)
-                    self.assertIn('60 секунд', result['message'])
-                else:
-                    wait.assert_not_called()
+            step(1)
             connect.assert_called_with('configured-connection')
             connection.commit.assert_called_once()
             connection.close.assert_called_once()
             connection.rollback.assert_not_called()
-
-    def test_failed_olap_start_does_not_wait(self):
-        from .services.calculation import run_step
-        with patch('model_purch.services.calculation.execute_sql', side_effect=RuntimeError('job start failed')), patch(
-            'model_purch.services.calculation.time.sleep',
-        ) as wait:
-            with self.assertRaisesRegex(RuntimeError, 'job start failed'):
-                run_step(5, 1, Mock())
-        wait.assert_not_called()
 
     @patch('model_purch.views.connect_database')
     def test_error_in_later_procedure_rolls_back_and_closes(self, connect):

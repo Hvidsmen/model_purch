@@ -1,5 +1,3 @@
-import time
-
 def execute_sql(sql, connector):
     connection, cursor = connector('vm-dwh', 'ModelPurch')
     try:
@@ -22,8 +20,10 @@ def run_step(order, run_id, connector):
     statements = {
         2: ('EXEC [ModelPurch].[dbo].[sp_ETLDataBase]; EXEC [ModelPurch].[dbo].[sp_CreateTableModel];', 'Данные подготовлены'),
         4: ('EXEC [ModelPurch].[dbo].[sp_Date];', 'Таблицы обновлены'),
-        5: ("EXEC msdb.dbo.sp_start_job 'ModelPurch';", 'Куб отправлен на обсчет'),
     }
+    if order == 5:
+        from .olap_job import process_cube
+        return process_cube(connector)
     if order == 3:
         from ..models import AlgorithmRun
         from ..calc_purch import calc_purch
@@ -39,9 +39,4 @@ def run_step(order, run_id, connector):
         return {'message': 'Заказ рассчитан'}
     sql, message = statements[order]
     execute_sql(sql, connector)
-    if order == 5:
-        # sp_start_job returns before OLAP processing has finished.
-        # Keep this step running for the requested minute after dispatch.
-        time.sleep(60)
-        message = 'Куб отправлен на обсчёт. Ожидание 60 секунд завершено.'
     return {'message': message}
