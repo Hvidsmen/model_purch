@@ -1090,7 +1090,9 @@ def export_to_excel(request):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = f"PGGoods - {current_scenario.name if current_scenario else 'All'}"
+    # Excel limits sheet titles to 31 characters and forbids []:*?/\.
+    # Keep the full, unrestricted scenario name in the data column instead.
+    ws.title = 'Товары'
 
     header_font = Font(name='Calibri', size=11, bold=True, color='FFFFFF')
     header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')

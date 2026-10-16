@@ -5,6 +5,32 @@ from .models import ScenarioModel, KindPurch, PGGoods
 
 
 class GoodsEditorTests(TestCase):
+    def test_excel_sheet_title_is_valid_for_long_and_special_scenario_names(self):
+        import io
+        import warnings
+        from zipfile import ZipFile
+        from xml.etree import ElementTree
+        from openpyxl import load_workbook
+
+        names = ['Планирование закупок на следующий год ' * 3,
+                 'План [2026]: октябрь/ноябрь?*\\']
+        for name in names:
+            with self.subTest(name=name):
+                self.scenario.name = name
+                self.scenario.save(update_fields=['name'])
+                with warnings.catch_warnings():
+                    warnings.simplefilter('error', UserWarning)
+                    response = self.client.get(reverse('export_pggoods'), {'scenario': self.scenario.pk})
+                self.assertEqual(response.status_code, 200)
+                with ZipFile(io.BytesIO(response.content)) as archive:
+                    root = ElementTree.fromstring(archive.read('xl/workbook.xml'))
+                    sheet = root.find('{*}sheets/{*}sheet')
+                    self.assertEqual(sheet.attrib['name'], 'Товары')
+                workbook = load_workbook(io.BytesIO(response.content))
+                self.assertEqual(workbook.active.cell(2, 2).value, name)
+                self.assertEqual(workbook.active.cell(2, 3).value, self.good.planning_group)
+                workbook.close()
+
     def setUp(self):
         authorize_test_case(self)
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
