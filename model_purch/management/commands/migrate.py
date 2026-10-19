@@ -18,6 +18,9 @@ class Command(DjangoMigrate):
             executor = MigrationExecutor(connection)
             # A backup is also required for explicitly requested reverse/fake migrations.
             if options.get('app_label') or executor.migration_plan(executor.loader.graph.leaf_nodes()):
+                size_mb = Path(name).stat().st_size / (1024 * 1024)
+                self.stdout.write(f'Есть изменения схемы. Создание и проверка резервной копии SQLite ({size_mb:.1f} МБ)…')
+                self.stdout.flush()
                 try:
                     path = backup_sqlite(name, settings.BASE_DIR / '.local' / 'backups')
                 except Exception as error:
