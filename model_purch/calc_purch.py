@@ -50,12 +50,12 @@ def calc_purch(scenario_name=None, scenario_names=None):
                   WHERE
                     [PlanningGroupOZP] = ?
                     AND СценарийМодели = ?
-                    AND Date_ = (SELECT MAX(Date_) FROM [ModelPurch].[dbo].[TableForCalcPlanIncomes] WHERE СценарийМодели = ?)
+                    AND Date_ = (SELECT MAX(Date_) FROM [ModelPurch].[dbo].[TableForCalcPlanIncomes] WHERE СценарийМодели = ? AND PlanningGroupOZP = ?)
                 GROUP BY
                     [PlanningGroupOZP]
                       ,[CoeffEnd]
                 """
-                df_all_ord = pd.read_sql(sql_data_all, con=con, params=[pg, sc, sc])
+                df_all_ord = pd.read_sql(sql_data_all, con=con, params=[pg, sc, sc, pg])
                 qty_all_ord = sum([row['QtyALLOrder'] for _,row in df_all_ord.iterrows()])
                 sql_by_date = """
                     SELECT  [Date_]

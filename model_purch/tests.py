@@ -36,10 +36,35 @@ class PurchaseCalculationTests(SimpleTestCase):
         self.assertEqual(cursor.executemany.call_args.args[1],
                          [("Group's", '2026-01-01', 5.0, scenario) for scenario in scenarios])
         self.assertEqual(read.call_args_list[1].kwargs['params'], [scenarios[0]])
-        self.assertEqual(read.call_args_list[2].kwargs['params'], ["Group's", scenarios[0], scenarios[0]])
+        self.assertEqual(read.call_args_list[2].kwargs['params'], ["Group's", scenarios[0], scenarios[0], "Group's"])
         self.assertNotIn(scenarios[0], read.call_args_list[1].args[0])
         connection.commit.assert_called_once()
         connection.close.assert_called_once()
+
+    def test_each_group_uses_its_own_last_date_within_the_scenario(self):
+        import sqlite3
+        database = sqlite3.connect(':memory:')
+        self.addCleanup(database.close)
+        database.execute('CREATE TABLE source (PlanningGroupOZP, CoeffEnd, Количество, ПланПродаж, СценарийМодели, Date_, ПланСтока)')
+        database.executemany('INSERT INTO source VALUES (?, ?, ?, ?, ?, ?, ?)', [
+            ("Group's 1", 2, 10, 15, 'Plan', '2026-01-01', 0),
+            ('Group 2', 1, 5, 10, 'Plan', '2026-02-01', 0),
+            ("Group's 1", 2, 99, 99, 'Another plan', '2026-12-01', 0)])
+        real_read = pd.read_sql
+        def read(sql, con, params=None):
+            if 'SELECT DISTINCT СценарийМодели' in sql:
+                return pd.DataFrame({'СценарийМодели': ['Plan']})
+            if 'SELECT DISTINCT PlanningGroupOZP' in sql:
+                return pd.DataFrame({'PlanningGroupOZP': ["Group's 1", 'Group 2']})
+            return real_read(sql.replace('[ModelPurch].[dbo].[TableForCalcPlanIncomes]', 'source'), con=database, params=params)
+        connection, cursor = Mock(), Mock()
+        with patch('model_purch.calc_purch.connect_database', return_value=(connection, cursor)), patch('model_purch.calc_purch.pd.read_sql', side_effect=read):
+            calc_purch(scenario_name='Plan')
+        rows = cursor.executemany.call_args.args[1]
+        self.assertEqual(sum(row[2] for row in rows if row[0] == "Group's 1"), 20)
+        self.assertEqual(sum(row[2] for row in rows if row[0] == 'Group 2'), 5)
+        self.assertEqual({row[1] for row in rows if row[0] == "Group's 1"}, {'2026-01-01'})
+        connection.commit.assert_called_once()
 
     def test_no_scenarios_does_not_make_empty_bulk_insert(self):
         connection, cursor, _ = self.run_calc([pd.DataFrame({'СценарийМодели': []})])
