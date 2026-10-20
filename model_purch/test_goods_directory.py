@@ -5,7 +5,7 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from base.testing import authorize_test_case
-from .models import Freight, GoodsGroup, KindPurch, PGGoods, Purch, ScenarioModel
+from .models import Freight, GoodsGroup, KindPurch, PGGoods, ScenarioModel
 from .services.goods_directory import REBUILD_SQL, SQL, refresh_goods_directory
 
 
@@ -19,13 +19,13 @@ class GoodsDirectoryTests(TestCase):
             volume=1, container_volume=70, duty_rate=7, exw_usd=10, stock_cnt_day=30, percent_stock_end=20)
         self.connection, self.cursor = Mock(), Mock()
         self.connector = Mock(return_value=(self.connection, self.cursor))
-        self.cursor.fetchall.return_value = [(' GROUP ', 'New sales', 'New goods', 'New brand', 'New supplier', 'PG1')]
+        self.cursor.fetchall.return_value = [(' GROUP ', 'New sales', 'New goods', 'New brand', 'PG1')]
         self.url = reverse('refresh_goods_directory', args=[self.scenario.pk])
 
     def refresh(self):
         return refresh_goods_directory(self.scenario, connector=self.connector)
 
-    def test_only_four_fields_update_and_only_in_selected_scenario(self):
+    def test_only_three_fields_update_and_only_in_selected_scenario(self):
         other_good = PGGoods.objects.get(pk=self.good.pk)
         other_good.pk = None
         other_good.scenario_plan = self.other
@@ -33,9 +33,9 @@ class GoodsDirectoryTests(TestCase):
         before = PGGoods.objects.values().get(pk=self.good.pk)
         self.assertEqual(self.refresh(), {'updated': 1, 'unchanged': 0, 'missing': 0})
         after = PGGoods.objects.values().get(pk=self.good.pk)
-        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand', 'purch'})
+        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand'})
         self.assertEqual((after['planning_sales'], after['group_goods'], after['brand'], after['purch']),
-                         ('New sales', 'New goods', 'New brand', 'New supplier'))
+                         ('New sales', 'New goods', 'New brand', 'Supplier'))
         other_good.refresh_from_db()
         self.assertEqual(other_good.brand, 'Brand')
         self.assertTrue(GoodsGroup.objects.filter(name='New goods').exists())
@@ -47,7 +47,7 @@ class GoodsDirectoryTests(TestCase):
     def test_source_rebuild_precedes_read_and_commits_transaction(self):
         events = []
         self.cursor.execute.side_effect = lambda sql: events.append(sql)
-        self.cursor.fetchall.side_effect = lambda: events.append('fetch') or [('Group', 'New', 'New', 'New', 'Supplier', 'PG1')]
+        self.cursor.fetchall.side_effect = lambda: events.append('fetch') or [('Group', 'New', 'New', 'New', 'PG1')]
         self.connection.commit.side_effect = lambda: events.append('commit')
         self.refresh()
         self.assertEqual(events, [REBUILD_SQL, SQL, 'fetch', 'commit'])
@@ -75,22 +75,22 @@ class GoodsDirectoryTests(TestCase):
                 self.connection.commit.side_effect = None
 
     def test_unmatched_goods_preserved_new_source_goods_not_created(self):
-        self.cursor.fetchall.return_value = [('Missing', 'Sales', 'Goods', 'Brand', 'Supplier', 'PG2')]
+        self.cursor.fetchall.return_value = [('Missing', 'Sales', 'Goods', 'Brand', 'PG2')]
         before = PGGoods.objects.values().get(pk=self.good.pk)
         self.assertEqual(self.refresh(), {'updated': 0, 'unchanged': 0, 'missing': 1})
         self.assertEqual(PGGoods.objects.values().get(pk=self.good.pk), before)
         self.assertEqual(PGGoods.objects.count(), 1)
 
     def test_duplicate_identical_source_rows_accepted_and_blanks_clear_fields(self):
-        self.cursor.fetchall.return_value = [('group', None, None, None, None, 'PG1'), ('GROUP', '', '', '', '', 'PG2')]
+        self.cursor.fetchall.return_value = [('group', None, None, None, 'PG1'), ('GROUP', '', '', '', 'PG2')]
         self.assertEqual(self.refresh()['updated'], 1)
         self.good.refresh_from_db()
-        self.assertEqual((self.good.planning_sales, self.good.group_goods, self.good.brand, self.good.purch), ('', '', None, None))
+        self.assertEqual((self.good.planning_sales, self.good.group_goods, self.good.brand, self.good.purch), ('', '', None, 'Supplier'))
 
     def test_normalized_duplicates_prefer_pg_and_are_independent_of_source_order(self):
-        candidates = [(' Group ', 'Model sales', 'Model goods', 'Model brand', 'Supplier', 'A001'),
-                      ('GROUP', 'PG sales', 'PG goods', 'PG brand', 'Supplier', 'PG002'),
-                      ('group', 'First sales', 'First goods', 'First brand', 'Supplier', 'PG001')]
+        candidates = [(' Group ', 'Model sales', 'Model goods', 'Model brand', 'A001'),
+                      ('GROUP', 'PG sales', 'PG goods', 'PG brand', 'PG002'),
+                      ('group', 'First sales', 'First goods', 'First brand', 'PG001')]
         for order in (candidates, list(reversed(candidates))):
             self.cursor.fetchall.return_value = order
             self.refresh()
@@ -100,8 +100,8 @@ class GoodsDirectoryTests(TestCase):
         self.connection.rollback.assert_not_called()
 
     def test_equal_planning_keys_have_stable_whole_row_tiebreak(self):
-        candidates = [('Group', 'B sales', 'A goods', 'B brand', 'Supplier', 'PG1'),
-                      ('Group', 'A sales', 'Z goods', 'A brand', 'Supplier', 'PG1')]
+        candidates = [('Group', 'B sales', 'A goods', 'B brand', 'PG1'),
+                      ('Group', 'A sales', 'Z goods', 'A brand', 'PG1')]
         for order in (candidates, list(reversed(candidates))):
             self.cursor.fetchall.return_value = order
             self.refresh()
@@ -110,7 +110,7 @@ class GoodsDirectoryTests(TestCase):
                              ('A sales', 'Z goods', 'A brand'))
 
     def test_oversized_values_cancel_entire_update(self):
-        self.cursor.fetchall.return_value = [('Group', 'x' * 256, '', '', '', 'PG1')]
+        self.cursor.fetchall.return_value = [('Group', 'x' * 256, '', '', 'PG1')]
         with self.assertRaises(ValidationError):
             self.refresh()
         self.good.refresh_from_db()
@@ -128,22 +128,23 @@ class GoodsDirectoryTests(TestCase):
         self.good.refresh_from_db()
         self.assertEqual(self.good.brand, 'Brand')
 
-    def test_supplier_change_updates_derived_price_without_overwriting_inputs(self):
+    def test_supplier_and_derived_prices_are_preserved(self):
         Freight.objects.create(scenario=self.scenario, price_per_container=700)
         self.good.save()
-        self.assertGreater(self.good.ddp_usd, self.good.exw_usd)
-        Purch.objects.create(name='New supplier', lag_income=30, supply_type='russian')
+        before = PGGoods.objects.values().get(pk=self.good.pk)
         self.refresh()
-        self.good.refresh_from_db()
-        self.assertEqual(self.good.ddp_usd, self.good.exw_usd)
-        self.assertEqual((self.good.volume, self.good.container_volume, self.good.duty_rate, self.good.exw_usd), (1, 70, 7, 10))
+        after = PGGoods.objects.values().get(pk=self.good.pk)
+        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand'})
+        self.assertEqual(after['purch'], 'Supplier')
+        self.assertNotIn('[Purch]', SQL)
 
-    def test_price_failure_rolls_back_metadata_and_new_groups(self):
-        with patch('model_purch.services.goods_directory.reprice_goods', side_effect=ValidationError('Bad price')):
+    def test_local_failure_rolls_back_metadata_and_new_groups(self):
+        with patch('model_purch.services.goods_directory.PGGoods.objects.bulk_update', side_effect=ValidationError('Write failed')):
             with self.assertRaises(ValidationError):
                 self.refresh()
         self.good.refresh_from_db()
         self.assertEqual(self.good.purch, 'Supplier')
+        self.assertEqual(self.good.brand, 'Brand')
         self.assertFalse(GoodsGroup.objects.filter(name='New goods').exists())
 
     def test_empty_scenario_skips_connection(self):

@@ -1,4 +1,4 @@
-"""Refresh the four source classifications without reimporting scenario inputs."""
+"""Refresh the three source classifications without reimporting scenario inputs."""
 from pathlib import Path
 import unicodedata
 
@@ -8,12 +8,11 @@ from django.db import transaction
 from ..conns import connect_database
 from ..goods_identity import planning_group_key
 from ..models import GoodsGroup, PGGoods, ScenarioModel
-from .pricing import reprice_goods
 
-FIELDS = ('planning_sales', 'group_goods', 'brand', 'purch')
+FIELDS = ('planning_sales', 'group_goods', 'brand')
 REBUILD_SQL = (Path(__file__).resolve().parents[1] / 'sql' / 'refresh_goods_directory.sql').read_text(encoding='utf-8')
 SQL = '''
-SELECT DISTINCT [PlanningGroupOZP], [PlanningGroupSalesERP], [Group_1], [BrandName], [Purch], [PlanningKey]
+SELECT DISTINCT [PlanningGroupOZP], [PlanningGroupSalesERP], [Group_1], [BrandName], [PlanningKey]
 FROM [ModelPurch].[dbo].[PlanningGroupOZP]
 WHERE [PlanningGroupOZP] IS NOT NULL
 '''
@@ -30,15 +29,15 @@ def refresh_goods_directory(scenario, connector=None):
         cursor.execute(REBUILD_SQL)
         cursor.execute(SQL)
         source, ranks = {}, {}
-        for group, sales, goods_group, brand, supplier, planning_key in cursor.fetchall():
-            raw = (sales, goods_group, brand, supplier)
+        for group, sales, goods_group, brand, planning_key in cursor.fetchall():
+            raw = (sales, goods_group, brand)
             key = planning_group_key(group)
             if key not in keys:
                 continue
             values = tuple(str(value).strip() if value is not None else '' for value in raw)
             if len(values) != len(FIELDS) or any(len(value) > 255 for value in values):
                 raise ValidationError(f'Некорректные поля справочника для группы «{group}». Обновление отменено.')
-            values = (*values[:2], values[2] or None, values[3] or None)
+            values = (*values[:2], values[2] or None)
             # Match the portal's exact Unicode identity as well as SQL's grouping.
             # Choose a whole representative row; never combine unrelated fields.
             code = unicodedata.normalize('NFC', str(planning_key or '').strip())
@@ -58,7 +57,7 @@ def refresh_goods_directory(scenario, connector=None):
     with transaction.atomic():
         locked = ScenarioModel.objects.select_for_update().get(pk=scenario.pk)
         goods = PGGoods.objects.select_for_update().filter(scenario_plan=locked)
-        changed, supplier_ids, groups = [], [], {}
+        changed, groups = [], {}
         for good in goods:
             values = source.get(good.planning_group_key)
             if values is None:
@@ -67,8 +66,6 @@ def refresh_goods_directory(scenario, connector=None):
             if tuple(getattr(good, field) for field in FIELDS) == values:
                 counts['unchanged'] += 1
                 continue
-            if good.purch != values[3]:
-                supplier_ids.append(good.pk)
             for field, value in zip(FIELDS, values):
                 setattr(good, field, value)
             if good.group_goods:
@@ -77,8 +74,5 @@ def refresh_goods_directory(scenario, connector=None):
         for key, name in groups.items():
             GoodsGroup.objects.get_or_create(name_key=key, defaults={'name': name})
         PGGoods.objects.bulk_update(changed, FIELDS, batch_size=100)
-        # Supplier supply type participates in DDP (e.g. a Russian supplier).
-        for start in range(0, len(supplier_ids), 500):
-            reprice_goods(goods=PGGoods.objects.filter(pk__in=supplier_ids[start:start + 500]))
         counts['updated'] = len(changed)
     return counts

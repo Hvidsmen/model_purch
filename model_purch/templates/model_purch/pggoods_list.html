@@ -102,7 +102,7 @@ body .product-table th:last-child{width:64px!important}
             {% if current_scenario %}
             <form method="post" action="{% url 'refresh_goods_directory' current_scenario.pk %}" id="refreshGoodsDirectoryForm" class="m-0">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-outline-primary" id="refreshGoodsDirectoryBtn" title="Обновить группу планов продаж, группу товаров, марку и поставщика у всех товаров выбранного сценария из MS SQL">
+                <button type="submit" class="btn btn-outline-primary" id="refreshGoodsDirectoryBtn" title="Обновить группу планов продаж, группу товаров и марку у всех товаров выбранного сценария из MS SQL">
                     <i aria-hidden="true" class="bi bi-arrow-repeat"></i> Обновить справочник товаров
                 </button>
             </form>

@@ -63,7 +63,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         from unittest.mock import Mock
         from playwright.sync_api import expect
         connection, cursor = Mock(), Mock()
-        cursor.fetchall.return_value = [('group', 'New sales', 'New goods', 'New brand', 'Supplier', 'PG1')]
+        cursor.fetchall.return_value = [('group', 'New sales', 'New goods', 'New brand', 'PG1')]
         with patch('model_purch.services.goods_directory.connect_database', return_value=(connection, cursor)):
             self.page.goto(self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}')
             self.page.screenshot(path='/tmp/goods-directory-toolbar.png', full_page=True)
@@ -82,6 +82,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
             self.assertEqual(row.locator('[name="planning_sales"]').input_value(), 'New sales')
             self.assertEqual(row.locator('[name="group_goods"]').input_value(), 'New goods')
             self.assertEqual(row.locator('[name="brand"]').input_value(), 'New brand')
+            self.assertEqual(row.locator('[name="purch"]').input_value(), 'Supplier')
             self.assertEqual(row.locator('[name="exw_usd"]').input_value(), '10.00')
             self.assertEqual(self.errors, [])
             connection.close.assert_called_once()
