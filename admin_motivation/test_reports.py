@@ -36,6 +36,17 @@ class NativeMotivationReportTests(TestCase):
         self.assertEqual(args,[attack,'B','Политики','Политики'])
         with self.assertRaises(ValidationError):bind_sql('SELECT @missing',{})
 
+    def test_subdivision_filters_accept_multiple_values_and_bind_all_sql_filters(self):
+        query = QueryDict('type=Политики&type=Директора&subdivision=A&subdivision=B&planning=P1&planning=P2&goods=G1&goods=G2&brand=M1&brand=M2')
+        values = parameters('subdivisions', query)
+        self.assertEqual(values, {'type_coeff': ['Политики', 'Директора'], 'Subdivision': ['A', 'B'],
+                                 'gp_sales': ['P1', 'P2'], 'GPGoods': ['G1', 'G2'], 'Brend': ['M1', 'M2']})
+        from .services.reports import SQL_ROOT
+        sql, args = bind_sql((SQL_ROOT / 'subdivisions.sql').read_text(), values)
+        self.assertEqual(sql.count('IN (?,?)'), 5)
+        self.assertEqual(len(args), 10)
+        self.assertNotIn('Директора', sql)
+
     def test_date_and_parameter_validation(self):
         with self.assertRaises(ValidationError):parameters('deals',QueryDict('start=2025-12-31&end=2025-01-01'))
         values=parameters('deals',QueryDict('start=2025-01-01&end=2025-12-31&author=A&author=B&type=Политики&subdivision=Филиал'))

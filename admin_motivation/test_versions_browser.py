@@ -11,6 +11,39 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_subdivision_report_checkbox_filters_submit_multiple_values(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .services.reports import FILTERS, subdivision_report
+        def options(kind, values, **kwargs):
+            return [{'name': name, 'label': caption, 'multiple': multiple,
+                     'options': [{'value': value, 'selected': value in values.get(parameter, [])}
+                                 for value in ('A', 'B', 'C')]}
+                    for name, parameter, caption, dataset, multiple in FILTERS[kind]]
+        with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', return_value=subdivision_report([])) as load:
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['subdivisions']))
+            expect(self.page.locator('.manager-multi-field')).to_have_count(5)
+            for field_name in ('type', 'planning', 'goods', 'brand', 'subdivision'):
+                field = self.page.locator(f'.manager-multi-filter[data-field="{field_name}"]')
+                field.locator('summary').click()
+                field.locator('[data-multi-all]').click()
+                expect(field.locator('input[type=checkbox]:checked')).to_have_count(3)
+                field.locator('[data-multi-clear]').click()
+                expect(field.locator('input[type=checkbox]:checked')).to_have_count(0)
+                field.locator('input[type=search]').fill('B')
+                expect(field.locator('.manager-multi-options label:visible')).to_have_count(1)
+                field.locator('input[type=search]').fill('')
+                field.locator('input[type=checkbox]').nth(0).check()
+                field.locator('input[type=checkbox]').nth(1).check()
+                if field_name != 'subdivision':
+                    field.locator('[data-multi-apply]').click()
+            with self.page.expect_navigation():
+                self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
+            values = load.call_args.args[1]
+            for key in ('type_coeff', 'Subdivision', 'gp_sales', 'GPGoods', 'Brend'):
+                self.assertEqual(values[key], ['A', 'B'])
+            self.assertEqual(self.errors, [])
+
     def test_deals_scrollbar_is_available_above_long_table(self):
         from unittest.mock import patch
         from playwright.sync_api import expect

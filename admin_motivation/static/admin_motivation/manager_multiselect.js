@@ -43,7 +43,7 @@
   });
   document.addEventListener('click', event => { if (!field.contains(event.target)) dropdown.open = false; });
   select.form?.addEventListener('submit', () => {
-   if (dirty && dropdown.dataset.field === 'subdivision') [...select.form.elements.author.options].forEach(option => option.selected = false);
+   if (dirty && dropdown.dataset.field === 'subdivision' && select.form.elements.author) [...select.form.elements.author.options].forEach(option => option.selected = false);
    dirty = false;
    dropdown.open = false;
    if (inputs.length && inputs.every(input => input.checked)) [...select.options].forEach(option => option.selected = false);
