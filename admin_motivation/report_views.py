@@ -1,5 +1,6 @@
 import csv
 import logging
+from time import perf_counter
 from django.core.exceptions import ValidationError
 from django.http import Http404, HttpResponse
 from django.shortcuts import render, get_object_or_404
@@ -74,6 +75,7 @@ def report_page(request, kind):
 
 def plan_summary(request):
     from .services.plan_summary import summary_report, summary_filters
+    started = perf_counter()
     plans = SalesPlanScenario.objects.filter(is_deleted=False).order_by('-pk')
     plan = None
     summary = {}
@@ -90,6 +92,13 @@ def plan_summary(request):
             summary['summary_filters'] = summary_filters(plan, request.GET)
         except ValidationError as error:
             summary = {'summary_error': ' '.join(error.messages)}
-    return render(request, 'admin_motivation/reports/plan_summary.html', {
+    calculated = perf_counter()
+    response = render(request, 'admin_motivation/reports/plan_summary.html', {
         'plans': plans, 'plan': plan, 'subdivisions': Subdivision.objects.all(), **summary,
     })
+    rendered = perf_counter()
+    response['Server-Timing'] = f'calculation;dur={(calculated - started) * 1000:.1f}, render;dur={(rendered - calculated) * 1000:.1f}'
+    if rendered - started >= 3:
+        logger.warning('Slow plan summary plan=%s calculation=%.3fs render=%.3fs',
+                       plan.pk if plan else None, calculated - started, rendered - calculated)
+    return response

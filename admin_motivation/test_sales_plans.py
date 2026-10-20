@@ -161,6 +161,26 @@ class SalesPlanTests(TestCase):
         self.assertContains(response, 'Петров')
         self.assertIsNone(self.scenario.lines.first().total_usd)  # Read-only, no snapshot mutation.
 
+    def test_summary_streams_director_inputs_without_related_model_instances(self):
+        from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+        from .services.plan_summary import summary_report
+        self.load()
+        employee = DirectorEmployee.objects.create(full_name='Streaming director')
+        GlobalDirectorCoeff.objects.create(version=self.version, goods=self.good,
+            **{f'k{i}': '.01' for i in range(5)})
+        SubdivisionDirectorCoeff.objects.create(version=self.version, goods=self.good,
+            subdivision=self.subs[0], employee=employee, **{f'k{i}': '.02' for i in range(5)})
+        with patch.object(Goods, 'from_db', side_effect=AssertionError('Unexpected goods hydration')), \
+             patch.object(SubdivisionDirectorCoeff, 'from_db', side_effect=AssertionError('Unexpected coefficient hydration')), \
+             patch.object(Subdivision, 'from_db', side_effect=AssertionError('Unexpected subdivision hydration')):
+            result = summary_report(self.scenario, {})
+        self.assertEqual(result['summary_nodes'][0]['global'], Decimal('235'))
+        self.assertEqual(result['summary_nodes'][0]['local'], Decimal('365'))
+        page = self.client.get(reverse('motivation_plan_summary'), {'plan': self.scenario.pk})
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('calculation;dur=', page['Server-Timing'])
+        self.assertIn('render;dur=', page['Server-Timing'])
+
     def test_summary_markup_missing_ddp_and_zero_denominator(self):
         from .services.plan_summary import row, summary_report
         self.load()

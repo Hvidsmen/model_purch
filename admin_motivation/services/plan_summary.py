@@ -20,14 +20,16 @@ def selections(params, field):
 
 def summary_filters(scenario, params):
     lines = scenario.lines.exclude(subdivision='')
-    branch_keys = list(lines.order_by().values_list('subdivision', flat=True).distinct())
+    # Obtain both menus with one narrow scan of the plan, instead of two DISTINCT sorts.
+    scopes = list(lines.order_by().values_list('subdivision', 'planning_group_sales').distinct())
+    branch_keys = {sub for sub, pg in scopes}
     names = dict(Subdivision.objects.filter(subdivision_key__in=branch_keys).values_list('subdivision_key', 'subdivision_name'))
     staff = DirectorEmployee.objects.filter(pk__in=SubdivisionDirectorCoeff.objects.filter(
         subdivision__subdivision_key__in=branch_keys).values('employee_id')).order_by('full_name', 'pk')
     options = {
         'subdivision': [(key, names.get(key, key)) for key in sorted(branch_keys)],
         'type': KINDS,
-        'planning_group_sales': [(key, key or 'Без группы') for key in lines.order_by().values_list('planning_group_sales', flat=True).distinct()],
+        'planning_group_sales': [(key, key or 'Без группы') for key in {pg for sub, pg in scopes}],
         'director': [(str(employee.pk), employee.full_name) for employee in staff],
     }
     captions = {'subdivision': 'Подразделение', 'type': 'Тип коэффициента',
