@@ -127,13 +127,13 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.choose_filter('select[name=quarter]', '1 Квартал')
             with self.page.expect_navigation():
                 self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
-            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера · 2024 · USD')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация. Дашборд · 2024 · USD')
             if self.page.locator('.report-filter-panel').get_attribute('open') is None:
                 self.page.locator('.report-filter-panel > summary').click()
             self.choose_filter('select[name=currency]', 'RUB')
             with self.page.expect_navigation():
                 self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
-            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера · 2024 · RUB')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация. Дашборд · 2024 · RUB')
         self.assertEqual(self.errors, [])
 
     def test_current_coefficient_templates_download_for_global_and_subdivision(self):
@@ -872,7 +872,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         division=subdivision_report(NativeMotivationReportTests.division_rows())
         with patch('admin_motivation.report_views.choices',return_value=[]), patch('admin_motivation.report_views.load_report',return_value=manager):
             self.page.goto(self.live_server_url + reverse('motivation_report',args=['manager']) + '?run=1&type=Политики&subdivision=Филиал&author=Менеджер&quarter=1+Квартал')
-            expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера · USD')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация. Дашборд · USD')
             expect(self.page.locator('.manager-section').nth(1)).not_to_have_attribute('open','')
             self.page.locator('.manager-section').nth(1).locator('summary').click()
             expect(self.page.get_by_text('4. VENT',exact=True)).to_be_visible()

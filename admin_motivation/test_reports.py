@@ -16,7 +16,7 @@ class NativeMotivationReportTests(TestCase):
 
     def test_report_catalog_and_all_pages_render_without_sql_configuration(self):
         page = self.client.get(reverse('motivation_reports'))
-        self.assertContains(page, 'Мотивация менеджера')
+        self.assertContains(page, 'Мотивация. Дашборд')
         self.assertContains(page, 'Факт закрытых сделок')
         self.assertContains(page, 'Мотивация по подразделениям')
         with patch('admin_motivation.report_views.choices', side_effect=RuntimeError('No connection')):
@@ -130,7 +130,7 @@ class NativeMotivationReportTests(TestCase):
         connection.close.assert_called_once()
         with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=data):
             page = self.client.get(reverse('motivation_report', args=['manager']), {'run': 1})
-        self.assertContains(page, 'Мотивация менеджера · 2024, 2025')
+        self.assertContains(page, 'Мотивация. Дашборд · 2024, 2025')
 
     def test_manager_sums_and_default_collapse_match_rdl(self):
         report=manager_report(self.manager_rows())
