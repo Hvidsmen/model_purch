@@ -18,7 +18,7 @@ def detail_rows():
             'СуммаПланUSD': 600, 'СуммаОтгрузокUSD': 540, 'СуммаМотивацииUSD': 100,
             'СуммаМотивацииUSDУчетПроцента': 90, 'Остаток': 5, 'СуммаМотивацииRUR': 10000,
             'СуммаМотивацииRURУчетПроцента': 9000, 'ОстатокRUR': 500,
-            **{f'K{i}Sum': Decimal('.03') for i in range(5)}, **{f'K{i}Count': 2 for i in range(5)}})
+            **{f'K{i}WeightedSum': Decimal('1.5') for i in range(5)}, **{f'K{i}Weight': 100 for i in range(5)}})
     return rows
 
 
@@ -35,7 +35,7 @@ class ManagerDetailTests(TestCase):
         self.assertEqual(overall[5:10], [Decimal(100)] * 5)  # Overall inputs come from the annual row.
         self.assertEqual(overall[10:14], [Decimal(1000), Decimal(800), Decimal('.8'), Decimal(200)])
         self.assertEqual(overall[17:], [Decimal(180), Decimal(10), Decimal(190)])
-        self.assertEqual(data['cards'][1]['total'], Decimal(19000))
+        self.assertEqual(manager_detail_report(detail_rows(), 'RUB')['cards'][0]['total'], Decimal(19000))
         labels = []
         node = data['nodes'][0]
         while True:
@@ -44,7 +44,7 @@ class ManagerDetailTests(TestCase):
             node = node['children'][0]
         self.assertEqual(labels, ['A', 'Иванов', '1. RAC', 'Кондиционеры', '<Brand>'])
         self.assertEqual(node['values'][0][0], Decimal('.015'))
-        self.assertIsNone(data['nodes'][0]['values'][0][0])
+        self.assertEqual(data['nodes'][0]['values'][0][0], Decimal('.015'))
         rubles = manager_detail_report(detail_rows(), 'RUB')['detail_totals'][-1]
         self.assertEqual(rubles[13], Decimal(20000))
         self.assertEqual(rubles[17:], [Decimal(18000), Decimal(1000), Decimal(19000)])
@@ -81,6 +81,68 @@ class ManagerDetailTests(TestCase):
         complete_brand = incomplete['nodes'][0]['children'][0]['children'][0]['children'][0]['children'][0]
         self.assertEqual(complete_brand['values'][-1][16], Decimal('.79'))
 
+    def test_coefficients_are_shipment_weighted_at_every_level(self):
+        first = detail_rows()[0]
+        first.update(K0WeightedSum=Decimal(1), K0Weight=100,
+                     K1WeightedSum=Decimal(4), K1Weight=200,
+                     K2WeightedSum=Decimal(0), K2Weight=100,
+                     K3WeightedSum=Decimal(0), K3Weight=0)
+        second = dict(first, Марка='Second', K0WeightedSum=Decimal(27), K0Weight=900,
+                      K1WeightedSum=Decimal(32), K1Weight=800)
+        annual_first = dict(first, КварталМотивации='Год', K0WeightedSum=Decimal(1), K0Weight=50)
+        annual_second = dict(second, КварталМотивации='Год', K0WeightedSum=Decimal(6), K0Weight=150)
+        data = manager_detail_report([first, second, annual_first, annual_second])
+        self.assertEqual(data['detail_totals'][0][0], Decimal('.028'))
+        self.assertEqual(data['detail_totals'][0][1], Decimal('.036'))
+        self.assertEqual(data['detail_totals'][-1][0], Decimal('.035'))
+        node = data['nodes'][0]
+        while node['children']:
+            self.assertEqual(node['values'][0][0], Decimal('.028'))
+            self.assertEqual(node['values'][0][1], Decimal('.036'))
+            self.assertEqual(node['values'][0][2], Decimal(0))
+            self.assertIsNone(node['values'][0][3])
+            node = node['children'][0]
+        self.assertEqual(node['values'][0][0], Decimal('.01'))
+        cancelled = metrics([dict(first, K0Weight=100, K0WeightedSum=1),
+                             dict(first, K0Weight=-100, K0WeightedSum=-1)])
+        self.assertIsNone(cancelled[0])
+
+    def test_summary_groups_by_branch_and_author_in_selected_currency(self):
+        rows = detail_rows()
+        rows.extend([dict(rows[0], АвторСделки='Петров'), dict(rows[0], Подразделение='B')])
+        for currency in ['USD', 'RUB']:
+            data = manager_detail_report(rows, currency)
+            self.assertEqual([card['currency'] for card in data['cards']], [currency])
+            summary = data['period_summary']
+            self.assertEqual([(row['subdivision'], row['author']) for row in summary['rows']],
+                             [('A', 'Иванов'), ('A', 'Петров'), ('B', 'Иванов')])
+            self.assertEqual(summary['currency'], currency)
+            self.assertEqual(sum(row['total'] for row in summary['rows']), summary['totals']['total'])
+            self.assertEqual(summary['totals']['total'], data['cards'][0]['total'])
+            for index in range(len(summary['columns'])):
+                values = [row['values'][index] for row in summary['rows'] if row['values'][index] is not None]
+                self.assertEqual(sum(values) if values else None, summary['totals']['values'][index])
+
+    def test_sql_weights_use_each_segment_and_ignore_missing_coefficients(self):
+        import sqlite3
+        from .services.manager_detail import DIMENSIONS, SUM_FIELDS
+        columns = [*DIMENSIONS, 'Год', 'КварталМотивации', *SUM_FIELDS, 'K0', 'K1', 'K2', 'k3', 'k4']
+        database = sqlite3.connect(':memory:')
+        try:
+            database.execute('CREATE TABLE source (' + ','.join('[' + key + ']' for key in columns) + ')')
+            first = dict(detail_rows()[0], K0=.01, K1=None, K2=0, k3=.04, k4=.05, O0=100, O1=500, O2=100)
+            second = dict(first, K0=.03, K1=.02, O0=900, O1=100)
+            for row in [first, second]:
+                database.execute('INSERT INTO source VALUES (' + ','.join('?' for key in columns) + ')', [row.get(key) for key in columns])
+            cursor = database.execute(grouped_sql('SELECT * FROM source'))
+            result = [dict(zip([column[0] for column in cursor.description], row)) for row in cursor.fetchall()]
+            values = metrics(result)
+            self.assertEqual(values[0], Decimal('.028'))
+            self.assertEqual(values[1], Decimal('.02'))
+            self.assertEqual(values[2], Decimal(0))
+        finally:
+            database.close()
+
     def test_period_summary_matches_cards_in_both_currencies_and_keeps_all_periods(self):
         from .services.manager_detail import period_motivation_summary
         rows = detail_rows()
@@ -102,8 +164,8 @@ class ManagerDetailTests(TestCase):
         self.assertIn('2026 · 1 кв.', [column['label'] for column in multiple['columns']])
         self.assertEqual(multiple['rows'][0]['total'], summary['rows'][0]['total'] + Decimal(95))
         empty = period_motivation_summary([])
-        self.assertEqual(empty['rows'][0]['values'], [None] * 5)
-        self.assertEqual(empty['rows'][0]['total'], Decimal(0))
+        self.assertEqual(empty['totals']['values'], [None] * 5)
+        self.assertEqual(empty['totals']['total'], Decimal(0))
 
     def test_branch_execution_aligns_periods_and_uses_annual_values_in_total(self):
         rows = detail_rows()
@@ -123,12 +185,12 @@ class ManagerDetailTests(TestCase):
             response = self.client.get(reverse('motivation_report', args=['manager-detail']), {'run': '1', 'type': 'Продажи'})
         self.assertContains(response, '% выполнения подразделений')
         self.assertNotContains(response, 'Выполнение плана подразделений</h2>')
-        self.assertLess(response.content.index(b'manager-division-execution'), response.content.index(b'report-total-row'))
+        self.assertLess(response.content.index(b'manager-division-execution'), response.content.index(b'report-total-row', response.content.index(b'manager-division-execution')))
 
     def test_weighted_averages_zero_denominators_and_separate_years(self):
         rows = detail_rows()
-        rows[1]['K0Sum'], rows[1]['K0Count'] = Decimal('.09'), 1
-        self.assertEqual(metrics(rows, coefficients=True)[0], Decimal('.04'))
+        rows[1]['K0WeightedSum'], rows[1]['K0Weight'] = Decimal('27'), 300
+        self.assertEqual(metrics(rows, coefficients=True)[0], Decimal('.07125'))
         self.assertIsNone(metrics([{}], coefficients=True)[0])
         self.assertIsNone(metrics([{}])[12])
         self.assertEqual(metrics([{'СуммаОтгрузокUSDКвартал': 100}])[12], Decimal(1))
@@ -154,7 +216,8 @@ class ManagerDetailTests(TestCase):
             result = load_report('manager-detail', values)
         sql, args = fetch.call_args_list[0].args[1:3]
         self.assertIn('GROUP BY', sql)
-        self.assertIn('COUNT([K0])', sql)
+        self.assertIn('SUM([K0] * [O0])', sql)
+        self.assertIn('CASE WHEN [K0] IS NOT NULL THEN [O0]', sql)
         self.assertIn('SUM([СуммаМотивацииRUR])', sql)
         self.assertNotIn(attack, sql)
         self.assertIn(attack, args)

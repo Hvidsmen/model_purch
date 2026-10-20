@@ -1,0 +1,8 @@
+<div class="manager-multi-field"><span>{{ filter.label }}</span>
+<select name="{{ filter.name }}" multiple hidden data-search-ready="true">{% for option in filter.options %}<option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.value|default:'Без значения' }}</option>{% endfor %}</select>
+<details class="manager-multi-filter" data-field="{{ filter.name }}"><summary class="form-select" aria-label="{{ filter.label }}"><span data-multi-caption>Все</span></summary><div class="manager-multi-menu">
+<input type="search" class="form-control" placeholder="Поиск…" aria-label="Поиск: {{ filter.label }}">
+<div class="manager-multi-actions"><button type="button" data-multi-all>Выбрать все</button><button type="button" data-multi-clear>Снять все</button></div>
+<div class="manager-multi-options">{% for option in filter.options %}<label><input type="checkbox" value="{{ option.value }}" {% if option.selected %}checked{% endif %}><span>{{ option.value|default:'Без значения' }}</span></label>{% empty %}<p>Нет доступных значений</p>{% endfor %}</div>
+<button type="button" class="btn btn-sm btn-primary" data-multi-apply>Применить</button>
+</div></details></div>

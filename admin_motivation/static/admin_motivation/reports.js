@@ -10,6 +10,16 @@
    form.requestSubmit(document.getElementById('report-filter-refresh'));
   }));
  }
+ if (form?.dataset.kind === 'manager-detail') {
+  form.elements.currency?.addEventListener('change', () => {
+   if (document.getElementById('manager-detail-panel')?.open) {
+    let flag = form.querySelector('input[name=details]');
+    if (!flag) { flag = document.createElement('input'); flag.type = 'hidden'; flag.name = 'details'; form.appendChild(flag); }
+    flag.value = '1';
+   }
+   form.requestSubmit(form.elements.type.value ? form.querySelector('button[name=run]') : document.getElementById('report-filter-refresh'));
+  });
+ }
  const root = document.getElementById('native-division-report');
  const data = document.getElementById('native-division-tree');
  if (!root || !data) return;

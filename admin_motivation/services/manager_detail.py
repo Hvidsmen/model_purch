@@ -1,4 +1,4 @@
-"""Detailed manager RDL metrics, using grouped inputs and weighted coefficient averages."""
+"""Detailed manager RDL metrics, using grouped inputs and shipment-weighted coefficient averages."""
 from collections import defaultdict
 import re
 from .reports import number, ratio, total
@@ -18,12 +18,13 @@ def grouped_sql(source):
     fields = [*DIMENSIONS, 'Год', 'КварталМотивации']
     columns = ','.join(f'[{key}]' for key in fields)
     sums = ','.join(f'SUM([{key}]) AS [{key}]' for key in SUM_FIELDS)
-    averages = ','.join(f'SUM([{source}]) AS [K{i}Sum],COUNT([{source}]) AS [K{i}Count]'
+    averages = ','.join(f'SUM([{source}] * [O{i}]) AS [K{i}WeightedSum],'
+                        f'SUM(CASE WHEN [{source}] IS NOT NULL THEN [O{i}] ELSE 0 END) AS [K{i}Weight]'
                         for i, source in enumerate(['K0', 'K1', 'K2', 'k3', 'k4']))
     return f'SELECT {columns},{sums},{averages} FROM ({source}) AS manager_source GROUP BY {columns}'
 
 
-def metrics(rows, currency='USD', overall=False, coefficients=False):
+def metrics(rows, currency='USD', overall=False, coefficients=True):
     inputs = rows
     if overall:
         annual = [row for row in rows if str(row.get('КварталМотивации') or '').strip().casefold() == 'год']
@@ -37,21 +38,24 @@ def metrics(rows, currency='USD', overall=False, coefficients=False):
     bonus = total(rows, 'ОстатокRUR' if currency == 'RUB' else 'Остаток')
     averages = []
     for index in range(5):
-        count = total(inputs or [], f'K{index}Count')
-        averages.append(total(inputs or [], f'K{index}Sum') / count if coefficients and count else None)
+        weight = total(inputs or [], f'K{index}Weight')
+        averages.append(total(inputs or [], f'K{index}WeightedSum') / weight if coefficients and weight else None)
     return [*averages, *[total(inputs, f'O{i}') if inputs is not None else None for i in range(5)], plan, fact, ratio(fact, plan, True),
             total(rows, f'СуммаМотивации{prefix}'), motive_plan, motive_fact, ratio(motive_fact, motive_plan, True),
             paid, bonus, paid + bonus]
 
 
-def period_motivation_summary(rows):
-    buckets = defaultdict(list)
-    captions = {}
-    for row in rows:
+def period_motivation_summary(rows, currency='USD'):
+    def period_key(row):
         year = str(row['Год']) if row.get('Год') is not None else 'Без года'
         name = str(row.get('КварталМотивации') or 'Без периода').strip()
         match = re.match(r'^([1-4])\s*кв', name, re.I)
         segment = int(match.group(1)) if match else 'year' if name.casefold() == 'год' else name
+        return year, segment, name
+    buckets = defaultdict(list)
+    captions = {}
+    for row in rows:
+        year, segment, name = period_key(row)
         buckets[year, segment].append(row)
         captions.setdefault((year, segment), set()).add(name)
     years = sorted({year for year, segment in buckets}) or ['']
@@ -65,14 +69,23 @@ def period_motivation_summary(rows):
             columns.append({'label': f'{year} · {label}' if len(years) > 1 else label,
                             'title': ', '.join(sorted(captions.get(key, ())))})
             keys.append(key)
-    currencies = []
-    for currency, paid_key, bonus_key in [('USD', 'СуммаМотивацииUSDУчетПроцента', 'Остаток'),
-                                           ('RUB', 'СуммаМотивацииRURУчетПроцента', 'ОстатокRUR')]:
-        values = [total(buckets[key], paid_key) if key in buckets else None for key in keys]
-        bonus = total(rows, bonus_key)
-        currencies.append({'currency': currency, 'values': values, 'remainder': bonus,
-                           'total': total(rows, paid_key) + bonus})
-    return {'columns': columns, 'rows': currencies}
+    paid_key = 'СуммаМотивацииRURУчетПроцента' if currency == 'RUB' else 'СуммаМотивацииUSDУчетПроцента'
+    bonus_key = 'ОстатокRUR' if currency == 'RUB' else 'Остаток'
+    def summary(subset):
+        grouped = defaultdict(list)
+        for row in subset:
+            year, segment, name = period_key(row)
+            grouped[year, segment].append(row)
+        bonus = total(subset, bonus_key)
+        return {'currency': currency,
+                'values': [total(grouped[key], paid_key) if key in grouped else None for key in keys],
+                'remainder': bonus, 'total': total(subset, paid_key) + bonus}
+    authors = defaultdict(list)
+    for row in rows:
+        authors[row.get('Подразделение') or '—', row.get('АвторСделки') or '—'].append(row)
+    details = [{'subdivision': sub, 'author': author, **summary(subset)}
+               for (sub, author), subset in sorted(authors.items())]
+    return {'columns': columns, 'rows': details, 'totals': summary(rows), 'currency': currency}
 
 
 def manager_detail_report(rows, currency='USD', performance_rows=None):
@@ -82,7 +95,7 @@ def manager_detail_report(rows, currency='USD', performance_rows=None):
         name = row.get('КварталМотивации') or 'Без периода'
         return f'{row.get("Год") or "Без года"} · {name}' if len(year_scopes) > 1 else name
     periods = sorted({period(row) for row in rows}, key=lambda name: ('Год' in name, name))
-    def blocks(subset, coefficients=False):
+    def blocks(subset, coefficients=True):
         grouped = defaultdict(list)
         for row in subset:
             grouped[period(row)].append(row)
@@ -92,7 +105,7 @@ def manager_detail_report(rows, currency='USD', performance_rows=None):
         grouped = defaultdict(list)
         for row in subset:
             grouped[row.get(DIMENSIONS[level]) or '—'].append(row)
-        return [{'label': label, 'level': level, 'values': blocks(items, level == len(DIMENSIONS) - 1),
+        return [{'label': label, 'level': level, 'values': blocks(items),
                  'children': nodes(items, level + 1) if level + 1 < len(DIMENSIONS) else []}
                 for label, items in sorted(grouped.items())]
     cards = []
@@ -118,5 +131,5 @@ def manager_detail_report(rows, currency='USD', performance_rows=None):
             block[12], block[16] = values[12], values[16]
             execution.append(block)
     return {'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
-            'headers': [{'label': label, 'detail': index < 13} for index, label in enumerate(HEADERS)],
-            'cards': cards, 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows)}
+            'headers': [{'label': label, 'detail': index < 13, 'title': f'Средневзвешенный K{index}: Σ(K{index} × O{index}) / Σ(O{index})' if index < 5 else label} for index, label in enumerate(HEADERS)],
+            'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency)}

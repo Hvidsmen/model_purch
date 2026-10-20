@@ -90,7 +90,7 @@ class NativeMotivationReportTests(TestCase):
         with patch('admin_motivation.report_views.choices', return_value=first):
             page = self.client.get(reverse('motivation_report', args=['manager']), {'type': 'Директора', 'subdivision': 'Д-Астрахань'})
         self.assertContains(page, 'В расчётных данных нет авторов сделки')
-        self.assertContains(page, '?v=manager-detail-20261020')
+        self.assertContains(page, '?v=selected-currency-20261020')
 
     def test_manager_currency_uses_rur_source_fields_without_changing_plan_metrics(self):
         from .services.reports import SQL_ROOT, manager_currency_sql
