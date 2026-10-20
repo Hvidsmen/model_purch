@@ -63,9 +63,7 @@
 #native-division-report .division-report-grid{grid-template-columns:280px repeat(calc(var(--report-blocks)*(var(--report-columns) - 1) + 1),112px)}#native-division-report .report-period-header{grid-template-columns:280px repeat(calc(var(--report-blocks) - 1),calc((var(--report-columns) - 1)*112px)) calc(var(--report-columns)*112px)}
 
 /* Potential earnings versus earnings adjusted for performance. */
-.native-report .motivation-potential{background:#f4f0ff!important;color:#53399a;font-weight:600}
-.native-report .motivation-earned{background:#edf9f2!important;color:#146342;font-weight:700}
+.native-report .motivation-potential{font-weight:600}
+.native-report .motivation-earned{font-weight:700}
 .native-report .metric-heading.motivation-potential{background:#ebe5ff!important;color:#53399a}
 .native-report .metric-heading.motivation-earned{background:#dcf2e5!important;color:#146342}
-.native-report .report-total-row .motivation-potential{background:#e9e2ff!important;font-weight:700}
-.native-report .report-total-row .motivation-earned{background:#d5eddf!important;font-weight:700}

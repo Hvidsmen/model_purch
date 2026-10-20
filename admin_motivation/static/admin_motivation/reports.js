@@ -40,6 +40,16 @@
    form.requestSubmit(form.elements.type.value ? form.querySelector('button[name=run]') : document.getElementById('report-filter-refresh'));
   });
  }
+ const summaryPotential = document.getElementById('subdivision-summary-potential');
+ const summaryTable = document.getElementById('subdivision-summary-table');
+ if (summaryPotential && summaryTable) {
+  summaryPotential.addEventListener('change', () => {
+   const show = summaryPotential.checked;
+   summaryTable.querySelectorAll('.motivation-potential').forEach(cell => cell.hidden = !show);
+   summaryTable.querySelectorAll('[data-summary-period]').forEach(cell => cell.colSpan = show ? 2 : 1);
+   summaryTable.querySelector('[data-summary-overall]').colSpan = show ? 4 : 3;
+  });
+ }
  document.querySelectorAll('.subdivision-summary-toggle').forEach(button => {
   button.addEventListener('click', () => {
    const expanded = button.getAttribute('aria-expanded') !== 'true';
@@ -78,7 +88,7 @@
     button.textContent=text; cell.appendChild(button);
    } else cell.textContent=text;
    if (isRatio && value!=null) cell.classList.add(Number(value)>=.8 ? 'percent-good' : 'percent-low');
-   if (index===8 || index===12) cell.classList.add('metric-number', index===8 ? 'motivation-potential' : 'motivation-earned');
+   if (index===8 || index===12) cell.classList.add(index===8 ? 'motivation-potential' : 'motivation-earned');
    if (index<5) {cell.dataset.divisionSegments='';cell.hidden=!expandedColumns.segments;}
    if (index===9 || index===10) {cell.dataset.divisionMotivation='';cell.hidden=!expandedColumns.motivation;}
    row.appendChild(cell);
