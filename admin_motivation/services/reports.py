@@ -176,24 +176,52 @@ DIV_NUMBERS = [*[f'O{i}' for i in range(5)], 'СуммаПланUSDКварта�
  'СуммаПланUSDI', 'СуммаОтгрузокUSDI']
 
 
+DIV_INPUT_DIMENSIONS = ('Подразделение', 'АвторСделки', 'Год', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка')
+DIV_INPUT_FIELDS = (*[f'O{i}' for i in range(5)], 'СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал',
+                    'СуммаПланUSD', 'СуммаОтгрузокUSD', 'СуммаПланUSDI', 'СуммаОтгрузокUSDI')
+
+
 def division_metrics(rows, annual=False, motivation_scope="plain"):
-    divisor = Decimal(4 if annual else 2)
-    plan, fact = total(rows, 'СуммаПланUSDКвартал')/divisor, total(rows, 'СуммаОтгрузокUSDКвартал')/divisor
-    mp = total(rows, 'СуммаПланUSDI' if motivation_scope == 'planning' else 'СуммаПланUSD')/divisor
-    mf = total(rows, 'СуммаОтгрузокUSDI' if motivation_scope == 'planning' else 'СуммаОтгрузокUSD')/divisor
-    possible, paid = total(rows, 'СуммаМотивацииUSD'), total(rows, 'СуммаМотивацииUSDУчетПроцента')
-    motivation = [mp, mf, ratio(mf, mp, True)] if motivation_scope else [None, None, None]
-    return [*[total(rows, f'O{i}')/divisor for i in range(5)], plan, fact, ratio(fact, plan, True),
-            possible, *motivation, paid, total(rows, 'Остаток'), paid+total(rows, 'Остаток')]
+    def identity(row):
+        return tuple(row.get(key) for key in DIV_INPUT_DIMENSIONS)
+    inputs = rows
+    if annual:
+        annual_rows = [row for row in rows if str(row.get('КварталМотивации') or '').strip().casefold() == 'год']
+        inputs = annual_rows if annual_rows and {identity(row) for row in annual_rows} == {identity(row) for row in rows} else None
+    # Sales inputs repeat for each coefficient type. Keep every employee/year/
+    # matrix scope distinct, but count its sales once, independent of type count.
+    unique = {}
+    for row in inputs or []:
+        key = (*identity(row), row.get('КварталМотивации'))
+        current = unique.setdefault(key, {})
+        for field in DIV_INPUT_FIELDS:
+            value = row.get(field)
+            if value is not None:
+                value = number(value)
+                current[field] = max(current[field], value) if field in current else value
+    def input_total(field):
+        return total(unique.values(), field) if inputs is not None else None
+    plan, fact = input_total('СуммаПланUSDКвартал'), input_total('СуммаОтгрузокUSDКвартал')
+    mp = input_total('СуммаПланUSDI' if motivation_scope == 'planning' else 'СуммаПланUSD')
+    mf = input_total('СуммаОтгрузокUSDI' if motivation_scope == 'planning' else 'СуммаОтгрузокUSD')
+    possible, paid, bonus = total(rows, 'СуммаМотивацииUSD'), total(rows, 'СуммаМотивацииUSDУчетПроцента'), total(rows, 'Остаток')
+    motivation = [mp, mf, ratio(mf, mp, True) if mp is not None else None] if motivation_scope else [None, None, None]
+    return [*[input_total(f'O{i}') for i in range(5)], plan, fact,
+            ratio(fact, plan, True) if plan is not None else None,
+            possible, *motivation, paid, bonus, paid + bonus]
 
 
 def subdivision_report(rows, scope='subdivisions'):
-    periods = sorted({row.get('КварталМотивации') or 'Без периода' for row in rows}, key=lambda value: (value == 'Год', value))
+    years = {row.get('Год') for row in rows}
+    def period_label(row):
+        period = row.get('КварталМотивации') or 'Без периода'
+        return f'{row.get("Год") or "Без года"} · {period}' if len(years) > 1 else period
+    periods = sorted({period_label(row) for row in rows}, key=lambda value: (value.endswith('Год'), value))
     dimensions = ['Подразделение', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка'] if scope != 'matrix' else ['ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка']
     def metrics(subset, level=None):
         planning_level = 0 if scope == 'matrix' else 1
         motivation_scope = 'plain' if level is None or (scope != 'matrix' and level == 0) else 'planning' if level == planning_level else None
-        return [division_metrics([r for r in subset if (r.get('КварталМотивации') or 'Без периода') == period], motivation_scope=motivation_scope) for period in periods] + [division_metrics(subset, True, motivation_scope)]
+        return [division_metrics([r for r in subset if period_label(r) == period], motivation_scope=motivation_scope) for period in periods] + [division_metrics(subset, True, motivation_scope)]
     def nodes(subset, level=0):
         grouped = defaultdict(list)
         for row in subset: grouped[row.get(dimensions[level]) or '—'].append(row)
@@ -204,7 +232,7 @@ def subdivision_report(rows, scope='subdivisions'):
     def summary(subset):
         blocks = []
         for period in periods:
-            items = [row for row in subset if (row.get('КварталМотивации') or 'Без периода')==period]
+            items = [row for row in subset if period_label(row)==period]
             blocks.append([total(items, 'СуммаМотивацииUSD'), total(items, 'СуммаМотивацииUSDУчетПроцента')])
         possible, paid, bonus = total(subset, 'СуммаМотивацииUSD'), total(subset, 'СуммаМотивацииUSDУчетПроцента'), total(subset, 'Остаток')
         return [value for block in blocks for value in block] + [possible, paid, bonus, paid+bonus]
@@ -266,7 +294,7 @@ def load_report(kind, values, page=1, scope='subdivisions'):
             performance = fetch(cursor, performance_sql, performance_args)
             return manager_detail_report(rows, values.get('Currency', 'USD'), performance)
         if kind == 'subdivisions':
-            dimensions = ['Подразделение', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
+            dimensions = ['Подразделение', 'АвторСделки', 'Год', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
             columns = ','.join('['+key+']' for key in dimensions)
             sums = ','.join('SUM(['+key+']) AS ['+key+']' for key in DIV_NUMBERS)
             rows = fetch(cursor, 'SELECT '+columns+','+sums+' FROM ('+sql+') AS report_source GROUP BY '+columns, args)

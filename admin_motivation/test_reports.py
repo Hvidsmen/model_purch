@@ -52,7 +52,9 @@ class NativeMotivationReportTests(TestCase):
         cursor.fetchmany.return_value = []
         with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)):
             load_report('subdivisions', parameters('subdivisions', QueryDict('')))
-        self.assertIn('[ТипКоэф]', cursor.execute.call_args.args[0].split('GROUP BY')[-1])
+        grouping = cursor.execute.call_args.args[0].split('GROUP BY')[-1]
+        for column in ('ТипКоэф', 'АвторСделки', 'Год'):
+            self.assertIn(f'[{column}]', grouping)
 
     def test_subdivision_filters_accept_multiple_values_and_bind_all_sql_filters(self):
         query = QueryDict('type=Политики&type=Директора&subdivision=A&subdivision=B&planning=P1&planning=P2&goods=G1&goods=G2&brand=M1&brand=M2')
@@ -119,7 +121,7 @@ class NativeMotivationReportTests(TestCase):
         with patch('admin_motivation.report_views.choices', return_value=first):
             page = self.client.get(reverse('motivation_report', args=['manager']), {'type': 'Директора', 'subdivision': 'Д-Астрахань'})
         self.assertContains(page, 'В расчётных данных нет авторов сделки')
-        self.assertContains(page, '?v=subdivision-types-20261021')
+        self.assertContains(page, '?v=subdivision-inputs-20261021')
 
     def test_manager_currency_uses_rur_source_fields_without_changing_plan_metrics(self):
         from .services.reports import SQL_ROOT, manager_currency_sql
@@ -179,20 +181,51 @@ class NativeMotivationReportTests(TestCase):
             'СуммаПланUSD':1000,'СуммаОтгрузокUSD':800,'СуммаМотивацииUSD':100,
             'СуммаМотивацииUSDУчетПроцента':80,'Остаток':20,'СуммаПланUSDI':500,'СуммаОтгрузокUSDI':400}]
 
-    def test_subdivision_original_divisors_and_highlighted_metrics(self):
+    def test_subdivision_repeated_types_do_not_multiply_sales_and_year_totals_use_year_rows(self):
+        base = dict(self.division_rows()[0], АвторСделки='Иванов', Год=2025)
+        for count in (1, 2, 3):
+            rows = [dict(base, ТипКоэф=kind, КварталМотивации=period)
+                    for kind in ('Политики', 'Продажи', 'Директора')[:count]
+                    for period in ('1 Квартал', '2 Квартал(1-2 кв)', 'Год')]
+            report = subdivision_report(rows)
+            quarter, year, overall = report['detail_totals'][0], report['detail_totals'][-2], report['detail_totals'][-1]
+            for block in (quarter, year, overall):
+                self.assertEqual(block[:8], [200, 0, 0, 0, 0, 2000, 1600, Decimal('.8')])
+                self.assertEqual(block[9:12], [1000, 800, Decimal('.8')])
+            self.assertEqual(quarter[8], 100 * count)
+            self.assertEqual(overall[8], 300 * count)
+            self.assertEqual(overall[14], 300 * count)
+            # Two distinct employees and years with identical amounts must both count.
+            extra = [dict(row, АвторСделки='Петров') for row in rows]
+            doubled = subdivision_report(rows + extra)
+            self.assertEqual(doubled['detail_totals'][-1][5], 4000)
+            extra_year = [dict(row, Год=2026) for row in rows]
+            multiple = subdivision_report(rows + extra_year)
+            self.assertEqual(multiple['detail_totals'][-1][5], 4000)
+            self.assertEqual(len(multiple['periods']), 6)
+
+    def test_subdivision_incomplete_year_shows_no_partial_overall_sales(self):
+        base = dict(self.division_rows()[0], АвторСделки='Иванов', Год=2025)
+        rows = [base, dict(base, КварталМотивации='Год'), dict(base, АвторСделки='Петров')]
+        report = subdivision_report(rows)
+        self.assertIsNone(report['detail_totals'][-1][5])
+        self.assertIsNone(report['detail_totals'][-1][7])
+        self.assertEqual(report['detail_totals'][-1][14], 300)
+
+    def test_subdivision_sales_are_not_divided_and_missing_annual_is_not_invented(self):
         report=subdivision_report(self.division_rows())
         self.assertEqual(report['summary_totals'],[100,80,100,80,20,100])
         root=report['nodes'][0]
         self.assertEqual(root['label'],'Филиал')
-        self.assertEqual(root['values'][0][0],100)
-        self.assertEqual(root['values'][0][5],1000)
+        self.assertEqual(root['values'][0][0],200)
+        self.assertEqual(root['values'][0][5],2000)
         self.assertEqual(root['values'][0][8],100)
-        self.assertEqual(root['values'][1][5],500) # Original RDL annual /4.
+        self.assertIsNone(root['values'][1][5])
         self.assertEqual(root['values'][1][14],100)
         matrix=subdivision_report(self.division_rows(),'matrix')
         self.assertEqual(matrix['nodes'][0]['label'],'1. RAC')
-        self.assertEqual(matrix['detail_totals'][0][9],500) # Overall total uses the original unfiltered plan.
-        self.assertEqual(matrix['nodes'][0]['values'][0][9],250) # Planning groups use USD I.
+        self.assertEqual(matrix['detail_totals'][0][9],1000) # Overall uses the plain motivation basis.
+        self.assertEqual(matrix['nodes'][0]['values'][0][9],500) # Planning groups use USD I, once.
         self.assertIsNone(matrix['nodes'][0]['children'][0]['values'][0][9])
 
     def test_manager_and_subdivision_html_escape_data_and_show_interactive_sections(self):

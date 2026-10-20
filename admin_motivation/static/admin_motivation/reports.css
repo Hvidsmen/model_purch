@@ -57,3 +57,5 @@
 .deal-scroll{max-height:65vh}.deal-scroll .deal-table thead th{position:sticky;top:0;z-index:2;background:#f1f5f9}.deal-scroll .deal-table thead th.metric-heading{background:#fff3cd}.deal-scroll-top{overflow-x:scroll;overflow-y:hidden;height:20px;width:100%;background:#f1f5f9}.deal-scroll-top>div{height:1px}.deal-scroll-top:focus-visible,.deal-scroll:focus-visible{outline:2px solid #7c5cff;outline-offset:2px}
 
 .subdivision-summary-total th,.subdivision-summary-total td{background:#f1f5fb;font-weight:600}.subdivision-summary-toggle{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left;padding:0}.subdivision-summary-toggle:focus-visible{outline:2px solid #7c5cff;outline-offset:3px}.subdivision-summary .subdivision-summary-type th{padding-left:20px}
+
+.division-metric-toggle{border:0;background:transparent;color:inherit;font:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer;padding:0}.division-metric-toggle:focus-visible{outline:2px solid #7c5cff;outline-offset:3px}

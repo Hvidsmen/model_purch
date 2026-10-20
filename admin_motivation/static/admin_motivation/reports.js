@@ -52,10 +52,10 @@
  const data = document.getElementById('native-division-tree');
  if (!root || !data) return;
  const nodes = JSON.parse(data.textContent);
- const periodToggle = document.getElementById('native-report-period-detail');
+ const expandedColumns = {segments: false, motivation: false};
  const blocks = root.querySelector('.report-period-header').children.length-1;
  root.style.setProperty('--report-blocks',blocks);
- root.style.setProperty('--report-columns',7);
+ root.style.setProperty('--report-columns',8);
  const money = new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0});
  const percent = new Intl.NumberFormat('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2});
  function create(node) {
@@ -67,10 +67,18 @@
   node.values.forEach(block => block.forEach((value,index) => {
    const cell=document.createElement('span');cell.className='report-number';
    const isRatio=index===7 || index===11;
-   cell.textContent=value==null ? '—' : (isRatio ? percent.format(Number(value)*100)+'%' : money.format(Number(value)));
+   const text=value==null ? '—' : (isRatio ? percent.format(Number(value)*100)+'%' : money.format(Number(value)));
+   if (index===6 || index===11) {
+    const button=document.createElement('button'); button.type='button'; button.className='division-metric-toggle';
+    button.dataset.divisionReveal=index===6 ? 'segments' : 'motivation';
+    button.setAttribute('aria-expanded',String(expandedColumns[button.dataset.divisionReveal]));
+    button.title=index===6 ? 'Показать отгрузки O0–O4' : 'Показать план и факт мотивации';
+    button.textContent=text; cell.appendChild(button);
+   } else cell.textContent=text;
    if (isRatio && value!=null) cell.classList.add(Number(value)>=.8 ? 'percent-good' : 'percent-low');
    if (index===8 || index===12) cell.classList.add('metric-number');
-   if (index<8) {cell.dataset.periodDetail='';cell.hidden=!periodToggle.checked;}
+   if (index<5) {cell.dataset.divisionSegments='';cell.hidden=!expandedColumns.segments;}
+   if (index===9 || index===10) {cell.dataset.divisionMotivation='';cell.hidden=!expandedColumns.motivation;}
    row.appendChild(cell);
   }));
   if (node.children.length) {
@@ -89,8 +97,14 @@
   target.querySelectorAll(':scope > details').forEach(expand);
  });
  document.getElementById('native-report-collapse').addEventListener('click',()=>target.querySelectorAll('details').forEach(element=>element.open=false));
- periodToggle.addEventListener('change',()=>{
-  root.style.setProperty('--report-columns',periodToggle.checked ? 15 : 7);
-  root.querySelectorAll('[data-period-detail]').forEach(cell=>cell.hidden=!periodToggle.checked);
+ root.addEventListener('click', event => {
+  const button=event.target.closest('[data-division-reveal]');
+  if (!button) return;
+  event.preventDefault(); event.stopPropagation();
+  const kind=button.dataset.divisionReveal;
+  expandedColumns[kind]=!expandedColumns[kind];
+  root.style.setProperty('--report-columns',8+(expandedColumns.segments ? 5 : 0)+(expandedColumns.motivation ? 2 : 0));
+  root.querySelectorAll(kind==='segments' ? '[data-division-segments]' : '[data-division-motivation]').forEach(cell=>cell.hidden=!expandedColumns[kind]);
+  root.querySelectorAll(`[data-division-reveal="${kind}"]`).forEach(control=>control.setAttribute('aria-expanded',String(expandedColumns[kind])));
  });
 })();
