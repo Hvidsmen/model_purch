@@ -744,10 +744,10 @@
                             <span class="file-name" id="fileName">Выбрать файл</span>
                         </label>
                         <button type="submit" class="btn btn-secondary" name="action_button" value="file_load">Загрузить из файла</button>
-                        {% if templates_file %}<a href="{{ templates_file.url }}" download class="btn-download">
+                        <a href="{% url 'motivation_subdivision_template' sub.pk %}?version={{ selected_version.pk }}{% if employee %}&amp;employee={{ employee.pk }}{% endif %}" class="btn-download">
                             <span class="icon">📥</span>
                             Скачать шаблон
-                        </a>{% endif %}
+                        </a>
                     </div>
                     </div></details>
                 </div>

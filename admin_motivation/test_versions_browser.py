@@ -49,6 +49,28 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(self.page.locator('.report-title')).to_have_text('Мотивация менеджера · 2024 · RUB')
         self.assertEqual(self.errors, [])
 
+    def test_current_coefficient_templates_download_for_global_and_subdivision(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from .test_sales_plans import SalesPlanTests
+        fixture = SalesPlanTests()
+        self.db(fixture.setUp)
+        for route, args, filename in [('global_coeff_admin_motivation', [], 'global'),
+                ('coeff_subdivisions_admin_motivation', [fixture.subs[0].pk], f'subdivision-{fixture.subs[0].pk}')]:
+            self.page.goto(self.live_server_url + reverse(route, args=args) + f'?version={fixture.version.pk}')
+            self.page.locator('#coefficient-tools > summary').click()
+            with self.page.expect_download() as download_info:
+                self.page.get_by_role('link', name='Скачать шаблон', exact=False).click()
+            download = download_info.value
+            self.assertEqual(download.suggested_filename, f'motivation-coefficients-{filename}.xlsx')
+            with open(download.path(), 'rb') as stream:
+                book = load_workbook(BytesIO(stream.read()))
+            rows = list(book.active.iter_rows(min_row=3, values_only=True))
+            target = next(row for row in rows if row[1:4] == ('Sales', '*', '*'))
+            self.assertIn(.1 if not args else .2, target[4:])
+            book.close()
+        self.assertEqual(self.errors, [])
+
     def test_plan_summary_expansion_and_independent_column_toggles(self):
         from playwright.sync_api import expect
         from .test_sales_plans import SalesPlanTests

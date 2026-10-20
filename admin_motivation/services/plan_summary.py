@@ -1,11 +1,11 @@
 """Read-only comparison of global and branch budgets over identical plan lines."""
 from decimal import Decimal
 from django.core.exceptions import ValidationError
-from ..models import GlobalCoeffVersion, DirectorEmployee, Subdivision, SubdivisionDirectorCoeff
+from ..models import DirectorEmployee, Subdivision, SubdivisionDirectorCoeff
 from .comparison import Index, coefficient_rows
 from .director_comparison import DirectorIndex
-from .sales_plans import SEGMENTS, number
 from .markup import motivation_markup
+from .plan_summary_groups import ensure_summary_groups, summary_versions
 
 ZERO = Decimal(0)
 KINDS = [('policies', 'Политика'), ('sales', 'Продажи'), ('directors', 'Директор')]
@@ -19,7 +19,7 @@ def selections(params, field):
 
 
 def summary_filters(scenario, params):
-    lines = scenario.lines.exclude(subdivision='')
+    lines = ensure_summary_groups(scenario)
     # Obtain both menus with one narrow scan of the plan, instead of two DISTINCT sorts.
     scopes = list(lines.order_by().values_list('subdivision', 'planning_group_sales').distinct())
     branch_keys = {sub for sub, pg in scopes}
@@ -48,10 +48,8 @@ def summary_report(scenario, params):
     if any(not value.isdecimal() for value in selected_staff):
         raise ValidationError('Некорректный директор.')
     selected_staff = {int(value) for value in selected_staff}
-    versions = GlobalCoeffVersion.objects.exclude(status='superseded')
-    if versions.filter(status='approved').exists():
-        versions = versions.filter(status='approved')
-    versions = list(versions.order_by('effective_from', 'pk'))
+    versions = summary_versions()
+    groups = ensure_summary_groups(scenario, versions)
     ids = [v.pk for v in versions]
     indexes = {key: Index(coefficient_rows(ids, subdivision=local))
                for key, local in [('global', False), ('local', True)]}
@@ -59,7 +57,7 @@ def summary_report(scenario, params):
                  for key, local in [('global', False), ('local', True)]}
     names = dict(DirectorEmployee.objects.values_list('pk', 'full_name'))
     branches = dict(Subdivision.objects.values_list('subdivision_key', 'subdivision_name'))
-    lines = scenario.lines.exclude(subdivision='')
+    lines = groups
     if selected_staff:
         allowed = {sub for (version, sub), staff in directors['local'].employees.items() if staff & selected_staff}
         lines = lines.filter(subdivision__in=allowed)
@@ -67,22 +65,13 @@ def summary_report(scenario, params):
         selected = selections(params, field)
         if selected:
             lines = lines.filter(**{field + '__in': selected})
-    # Read only report inputs; calculation JSON snapshots can dwarf the plan itself.
-    # Equal coefficient scopes across dates are accumulated exactly with Decimal.
-    grouped, dates = {}, {}
-    for on_date, sub, pg, group, brand, amount, segments, ddp in lines.order_by().values_list(
-            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'segment_amounts', 'amount_ddp_usd').iterator(chunk_size=2000):
-        if on_date not in dates:
-            dates[on_date] = next((v.pk for v in reversed(versions) if v.effective_from <= on_date), None)
-        key = (dates[on_date], sub, pg, group, brand)
-        data = grouped.setdefault(key, [ZERO, [ZERO] * len(SEGMENTS), ZERO])
-        data[0] += amount
-        data[2] = add(data[2], ddp)
-        for index, segment in enumerate(SEGMENTS):
-            data[1][index] += number(segments.get(segment))
     buckets, missing = {}, set()
     policy_kinds = [(key, source) for key, source in [('policies', 'Политики'), ('sales', 'Продажи')] if key in kinds]
-    for (version, sub, pg, group, brand), (plan, amounts, ddp) in grouped.items():
+    for version, sub, pg, group, brand, values in lines.order_by().values_list(
+            'version_key', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amounts').iterator(chunk_size=2000):
+        plan = Decimal(values['plan'])
+        ddp = Decimal(values['ddp']) if values['ddp'] is not None else None
+        amounts = [Decimal(value) for value in values['segments']]
         staff_values = directors['local'].by_employee(version, sub, pg, group, brand, amounts) if 'directors' in kinds or selected_staff else {}
         if selected_staff:
             staff_values = {staff: value for staff, value in staff_values.items() if staff in selected_staff}

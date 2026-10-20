@@ -121,6 +121,9 @@ def load_plan(scenario_id, connector=None, progress=None):
             report(progress, 'Сохранение плана', 75 + 24 * min(offset + 1000, len(lines)) / len(lines), min(offset + 1000, len(lines)), len(lines))
         locked.loaded_at, locked.calculated_at = timezone.now(), None
         locked.save(update_fields=['loaded_at', 'calculated_at'])
+        report(progress, 'Подготовка сводного отчёта', 99)
+        from .plan_summary_groups import ensure_summary_groups
+        ensure_summary_groups(locked)
     return subdivision_count
 
 

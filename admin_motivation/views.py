@@ -18,6 +18,7 @@ def goods_matrix(request):
 
 
 from datetime import timedelta
+from decimal import Decimal
 import math
 import pandas as pd
 from django.contrib import messages
@@ -26,7 +27,7 @@ from django.db import transaction
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_GET
 from .forms import GlobalCoeffVersionForm
 from .services.versions import latest_version, effective_version, create_version, apply_to_subdivisions, effective_coefficients, today
 from base.access import can_access
@@ -38,14 +39,13 @@ from .services.version_context import version_context
 def gloabal_coeff(request, version_form=None):
     context = version_context(request, version_form)
     selected = context['selected_version']
-    example = ExampleFiles.objects.filter(pk=1).first()
     from .services.coefficient_groups import global_matrix
     return render(request, 'admin_motivation/gloabal_coeff.html', {
         **context, 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.all(),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
-        'subdivisions': Subdivision.objects.prefetch_related('directors'), 'templates_file': example.file if example else None,
+        'subdivisions': Subdivision.objects.prefetch_related('directors'),
     })
 
 
@@ -58,24 +58,33 @@ def coefficient_number(value):
     return number
 
 
-def upsert_product(version, group_sales, group, brand, variation_id, policies, sales, subdivision=None):
+def upsert_product(version, group_sales, group, brand, variation_id, policies, sales, subdivision=None, preserve_settings=False):
     labels = [str(label).strip() for label in [group_sales, group, brand]]
     if not all(labels):
         raise ValidationError('Заполните группу планов продаж, группу и марку.')
     segments = list(SegmentCoeff.objects.order_by('pk'))
-    if not segments or len(policies) != len(segments) or len(sales) != len(segments):
+    if not segments or any(values is not None and len(values) != len(segments) for values in [policies, sales]):
         raise ValidationError('Число коэффициентов должно соответствовать числу сегментов.')
     good, _ = Goods.objects.get_or_create(planning_group_sales=labels[0], group=labels[1], brand=labels[2],
                                           defaults={'goods_key': ''.join(labels)})
     variation = get_object_or_404(VariationCalculate, pk=variation_id)
     for type_name, values in [('Политики', policies), ('Продажи', sales)]:
+        if values is None:
+            continue
         kind = get_object_or_404(TypeCoeff, type_coeff_name=type_name)
         for segment, value in zip(segments, values):
+            if value is None:
+                continue
             model = SubdivisionCoeff if subdivision else GlobalCoeff
             extra = {'subdivision': subdivision} if subdivision else {}
+            defaults = {'motivation_coeff': coefficient_number(value)}
+            settings = {'variation_calculate': variation, 'manager_coeff': 1}
+            if not preserve_settings:
+                defaults.update(settings)
             model.objects.update_or_create(version=version, **extra, goods=good, type_coeff=kind, segment=segment,
-                defaults={'variation_calculate': variation, 'motivation_coeff': coefficient_number(value), 'manager_coeff': 1})
+                defaults=defaults, create_defaults={**defaults, **settings})
 
+    return good
 
 def coefficient_return_route(request, subdivision=None):
     if request.POST.get('return_directors') == 'global':
@@ -161,14 +170,7 @@ def gloabal_coeff_action(request):
             elif action == 'file_load':
                 if 'myfile' not in request.FILES:
                     raise ValidationError('Выберите Excel-файл.')
-                df = pd.read_excel(request.FILES['myfile'], skiprows=1)
-                count = SegmentCoeff.objects.count()
-                variation = VariationCalculate.objects.order_by('pk').first()
-                if not variation or len(df.columns) != 4 + 2 * count:
-                    raise ValidationError('Файл не соответствует шаблону или не настроены уровни мотивации.')
-                for _, row in df.iterrows():
-                    values = row.tolist()[1:]
-                    upsert_product(version, *values[:3], variation.pk, values[3:3+count], values[3+count:])
+                import_current_coefficients(request.FILES['myfile'], version)
             elif action == 'apply_sub':
                 subdivisions = Subdivision.objects.filter(pk__in=request.POST.getlist('selected_subdivisions'))
                 if not subdivisions.exists():
@@ -240,7 +242,6 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     if employee_form_override is not None:
         employee_form = employee_form_override
     employee_bound = bool(employee and employee.subdivisions.filter(pk=sub.pk).exists())
-    example = ExampleFiles.objects.filter(pk=1).first()
     return render(request, 'admin_motivation/coef_one_sub.html', {
         **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
         'director_editable': bool(context['version_editable'] and employee_bound),
@@ -250,7 +251,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
-        'subdivisions': Subdivision.objects.all(), 'templates_file': example.file if example else None,
+        'subdivisions': Subdivision.objects.all(),
     })
 
 
@@ -314,14 +315,8 @@ def sub_act(request, subdivision):
             elif action == 'file_load':
                 if 'myfile' not in request.FILES:
                     raise ValidationError('Выберите Excel-файл.')
-                df = pd.read_excel(request.FILES['myfile'], skiprows=1)
-                count = SegmentCoeff.objects.count()
-                variation = VariationCalculate.objects.order_by('pk').first()
-                if not variation or len(df.columns) != 4 + 2 * count:
-                    raise ValidationError('Файл не соответствует шаблону или не настроены уровни мотивации.')
-                for _, row in df.iterrows():
-                    values = row.tolist()[1:]
-                    upsert_product(version, *values[:3], variation.pk, values[3:3+count], values[3+count:], subdivision=sub)
+                employee = get_object_or_404(DirectorEmployee, pk=request.POST['employee']) if request.POST.get('employee') else None
+                import_current_coefficients(request.FILES['myfile'], version, sub, employee)
             else:
                 raise ValidationError('Неизвестное действие.')
     except (ValidationError, ValueError, TypeError) as error:
@@ -350,3 +345,62 @@ def loader_motive(request):
         else:
             return render(request, 'admin_motivation/loader_complete.html', {'subdivisions': subdivisions, 'exported_versions': versions})
     return render(request, 'admin_motivation/loader.html', {'subdivisions': subdivisions, 'export_versions': GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk')})
+
+
+@require_GET
+def download_coefficient_template(request, subdivision=None):
+    from django.http import HttpResponse, Http404
+    from .services.coefficient_template import coefficient_template
+    selected = request.GET.get('version', '')
+    if selected and not selected.isdecimal():
+        raise Http404('Версия коэффициентов не найдена.')
+    version = get_object_or_404(GlobalCoeffVersion, pk=selected) if selected else latest_version()
+    sub = get_object_or_404(Subdivision, pk=subdivision) if subdivision is not None else None
+    from django.db.models import Q
+    employee = None
+    selected_employee = request.GET.get('employee', '')
+    if sub and selected_employee:
+        if not selected_employee.isdecimal():
+            raise Http404('Директор не найден.')
+        employee = get_object_or_404(DirectorEmployee.objects.filter(Q(subdivisions=sub) |
+            Q(subdivisiondirectorcoeff__version=version, subdivisiondirectorcoeff__subdivision=sub)).distinct(), pk=selected_employee)
+    response = HttpResponse(coefficient_template(version, sub, employee),
+        content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    scope = f'subdivision-{sub.pk}' if sub else 'global'
+    response['Content-Disposition'] = f'attachment; filename="motivation-coefficients-{scope}.xlsx"'
+    return response
+
+
+@transaction.atomic
+def import_current_coefficients(upload, version, subdivision=None, employee=None):
+    df = pd.read_excel(upload, skiprows=1)
+    count = SegmentCoeff.objects.count()
+    variation = VariationCalculate.objects.order_by('pk').first()
+    if not variation or not count or len(df.columns) not in (4 + 2 * count, 9 + 2 * count):
+        raise ValidationError('Файл не соответствует шаблону или не настроены уровни мотивации.')
+    for _, row in df.iterrows():
+        if row.isna().all():
+            continue
+        values = row.tolist()[1:]
+        if any(pd.isna(value) for value in values[:3]):
+            raise ValidationError('Заполните группу планов продаж, группу и марку.')
+        def block(items, allow_missing=False):
+            missing = [pd.isna(value) for value in items]
+            if all(missing):
+                return None
+            if any(missing) and not allow_missing:
+                raise ValidationError('Заполните все коэффициенты группы или оставьте всю группу пустой.')
+            return [None if pd.isna(value) else coefficient_number(value) for value in items]
+        policies = block(values[3:3 + count], allow_missing=True)
+        sales = block(values[3 + count:3 + 2 * count], allow_missing=True)
+        directors = block(values[3 + 2 * count:]) if len(df.columns) == 9 + 2 * count else None
+        if policies is None and sales is None and directors is None:
+            continue
+        if directors is not None and subdivision and (not employee or not employee.subdivisions.filter(pk=subdivision.pk).exists()):
+            raise ValidationError('Для загрузки директорских коэффициентов выберите директора этого подразделения.')
+        good = upsert_product(version, *values[:3], variation.pk, policies, sales, subdivision, preserve_settings=True)
+        if directors is not None:
+            model = SubdivisionDirectorCoeff if subdivision else GlobalDirectorCoeff
+            scope = {'subdivision': subdivision, 'employee': employee} if subdivision else {}
+            model.objects.update_or_create(version=version, goods=good, **scope,
+                defaults={f'k{i}': Decimal(str(value)) for i, value in enumerate(directors)})

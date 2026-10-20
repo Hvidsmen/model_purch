@@ -460,6 +460,7 @@ class SalesPlanScenario(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     loaded_at = models.DateTimeField(null=True, blank=True)
     calculated_at = models.DateTimeField(null=True, blank=True)
+    summary_signature = models.CharField(max_length=64, blank=True, default='', editable=False)
 
     class Meta:
         ordering = ['-pk']
@@ -468,7 +469,67 @@ class SalesPlanScenario(models.Model):
         return self.title
 
 
+class SalesPlanLineQuerySet(models.QuerySet):
+    INPUT_FIELDS = {'scenario', 'scenario_id', 'plan_date', 'subdivision', 'planning_group_sales',
+                    'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts'}
+
+    def invalidate_summary(self, extra_ids=()):
+        # Lock the same parent row as the aggregate builder BEFORE changing inputs.
+        ids = set(self.order_by().values_list('scenario_id', flat=True).distinct()) | set(extra_ids)
+        SalesPlanScenario.objects.filter(pk__in=ids).update(summary_signature='')
+
+    @transaction.atomic
+    def update(self, **kwargs):
+        if self.INPUT_FIELDS.intersection(kwargs):
+            extra_ids = ()
+            if 'scenario_id' in kwargs or 'scenario' in kwargs:
+                target = kwargs.get('scenario_id', kwargs.get('scenario'))
+                if isinstance(target, SalesPlanScenario):
+                    target = target.pk
+                extra_ids = [target] if isinstance(target, int) else SalesPlanScenario.objects.values_list('pk', flat=True)
+            self.invalidate_summary(extra_ids)
+        return super().update(**kwargs)
+
+    @transaction.atomic
+    def bulk_create(self, objs, *args, **kwargs):
+        objs = list(objs)
+        SalesPlanScenario.objects.filter(pk__in={obj.scenario_id for obj in objs}).update(summary_signature='')
+        return super().bulk_create(objs, *args, **kwargs)
+
+    @transaction.atomic
+    def bulk_update(self, objs, fields, *args, **kwargs):
+        objs = list(objs)
+        if self.INPUT_FIELDS.intersection(fields):
+            for offset in range(0, len(objs), 1000):
+                batch = objs[offset:offset + 1000]
+                self.filter(pk__in=[obj.pk for obj in batch]).invalidate_summary(obj.scenario_id for obj in batch)
+        return super().bulk_update(objs, fields, *args, **kwargs)
+
+    @transaction.atomic
+    def delete(self):
+        self.invalidate_summary()
+        return super().delete()
+
+
 class SalesPlanLine(models.Model):
+    objects = SalesPlanLineQuerySet.as_manager()
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        fields = kwargs.get('update_fields')
+        if fields is None or SalesPlanLineQuerySet.INPUT_FIELDS.intersection(fields):
+            ids = {self.scenario_id}
+            if self.pk:
+                ids.update(type(self).objects.filter(pk=self.pk).values_list('scenario_id', flat=True))
+            SalesPlanScenario.objects.filter(pk__in=ids).update(summary_signature='')
+        return super().save(*args, **kwargs)
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        ids = set(type(self).objects.filter(pk=self.pk).values_list('scenario_id', flat=True)) | {self.scenario_id}
+        SalesPlanScenario.objects.filter(pk__in=ids).update(summary_signature='')
+        return super().delete(*args, **kwargs)
+
     scenario = models.ForeignKey(SalesPlanScenario, on_delete=models.CASCADE, related_name='lines')
     plan_date = models.DateField('Дата плана')
     subdivision = models.CharField(max_length=255)
@@ -488,6 +549,18 @@ class SalesPlanLine(models.Model):
     class Meta:
         ordering = ['plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand']
         constraints = [models.UniqueConstraint(fields=['scenario', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand'], name='unique_motivation_sales_plan_line')]
+
+
+class SalesPlanSummaryGroup(models.Model):
+    scenario = models.ForeignKey(SalesPlanScenario, on_delete=models.CASCADE, related_name='summary_groups')
+    # A materialized input scope, not a saved motivation calculation.
+    version_key = models.BigIntegerField(null=True)
+    subdivision = models.CharField(max_length=255)
+    planning_group_sales = models.CharField(max_length=255)
+    group = models.CharField(max_length=255)
+    brand = models.CharField(max_length=255)
+    # Decimal strings avoid SQLite SUM/REAL rounding and preserve large exact totals.
+    amounts = models.JSONField()
 
 
 class ApprovalQuerySet(models.QuerySet):
