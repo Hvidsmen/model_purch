@@ -1,5 +1,5 @@
 .native-report{font-family:'Segoe UI',Arial,sans-serif;color:#1e3a5f}
-.content-wrapper .native-report h1.report-title{margin:16px 0;background:#1e3a5f;color:white;font-size:28px;font-weight:400;text-align:center;padding:16px;border-radius:0}
+.content-wrapper .native-report h1.report-title{margin:16px 0;background:#f5f3ff;color:#312e81;font-size:26px;font-weight:600;text-align:left;padding:16px 20px;border:1px solid #e5defa;border-left:4px solid #7964df;border-radius:8px}
 .report-subtitle{background:#f7f9fc;padding:10px 14px;margin:8px 0 20px;color:#526079}
 .report-filter-panel{padding:12px;border:1px solid #dce3ec;border-radius:8px;margin-bottom:18px}
 .report-filter-panel summary{cursor:pointer;font-weight:600}
@@ -49,3 +49,5 @@
 .manager-division-execution>span,.manager-division-execution>strong{background:#f0f7ff;font-weight:600}
 
 .manager-detail-cards>button{text-align:left;cursor:pointer;color:inherit;font:inherit;transition:border-color .15s,box-shadow .15s}.manager-detail-cards>button:hover,.manager-detail-cards>button:focus-visible{border-color:#7964df;box-shadow:0 0 0 2px #ede9fe}.manager-card-hint{font-size:12px;color:#5845bd}.manager-detail-panel{border:1px solid #dce3ec;border-radius:8px;padding:14px}.manager-detail-panel>summary{cursor:pointer;font-weight:700;color:#1e3a5f;padding:6px}.manager-detail-panel[open]>summary{margin-bottom:12px}
+
+.manager-period-summary{margin:20px 0}.manager-period-summary table{min-width:780px}.manager-period-summary .summary-remainder{background:#f0f7ff}.manager-period-summary .summary-final{background:#ede9fe;color:#312e81;font-weight:800}

@@ -1,5 +1,6 @@
 """Detailed manager RDL metrics, using grouped inputs and weighted coefficient averages."""
 from collections import defaultdict
+import re
 from .reports import number, ratio, total
 
 DIMENSIONS = ['Подразделение', 'АвторСделки', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка']
@@ -41,6 +42,37 @@ def metrics(rows, currency='USD', overall=False, coefficients=False):
     return [*averages, *[total(inputs, f'O{i}') if inputs is not None else None for i in range(5)], plan, fact, ratio(fact, plan, True),
             total(rows, f'СуммаМотивации{prefix}'), motive_plan, motive_fact, ratio(motive_fact, motive_plan, True),
             paid, bonus, paid + bonus]
+
+
+def period_motivation_summary(rows):
+    buckets = defaultdict(list)
+    captions = {}
+    for row in rows:
+        year = str(row['Год']) if row.get('Год') is not None else 'Без года'
+        name = str(row.get('КварталМотивации') or 'Без периода').strip()
+        match = re.match(r'^([1-4])\s*кв', name, re.I)
+        segment = int(match.group(1)) if match else 'year' if name.casefold() == 'год' else name
+        buckets[year, segment].append(row)
+        captions.setdefault((year, segment), set()).add(name)
+    years = sorted({year for year, segment in buckets}) or ['']
+    columns, keys = [], []
+    for year in years:
+        segments = [1, 2, 3, 4, 'year'] + sorted(
+            {segment for scope_year, segment in buckets if scope_year == year and segment not in (1, 2, 3, 4, 'year')})
+        for segment in segments:
+            key = (year, segment)
+            label = f'{segment} кв.' if isinstance(segment, int) else 'Год' if segment == 'year' else segment
+            columns.append({'label': f'{year} · {label}' if len(years) > 1 else label,
+                            'title': ', '.join(sorted(captions.get(key, ())))})
+            keys.append(key)
+    currencies = []
+    for currency, paid_key, bonus_key in [('USD', 'СуммаМотивацииUSDУчетПроцента', 'Остаток'),
+                                           ('RUB', 'СуммаМотивацииRURУчетПроцента', 'ОстатокRUR')]:
+        values = [total(buckets[key], paid_key) if key in buckets else None for key in keys]
+        bonus = total(rows, bonus_key)
+        currencies.append({'currency': currency, 'values': values, 'remainder': bonus,
+                           'total': total(rows, paid_key) + bonus})
+    return {'columns': columns, 'rows': currencies}
 
 
 def manager_detail_report(rows, currency='USD', performance_rows=None):
@@ -87,4 +119,4 @@ def manager_detail_report(rows, currency='USD', performance_rows=None):
             execution.append(block)
     return {'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
             'headers': [{'label': label, 'detail': index < 13} for index, label in enumerate(HEADERS)],
-            'cards': cards, 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution}
+            'cards': cards, 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows)}

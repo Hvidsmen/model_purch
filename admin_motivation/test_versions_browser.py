@@ -29,6 +29,13 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', side_effect=report):
             self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?type=Политики&run=1')
             expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · USD')
+            summary = self.page.locator('.manager-period-summary')
+            expect(summary).to_be_visible()
+            expect(summary.locator('tbody tr')).to_have_count(2)
+            expect(summary.get_by_role('columnheader', name='4 кв.', exact=True)).to_be_visible()
+            expect(summary.locator('tbody tr').first.locator('td').last).to_have_text('190')
+            self.assertEqual(self.page.locator('.report-title').evaluate('(heading) => getComputedStyle(heading).backgroundColor'), 'rgb(245, 243, 255)')
+            self.page.screenshot(path='/tmp/manager-period-summary.png', full_page=True)
             panel = self.page.locator('#manager-detail-panel')
             self.assertFalse(panel.evaluate('(panel) => panel.open'))
             self.page.locator('[data-manager-open=USD]').click()

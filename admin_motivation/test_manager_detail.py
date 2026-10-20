@@ -81,6 +81,30 @@ class ManagerDetailTests(TestCase):
         complete_brand = incomplete['nodes'][0]['children'][0]['children'][0]['children'][0]['children'][0]
         self.assertEqual(complete_brand['values'][-1][16], Decimal('.79'))
 
+    def test_period_summary_matches_cards_in_both_currencies_and_keeps_all_periods(self):
+        from .services.manager_detail import period_motivation_summary
+        rows = detail_rows()
+        rows.extend([dict(rows[0], КварталМотивации='2 Квартал(1-2 кв)',
+                          СуммаМотивацииUSDУчетПроцента=0, СуммаМотивацииRURУчетПроцента=0, Остаток=0, ОстатокRUR=0),
+                     dict(rows[0], КварталМотивации='3 Квартал', СуммаМотивацииUSDУчетПроцента=-10,
+                          СуммаМотивацииRURУчетПроцента=-1000, Остаток=0, ОстатокRUR=0)])
+        data = manager_detail_report(rows)
+        summary = data['period_summary']
+        self.assertEqual([column['label'] for column in summary['columns']], ['1 кв.', '2 кв.', '3 кв.', '4 кв.', 'Год'])
+        self.assertEqual(summary['rows'][0]['values'], [Decimal(90), Decimal(0), Decimal(-10), None, Decimal(90)])
+        for row, card in zip(summary['rows'], data['cards']):
+            self.assertEqual(row['total'], card['total'])
+            self.assertEqual(row['remainder'], card['bonus'])
+            self.assertEqual(sum(value for value in row['values'] if value is not None) + row['remainder'], row['total'])
+        extra = dict(rows[0], Год=2025, КварталМотивации='Другой период')
+        multiple = period_motivation_summary([*rows, extra])
+        self.assertIn('2025 · Другой период', [column['label'] for column in multiple['columns']])
+        self.assertIn('2026 · 1 кв.', [column['label'] for column in multiple['columns']])
+        self.assertEqual(multiple['rows'][0]['total'], summary['rows'][0]['total'] + Decimal(95))
+        empty = period_motivation_summary([])
+        self.assertEqual(empty['rows'][0]['values'], [None] * 5)
+        self.assertEqual(empty['rows'][0]['total'], Decimal(0))
+
     def test_branch_execution_aligns_periods_and_uses_annual_values_in_total(self):
         rows = detail_rows()
         performance = [dict(row) for row in rows]
