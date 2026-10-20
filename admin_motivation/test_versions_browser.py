@@ -29,6 +29,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', side_effect=report):
             self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?type=Политики&run=1')
             expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · USD')
+            panel = self.page.locator('#manager-detail-panel')
+            self.assertFalse(panel.evaluate('(panel) => panel.open'))
+            self.page.locator('[data-manager-open=USD]').click()
+            self.assertTrue(panel.evaluate('(panel) => panel.open'))
             execution = self.page.locator('.manager-division-execution')
             expect(execution).to_be_visible()
             self.assertEqual(execution.evaluate('(row) => row.nextElementSibling.classList.contains("report-total-row")'), True)
@@ -41,6 +45,12 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(self.page.locator('#manager-detail-report [data-manager-extra]').first).to_be_visible()
             self.page.locator('#manager-detail-collapse').click()
             expect(self.page.locator('#manager-detail-nodes').get_by_text('Иванов', exact=True)).to_be_hidden()
+            with self.page.expect_navigation():
+                self.page.locator('[data-manager-open=RUB]').click()
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · RUB')
+            self.assertTrue(panel.evaluate('(panel) => panel.open'))
+            panel.locator(':scope > summary').click()
+            self.assertFalse(panel.evaluate('(panel) => panel.open'))
             self.page.locator('.report-filter-panel > summary').click()
             self.page.locator('select[name=author]').select_option(['Иванов'])
             with self.page.expect_navigation():

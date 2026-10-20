@@ -1,6 +1,25 @@
 (() => {
  const root = document.getElementById('manager-detail-report');
  if (!root) return;
+ const panel = document.getElementById('manager-detail-panel');
+ const cards = document.querySelectorAll('[data-manager-open]');
+ const syncCards = () => cards.forEach(card => card.setAttribute('aria-expanded', String(panel.open && card.dataset.managerOpen === panel.dataset.currency)));
+ cards.forEach(card => card.addEventListener('click', () => {
+  if (card.dataset.managerOpen === panel.dataset.currency) {
+   panel.open = true;
+   syncCards();
+   panel.scrollIntoView({behavior: 'smooth', block: 'start'});
+  } else {
+   const form = document.getElementById('native-report-filters');
+   form.elements.currency.value = card.dataset.managerOpen;
+   let flag = form.querySelector('input[name=details]');
+   if (!flag) { flag = document.createElement('input'); flag.type = 'hidden'; flag.name = 'details'; form.appendChild(flag); }
+   flag.value = '1';
+   form.requestSubmit(form.querySelector('button[name=run]'));
+  }
+ }));
+ panel.addEventListener('toggle', syncCards);
+ syncCards();
  const nodes = JSON.parse(document.getElementById('manager-detail-tree').textContent);
  const target = document.getElementById('manager-detail-nodes');
  const extra = document.getElementById('manager-detail-extra');

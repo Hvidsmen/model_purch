@@ -1,6 +1,7 @@
 {% load report_format %}
 {% if not data.nodes %}<p class="report-empty">Нет данных по выбранным параметрам.</p>{% endif %}
-<div class="manager-detail-cards">{% for card in data.cards %}<div><strong>{{ card.currency }}</strong><span>С учётом выполнения: {{ card.paid|report_money }}</span><span>Доплата за кварталы: {{ card.bonus|report_money }}</span><strong>Итого: {{ card.total|report_money }}</strong></div>{% endfor %}</div>
+<div class="manager-detail-cards">{% for card in data.cards %}<button type="button" data-manager-open="{{ card.currency }}" aria-controls="manager-detail-panel" aria-expanded="false"><strong>{{ card.currency }}</strong><span>С учётом выполнения: {{ card.paid|report_money }}</span><span>Доплата за кварталы: {{ card.bonus|report_money }}</span><strong>Итого: {{ card.total|report_money }}</strong><span class="manager-card-hint">Открыть расширенную таблицу →</span></button>{% endfor %}</div>
+<details id="manager-detail-panel" class="manager-detail-panel" data-currency="{{ data.currency }}" {% if query.details == '1' %}open{% endif %}><summary>Расширенная таблица мотивации · {{ data.currency }}</summary>
 <p class="report-filter-hint">План и отгрузки — USD. Мотивация — {{ data.currency }}. В блоке «Итого» план, факт и процент выполнения берутся из строк «Год». Мотивация и доплата суммируются по всем периодам. При отсутствии полных годовых данных план, факт и процент показаны прочерком. Коэффициенты показаны на уровне марки и общего итога.</p>
 <div class="report-buttons"><button type="button" class="btn btn-outline-secondary" id="manager-detail-expand">Развернуть всё</button><button type="button" class="btn btn-outline-secondary" id="manager-detail-collapse">Свернуть всё</button><label><input type="checkbox" id="manager-detail-extra"> Коэффициенты K0–K4, отгрузки и план / факт периода</label></div>
 {{ data.nodes|json_script:'manager-detail-tree' }}
@@ -11,3 +12,4 @@
 <div class="division-report-grid report-total-row"><strong>Итого</strong>{% for block in data.detail_totals %}{% include 'admin_motivation/reports/_manager_detail_values.html' %}{% endfor %}</div>
 <div id="manager-detail-nodes"></div>
 </div></div>
+</details>

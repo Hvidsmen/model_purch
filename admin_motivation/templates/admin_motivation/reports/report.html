@@ -1,7 +1,7 @@
 {% extends 'admin_motivation/base.html' %}
 {% load static report_format %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=division-execution-20261020">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=manager-panel-20261020">
 <section class="content native-report">
 <a href="{% url 'motivation_reports' %}">← Все отчёты</a>
 <h1 class="report-title">{{ definition.title }}{% if data.years %} · {{ data.years|join:", " }}{% endif %}{% if kind == 'manager' or kind == 'manager-detail' %} · {% if query.currency == 'RUB' %}RUB{% else %}USD{% endif %}{% endif %}</h1>
@@ -21,5 +21,5 @@
 {% elif not errors %}<p class="report-empty">Выберите параметры и нажмите «Сформировать отчёт».</p>{% endif %}
 </section>
 <script src="{% static 'admin_motivation/reports.js' %}?v=manager-detail-20261020" defer></script>
-{% if kind == 'manager-detail' %}<script src="{% static 'admin_motivation/manager_detail.js' %}" defer></script>{% endif %}
+{% if kind == 'manager-detail' %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=manager-panel-20261020" defer></script>{% endif %}
 {% endblock %}
