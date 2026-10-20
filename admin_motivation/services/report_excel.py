@@ -16,7 +16,7 @@ def report_excel(data, parameters, scope='all'):
     if scope not in ('all', 'summary', 'detail'):
         raise ValidationError('Неизвестная таблица для выгрузки.')
     book = Workbook(write_only=True)
-    book.properties.title = 'Мотивация по менеджеру'
+    book.properties.title = 'Мотивация. Детально'
     book.properties.creator = 'Рабочий портал'
     currency = data['currency']
     edge = Side(style='thin', color='DCE3EC')

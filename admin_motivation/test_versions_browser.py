@@ -28,7 +28,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             return manager_detail_report(detail_rows(), values.get('Currency', 'USD'), detail_rows())
         with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', side_effect=report):
             self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?type=Политики&run=1')
-            expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · USD')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация. Детально · 2026 · USD')
             with self.page.expect_download() as downloaded:
                 self.page.get_by_role('link', name='Скачать весь отчёт Excel', exact=True).click()
             from openpyxl import load_workbook
@@ -68,7 +68,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.locator('.report-filter-panel > summary').click()
             with self.page.expect_navigation():
                 self.choose_filter('select[name=currency]', 'RUB')
-            expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · RUB')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация. Детально · 2026 · RUB')
             expect(self.page.locator('[data-manager-open=USD]')).to_have_count(0)
             expect(self.page.locator('[data-manager-open=RUB]')).to_have_count(1)
             expect(summary.locator('tbody tr')).to_have_count(3)
@@ -95,7 +95,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.assertEqual(self.page.locator('select[name=author]').evaluate('(select) => [...select.selectedOptions].map(option => option.value)'), [])
             with self.page.expect_navigation():
                 self.choose_filter('select[name=currency]', 'USD')
-            expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · USD')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация. Детально · 2026 · USD')
         self.assertEqual(self.errors, [])
 
     def test_manager_authors_refresh_automatically_with_type_and_branch(self):

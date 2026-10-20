@@ -239,12 +239,12 @@ class ManagerDetailTests(TestCase):
         connection.close.assert_called_once()
 
     def test_catalog_and_page_render_separately_from_short_report(self):
-        self.assertContains(self.client.get(reverse('motivation_reports')), 'Мотивация по менеджеру')
+        self.assertContains(self.client.get(reverse('motivation_reports')), 'Мотивация. Детально')
         with patch('admin_motivation.report_views.choices', return_value=[]), \
              patch('admin_motivation.report_views.load_report', return_value=manager_detail_report(detail_rows())):
             page = self.client.get(reverse('motivation_report', args=['manager-detail']), {'run': '1', 'type': 'Продажи'})
         self.assertEqual(page.status_code, 200)
-        self.assertContains(page, 'Мотивация по менеджеру · 2026 · USD')
+        self.assertContains(page, 'Мотивация. Детально · 2026 · USD')
         self.assertContains(page, 'manager-detail-tree')
         self.assertContains(page, '190')
         self.assertNotContains(page, 'NoReverseMatch')
