@@ -63,7 +63,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         from unittest.mock import Mock
         from playwright.sync_api import expect
         connection, cursor = Mock(), Mock()
-        cursor.fetchall.return_value = [('group', 'New sales', 'New goods', 'New brand', 'Supplier')]
+        cursor.fetchall.return_value = [('group', 'New sales', 'New goods', 'New brand', 'Supplier', 'PG1')]
         with patch('model_purch.services.goods_directory.connect_database', return_value=(connection, cursor)):
             self.page.goto(self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}')
             self.page.screenshot(path='/tmp/goods-directory-toolbar.png', full_page=True)

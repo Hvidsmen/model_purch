@@ -19,7 +19,7 @@ class GoodsDirectoryTests(TestCase):
             volume=1, container_volume=70, duty_rate=7, exw_usd=10, stock_cnt_day=30, percent_stock_end=20)
         self.connection, self.cursor = Mock(), Mock()
         self.connector = Mock(return_value=(self.connection, self.cursor))
-        self.cursor.fetchall.return_value = [(' GROUP ', 'New sales', 'New goods', 'New brand', 'New supplier')]
+        self.cursor.fetchall.return_value = [(' GROUP ', 'New sales', 'New goods', 'New brand', 'New supplier', 'PG1')]
         self.url = reverse('refresh_goods_directory', args=[self.scenario.pk])
 
     def refresh(self):
@@ -47,7 +47,7 @@ class GoodsDirectoryTests(TestCase):
     def test_source_rebuild_precedes_read_and_commits_transaction(self):
         events = []
         self.cursor.execute.side_effect = lambda sql: events.append(sql)
-        self.cursor.fetchall.side_effect = lambda: events.append('fetch') or [('Group', 'New', 'New', 'New', 'Supplier')]
+        self.cursor.fetchall.side_effect = lambda: events.append('fetch') or [('Group', 'New', 'New', 'New', 'Supplier', 'PG1')]
         self.connection.commit.side_effect = lambda: events.append('commit')
         self.refresh()
         self.assertEqual(events, [REBUILD_SQL, SQL, 'fetch', 'commit'])
@@ -75,29 +75,47 @@ class GoodsDirectoryTests(TestCase):
                 self.connection.commit.side_effect = None
 
     def test_unmatched_goods_preserved_new_source_goods_not_created(self):
-        self.cursor.fetchall.return_value = [('Missing', 'Sales', 'Goods', 'Brand', 'Supplier')]
+        self.cursor.fetchall.return_value = [('Missing', 'Sales', 'Goods', 'Brand', 'Supplier', 'PG2')]
         before = PGGoods.objects.values().get(pk=self.good.pk)
         self.assertEqual(self.refresh(), {'updated': 0, 'unchanged': 0, 'missing': 1})
         self.assertEqual(PGGoods.objects.values().get(pk=self.good.pk), before)
         self.assertEqual(PGGoods.objects.count(), 1)
 
     def test_duplicate_identical_source_rows_accepted_and_blanks_clear_fields(self):
-        self.cursor.fetchall.return_value = [('group', None, None, None, None), ('GROUP', '', '', '', '')]
+        self.cursor.fetchall.return_value = [('group', None, None, None, None, 'PG1'), ('GROUP', '', '', '', '', 'PG2')]
         self.assertEqual(self.refresh()['updated'], 1)
         self.good.refresh_from_db()
         self.assertEqual((self.good.planning_sales, self.good.group_goods, self.good.brand, self.good.purch), ('', '', None, None))
 
-    def test_conflicts_and_oversized_values_cancel_entire_update(self):
-        for bad in [('group', 'Conflicting', 'New goods', 'New brand', 'New supplier'),
-                    ('Group', 'x' * 256, '', '', '')]:
-            self.cursor.fetchall.return_value = [('Group', 'New sales', 'New goods', 'New brand', 'New supplier'), bad]
-            with self.assertRaises(ValidationError):
-                self.refresh()
+    def test_normalized_duplicates_prefer_pg_and_are_independent_of_source_order(self):
+        candidates = [(' Group ', 'Model sales', 'Model goods', 'Model brand', 'Supplier', 'A001'),
+                      ('GROUP', 'PG sales', 'PG goods', 'PG brand', 'Supplier', 'PG002'),
+                      ('group', 'First sales', 'First goods', 'First brand', 'Supplier', 'PG001')]
+        for order in (candidates, list(reversed(candidates))):
+            self.cursor.fetchall.return_value = order
+            self.refresh()
             self.good.refresh_from_db()
-            self.assertEqual(self.good.planning_sales, 'Sales')
-            self.assertFalse(GoodsGroup.objects.filter(name='New goods').exists())
-        self.assertEqual(self.connection.close.call_count, 2)
-        self.assertEqual(self.connection.rollback.call_count, 2)
+            self.assertEqual((self.good.planning_sales, self.good.group_goods, self.good.brand),
+                             ('First sales', 'First goods', 'First brand'))
+        self.connection.rollback.assert_not_called()
+
+    def test_equal_planning_keys_have_stable_whole_row_tiebreak(self):
+        candidates = [('Group', 'B sales', 'A goods', 'B brand', 'Supplier', 'PG1'),
+                      ('Group', 'A sales', 'Z goods', 'A brand', 'Supplier', 'PG1')]
+        for order in (candidates, list(reversed(candidates))):
+            self.cursor.fetchall.return_value = order
+            self.refresh()
+            self.good.refresh_from_db()
+            self.assertEqual((self.good.planning_sales, self.good.group_goods, self.good.brand),
+                             ('A sales', 'Z goods', 'A brand'))
+
+    def test_oversized_values_cancel_entire_update(self):
+        self.cursor.fetchall.return_value = [('Group', 'x' * 256, '', '', '', 'PG1')]
+        with self.assertRaises(ValidationError):
+            self.refresh()
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.planning_sales, 'Sales')
+        self.connection.rollback.assert_called_once()
         self.connection.commit.assert_not_called()
 
     def test_connection_failure_closes_connection_and_preserves_goods(self):

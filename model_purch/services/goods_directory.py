@@ -1,5 +1,6 @@
 """Refresh the four source classifications without reimporting scenario inputs."""
 from pathlib import Path
+import unicodedata
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -12,7 +13,7 @@ from .pricing import reprice_goods
 FIELDS = ('planning_sales', 'group_goods', 'brand', 'purch')
 REBUILD_SQL = (Path(__file__).resolve().parents[1] / 'sql' / 'refresh_goods_directory.sql').read_text(encoding='utf-8')
 SQL = '''
-SELECT DISTINCT [PlanningGroupOZP], [PlanningGroupSalesERP], [Group_1], [BrandName], [Purch]
+SELECT DISTINCT [PlanningGroupOZP], [PlanningGroupSalesERP], [Group_1], [BrandName], [Purch], [PlanningKey]
 FROM [ModelPurch].[dbo].[PlanningGroupOZP]
 WHERE [PlanningGroupOZP] IS NOT NULL
 '''
@@ -28,8 +29,9 @@ def refresh_goods_directory(scenario, connector=None):
         connection.timeout = 120
         cursor.execute(REBUILD_SQL)
         cursor.execute(SQL)
-        source = {}
-        for group, *raw in cursor.fetchall():
+        source, ranks = {}, {}
+        for group, sales, goods_group, brand, supplier, planning_key in cursor.fetchall():
+            raw = (sales, goods_group, brand, supplier)
             key = planning_group_key(group)
             if key not in keys:
                 continue
@@ -37,9 +39,14 @@ def refresh_goods_directory(scenario, connector=None):
             if len(values) != len(FIELDS) or any(len(value) > 255 for value in values):
                 raise ValidationError(f'Некорректные поля справочника для группы «{group}». Обновление отменено.')
             values = (*values[:2], values[2] or None, values[3] or None)
-            if key in source and source[key] != values:
-                raise ValidationError(f'В источнике несколько разных наборов полей для группы «{group}». Обновление отменено.')
-            source[key] = values
+            # Match the portal's exact Unicode identity as well as SQL's grouping.
+            # Choose a whole representative row; never combine unrelated fields.
+            code = unicodedata.normalize('NFC', str(planning_key or '').strip())
+            rank = (0 if code.casefold().startswith('pg') else 1 if code else 2,
+                    code.casefold(), code, str(group or ''), tuple(value or '' for value in values))
+            if key not in ranks or rank < ranks[key]:
+                ranks[key] = rank
+                source[key] = values
         connection.commit()
     except Exception:
         connection.rollback()

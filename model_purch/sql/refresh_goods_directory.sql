@@ -36,8 +36,15 @@ FROM (
         g.Purch,
         COALESCE(mce.Volume, 0) Volume,
         ROW_NUMBER() OVER (
-            PARTITION BY g.PlanningGroupOZP
-            ORDER BY IIF(g.PlanningKey LIKE 'PG%', '00', CONCAT('01', g.PlanningGroupOZP))
+            PARTITION BY LOWER(LTRIM(RTRIM(g.PlanningGroupOZP)))
+            ORDER BY CASE WHEN UPPER(LTRIM(RTRIM(g.PlanningKey))) LIKE 'PG%' THEN 0 ELSE 1 END,
+                g.PlanningKey COLLATE Latin1_General_100_BIN2,
+                g.PlanningGroupOZP COLLATE Latin1_General_100_BIN2,
+                g.PlanningGroupSalesERP COLLATE Latin1_General_100_BIN2,
+                g.Group_1 COLLATE Latin1_General_100_BIN2,
+                g.BrandName COLLATE Latin1_General_100_BIN2,
+                g.Purch COLLATE Latin1_General_100_BIN2,
+                COALESCE(mce.Volume, 0)
         ) RowId,
         IIF(g.PlanningGroupOZP IN (
             SELECT DISTINCT fs.PlanningGroupOZP FROM [ModelPurch].dbo.GoodsPlan fs
