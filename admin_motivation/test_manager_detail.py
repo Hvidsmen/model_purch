@@ -81,6 +81,26 @@ class ManagerDetailTests(TestCase):
         complete_brand = incomplete['nodes'][0]['children'][0]['children'][0]['children'][0]['children'][0]
         self.assertEqual(complete_brand['values'][-1][16], Decimal('.79'))
 
+    def test_branch_execution_aligns_periods_and_uses_annual_values_in_total(self):
+        rows = detail_rows()
+        performance = [dict(row) for row in rows]
+        performance[0].update(СуммаПланUSD=100, СуммаОтгрузокUSD=92,
+                              СуммаПланUSDКвартал=100, СуммаОтгрузокUSDКвартал=93)
+        performance[1].update(СуммаПланUSD=1000, СуммаОтгрузокUSD=790,
+                              СуммаПланUSDКвартал=1000, СуммаОтгрузокUSDКвартал=800)
+        performance.append(dict(performance[0], Год=2025, СуммаОтгрузокUSD=0))
+        data = manager_detail_report(rows, performance_rows=performance)
+        self.assertEqual(len(data['division_execution']), len(data['detail_totals']))
+        self.assertEqual([block[16] for block in data['division_execution']], [Decimal('.92'), Decimal('.79'), Decimal('.79')])
+        self.assertEqual(data['division_execution'][0][12], Decimal('.93'))
+        self.assertTrue(all(value is None for index, value in enumerate(data['division_execution'][0]) if index not in (12, 16)))
+        with patch('admin_motivation.report_views.choices', return_value=[]), \
+             patch('admin_motivation.report_views.load_report', return_value=data):
+            response = self.client.get(reverse('motivation_report', args=['manager-detail']), {'run': '1', 'type': 'Продажи'})
+        self.assertContains(response, '% выполнения подразделений')
+        self.assertNotContains(response, 'Выполнение плана подразделений</h2>')
+        self.assertLess(response.content.index(b'manager-division-execution'), response.content.index(b'report-total-row'))
+
     def test_weighted_averages_zero_denominators_and_separate_years(self):
         rows = detail_rows()
         rows[1]['K0Sum'], rows[1]['K0Count'] = Decimal('.09'), 1

@@ -25,10 +25,14 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
                                  for value in items[name]]}
                     for name, parameter, caption, dataset, multiple in FILTERS[kind]]
         def report(kind, values, *args):
-            return manager_detail_report(detail_rows(), values.get('Currency', 'USD'))
+            return manager_detail_report(detail_rows(), values.get('Currency', 'USD'), detail_rows())
         with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', side_effect=report):
             self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?type=Политики&run=1')
             expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · USD')
+            execution = self.page.locator('.manager-division-execution')
+            expect(execution).to_be_visible()
+            self.assertEqual(execution.evaluate('(row) => row.nextElementSibling.classList.contains("report-total-row")'), True)
+            expect(execution.locator('span:not([hidden])').nth(3)).to_have_text('90,00%')
             self.page.locator('#manager-detail-expand').click()
             expect(self.page.locator('#manager-detail-nodes').get_by_text('Иванов', exact=True)).to_be_visible()
             expect(self.page.locator('#manager-detail-nodes').get_by_text('<Brand>', exact=True)).to_be_visible()

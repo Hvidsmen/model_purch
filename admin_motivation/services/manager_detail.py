@@ -76,6 +76,15 @@ def manager_detail_report(rows, currency='USD', performance_rows=None):
             'period': row.get('КварталМотивации') or 'Без периода',
             'values': [plan, fact, ratio(fact, plan, True), motive_plan, motive_fact, ratio(motive_fact, motive_plan, True)]})
     performance.sort(key=lambda row: (row['subdivision'], str(row['year']), row['period']))
+    # Align branch execution with the visible periods/years of the main report.
+    visible_years = {str(row.get('Год')) for row in rows}
+    execution_rows = [row for row in performance_rows or [] if str(row.get('Год')) in visible_years]
+    execution = []
+    if execution_rows:
+        for values in blocks(execution_rows):
+            block = [None] * len(HEADERS)
+            block[12], block[16] = values[12], values[16]
+            execution.append(block)
     return {'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
             'headers': [{'label': label, 'detail': index < 13} for index, label in enumerate(HEADERS)],
-            'cards': cards, 'years': years, 'currency': currency, 'division_performance': performance}
+            'cards': cards, 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution}
