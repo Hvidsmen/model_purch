@@ -2,7 +2,7 @@ import csv
 import logging
 from time import perf_counter
 from django.core.exceptions import ValidationError
-from django.http import Http404, HttpResponse
+from django.http import Http404, HttpResponse, FileResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from .services.reports import CATALOG, FILTERS, parameters, choices, load_report
@@ -28,11 +28,28 @@ def report_page(request, kind):
     values = {}
     try:
         values = parameters(kind, query)
-        filters = choices(kind, values, refresh=request.GET.get('refresh_choices') == '1')
-        if request.GET.get('run') == '1':
+        excel = kind == 'manager-detail' and query.get('export') == 'xlsx'
+        if excel and query.get('table', 'all') not in ('all', 'summary', 'detail'):
+            raise ValidationError('Неизвестная таблица для выгрузки.')
+        if not excel:
+            filters = choices(kind, values, refresh=request.GET.get('refresh_choices') == '1')
+        if request.GET.get('run') == '1' or excel:
             try: page = max(1, int(query.get('page', 1)))
             except ValueError: page = 1
             data = load_report(kind, values, page, 'matrix' if query.get('scope')=='matrix' else 'subdivisions')
+            if excel:
+                from .services.report_excel import report_excel
+                table = query.get('table', 'all')
+                return FileResponse(report_excel(data, values, table), as_attachment=True,
+                    filename=f'motivation-manager-{data["currency"]}-{table}.xlsx',
+                    content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+            if kind == 'manager-detail':
+                data['excel_urls'] = {}
+                for table in ('all', 'summary', 'detail'):
+                    target = query.copy()
+                    target['run'], target['export'], target['table'] = '1', 'xlsx', table
+                    target.pop('refresh_choices', None)
+                    data['excel_urls'][table] = '?' + target.urlencode()
     except ValidationError as error:
         errors = error.messages
     except RuntimeError:

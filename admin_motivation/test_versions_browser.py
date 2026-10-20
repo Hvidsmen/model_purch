@@ -29,6 +29,16 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', side_effect=report):
             self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?type=Политики&run=1')
             expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · USD')
+            with self.page.expect_download() as downloaded:
+                self.page.get_by_role('link', name='Скачать весь отчёт Excel', exact=True).click()
+            from openpyxl import load_workbook
+            self.assertEqual(downloaded.value.suggested_filename, 'motivation-manager-USD-all.xlsx')
+            from io import BytesIO
+            with open(downloaded.value.path(), 'rb') as export_file:
+                book = load_workbook(BytesIO(export_file.read()))
+            self.assertEqual(book.sheetnames, ['Итого по мотивации', 'Расширенная мотивация', 'Параметры отчёта'])
+            self.assertEqual(book['Итого по мотивации']['B3'].value, 'Иванов')
+            book.close()
             summary = self.page.locator('.manager-period-summary')
             expect(summary).to_be_visible()
             expect(summary.locator('tbody tr')).to_have_count(1)
