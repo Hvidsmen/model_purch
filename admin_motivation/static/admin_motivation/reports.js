@@ -78,7 +78,7 @@
     button.textContent=text; cell.appendChild(button);
    } else cell.textContent=text;
    if (isRatio && value!=null) cell.classList.add(Number(value)>=.8 ? 'percent-good' : 'percent-low');
-   if (index===8 || index===12) cell.classList.add('metric-number');
+   if (index===8 || index===12) cell.classList.add('metric-number', index===8 ? 'motivation-potential' : 'motivation-earned');
    if (index<5) {cell.dataset.divisionSegments='';cell.hidden=!expandedColumns.segments;}
    if (index===9 || index===10) {cell.dataset.divisionMotivation='';cell.hidden=!expandedColumns.motivation;}
    row.appendChild(cell);

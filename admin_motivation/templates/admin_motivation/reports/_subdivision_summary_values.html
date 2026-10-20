@@ -1,0 +1,1 @@
+{% load report_format %}{% for value in values %}<td{% if forloop.revcounter > 2 %} class="{% if forloop.counter0|divisibleby:2 %}motivation-potential{% else %}motivation-earned{% endif %}"{% endif %}>{{ value|report_money }}</td>{% endfor %}
