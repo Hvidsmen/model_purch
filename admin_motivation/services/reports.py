@@ -13,12 +13,17 @@ from ..conns import connect_database
 
 SQL_ROOT = Path(__file__).resolve().parents[1] / 'sql' / 'reports'
 CATALOG = {
+    'manager-detail': {'title': 'Мотивация по менеджеру', 'description': 'Подробный отчёт: подразделения, сотрудники, кварталы, коэффициенты и товарная матрица. USD и RUB.'},
     'manager': {'title': 'Мотивация менеджера', 'description': 'Квартал и год, выполнение плана, доступная мотивация и доплата за кварталы.'},
     'deals': {'title': 'Факт закрытых сделок', 'description': 'Отгрузки и возможная мотивация по сделкам, менеджерам и товарной матрице.'},
     'subdivisions': {'title': 'Мотивация по подразделениям', 'description': 'Итоги по филиалам и раскрываемая детализация товарной матрицы.'},
 }
 # UI name, RDL parameter, caption, lookup dataset, multiple
 FILTERS = {
+ 'manager-detail': [('type', 'TypeCoeff_', 'Вид работника', 'TPK', False), ('subdivision', 'Subdivision', 'Подразделение', 'Sub', True),
+                    ('author', 'DealAuthor', 'Автор сделки', 'DA', True), ('planning', 'gp_sales', 'Группа планов продаж', 'PGSales', True),
+                    ('goods', 'GPGoods', 'Группа товаров', 'GPGoods', True), ('brand', 'Brend', 'Марка / бренд', 'Brend', True),
+                    ('year', 'Years', 'Год', 'Years', True)],
  'manager': [('type', 'TypeCoeff_', 'Вид работника', 'TPK', False), ('subdivision', 'Subdivision', 'Подразделение', 'Sub', False),
              ('author', 'DealAuthor', 'Автор сделки', 'DA', False), ('planning', 'gp_sales', 'Группа планов продаж', 'PGSales', True),
              ('quarter', 'qm', 'Квартал', 'Quar', False)],
@@ -40,7 +45,7 @@ def parameters(kind, query):
         if len(items) > 100 or any(len(value) > 255 for value in items):
             raise ValidationError('Слишком много значений фильтра или слишком длинное значение.')
         values[parameter] = list(dict.fromkeys(items)) if multi else (items[0] if items else None)
-    if kind == 'manager':
+    if kind in ('manager', 'manager-detail'):
         currency = query.get('currency', 'USD')
         if currency not in ('USD', 'RUB'):
             raise ValidationError('Выберите валюту USD или RUB.')
@@ -90,7 +95,7 @@ def choices(kind, values, refresh=False):
         connection.timeout = 30
         result = []
         for name, parameter, caption, dataset, multiple in FILTERS[kind]:
-            if kind == 'manager' and dataset == 'DA' and (not values.get('TypeCoeff_') or not values.get('Subdivision')):
+            if kind in ('manager', 'manager-detail') and dataset == 'DA' and (not values.get('TypeCoeff_') or (kind == 'manager' and not values.get('Subdivision'))):
                 result.append({'name': name, 'label': caption, 'multiple': multiple, 'options': []})
                 continue
             if kind == 'deals' and dataset not in ('Sub', 'TC') and not values.get('Division'):
@@ -105,7 +110,7 @@ def choices(kind, values, refresh=False):
                 if values.get('TypeCoeff'):
                     sql += ' AND [ТипКоэф] = ?'; args.append(values['TypeCoeff'])
             cache_key = 'motivation-report-choices-' + hashlib.sha256((signature+sql+repr(args)).encode()).hexdigest()
-            dynamic_authors = kind == 'manager' and dataset == 'DA'
+            dynamic_authors = kind in ('manager', 'manager-detail') and dataset == 'DA'
             options = None if refresh or dynamic_authors else cache.get(cache_key)
             if options is None:
                 rows = fetch(cursor, sql, args, limit=10000)
@@ -220,6 +225,8 @@ def manager_currency_sql(sql, currency):
 
 
 def load_report(kind, values, page=1, scope='subdivisions'):
+    if kind == 'manager-detail' and not values.get('TypeCoeff_'):
+        raise ValidationError('Выберите вид работника.')
     if kind == 'manager' and any(not values.get(key) for key in ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')):
         raise ValidationError('Выберите вид работника, подразделение, автора сделки и квартал.')
     if kind == 'deals' and (not values.get('TypeCoeff') or not values.get('Division')):
@@ -242,6 +249,19 @@ def load_report(kind, values, page=1, scope='subdivisions'):
             page = min(max(1, page), pages)
             details = fetch(cursor, 'SELECT * FROM '+source+' ORDER BY [ДатаЗакрытияСделки] DESC,[Номер],[Модель],[АвторСделки] OFFSET ? ROWS FETCH NEXT 50 ROWS ONLY', [*args, (page-1)*50], 50)
             return {'summary': summary, 'totals': totals, 'details': details, 'page': page, 'pages': pages, 'offset': (page-1)*50}
+        if kind == 'manager-detail':
+            from .manager_detail import grouped_sql, manager_detail_report
+            rows = fetch(cursor, grouped_sql(sql), args)
+            performance_sql, performance_args = bind_sql(
+                'SELECT [Подразделение],[Год],[КварталМотивации],'
+                'SUM([СуммаПланUSDКвартал]) AS [СуммаПланUSDКвартал],'
+                'SUM([СуммаОтгрузокUSDКвартал]) AS [СуммаОтгрузокUSDКвартал],'
+                'SUM([СуммаПланUSD]) AS [СуммаПланUSD],SUM([СуммаОтгрузокUSD]) AS [СуммаОтгрузокUSD] '
+                'FROM DataWH.motivation.ReportMotivationByDealAuthor '
+                'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ AND [Год] IN (@Years) '
+                'GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
+            performance = fetch(cursor, performance_sql, performance_args)
+            return manager_detail_report(rows, values.get('Currency', 'USD'), performance)
         if kind == 'subdivisions':
             dimensions = ['Подразделение', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
             columns = ','.join('['+key+']' for key in dimensions)

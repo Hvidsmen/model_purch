@@ -25,5 +25,14 @@
     "GPGoods": "SELECT DISTINCT \nCOALESCE(ГруппаТоваров,'') ГруппаТоваров\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
     "Brend": "SELECT DISTINCT \nМарка\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
     "TypeCoeff": "SELECT DISTINCT \nТипКоэф\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor"
+  },
+  "manager-detail": {
+    "Sub": "SELECT DISTINCT\nПодразделение \nFROM \nDataWH.motivation.ReportMotivationByDealAuthor\n",
+    "DA": "SELECT DISTINCT\nАвторСделки \nFROM \nDataWH.motivation.ReportMotivationByDealAuthor\nWHERE \nПодразделение IN (@Subdivision)\nAND ТипКоэф = @TypeCoeff_",
+    "TPK": "SELECT DISTINCT\nТипКоэф\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "PGSales": "SELECT DISTINCT \nГруппаПлановПродаж\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "GPGoods": "SELECT DISTINCT\nГруппаТоваров\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "Brend": "SELECT DISTINCT\nМарка\nFROM \nDataWH.motivation.ReportMotivationByDealAuthor",
+    "Years": "SELECT DISTINCT [Год] FROM DataWH.motivation.ReportMotivationByDealAuthor WHERE [Год] IS NOT NULL"
   }
 }

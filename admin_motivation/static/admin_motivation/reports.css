@@ -44,3 +44,4 @@
 .native-label{padding-left:calc(10px + var(--level)*16px)!important}.native-division-node>summary:hover{background:#f7f9fc}
 .native-report [hidden]{display:none!important}
 @media(max-width:600px){.content-wrapper .native-report h1.report-title{font-size:22px}.native-report-filters{grid-template-columns:1fr}}
+.manager-detail-cards{display:flex;gap:16px;flex-wrap:wrap;margin:20px 0}.manager-detail-cards>div{display:flex;flex-direction:column;gap:8px;background:#f3f6ff;border:1px solid #dce3ec;border-radius:8px;padding:16px;min-width:260px}#manager-detail-report .report-total-row{position:sticky;top:0;z-index:1}

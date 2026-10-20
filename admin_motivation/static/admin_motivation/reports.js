@@ -4,9 +4,9 @@
  const detail = document.getElementById('deal-detail-toggle');
  if (detail) detail.addEventListener('change', () => document.querySelectorAll('[data-deal-detail]').forEach(cell => cell.hidden=!detail.checked));
  const form = document.getElementById('native-report-filters');
- if (form?.dataset.kind === 'manager') {
+ if (['manager', 'manager-detail'].includes(form?.dataset.kind)) {
   ['type', 'subdivision'].forEach(name => form.elements[name]?.addEventListener('change', () => {
-   form.elements.author.value = '';
+   [...form.elements.author.options].forEach(option => option.selected = false);
    form.requestSubmit(document.getElementById('report-filter-refresh'));
   }));
  }

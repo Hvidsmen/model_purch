@@ -1,0 +1,1 @@
+{% load report_format %}{% for value in block %}<span {% if forloop.counter0 < 13 %}data-manager-extra hidden{% endif %} class="report-number">{% if forloop.counter0 < 5 or forloop.counter0 == 12 or forloop.counter0 == 16 %}{{ value|report_percent }}{% else %}{{ value|report_money }}{% endif %}</span>{% endfor %}

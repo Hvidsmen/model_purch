@@ -11,6 +11,43 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_detailed_manager_report_tree_currencies_and_filter_refresh(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .services.reports import FILTERS
+        from .services.manager_detail import manager_detail_report
+        from .test_manager_detail import detail_rows
+        def options(kind, values, **kwargs):
+            items = {'type': ['Политики'], 'subdivision': ['A', 'B'], 'author': ['Иванов'],
+                     'planning': ['1. RAC'], 'goods': ['Кондиционеры'], 'brand': ['<Brand>'], 'year': ['2026']}
+            return [{'name': name, 'label': caption, 'multiple': multiple,
+                     'options': [{'value': value, 'selected': value in (values.get(parameter) if isinstance(values.get(parameter), list) else [values.get(parameter)])}
+                                 for value in items[name]]}
+                    for name, parameter, caption, dataset, multiple in FILTERS[kind]]
+        def report(kind, values, *args):
+            return manager_detail_report(detail_rows(), values.get('Currency', 'USD'))
+        with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', side_effect=report):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?type=Политики&run=1')
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · USD')
+            self.page.locator('#manager-detail-expand').click()
+            expect(self.page.locator('#manager-detail-nodes').get_by_text('Иванов', exact=True)).to_be_visible()
+            expect(self.page.locator('#manager-detail-nodes').get_by_text('<Brand>', exact=True)).to_be_visible()
+            expect(self.page.locator('#manager-detail-report [data-manager-extra]').first).to_be_hidden()
+            self.page.locator('#manager-detail-extra').check()
+            expect(self.page.locator('#manager-detail-report [data-manager-extra]').first).to_be_visible()
+            self.page.locator('#manager-detail-collapse').click()
+            expect(self.page.locator('#manager-detail-nodes').get_by_text('Иванов', exact=True)).to_be_hidden()
+            self.page.locator('.report-filter-panel > summary').click()
+            self.page.locator('select[name=author]').select_option(['Иванов'])
+            with self.page.expect_navigation():
+                self.page.locator('select[name=subdivision]').select_option(['A', 'B'])
+            self.assertEqual(self.page.locator('select[name=author]').evaluate('(select) => [...select.selectedOptions].map(option => option.value)'), [])
+            self.choose_filter('select[name=currency]', 'RUB')
+            with self.page.expect_navigation():
+                self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
+            expect(self.page.locator('.report-title')).to_have_text('Мотивация по менеджеру · 2026 · RUB')
+        self.assertEqual(self.errors, [])
+
     def test_manager_authors_refresh_automatically_with_type_and_branch(self):
         from unittest.mock import patch
         from playwright.sync_api import expect

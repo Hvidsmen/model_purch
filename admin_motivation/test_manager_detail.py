@@ -1,0 +1,104 @@
+from decimal import Decimal
+from unittest.mock import Mock, patch
+from django.test import TestCase
+from django.http import QueryDict
+from django.urls import reverse
+from django.core.exceptions import ValidationError
+from base.testing import authorize_test_case
+from .services.reports import parameters, load_report, bind_sql
+from .services.manager_detail import manager_detail_report, metrics, grouped_sql
+
+
+def detail_rows():
+    rows = []
+    for period in ['1 Квартал', 'Год']:
+        rows.append({'Подразделение': 'A', 'АвторСделки': 'Иванов', 'ГруппаПлановПродаж': '1. RAC',
+            'ГруппаТоваров': 'Кондиционеры', 'Марка': '<Brand>', 'Год': 2026, 'КварталМотивации': period,
+            **{f'O{i}': 100 for i in range(5)}, 'СуммаПланUSDКвартал': 1000, 'СуммаОтгрузокUSDКвартал': 800,
+            'СуммаПланUSD': 600, 'СуммаОтгрузокUSD': 540, 'СуммаМотивацииUSD': 100,
+            'СуммаМотивацииUSDУчетПроцента': 90, 'Остаток': 5, 'СуммаМотивацииRUR': 10000,
+            'СуммаМотивацииRURУчетПроцента': 9000, 'ОстатокRUR': 500,
+            **{f'K{i}Sum': Decimal('.03') for i in range(5)}, **{f'K{i}Count': 2 for i in range(5)}})
+    return rows
+
+
+class ManagerDetailTests(TestCase):
+    def setUp(self):
+        authorize_test_case(self)
+
+    def test_rdl_totals_divisors_and_hierarchy_in_both_currencies(self):
+        data = manager_detail_report(detail_rows())
+        self.assertEqual(data['periods'], ['1 Квартал', 'Год'])
+        self.assertEqual(data['years'], ['2026'])
+        period, annual, overall = data['detail_totals']
+        self.assertEqual(period[10:14], [Decimal(1000), Decimal(800), Decimal('.8'), Decimal(100)])
+        self.assertEqual(overall[5:10], [Decimal(100)] * 5)  # RDL SUM/2, not /4.
+        self.assertEqual(overall[10:14], [Decimal(1000), Decimal(800), Decimal('.8'), Decimal(200)])
+        self.assertEqual(overall[17:], [Decimal(180), Decimal(10), Decimal(190)])
+        self.assertEqual(data['cards'][1]['total'], Decimal(19000))
+        labels = []
+        node = data['nodes'][0]
+        while True:
+            labels.append(node['label'])
+            if not node['children']: break
+            node = node['children'][0]
+        self.assertEqual(labels, ['A', 'Иванов', '1. RAC', 'Кондиционеры', '<Brand>'])
+        self.assertEqual(node['values'][0][0], Decimal('.015'))
+        self.assertIsNone(data['nodes'][0]['values'][0][0])
+        rubles = manager_detail_report(detail_rows(), 'RUB')['detail_totals'][-1]
+        self.assertEqual(rubles[13], Decimal(20000))
+        self.assertEqual(rubles[17:], [Decimal(18000), Decimal(1000), Decimal(19000)])
+        self.assertEqual(rubles[10:13], overall[10:13])  # Plan/fact always USD.
+
+    def test_weighted_averages_zero_denominators_and_separate_years(self):
+        rows = detail_rows()
+        rows[1]['K0Sum'], rows[1]['K0Count'] = Decimal('.09'), 1
+        self.assertEqual(metrics(rows, coefficients=True)[0], Decimal('.04'))
+        self.assertIsNone(metrics([{}], coefficients=True)[0])
+        self.assertIsNone(metrics([{}])[12])
+        self.assertEqual(metrics([{'СуммаОтгрузокUSDКвартал': 100}])[12], Decimal(1))
+        rows[1]['Год'] = 2025
+        self.assertEqual(manager_detail_report(rows)['periods'], ['2026 · 1 Квартал', '2025 · Год'])
+        rows[1]['Подразделение'] = 'B'
+        self.assertEqual(len(manager_detail_report(rows)['nodes']), 2)
+        self.assertEqual(manager_detail_report([])['nodes'], [])
+
+    def test_parameters_and_sql_group_before_fetch_without_interpolation(self):
+        attack = "x'); DROP TABLE x; --"
+        values = parameters('manager-detail', QueryDict('type=Директора&subdivision=A&subdivision=B&author=X&author=Y&year=2026&currency=RUB'))
+        self.assertEqual(values['Subdivision'], ['A', 'B'])
+        self.assertEqual(values['DealAuthor'], ['X', 'Y'])
+        self.assertEqual(values['Years'], ['2026'])
+        self.assertEqual(values['Currency'], 'RUB')
+        with self.assertRaises(ValidationError): parameters('manager-detail', QueryDict('currency=bad'))
+        with self.assertRaises(ValidationError): load_report('manager-detail', {})
+        connection, cursor = Mock(), Mock()
+        values['DealAuthor'] = [attack]
+        with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), \
+             patch('admin_motivation.services.reports.fetch', return_value=detail_rows()) as fetch:
+            result = load_report('manager-detail', values)
+        sql, args = fetch.call_args_list[0].args[1:3]
+        self.assertIn('GROUP BY', sql)
+        self.assertIn('COUNT([K0])', sql)
+        self.assertIn('SUM([СуммаМотивацииRUR])', sql)
+        self.assertNotIn(attack, sql)
+        self.assertIn(attack, args)
+        performance_sql, performance_args = fetch.call_args_list[1].args[1:3]
+        self.assertNotIn('[АвторСделки]', performance_sql)
+        self.assertNotIn(attack, performance_args)
+        self.assertEqual(len(result['division_performance']), 2)
+        self.assertEqual(result['currency'], 'RUB')
+        connection.close.assert_called_once()
+
+    def test_catalog_and_page_render_separately_from_short_report(self):
+        self.assertContains(self.client.get(reverse('motivation_reports')), 'Мотивация по менеджеру')
+        with patch('admin_motivation.report_views.choices', return_value=[]), \
+             patch('admin_motivation.report_views.load_report', return_value=manager_detail_report(detail_rows())):
+            page = self.client.get(reverse('motivation_report', args=['manager-detail']), {'run': '1', 'type': 'Продажи'})
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'Мотивация по менеджеру · 2026 · USD')
+        self.assertContains(page, 'manager-detail-tree')
+        self.assertContains(page, '190')
+        self.assertNotContains(page, 'NoReverseMatch')
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse('motivation_report', args=['manager-detail'])).status_code, 302)
