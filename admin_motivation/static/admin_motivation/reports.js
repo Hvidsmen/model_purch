@@ -64,8 +64,10 @@
   const row=node.children.length ? document.createElement('summary') : parent;
   row.classList.add('division-report-grid'); row.style.setProperty('--level',node.level);
   const label=document.createElement('span'); label.className='native-label';label.textContent=node.label;row.appendChild(label);
-  node.values.forEach(block => block.forEach((value,index) => {
+  node.values.forEach((block,blockIndex) => block.forEach((value,index) => {
+   if (index===13 && blockIndex < blocks-1) return;
    const cell=document.createElement('span');cell.className='report-number';
+   if (index===13) cell.dataset.divisionBonus='';
    const isRatio=index===7 || index===11;
    const text=value==null ? '—' : (isRatio ? percent.format(Number(value)*100)+'%' : money.format(Number(value)));
    if (index===6 || index===11) {

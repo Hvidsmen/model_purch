@@ -10,7 +10,7 @@
 {{ data.nodes|json_script:'native-division-tree' }}
 <div class="report-scroll"><div id="native-division-report">
 <div class="division-report-grid report-period-header"><span></span>{% for period in data.periods %}<strong>{{ period }}</strong>{% endfor %}<strong>Итого</strong></div>
-<div class="division-report-grid report-column-header"><span>Подразделение / группа планов / группа товаров / бренд</span>{% for period in data.periods %}{% include 'admin_motivation/reports/_division_header.html' %}{% endfor %}{% include 'admin_motivation/reports/_division_header.html' %}</div>
-<div class="division-report-grid report-total-row"><strong>Итого</strong>{% for block in data.detail_totals %}{% include 'admin_motivation/reports/_division_values.html' with values=block %}{% endfor %}</div>
+<div class="division-report-grid report-column-header"><span>Подразделение / группа планов / группа товаров / бренд</span>{% for period in data.periods %}{% include 'admin_motivation/reports/_division_header.html' with overall=False %}{% endfor %}{% include 'admin_motivation/reports/_division_header.html' with overall=True %}</div>
+<div class="division-report-grid report-total-row"><strong>Итого</strong>{% for block in data.detail_totals %}{% include 'admin_motivation/reports/_division_values.html' with values=block overall=forloop.last %}{% endfor %}</div>
 <div id="native-division-nodes"></div>
 </div></div>

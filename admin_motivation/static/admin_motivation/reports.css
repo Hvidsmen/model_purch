@@ -59,3 +59,5 @@
 .subdivision-summary-total th,.subdivision-summary-total td{background:#f1f5fb;font-weight:600}.subdivision-summary-toggle{border:0;background:transparent;color:inherit;font:inherit;cursor:pointer;text-align:left;padding:0}.subdivision-summary-toggle:focus-visible{outline:2px solid #7c5cff;outline-offset:3px}.subdivision-summary .subdivision-summary-type th{padding-left:20px}
 
 .division-metric-toggle{border:0;background:transparent;color:inherit;font:inherit;text-decoration:underline dotted;text-underline-offset:3px;cursor:pointer;padding:0}.division-metric-toggle:focus-visible{outline:2px solid #7c5cff;outline-offset:3px}
+
+#native-division-report .division-report-grid{grid-template-columns:280px repeat(calc(var(--report-blocks)*(var(--report-columns) - 1) + 1),112px)}#native-division-report .report-period-header{grid-template-columns:280px repeat(calc(var(--report-blocks) - 1),calc((var(--report-columns) - 1)*112px)) calc(var(--report-columns)*112px)}
