@@ -3,6 +3,26 @@
  if (csv) csv.addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('run','1'); url.searchParams.set('export','csv'); location.href=url; });
  const detail = document.getElementById('deal-detail-toggle');
  if (detail) detail.addEventListener('change', () => document.querySelectorAll('[data-deal-detail]').forEach(cell => cell.hidden=!detail.checked));
+ const dealScroll = document.getElementById('deal-scroll');
+ const dealTop = document.getElementById('deal-scroll-top');
+ if (dealScroll && dealTop) {
+  const table = dealScroll.querySelector('table');
+  const syncSize = () => {
+   dealTop.hidden = table.scrollWidth <= dealScroll.clientWidth;
+   dealTop.firstElementChild.style.width = `${dealScroll.scrollWidth + dealTop.clientWidth - dealScroll.clientWidth}px`;
+   dealTop.scrollLeft = dealScroll.scrollLeft;
+  };
+  dealTop.addEventListener('scroll', () => {
+   if (Math.abs(dealScroll.scrollLeft - dealTop.scrollLeft) > 1) dealScroll.scrollLeft = dealTop.scrollLeft;
+  });
+  dealScroll.addEventListener('scroll', () => {
+   if (Math.abs(dealTop.scrollLeft - dealScroll.scrollLeft) > 1) dealTop.scrollLeft = dealScroll.scrollLeft;
+  });
+  const observer = new ResizeObserver(syncSize);
+  observer.observe(table);
+  observer.observe(dealScroll);
+  syncSize();
+ }
  const form = document.getElementById('native-report-filters');
  if (['manager', 'manager-detail'].includes(form?.dataset.kind)) {
   ['type', 'subdivision'].forEach(name => form.elements[name]?.addEventListener('change', () => {

@@ -11,6 +11,30 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_deals_scrollbar_is_available_above_long_table(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        payload = {'summary': [], 'totals': {'count': 50, 'shipments': 1000, 'quarterly': 100, 'annual': 20, 'possible': 120},
+                   'details': [{'АвторСделки': 'Автор сделки', 'Номер': f'Deal-{index}',
+                                'ДатаЗакрытияСделки': date(2025, 1, 10), 'СуммаОтгрузокUSD': 20}
+                               for index in range(50)], 'page': 1, 'pages': 1, 'offset': 0}
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=payload):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['deals']) + '?run=1&start=2025-01-01&end=2025-12-31&type=Политики&subdivision=A')
+            top = self.page.locator('#deal-scroll-top')
+            scroll = self.page.locator('#deal-scroll')
+            expect(top).to_be_visible()
+            self.assertTrue(scroll.evaluate('(el) => el.scrollHeight > el.clientHeight'))
+            top.evaluate('(el) => {el.scrollLeft = 200}')
+            self.page.wait_for_function('document.getElementById("deal-scroll").scrollLeft > 100')
+            top.evaluate('(el) => {el.scrollLeft = 100000}')
+            self.page.wait_for_function('Math.abs(document.getElementById("deal-scroll").scrollLeft + document.getElementById("deal-scroll").clientWidth - document.getElementById("deal-scroll").scrollWidth) < 2', timeout=2000)
+            scroll.evaluate('(el) => {el.scrollLeft = 50; el.scrollTop = 250}')
+            self.page.wait_for_function('Math.abs(document.getElementById("deal-scroll-top").scrollLeft - 50) < 2')
+            self.assertEqual(self.page.locator('.deal-table thead th').first.evaluate('(el) => getComputedStyle(el).position'), 'sticky')
+            self.page.locator('#deal-detail-toggle').check()
+            self.page.wait_for_function('Math.abs(document.querySelector("#deal-scroll-top > div").getBoundingClientRect().width - document.getElementById("deal-scroll").scrollWidth - document.getElementById("deal-scroll-top").clientWidth + document.getElementById("deal-scroll").clientWidth) < 2')
+            self.assertEqual(self.errors, [])
+
     def test_detailed_manager_report_tree_currencies_and_filter_refresh(self):
         from unittest.mock import patch
         from playwright.sync_api import expect
