@@ -1,4 +1,6 @@
 """Refresh the four source classifications without reimporting scenario inputs."""
+from pathlib import Path
+
 from django.core.exceptions import ValidationError
 from django.db import transaction
 
@@ -8,6 +10,7 @@ from ..models import GoodsGroup, PGGoods, ScenarioModel
 from .pricing import reprice_goods
 
 FIELDS = ('planning_sales', 'group_goods', 'brand', 'purch')
+REBUILD_SQL = (Path(__file__).resolve().parents[1] / 'sql' / 'refresh_goods_directory.sql').read_text(encoding='utf-8')
 SQL = '''
 SELECT DISTINCT [PlanningGroupOZP], [PlanningGroupSalesERP], [Group_1], [BrandName], [Purch]
 FROM [ModelPurch].[dbo].[PlanningGroupOZP]
@@ -21,7 +24,9 @@ def refresh_goods_directory(scenario, connector=None):
         return {'updated': 0, 'unchanged': 0, 'missing': 0}
     connection, cursor = (connector or connect_database)('vm-dwh', 'ModelPurch')
     try:
-        connection.timeout = 60
+        connection.autocommit = False
+        connection.timeout = 120
+        cursor.execute(REBUILD_SQL)
         cursor.execute(SQL)
         source = {}
         for group, *raw in cursor.fetchall():
@@ -35,6 +40,10 @@ def refresh_goods_directory(scenario, connector=None):
             if key in source and source[key] != values:
                 raise ValidationError(f'В источнике несколько разных наборов полей для группы «{group}». Обновление отменено.')
             source[key] = values
+        connection.commit()
+    except Exception:
+        connection.rollback()
+        raise
     finally:
         connection.close()
 

@@ -6,7 +6,7 @@ from django.urls import reverse
 
 from base.testing import authorize_test_case
 from .models import Freight, GoodsGroup, KindPurch, PGGoods, Purch, ScenarioModel
-from .services.goods_directory import refresh_goods_directory
+from .services.goods_directory import REBUILD_SQL, SQL, refresh_goods_directory
 
 
 class GoodsDirectoryTests(TestCase):
@@ -44,6 +44,36 @@ class GoodsDirectoryTests(TestCase):
         self.connector.assert_called_once_with('vm-dwh', 'ModelPurch')
         self.assertEqual(self.refresh(), {'updated': 0, 'unchanged': 1, 'missing': 0})
 
+    def test_source_rebuild_precedes_read_and_commits_transaction(self):
+        events = []
+        self.cursor.execute.side_effect = lambda sql: events.append(sql)
+        self.cursor.fetchall.side_effect = lambda: events.append('fetch') or [('Group', 'New', 'New', 'New', 'Supplier')]
+        self.connection.commit.side_effect = lambda: events.append('commit')
+        self.refresh()
+        self.assertEqual(events, [REBUILD_SQL, SQL, 'fetch', 'commit'])
+        self.assertFalse(self.connection.autocommit)
+        self.connection.rollback.assert_not_called()
+        self.assertIn('DROP TABLE [ModelPurch].dbo.PlanningGroupOZP', REBUILD_SQL)
+        self.assertIn('FROM DataWH.planning.Goods', REBUILD_SQL)
+        self.assertIn('LEFT JOIN DataWH.dbo.ModelCodeERP', REBUILD_SQL)
+        self.assertIn('WHERE RowId = 1', REBUILD_SQL)
+        self.assertIn('sp_getapplock', REBUILD_SQL)
+
+    def test_source_read_or_commit_failure_rolls_back_rebuild(self):
+        for stage in ('fetchall', 'commit'):
+            with self.subTest(stage=stage):
+                self.connection.reset_mock()
+                self.cursor.reset_mock()
+                getattr(self.cursor if stage == 'fetchall' else self.connection, stage).side_effect = RuntimeError('SQL failed')
+                with self.assertRaises(RuntimeError):
+                    self.refresh()
+                self.connection.rollback.assert_called_once()
+                self.connection.close.assert_called_once()
+                self.good.refresh_from_db()
+                self.assertEqual(self.good.brand, 'Brand')
+                self.cursor.fetchall.side_effect = None
+                self.connection.commit.side_effect = None
+
     def test_unmatched_goods_preserved_new_source_goods_not_created(self):
         self.cursor.fetchall.return_value = [('Missing', 'Sales', 'Goods', 'Brand', 'Supplier')]
         before = PGGoods.objects.values().get(pk=self.good.pk)
@@ -67,12 +97,16 @@ class GoodsDirectoryTests(TestCase):
             self.assertEqual(self.good.planning_sales, 'Sales')
             self.assertFalse(GoodsGroup.objects.filter(name='New goods').exists())
         self.assertEqual(self.connection.close.call_count, 2)
+        self.assertEqual(self.connection.rollback.call_count, 2)
+        self.connection.commit.assert_not_called()
 
     def test_connection_failure_closes_connection_and_preserves_goods(self):
-        self.cursor.execute.side_effect = RuntimeError('read failed')
+        self.cursor.execute.side_effect = RuntimeError('rebuild failed')
         with self.assertRaises(RuntimeError):
             self.refresh()
         self.connection.close.assert_called_once()
+        self.connection.rollback.assert_called_once()
+        self.connection.commit.assert_not_called()
         self.good.refresh_from_db()
         self.assertEqual(self.good.brand, 'Brand')
 
