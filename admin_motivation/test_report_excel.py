@@ -26,7 +26,7 @@ class ReportExcelTests(TestCase):
                 self.assertEqual(book.sheetnames, names)
                 if scope != 'detail':
                     sheet = book['Итого по мотивации']
-                    self.assertEqual(sheet['B3'].value, 'Иванов')
+                    self.assertEqual(sheet['B5'].value, 'Иванов')
                     self.assertEqual(sheet['I3'].value, 19000)
                     self.assertEqual(sheet['I3'].data_type, 'n')
                     self.assertEqual(sheet['I4'].value, sheet['I3'].value)
@@ -58,8 +58,8 @@ class ReportExcelTests(TestCase):
         stream = report_excel(data, {'DealAuthor': ['=1+1']})
         try:
             book = load_workbook(stream, data_only=False)
-            self.assertEqual(book['Итого по мотивации']['B3'].value, '=1+1')
-            self.assertEqual(book['Итого по мотивации']['B3'].data_type, 's')
+            self.assertEqual(book['Итого по мотивации']['B5'].value, '=1+1')
+            self.assertEqual(book['Итого по мотивации']['B5'].data_type, 's')
             for sheet in book:
                 self.assertFalse(any(cell.data_type == 'f' for row in sheet for cell in row))
             book.close()

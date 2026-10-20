@@ -66,16 +66,19 @@ def report_excel(data, parameters, scope='all'):
     try:
         if scope in ('all', 'summary'):
             summary = data['period_summary']
-            headers = ['Подразделение', 'Автор сделки', *[column['label'] for column in summary['columns']], 'Остаток', 'Итого']
+            headers = ['Подразделение', 'Автор сделки', *[column['label'] for column in summary['columns']], 'Доплаты за квартал', 'Итого']
             target = sheet('Итого по мотивации', headers, [28, 42] + [18] * (len(headers) - 2), 'C3')
             kinds = ['text', 'text'] + ['money'] * (len(headers) - 2)
-            index = 2
-            for row in summary['rows']:
-                index += 1
-                append(target, [row['subdivision'], row['author'], *row['values'], row['remainder'], row['total']], kinds, index=index)
-            target.auto_filter.ref = f'A2:{get_column_letter(len(headers))}{max(index, 2)}'
             totals = summary['totals']
-            append(target, ['Итого', '', *totals['values'], totals['remainder'], totals['total']], kinds, index=index + 1, total=True)
+            append(target, ['Итого по компании', '', *totals['values'], totals['remainder'], totals['total']], kinds, index=3, total=True)
+            index = 3
+            for group in summary['groups']:
+                index += 1
+                append(target, [group['subdivision'], 'Итого по подразделению', *group['values'], group['remainder'], group['total']], kinds, index=index, total=True)
+                for row in group['authors']:
+                    index += 1
+                    append(target, [row['subdivision'], row['author'], *row['values'], row['remainder'], row['total']], kinds, index=index, indent=1)
+            target.auto_filter.ref = f'A2:{get_column_letter(len(headers))}{index}'
 
         if scope in ('all', 'detail'):
             periods = [*data['periods'], 'Итого']

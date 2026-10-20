@@ -6,7 +6,7 @@ from django.urls import reverse
 from django.core.exceptions import ValidationError
 from base.testing import authorize_test_case
 from .services.reports import parameters, load_report, bind_sql
-from .services.manager_detail import manager_detail_report, metrics, grouped_sql
+from .services.manager_detail import manager_detail_report, metrics, grouped_sql, period_motivation_summary
 
 
 def detail_rows():
@@ -142,6 +142,16 @@ class ManagerDetailTests(TestCase):
             self.assertEqual(values[2], Decimal(0))
         finally:
             database.close()
+
+    def test_summary_hierarchy_keeps_authors_within_subdivision_and_totals(self):
+        rows = detail_rows()
+        other = dict(rows[0], Подразделение='B', АвторСделки='Петров')
+        summary = period_motivation_summary([*rows, other])
+        self.assertEqual([group['subdivision'] for group in summary['groups']], ['A', 'B'])
+        self.assertEqual([row['author'] for row in summary['groups'][1]['authors']], ['Петров'])
+        self.assertEqual(sum(group['total'] for group in summary['groups']), summary['totals']['total'])
+        for group in summary['groups']:
+            self.assertEqual(sum(row['total'] for row in group['authors']), group['total'])
 
     def test_period_summary_matches_cards_in_both_currencies_and_keeps_all_periods(self):
         from .services.manager_detail import period_motivation_summary

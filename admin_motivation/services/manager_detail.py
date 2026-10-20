@@ -85,7 +85,17 @@ def period_motivation_summary(rows, currency='USD'):
         authors[row.get('Подразделение') or '—', row.get('АвторСделки') or '—'].append(row)
     details = [{'subdivision': sub, 'author': author, **summary(subset)}
                for (sub, author), subset in sorted(authors.items())]
-    return {'columns': columns, 'rows': details, 'totals': summary(rows), 'currency': currency}
+    subdivisions = defaultdict(list)
+    for row in rows:
+        subdivisions[row.get('Подразделение') or '—'].append(row)
+    authors_by_subdivision = defaultdict(list)
+    for row in details:
+        authors_by_subdivision[row['subdivision']].append(row)
+    groups = [{'subdivision': sub, **summary(subset),
+               'authors': authors_by_subdivision[sub]}
+              for sub, subset in sorted(subdivisions.items())]
+    return {'columns': columns, 'rows': details, 'groups': groups,
+            'totals': summary(rows), 'currency': currency}
 
 
 def manager_detail_report(rows, currency='USD', performance_rows=None):
