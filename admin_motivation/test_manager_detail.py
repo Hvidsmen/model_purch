@@ -26,13 +26,13 @@ class ManagerDetailTests(TestCase):
     def setUp(self):
         authorize_test_case(self)
 
-    def test_rdl_totals_divisors_and_hierarchy_in_both_currencies(self):
+    def test_annual_inputs_and_combined_motivation_in_both_currencies(self):
         data = manager_detail_report(detail_rows())
         self.assertEqual(data['periods'], ['1 Квартал', 'Год'])
         self.assertEqual(data['years'], ['2026'])
         period, annual, overall = data['detail_totals']
         self.assertEqual(period[10:14], [Decimal(1000), Decimal(800), Decimal('.8'), Decimal(100)])
-        self.assertEqual(overall[5:10], [Decimal(100)] * 5)  # RDL SUM/2, not /4.
+        self.assertEqual(overall[5:10], [Decimal(100)] * 5)  # Overall inputs come from the annual row.
         self.assertEqual(overall[10:14], [Decimal(1000), Decimal(800), Decimal('.8'), Decimal(200)])
         self.assertEqual(overall[17:], [Decimal(180), Decimal(10), Decimal(190)])
         self.assertEqual(data['cards'][1]['total'], Decimal(19000))
@@ -49,6 +49,37 @@ class ManagerDetailTests(TestCase):
         self.assertEqual(rubles[13], Decimal(20000))
         self.assertEqual(rubles[17:], [Decimal(18000), Decimal(1000), Decimal(19000)])
         self.assertEqual(rubles[10:13], overall[10:13])  # Plan/fact always USD.
+
+    def test_overall_uses_annual_execution_at_every_level_and_keeps_payments(self):
+        rows = detail_rows()
+        rows[0].update(СуммаПланUSD=1000, СуммаОтгрузокUSD=950,
+                       СуммаПланUSDКвартал=1000, СуммаОтгрузокUSDКвартал=950, O0=900)
+        rows[1].update(СуммаПланUSD=4000, СуммаОтгрузокUSD=3160,
+                       СуммаПланUSDКвартал=4000, СуммаОтгрузокUSDКвартал=3160, O0=3000)
+        for currency in ['USD', 'RUB']:
+            data = manager_detail_report(rows, currency)
+            def check(blocks):
+                annual, overall = blocks[1:]
+                self.assertEqual(overall[5:13], annual[5:13])
+                self.assertEqual(overall[14:17], annual[14:17])
+                self.assertEqual(overall[16], Decimal('.79'))
+                self.assertEqual(overall[17], sum(block[17] for block in blocks[:-1]))
+                self.assertEqual(overall[19], overall[17] + overall[18])
+            check(data['detail_totals'])
+            node = data['nodes'][0]
+            while True:
+                check(node['values'])
+                if not node['children']: break
+                node = node['children'][0]
+        missing = manager_detail_report(rows[:1])['detail_totals'][-1]
+        self.assertTrue(all(value is None for value in missing[5:13]))
+        self.assertTrue(all(value is None for value in missing[14:17]))
+        self.assertEqual(missing[19], Decimal(95))
+        extra = dict(rows[0], Марка='Without annual data')
+        incomplete = manager_detail_report([*rows, extra])
+        self.assertIsNone(incomplete['detail_totals'][-1][16])
+        complete_brand = incomplete['nodes'][0]['children'][0]['children'][0]['children'][0]['children'][0]
+        self.assertEqual(complete_brand['values'][-1][16], Decimal('.79'))
 
     def test_weighted_averages_zero_denominators_and_separate_years(self):
         rows = detail_rows()

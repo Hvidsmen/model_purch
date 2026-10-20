@@ -1,6 +1,5 @@
 """Detailed manager RDL metrics, using grouped inputs and weighted coefficient averages."""
 from collections import defaultdict
-from decimal import Decimal
 from .reports import number, ratio, total
 
 DIMENSIONS = ['Подразделение', 'АвторСделки', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка']
@@ -24,17 +23,22 @@ def grouped_sql(source):
 
 
 def metrics(rows, currency='USD', overall=False, coefficients=False):
-    divisor = Decimal(2 if overall else 1)  # RDL overall SUM/2, not subdivision report SUM/4.
+    inputs = rows
+    if overall:
+        annual = [row for row in rows if str(row.get('КварталМотивации') or '').strip().casefold() == 'год']
+        def scope(row):
+            return tuple(row.get(key) for key in [*DIMENSIONS, 'Год'])
+        inputs = annual if annual and {scope(row) for row in annual} == {scope(row) for row in rows} else None
     prefix = 'RUR' if currency == 'RUB' else 'USD'
-    plan, fact = total(rows, 'СуммаПланUSDКвартал') / divisor, total(rows, 'СуммаОтгрузокUSDКвартал') / divisor
-    motive_plan, motive_fact = total(rows, 'СуммаПланUSD') / divisor, total(rows, 'СуммаОтгрузокUSD') / divisor
+    plan, fact = (total(inputs, 'СуммаПланUSDКвартал'), total(inputs, 'СуммаОтгрузокUSDКвартал')) if inputs is not None else (None, None)
+    motive_plan, motive_fact = (total(inputs, 'СуммаПланUSD'), total(inputs, 'СуммаОтгрузокUSD')) if inputs is not None else (None, None)
     paid = total(rows, f'СуммаМотивации{prefix}УчетПроцента')
     bonus = total(rows, 'ОстатокRUR' if currency == 'RUB' else 'Остаток')
     averages = []
     for index in range(5):
-        count = total(rows, f'K{index}Count')
-        averages.append(total(rows, f'K{index}Sum') / count if coefficients and count else None)
-    return [*averages, *[total(rows, f'O{i}') / divisor for i in range(5)], plan, fact, ratio(fact, plan, True),
+        count = total(inputs or [], f'K{index}Count')
+        averages.append(total(inputs or [], f'K{index}Sum') / count if coefficients and count else None)
+    return [*averages, *[total(inputs, f'O{i}') if inputs is not None else None for i in range(5)], plan, fact, ratio(fact, plan, True),
             total(rows, f'СуммаМотивации{prefix}'), motive_plan, motive_fact, ratio(motive_fact, motive_plan, True),
             paid, bonus, paid + bonus]
 
