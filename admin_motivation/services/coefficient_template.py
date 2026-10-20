@@ -3,7 +3,9 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
-from ..models import GlobalCoeff, SubdivisionCoeff, SegmentCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+from openpyxl.worksheet.datavalidation import DataValidation
+from openpyxl.workbook.defined_name import DefinedName
+from ..models import GlobalCoeff, SubdivisionCoeff, SegmentCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff, VariationCalculate
 
 
 def coefficient_template(version, subdivision=None, employee=None):
@@ -13,13 +15,16 @@ def coefficient_template(version, subdivision=None, employee=None):
     if subdivision:
         rows = rows.filter(subdivision=subdivision)
     grouped = {}
-    for goods, pg, group, brand, kind, segment, value in rows.order_by().values_list(
+    for goods, pg, group, brand, kind, segment, value, kind_id, cell_id, formula in rows.order_by().values_list(
             'goods_id', 'goods__planning_group_sales', 'goods__group', 'goods__brand',
-            'type_coeff__type_coeff_name', 'segment_id', 'motivation_coeff').iterator(chunk_size=2000):
+            'type_coeff__type_coeff_name', 'segment_id', 'motivation_coeff', 'type_coeff_id', 'pk', 'variation_calculate__variation_name').iterator(chunk_size=2000):
         if kind not in ('Политики', 'Продажи'):
             continue
         record = grouped.setdefault((pg, group, brand, goods), {})
         record[kind, segment] = value
+        priority = (kind_id, segment, cell_id)
+        if 'formula_key' not in record or priority < record['formula_key']:
+            record['formula_key'], record['formula'] = priority, formula
     directors = (SubdivisionDirectorCoeff.objects.filter(version=version, subdivision=subdivision, employee=employee)
                  if subdivision and employee else GlobalDirectorCoeff.objects.filter(version=version)
                  if not subdivision else SubdivisionDirectorCoeff.objects.none())
@@ -33,23 +38,25 @@ def coefficient_template(version, subdivision=None, employee=None):
     sheet.title = 'Коэффициенты'
     labels = ['№', 'Группа планов продаж', 'Группа ERP', 'Марка / бренд']
     count = len(segments)
-    last_column = 9 + 2 * count
+    last_column = 10 + 2 * count
     bands = [(5, 4 + count, 'Политики', 'EFF6FF', 'F8FBFF'),
              (5 + count, 4 + 2 * count, 'Продажи', 'ECFDF5', 'F5FCFA'),
-             (5 + 2 * count, last_column, 'Директор', 'F3F0FF', 'FAF8FF')]
+             (5 + 2 * count, last_column - 1, 'Директор', 'F3F0FF', 'FAF8FF')]
     sheet.append([*labels, *[None] * (last_column - 4)])
-    sheet.append([None] * 4 + [name for pk, name in segments] * 2 + [f'K{i}' for i in range(5)])
+    sheet.append([None] * 4 + [name for pk, name in segments] * 2 + [f'K{i}' for i in range(5)] + [None])
     for column, label in enumerate(labels, 1):
         sheet.merge_cells(start_row=1, start_column=column, end_row=2, end_column=column)
+    sheet.cell(1, last_column, 'Настройки формулы')
+    sheet.merge_cells(start_row=1, start_column=last_column, end_row=2, end_column=last_column)
     for first, last, title, header_color, body_color in bands:
         if last >= first:
             sheet.merge_cells(start_row=1, start_column=first, end_row=1, end_column=last)
             sheet.cell(1, first, title)
     for index, (key, cells) in enumerate(sorted(grouped.items()), 1):
         sheet.append([index, *key[:3], *[cells.get((kind, segment))
-            for kind in ('Политики', 'Продажи') for segment, name in segments], *[cells.get(('Директор', i)) for i in range(5)]])
+            for kind in ('Политики', 'Продажи') for segment, name in segments], *[cells.get(('Директор', i)) for i in range(5)], cells.get('formula')])
         # Excel must treat external classification names as literal text.
-        for column in range(2, 5):
+        for column in [2, 3, 4, last_column]:
             sheet.cell(sheet.max_row, column).data_type = 's'
     sheet.freeze_panes = 'E3'
     sheet.sheet_view.showGridLines = False
@@ -68,9 +75,9 @@ def coefficient_template(version, subdivision=None, employee=None):
             cell.border = Border(left=divider if band and column == band[0] else edge,
                                  right=edge, top=edge, bottom=edge)
             cell.alignment = Alignment(horizontal='center' if cell.row <= 2 or column == 1 else
-                                       'right' if column >= 5 else 'left', vertical='center',
+                                       'right' if 5 <= column < last_column else 'left', vertical='center',
                                        wrap_text=cell.row <= 2, indent=1 if cell.row > 2 and 2 <= column <= 4 else 0)
-            if cell.row > 2 and column >= 5:
+            if cell.row > 2 and 5 <= column < last_column:
                 cell.number_format = '0.00%'
     sheet.row_dimensions[1].height = 30
     sheet.row_dimensions[2].height = 25
@@ -80,6 +87,7 @@ def coefficient_template(version, subdivision=None, employee=None):
         sheet.column_dimensions[column].width = width
     for column in range(5, last_column + 1):
         sheet.column_dimensions[get_column_letter(column)].width = 10
+    sheet.column_dimensions[get_column_letter(last_column)].width = 30
     sheet.print_title_rows = '1:2'
     sheet.print_options.horizontalCentered = True
     sheet.page_setup.orientation = 'landscape'
@@ -95,6 +103,7 @@ def coefficient_template(version, subdivision=None, employee=None):
              'Редактируйте значения на листе «Коэффициенты». Первые две строки не удаляйте.',
              'Коэффициенты отображаются в процентах: 0,48% соответствует значению 0,0048.',
              'Для обратной загрузки сохраните файл в формате .xlsx и порядок столбцов.',
+             'В столбце «Настройки формулы» выберите нужную формулу из списка.',
              'Пустые ячейки политик и продаж сохраняют существующие значения.',
              'Группа директора: заполните все K0–K4 или оставьте всю группу пустой.']
     for text in filter(None, notes):
@@ -105,6 +114,21 @@ def coefficient_template(version, subdivision=None, employee=None):
         instructions.row_dimensions[cell.row].height = 30
     instructions.column_dimensions['A'].width = 110
     instructions.sheet_view.showGridLines = False
+    instructions.cell(1, 3, 'Доступные формулы')
+    formulas = list(VariationCalculate.objects.order_by('pk').values_list('variation_name', flat=True))
+    for row, name in enumerate(formulas, 2):
+        instructions.cell(row, 3, name).data_type = 's'
+    instructions.column_dimensions['C'].width = 40
+    if formulas:
+        book.defined_names.add(DefinedName('MotivationFormulaOptions',
+            attr_text=f"'Инструкция'!$C$2:$C${len(formulas) + 1}"))
+        validation = DataValidation(type='list', formula1='=MotivationFormulaOptions', allow_blank=True)
+        validation.errorTitle = 'Неизвестная формула'
+        validation.error = 'Выберите формулу из списка на листе «Инструкция».'
+        validation.showErrorMessage = True
+        validation.errorStyle = 'stop'
+        sheet.add_data_validation(validation)
+        validation.add(f'{get_column_letter(last_column)}3:{get_column_letter(last_column)}{max(sheet.max_row, 10000)}')
     stream = BytesIO()
     book.save(stream)
     book.close()

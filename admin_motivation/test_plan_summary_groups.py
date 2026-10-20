@@ -119,6 +119,39 @@ class PlanSummaryGroupsTests(TestCase):
         self.scenario.refresh_from_db()
         self.assertTrue(self.scenario.summary_signature)
 
+    def test_formula_selector_exports_current_values_and_imports_changes_atomically(self):
+        from .models import VariationCalculate, SubdivisionCoeff
+        from .views import import_current_coefficients
+        from .services.coefficient_template import coefficient_template
+        from django.core.exceptions import ValidationError
+        self.load()
+        formula = VariationCalculate.objects.create(variation_name='Группа планов продаж')
+        replacement = VariationCalculate.objects.create(variation_name='Подразделение')
+        for subdivision, model in [(None, GlobalCoeff), (self.subs[0], SubdivisionCoeff)]:
+            scope = {'version': self.version}
+            if subdivision:
+                scope['subdivision'] = subdivision
+            model.objects.filter(**scope).update(variation_calculate=formula)
+            book = load_workbook(BytesIO(coefficient_template(self.version, subdivision)))
+            sheet = book.active
+            self.assertEqual(sheet['T1'].value, 'Настройки формулы')
+            self.assertEqual(sheet['T3'].value, formula.variation_name)
+            self.assertEqual(sheet['T3'].number_format, 'General')
+            self.assertIn('MotivationFormulaOptions', book.defined_names)
+            self.assertTrue(any('T3' in rule for rule in sheet.data_validations.dataValidation))
+            sheet['T3'] = replacement.variation_name
+            stream = BytesIO(); book.save(stream); book.close()
+            import_current_coefficients(SimpleUploadedFile('formula.xlsx', stream.getvalue()), self.version, subdivision)
+            self.assertEqual(set(model.objects.filter(**scope).values_list('variation_calculate_id', flat=True)), {replacement.pk})
+            book = load_workbook(BytesIO(stream.getvalue()))
+            book.active['T3'] = 'Unknown formula'
+            book.active['E3'] = .9
+            bad = BytesIO(); book.save(bad); book.close()
+            before = list(model.objects.filter(**scope).order_by('pk').values_list('motivation_coeff', 'variation_calculate_id'))
+            with self.assertRaises(ValidationError):
+                import_current_coefficients(SimpleUploadedFile('bad.xlsx', bad.getvalue()), self.version, subdivision)
+            self.assertEqual(list(model.objects.filter(**scope).order_by('pk').values_list('motivation_coeff', 'variation_calculate_id')), before)
+
     def test_template_preserves_missing_cells_and_existing_settings(self):
         from .models import VariationCalculate
         from .views import import_current_coefficients
@@ -155,7 +188,7 @@ class PlanSummaryGroupsTests(TestCase):
             response = self.client.get(reverse(route, args=args), {'version': self.version.pk, 'employee': employee_id})
             book = load_workbook(BytesIO(response.content))
             row = next(row for row in book.active.iter_rows(min_row=3, values_only=True) if row[1] == 'Sales')
-            self.assertEqual([Decimal(str(value)) for value in row[14:]], [expected] * 5)
+            self.assertEqual([Decimal(str(value)) for value in row[14:19]], [expected] * 5)
             book.close()
             before_global = list(GlobalCoeff.objects.filter(version=self.version).order_by('pk').values_list('pk', 'motivation_coeff'))
             posted = self.client.post(reverse('sub_act', args=args) if args else reverse('gb_act'),
@@ -176,7 +209,7 @@ class PlanSummaryGroupsTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertIn('attachment;', response['Content-Disposition'])
             book = load_workbook(BytesIO(response.content), data_only=False)
-            self.assertEqual(book.active.max_column, 19)
+            self.assertEqual(book.active.max_column, 20)
             self.assertIn('E1:I1', {str(region) for region in book.active.merged_cells.ranges})
             self.assertEqual(book.active['E1'].value, 'Политики')
             self.assertEqual(book.active['J1'].value, 'Продажи')

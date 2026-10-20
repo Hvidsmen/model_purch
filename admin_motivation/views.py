@@ -376,7 +376,7 @@ def import_current_coefficients(upload, version, subdivision=None, employee=None
     df = pd.read_excel(upload, skiprows=1)
     count = SegmentCoeff.objects.count()
     variation = VariationCalculate.objects.order_by('pk').first()
-    if not variation or not count or len(df.columns) not in (4 + 2 * count, 9 + 2 * count):
+    if not variation or not count or len(df.columns) not in (4 + 2 * count, 9 + 2 * count, 10 + 2 * count):
         raise ValidationError('Файл не соответствует шаблону или не настроены уровни мотивации.')
     for _, row in df.iterrows():
         if row.isna().all():
@@ -393,12 +393,25 @@ def import_current_coefficients(upload, version, subdivision=None, employee=None
             return [None if pd.isna(value) else coefficient_number(value) for value in items]
         policies = block(values[3:3 + count], allow_missing=True)
         sales = block(values[3 + count:3 + 2 * count], allow_missing=True)
-        directors = block(values[3 + 2 * count:]) if len(df.columns) == 9 + 2 * count else None
-        if policies is None and sales is None and directors is None:
+        directors = block(values[3 + 2 * count:8 + 2 * count]) if len(df.columns) >= 9 + 2 * count else None
+        formula = None
+        if len(df.columns) == 10 + 2 * count and not pd.isna(values[-1]) and str(values[-1]).strip():
+            formula = VariationCalculate.objects.filter(variation_name=str(values[-1]).strip()).first()
+            if formula is None:
+                raise ValidationError(f'Неизвестная формула: {values[-1]}. Выберите значение из списка шаблона.')
+        if policies is None and sales is None and directors is None and formula is None:
             continue
         if directors is not None and subdivision and (not employee or not employee.subdivisions.filter(pk=subdivision.pk).exists()):
             raise ValidationError('Для загрузки директорских коэффициентов выберите директора этого подразделения.')
         good = upsert_product(version, *values[:3], variation.pk, policies, sales, subdivision, preserve_settings=True)
+        if formula is not None:
+            model = SubdivisionCoeff if subdivision else GlobalCoeff
+            scope = {'subdivision': subdivision} if subdivision else {}
+            coefficients = model.objects.filter(version=version, goods=good, **scope)
+            current = coefficients.order_by('type_coeff_id', 'segment_id', 'pk').values_list('variation_calculate_id', flat=True).first()
+            # An unchanged downloaded selector must preserve any legacy per-cell settings.
+            if current != formula.pk:
+                coefficients.update(variation_calculate=formula)
         if directors is not None:
             model = SubdivisionDirectorCoeff if subdivision else GlobalDirectorCoeff
             scope = {'subdivision': subdivision, 'employee': employee} if subdivision else {}
