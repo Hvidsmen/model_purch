@@ -57,6 +57,8 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.db(fixture.load)
         from .models import DirectorEmployee, GlobalDirectorCoeff, SubdivisionDirectorCoeff
         def directors():
+            fixture.scenario.lines.filter(subdivision='A').update(amount_ddp_usd=600)
+            fixture.scenario.lines.filter(subdivision='B').update(amount_ddp_usd=300)
             employee = DirectorEmployee.objects.create(full_name='Иванов Иван')
             GlobalDirectorCoeff.objects.create(version=fixture.version, goods=fixture.good,
                 **{f'k{i}': '.01' for i in range(5)})
@@ -71,6 +73,9 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         report = self.page.locator('#plan-summary')
         self.assertEqual(report.locator('details[open]').count(), 0)
         expect(report.locator('.summary-company-total > summary .summary-difference')).to_have_text('+130')
+        expect(report.locator('.summary-company-total > summary .summary-global.summary-markup')).to_have_text('1,32')
+        expect(report.locator('.summary-company-total > summary .summary-local.summary-markup')).to_have_text('1,19')
+        expect(report.locator('.summary-company-total > summary .summary-markup-difference')).to_have_text('-0,14')
         report.locator('summary').first.click()
         expect(report.get_by_text('Политика', exact=True).first).to_be_visible()
         report.locator('[data-summary-side=global]').uncheck()

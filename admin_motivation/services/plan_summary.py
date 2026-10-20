@@ -5,6 +5,7 @@ from ..models import GlobalCoeffVersion, DirectorEmployee, Subdivision, Subdivis
 from .comparison import Index, coefficient_rows
 from .director_comparison import DirectorIndex
 from .sales_plans import SEGMENTS, number
+from .markup import motivation_markup
 
 ZERO = Decimal(0)
 KINDS = [('policies', 'Политика'), ('sales', 'Продажи'), ('directors', 'Директор')]
@@ -67,18 +68,19 @@ def summary_report(scenario, params):
     # Read only report inputs; calculation JSON snapshots can dwarf the plan itself.
     # Equal coefficient scopes across dates are accumulated exactly with Decimal.
     grouped, dates = {}, {}
-    for on_date, sub, pg, group, brand, amount, segments in lines.order_by().values_list(
-            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'segment_amounts').iterator(chunk_size=2000):
+    for on_date, sub, pg, group, brand, amount, segments, ddp in lines.order_by().values_list(
+            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'segment_amounts', 'amount_ddp_usd').iterator(chunk_size=2000):
         if on_date not in dates:
             dates[on_date] = next((v.pk for v in reversed(versions) if v.effective_from <= on_date), None)
         key = (dates[on_date], sub, pg, group, brand)
-        data = grouped.setdefault(key, [ZERO, [ZERO] * len(SEGMENTS)])
+        data = grouped.setdefault(key, [ZERO, [ZERO] * len(SEGMENTS), ZERO])
         data[0] += amount
+        data[2] = add(data[2], ddp)
         for index, segment in enumerate(SEGMENTS):
             data[1][index] += number(segments.get(segment))
     buckets, missing = {}, set()
     policy_kinds = [(key, source) for key, source in [('policies', 'Политики'), ('sales', 'Продажи')] if key in kinds]
-    for (version, sub, pg, group, brand), (plan, amounts) in grouped.items():
+    for (version, sub, pg, group, brand), (plan, amounts, ddp) in grouped.items():
         staff_values = directors['local'].by_employee(version, sub, pg, group, brand, amounts) if 'directors' in kinds or selected_staff else {}
         if selected_staff:
             staff_values = {staff: value for staff, value in staff_values.items() if staff in selected_staff}
@@ -86,6 +88,7 @@ def summary_report(scenario, params):
                 continue
         bucket = buckets.setdefault(sub, empty_bucket())
         bucket['plan'] += plan
+        bucket['ddp'] = add(bucket['ddp'], ddp)
         global_director = directors['global'].motivation(version, '', pg, group, brand, amounts) if 'directors' in kinds else ZERO
         if policy_kinds:
             for side in ['global', 'local']:
@@ -102,25 +105,28 @@ def summary_report(scenario, params):
             bucket['global']['directors'] += global_director * len(staff_values)
             bucket['local']['directors'] += sum(staff_values.values(), ZERO)
             for staff, value in staff_values.items():
-                employee = bucket['staff'].setdefault(staff, {'plan': ZERO, 'global': ZERO, 'local': ZERO})
+                employee = bucket['staff'].setdefault(staff, {'plan': ZERO, 'ddp': ZERO, 'global': ZERO, 'local': ZERO})
                 employee['plan'] += plan
+                employee['ddp'] = add(employee['ddp'], ddp)
                 employee['global'] += global_director
                 employee['local'] += value
     company = empty_bucket()
     for bucket in buckets.values():
         company['plan'] += bucket['plan']
+        company['ddp'] = add(company['ddp'], bucket['ddp'])
         for side in ['global', 'local']:
             for kind in ['policies', 'sales', 'directors']:
                 company[side][kind] = add(company[side][kind], bucket[side][kind])
         for staff, value in bucket['staff'].items():
-            employee = company['staff'].setdefault(staff, {'plan': ZERO, 'global': ZERO, 'local': ZERO})
+            employee = company['staff'].setdefault(staff, {'plan': ZERO, 'ddp': ZERO, 'global': ZERO, 'local': ZERO})
             for key in employee:
-                employee[key] += value[key]
+                employee[key] = add(employee[key], value[key])
     nodes = [node('Итого', company, names, kinds)] if buckets else []
     if nodes:
         nodes[0]['is_total'] = True
     nodes += [node(branches.get(key, key), bucket, names, kinds) for key, bucket in sorted(buckets.items())]
     return {'summary_nodes': nodes, 'summary_missing': bool(missing),
+            'summary_missing_ddp': any(bucket['ddp'] is None for bucket in buckets.values()),
             'summary_preliminary': not any(v.status == 'approved' for v in versions)}
 
 
@@ -129,11 +135,16 @@ def add(left, right):
 
 
 def empty_bucket():
-    return {'plan': ZERO, 'staff': {}, **{side: dict.fromkeys(['policies', 'sales', 'directors'], ZERO) for side in ['global', 'local']}}
+    return {'plan': ZERO, 'ddp': ZERO, 'staff': {}, **{side: dict.fromkeys(['policies', 'sales', 'directors'], ZERO) for side in ['global', 'local']}}
 
 
-def row(name, plan, global_value, local_value, children=None):
-    return {'name': name, 'plan': plan, 'global': global_value, 'local': local_value,
+def row(name, plan, global_value, local_value, children=None, ddp=None):
+    global_markup = motivation_markup(plan, ddp, global_value)
+    local_markup = motivation_markup(plan, ddp, local_value)
+    return {'name': name, 'plan': plan, 'ddp': ddp,
+            'global_markup': global_markup, 'local_markup': local_markup,
+            'markup_difference': local_markup - global_markup if global_markup is not None and local_markup is not None else None,
+            'global': global_value, 'local': local_value,
             'difference': local_value - global_value if global_value is not None and local_value is not None else None,
             'global_percent': global_value / plan * 100 if plan and global_value is not None else None,
             'local_percent': local_value / plan * 100 if plan and local_value is not None else None,
@@ -142,12 +153,12 @@ def row(name, plan, global_value, local_value, children=None):
 
 def node(name, bucket, names, kinds):
     plan = bucket['plan']
-    children = [row(label, plan, bucket['global'][kind], bucket['local'][kind])
+    children = [row(label, plan, bucket['global'][kind], bucket['local'][kind], ddp=bucket['ddp'])
                 for kind, label in KINDS if kind in kinds]
     for child in children:
         if child['name'] == 'Директор':
-            child['children'] = [row(names.get(staff, str(staff)), value['plan'], value['global'], value['local'])
+            child['children'] = [row(names.get(staff, str(staff)), value['plan'], value['global'], value['local'], ddp=value['ddp'])
                 for staff, value in sorted(bucket['staff'].items(), key=lambda item: (names.get(item[0], ''), item[0]))]
     total = {side: None if any(value is None for value in bucket[side].values()) else sum(bucket[side].values(), ZERO)
              for side in ['global', 'local']}
-    return row(name, plan, total['global'], total['local'], children)
+    return row(name, plan, total['global'], total['local'], children, ddp=bucket['ddp'])

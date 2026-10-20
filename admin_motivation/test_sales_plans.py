@@ -102,6 +102,8 @@ class SalesPlanTests(TestCase):
         for employee, sub, value in [(first, self.subs[0], '.02'), (second, self.subs[0], '.03'), (first, self.subs[1], '.04')]:
             SubdivisionDirectorCoeff.objects.create(version=self.version, goods=self.good, subdivision=sub, employee=employee,
                 **{f'k{i}': Decimal(value) for i in range(5)})
+        self.scenario.lines.filter(subdivision='A').update(amount_ddp_usd=600)
+        self.scenario.lines.filter(subdivision='B').update(amount_ddp_usd=300)
         nodes = summary_report(self.scenario, {})['summary_nodes']
         company, branch_a, branch_b = nodes
         self.assertEqual(company['plan'], Decimal('1500'))  # Global duplicate excluded.
@@ -118,6 +120,14 @@ class SalesPlanTests(TestCase):
             [('Иванов', Decimal('1500'), Decimal('15'), Decimal('40')),
              ('Петров', Decimal('1000'), Decimal('10'), Decimal('30'))])
         self.assertEqual(staff[1]['local_percent'], Decimal('3'))
+        self.assertEqual(company['ddp'], Decimal('900'))
+        self.assertEqual(company['global_markup'], Decimal('1500') / Decimal('1150'))
+        self.assertEqual(company['local_markup'], Decimal('1500') / Decimal('1315'))
+        self.assertEqual(company['markup_difference'], company['local_markup'] - company['global_markup'])
+        self.assertEqual(branch_a['global_markup'], Decimal('1000') / Decimal('770'))
+        self.assertEqual(staff[0]['ddp'], Decimal('900'))
+        self.assertEqual(staff[1]['ddp'], Decimal('600'))
+        self.assertEqual(staff[1]['local_markup'], Decimal('1000') / Decimal('630'))
         from django.http import QueryDict
         picked = QueryDict(mutable=True)
         picked.setlist('subdivision', ['A', 'B'])
@@ -130,6 +140,8 @@ class SalesPlanTests(TestCase):
         self.assertEqual(selected[0]['global'], Decimal('10'))
         self.assertEqual(selected[0]['local'], Decimal('30'))
         self.assertEqual(selected[0]['difference'], Decimal('20'))
+        self.assertEqual(selected[0]['global_markup'], Decimal('1000') / Decimal('610'))
+        self.assertEqual(selected[0]['local_markup'], Decimal('1000') / Decimal('630'))
         self.assertEqual([n['name'] for n in selected[0]['children']], ['Директор'])
         self.assertEqual([n['name'] for n in selected[0]['children'][0]['children']], ['Петров'])
         picked.setlist('director', [str(first.pk), str(second.pk)])
@@ -148,6 +160,29 @@ class SalesPlanTests(TestCase):
         self.assertContains(response, 'data-summary-side="local"')
         self.assertContains(response, 'Петров')
         self.assertIsNone(self.scenario.lines.first().total_usd)  # Read-only, no snapshot mutation.
+
+    def test_summary_markup_missing_ddp_and_zero_denominator(self):
+        from .services.plan_summary import row, summary_report
+        self.load()
+        self.scenario.lines.filter(subdivision='A').update(amount_ddp_usd=600)
+        result = summary_report(self.scenario, {})
+        self.assertTrue(result['summary_missing_ddp'])
+        company, branch_a, branch_b = result['summary_nodes']
+        self.assertIsNone(company['global_markup'])
+        self.assertIsNone(company['markup_difference'])
+        self.assertIsNone(branch_b['local_markup'])
+        self.assertEqual(branch_a['global_markup'], Decimal('1000') / Decimal('750'))
+        selected = summary_report(self.scenario, {'subdivision': 'A'})
+        self.assertFalse(selected['summary_missing_ddp'])
+        self.assertEqual(selected['summary_nodes'][0]['ddp'], Decimal('600'))
+        missing = row('Missing', Decimal(100), None, Decimal(10), ddp=Decimal(50))
+        self.assertIsNone(missing['global_markup'])
+        self.assertEqual(missing['local_markup'], Decimal(100) / Decimal(60))
+        self.assertIsNone(missing['markup_difference'])
+        zero = row('Zero', Decimal(100), Decimal(0), Decimal(10), ddp=Decimal(0))
+        self.assertIsNone(zero['global_markup'])
+        self.assertEqual(zero['local_markup'], Decimal(10))
+        self.assertIsNone(zero['markup_difference'])
 
     def test_summary_aggregates_repeated_dates_without_reading_calculation_snapshots(self):
         from datetime import timedelta
