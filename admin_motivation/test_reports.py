@@ -36,6 +36,24 @@ class NativeMotivationReportTests(TestCase):
         self.assertEqual(args,[attack,'B','Политики','Политики'])
         with self.assertRaises(ValidationError):bind_sql('SELECT @missing',{})
 
+    def test_subdivision_summary_separates_coefficient_types_without_changing_totals(self):
+        rows = [dict(self.division_rows()[0], ТипКоэф=kind, Подразделение=branch)
+                for branch, kind in [('A', 'Политики'), ('A', 'Продажи'), ('B', 'Директора')]]
+        report = subdivision_report(rows)
+        self.assertEqual([row['label'] for row in report['summary']], ['A', 'B'])
+        self.assertEqual([row['label'] for row in report['summary'][0]['children']], ['Политики', 'Продажи'])
+        for branch in report['summary']:
+            for index, value in enumerate(branch['values']):
+                self.assertEqual(value, sum(child['values'][index] for child in branch['children']))
+        self.assertEqual(report['summary_totals'], [sum(row['values'][index] for row in report['summary'])
+                                                  for index in range(len(report['summary_totals']))])
+        cursor, connection = Mock(), Mock()
+        cursor.description = [('Подразделение',), ('ТипКоэф',)]
+        cursor.fetchmany.return_value = []
+        with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)):
+            load_report('subdivisions', parameters('subdivisions', QueryDict('')))
+        self.assertIn('[ТипКоэф]', cursor.execute.call_args.args[0].split('GROUP BY')[-1])
+
     def test_subdivision_filters_accept_multiple_values_and_bind_all_sql_filters(self):
         query = QueryDict('type=Политики&type=Директора&subdivision=A&subdivision=B&planning=P1&planning=P2&goods=G1&goods=G2&brand=M1&brand=M2')
         values = parameters('subdivisions', query)
@@ -101,7 +119,7 @@ class NativeMotivationReportTests(TestCase):
         with patch('admin_motivation.report_views.choices', return_value=first):
             page = self.client.get(reverse('motivation_report', args=['manager']), {'type': 'Директора', 'subdivision': 'Д-Астрахань'})
         self.assertContains(page, 'В расчётных данных нет авторов сделки')
-        self.assertContains(page, '?v=deals-scroll-20261021')
+        self.assertContains(page, '?v=subdivision-types-20261021')
 
     def test_manager_currency_uses_rur_source_fields_without_changing_plan_metrics(self):
         from .services.reports import SQL_ROOT, manager_currency_sql

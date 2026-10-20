@@ -209,7 +209,10 @@ def subdivision_report(rows, scope='subdivisions'):
         possible, paid, bonus = total(subset, 'СуммаМотивацииUSD'), total(subset, 'СуммаМотивацииUSDУчетПроцента'), total(subset, 'Остаток')
         return [value for block in blocks for value in block] + [possible, paid, bonus, paid+bonus]
     return {'periods': periods, 'nodes': nodes(rows) if rows else [], 'detail_totals': metrics(rows),
-            'summary': [{'label': name, 'values': summary(items)} for name, items in sorted(division_groups.items())],
+            'summary': [{'label': name, 'values': summary(items),
+                         'children': [{'label': type_name, 'values': summary([row for row in items if (row.get('ТипКоэф') or 'Без типа коэффициента') == type_name])}
+                                      for type_name in sorted({row.get('ТипКоэф') or 'Без типа коэффициента' for row in items})]}
+                        for name, items in sorted(division_groups.items())],
             'summary_totals': summary(rows)}
 
 
@@ -263,7 +266,7 @@ def load_report(kind, values, page=1, scope='subdivisions'):
             performance = fetch(cursor, performance_sql, performance_args)
             return manager_detail_report(rows, values.get('Currency', 'USD'), performance)
         if kind == 'subdivisions':
-            dimensions = ['Подразделение', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
+            dimensions = ['Подразделение', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
             columns = ','.join('['+key+']' for key in dimensions)
             sums = ','.join('SUM(['+key+']) AS ['+key+']' for key in DIV_NUMBERS)
             rows = fetch(cursor, 'SELECT '+columns+','+sums+' FROM ('+sql+') AS report_source GROUP BY '+columns, args)

@@ -40,6 +40,14 @@
    form.requestSubmit(form.elements.type.value ? form.querySelector('button[name=run]') : document.getElementById('report-filter-refresh'));
   });
  }
+ document.querySelectorAll('.subdivision-summary-toggle').forEach(button => {
+  button.addEventListener('click', () => {
+   const expanded = button.getAttribute('aria-expanded') !== 'true';
+   button.setAttribute('aria-expanded', String(expanded));
+   button.querySelector('[data-subdivision-arrow]').textContent = expanded ? '▾' : '▸';
+   button.closest('tbody').querySelectorAll('.subdivision-summary-type').forEach(row => row.hidden = !expanded);
+  });
+ });
  const root = document.getElementById('native-division-report');
  const data = document.getElementById('native-division-tree');
  if (!root || !data) return;

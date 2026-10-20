@@ -11,6 +11,31 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_subdivision_summary_expands_types_and_keeps_company_total_first(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .services.reports import subdivision_report
+        from .test_reports import NativeMotivationReportTests
+        rows = [dict(NativeMotivationReportTests.division_rows()[0], ТипКоэф=kind, Подразделение=branch)
+                for branch, kind in [('A', 'Политики'), ('A', 'Продажи'), ('B', 'Директора')]]
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=subdivision_report(rows)):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['subdivisions']) + '?run=1')
+            table = self.page.locator('.subdivision-summary')
+            expect(table.locator('tbody tr').first.locator('th').first).to_have_text('Итого')
+            expect(table.get_by_role('columnheader', name='Тип коэффициента', exact=True)).to_be_visible()
+            branches = table.locator('.subdivision-summary-group')
+            expect(branches).to_have_count(2)
+            expect(table.locator('.subdivision-summary-type:visible')).to_have_count(0)
+            button = branches.nth(0).locator('button')
+            button.click()
+            expect(button).to_have_attribute('aria-expanded', 'true')
+            expect(branches.nth(0).locator('.subdivision-summary-type:visible')).to_have_count(2)
+            expect(branches.nth(1).locator('.subdivision-summary-type:visible')).to_have_count(0)
+            expect(branches.nth(0).get_by_text('Политики', exact=True)).to_be_visible()
+            button.press('Enter')
+            expect(branches.nth(0).locator('.subdivision-summary-type:visible')).to_have_count(0)
+            self.assertEqual(self.errors, [])
+
     def test_subdivision_report_checkbox_filters_submit_multiple_values(self):
         from unittest.mock import patch
         from playwright.sync_api import expect
