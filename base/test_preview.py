@@ -71,3 +71,50 @@ class UserPreviewTests(TestCase):
             response = self.client.post(reverse('portal_login'), {'username': self.admin.username, 'password': 'test'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(self.client.session['_auth_user_id'], str(self.admin.pk))
+
+    def test_admin_adds_domain_user_without_password_and_edits_role(self):
+        response = self.client.post(reverse('admin:auth_user_add'), {'username': 'DAICHI\\NewUser', 'portal_role': DIRECTOR, '_save': 'Save'})
+        self.assertEqual(response.status_code, 302)
+        user = User.objects.get(username='daichi\\newuser')
+        self.assertFalse(user.has_usable_password())
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.is_superuser)
+        self.assertEqual(list(user.groups.values_list('name', flat=True)), [DIRECTOR])
+        response = self.client.post(reverse('admin:auth_user_change', args=[user.pk]), {
+            'username': user.username, 'first_name': 'Employee', 'last_name': '', 'email': '', 'is_active': 'on',
+            'portal_role': LOGISTICIAN, 'date_joined_0': user.date_joined.strftime('%Y-%m-%d'),
+            'date_joined_1': user.date_joined.strftime('%H:%M:%S'), '_save': 'Save'})
+        self.assertEqual(response.status_code, 302)
+        user.refresh_from_db()
+        self.assertEqual(list(user.groups.values_list('name', flat=True)), [LOGISTICIAN])
+        self.assertEqual(user.first_name, 'Employee')
+        self.assertFalse(user.has_usable_password())
+
+    def test_domain_user_case_duplicate_rejected_and_local_password_still_required(self):
+        from .admin import PortalUserCreationForm
+        User.objects.create_user('daichi\\exists')
+        duplicate = PortalUserCreationForm({'username': 'DAICHI\\EXISTS', 'portal_role': DIRECTOR})
+        self.assertFalse(duplicate.is_valid())
+        self.assertIn('username', duplicate.errors)
+        local = PortalUserCreationForm({'username': 'new-local', 'portal_role': LOGISTICIAN})
+        self.assertFalse(local.is_valid())
+        self.assertIn('password1', local.errors)
+        malformed = PortalUserCreationForm({'username': 'DAICHI\\a\\b'})
+        self.assertFalse(malformed.is_valid())
+
+    def test_nonadmin_cannot_create_user_or_assign_role(self):
+        self.client.force_login(self.logistician)
+        response = self.client.post(reverse('admin:auth_user_add'), {'username': 'DAICHI\\forbidden', 'portal_role': ADMIN})
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(User.objects.filter(username__iexact='daichi\\forbidden').exists())
+
+    def test_custom_groups_manage_members_without_changing_their_roles(self):
+        response = self.client.post(reverse('admin:auth_group_add'), {'name': 'Test team', 'members': [self.director.pk, self.logistician.pk], '_save': 'Save'})
+        self.assertEqual(response.status_code, 302)
+        group = Group.objects.get(name='Test team')
+        self.assertEqual(set(group.user_set.values_list('pk', flat=True)), {self.director.pk, self.logistician.pk})
+        response = self.client.post(reverse('admin:auth_group_change', args=[group.pk]), {'name': group.name, 'members': [self.director.pk], '_save': 'Save'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(list(group.user_set.values_list('pk', flat=True)), [self.director.pk])
+        self.assertTrue(self.logistician.groups.filter(name=LOGISTICIAN).exists())
+        self.assertTrue(self.director.groups.filter(name=DIRECTOR).exists())

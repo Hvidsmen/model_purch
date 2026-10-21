@@ -25,7 +25,7 @@ class PortalAccessTests(TestCase):
         self.assertEqual(self.client.get(reverse('motivation_coefficient_comparison')).status_code, 401)
 
     def test_roles_see_only_their_projects(self):
-        for role in ROLES:
+        for role in (ADMIN, DIRECTOR, LOGISTICIAN):
             self.client.force_login(self.users[role])
             response = self.client.get('/')
             self.assertEqual(response.status_code, 200)

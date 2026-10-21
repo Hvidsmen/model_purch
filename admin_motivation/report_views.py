@@ -1,7 +1,7 @@
 import csv
 import logging
 from time import perf_counter
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.http import Http404, HttpResponse, FileResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
@@ -9,16 +9,23 @@ from .services.reports import CATALOG, FILTERS, parameters, choices, load_report
 from .services.versions import today
 from .models import Subdivision, SalesPlanScenario
 
+from base.access import role_for, POLITICIAN
+from base.report_access import politician_scope, scoped_query, PERSONAL_REPORTS
+
 logger = logging.getLogger(__name__)
 
 
 def report_index(request):
-    return render(request, 'admin_motivation/reports/index.html', {'reports': CATALOG, 'subdivisions': Subdivision.objects.all()})
+    catalog = {key: CATALOG[key] for key in PERSONAL_REPORTS} if role_for(request.user) == POLITICIAN else CATALOG
+    return render(request, 'admin_motivation/reports/index.html', {'reports': catalog, 'subdivisions': Subdivision.objects.none() if role_for(request.user) == POLITICIAN else Subdivision.objects.all()})
 
 
 def report_page(request, kind):
     if kind not in CATALOG: raise Http404('Отчёт не найден.')
-    query = request.GET.copy()
+    access_scope = getattr(request, 'personal_report_scope', None) or politician_scope(request.user)
+    if role_for(request.user) == POLITICIAN and (not access_scope or kind not in PERSONAL_REPORTS):
+        raise PermissionDenied
+    query = scoped_query(request.GET, access_scope) if access_scope else request.GET.copy()
     if kind == 'deals':
         query.setdefault('start', today().replace(month=1, day=1).isoformat())
         query.setdefault('end', today().isoformat())
@@ -32,11 +39,13 @@ def report_page(request, kind):
         if excel and query.get('table', 'all') not in ('all', 'summary', 'detail'):
             raise ValidationError('Неизвестная таблица для выгрузки.')
         if not excel:
-            filters = choices(kind, values, refresh=request.GET.get('refresh_choices') == '1')
+            options = {'access_scope': access_scope} if access_scope else {}
+            filters = choices(kind, values, refresh=request.GET.get('refresh_choices') == '1', **options)
         if request.GET.get('run') == '1' or excel:
             try: page = max(1, int(query.get('page', 1)))
             except ValueError: page = 1
-            data = load_report(kind, values, page, 'matrix' if query.get('scope')=='matrix' else 'subdivisions')
+            options = {'access_scope': access_scope} if access_scope else {}
+            data = load_report(kind, values, page, 'matrix' if query.get('scope')=='matrix' else 'subdivisions', **options)
             if excel:
                 from .services.report_excel import report_excel
                 table = query.get('table', 'all')
@@ -59,6 +68,12 @@ def report_page(request, kind):
         errors = ['Не удалось получить данные отчёта. Проверьте доступ к DataWH и журнал сервера.']
     if not filters:
         filters = [{'name': name, 'label': caption, 'multiple': multiple, 'options': []} for name, _, caption, _, multiple in FILTERS[kind]]
+    if access_scope:
+        fixed = {'type': access_scope['type'], 'subdivision': access_scope['subdivision'], 'author': access_scope['author']}
+        for item in filters:
+            if item['name'] in fixed:
+                item.update(locked=True, locked_value=fixed[item['name']])
+                item['options'] = [{'value': fixed[item['name']], 'selected': True}]
     if kind == 'deals' and data:
         columns = [('АвторСделки','Автор сделки','text'), ('Канал','Канал','text'), ('Подразделение','Подразделение','text'),
             ('ДатаЗакрытияСделки','Дата закрытия','date'), ('ДатаОтгрузки','Дата отгрузки','date'), ('Партнер','Партнёр','text'),
@@ -92,7 +107,7 @@ def report_page(request, kind):
     return render(request, 'admin_motivation/reports/report.html', {
         'kind': kind, 'definition': CATALOG[kind], 'filters': filters, 'query': query,
         'selected_parameters': selected_parameters, 'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
-        'subdivisions': Subdivision.objects.all(),
+        'subdivisions': Subdivision.objects.filter(subdivision_key=access_scope['subdivision']) if access_scope else Subdivision.objects.all(),
         'scope': query.get('scope','subdivisions'),
     })
 

@@ -4,7 +4,8 @@ from django.contrib.auth.models import Group, Permission
 ADMIN = 'Администратор'
 DIRECTOR = 'Генеральный директор'
 LOGISTICIAN = 'Логист'
-ROLES = (ADMIN, DIRECTOR, LOGISTICIAN)
+POLITICIAN = 'Политик'
+ROLES = (ADMIN, DIRECTOR, LOGISTICIAN, POLITICIAN)
 
 
 def ensure_roles(**kwargs):
@@ -27,7 +28,7 @@ def role_for(user):
 
 def can_access(user, project):
     role = role_for(user)
-    return role == ADMIN or (project == 'purchases' and role == LOGISTICIAN) or (project == 'motivation' and role == DIRECTOR)
+    return role == ADMIN or (project == 'purchases' and role == LOGISTICIAN) or (project == 'motivation' and role in (DIRECTOR, POLITICIAN))
 
 
 def portal_access(request):
@@ -35,4 +36,4 @@ def portal_access(request):
     return {'ad_auth_enabled': settings.AD_AUTH_ENABLED, 'ad_netbios_domain': settings.AD_NETBIOS_DOMAIN, 'ad_upn_suffix': settings.AD_UPN_SUFFIX, 'ad_https_ready': request.is_secure(), 'windows_auth_enabled': settings.WINDOWS_AUTH_ENABLED, 'portal_is_admin': can_access(request.user, 'admin'),
             'portal_can_purchases': can_access(request.user, 'purchases'),
             'portal_can_motivation': can_access(request.user, 'motivation'),
-            'portal_role_label': role_for(request.user) or 'Роль не назначена'}
+            'portal_reports_only': role_for(request.user) == POLITICIAN, 'portal_role_label': role_for(request.user) or 'Роль не назначена'}

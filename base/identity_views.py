@@ -59,3 +59,34 @@ def stop_preview(request):
     request.session.pop(SESSION_KEY, None)
     logger.info('Portal user preview stopped: actor=%s', actor.pk)
     return redirect('index_base')
+
+
+@require_GET
+def report_authors(request):
+    if not can_access(request.user, 'admin'):
+        raise PermissionDenied
+    from django.http import JsonResponse
+    from django.shortcuts import get_object_or_404
+    from admin_motivation.models import Subdivision
+    from admin_motivation.conns import connect_database
+    from admin_motivation.services.reports import bind_sql, fetch
+    try:
+        branch_id = int(request.GET.get('subdivision', ''))
+    except (TypeError, ValueError):
+        return JsonResponse({'error': 'Выберите подразделение.'}, status=400)
+    branch = get_object_or_404(Subdivision, pk=branch_id)
+    connection = None
+    try:
+        sql, args = bind_sql('SELECT DISTINCT [АвторСделки] AS author FROM DataWH.motivation.ReportMotivationByDealAuthor '
+            'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_',
+            {'Subdivision': [branch.subdivision_key], 'TypeCoeff_': 'Политики'})
+        connection, cursor = connect_database('vm-dwh', 'DataWH')
+        connection.timeout = 15
+        authors = sorted({str(row['author']).strip() for row in fetch(cursor, sql, args, limit=10000) if row.get('author') and str(row['author']).strip()})
+        return JsonResponse({'authors': authors})
+    except Exception:
+        logger.exception('Admin report author lookup failed')
+        return JsonResponse({'error': 'Список DWH недоступен. Можно указать точное ФИО вручную.'}, status=503)
+    finally:
+        if connection is not None:
+            connection.close()

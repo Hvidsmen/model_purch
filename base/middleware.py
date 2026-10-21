@@ -2,7 +2,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from .access import can_access
+from .access import can_access, role_for, POLITICIAN
 
 
 class PortalAccessMiddleware:
@@ -15,6 +15,19 @@ class PortalAccessMiddleware:
     def process_view(self, request, view_func, view_args, view_kwargs):
         module = view_func.__module__
         match = request.resolver_match
+        if role_for(request.user) == POLITICIAN:
+            from django.conf import settings
+            from .report_access import politician_scope
+            name = match.url_name if match else None
+            account_pages = {'index_base', 'portal_login', 'portal_logout', 'portal_windows_login'}
+            personal = name == 'motivation_reports' or (name == 'motivation_report' and view_kwargs.get('kind') in ('manager', 'manager-detail', 'deals'))
+            static = module == 'django.views.static' and request.path.startswith(settings.STATIC_URL)
+            if personal:
+                request.personal_report_scope = politician_scope(request.user)
+            if not (name in account_pages or static or (personal and request.method in ('GET', 'HEAD', 'OPTIONS') and request.personal_report_scope)):
+                if '/api/' in request.path or 'application/json' in request.headers.get('Accept', ''):
+                    return JsonResponse({'error': 'Доступны только личные отчёты с назначенными подразделением и автором сделки.'}, status=403)
+                return render(request, 'base/forbidden.html', status=403)
         project = None
         if module.startswith('model_purch.'):
             project = 'purchases'

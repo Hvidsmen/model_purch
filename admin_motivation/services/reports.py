@@ -89,7 +89,11 @@ def fetch(cursor, sql, args=(), limit=50000):
     return report_rows([dict(zip(columns, row)) for row in rows])
 
 
-def choices(kind, values, refresh=False):
+def choices(kind, values, refresh=False, access_scope=None):
+    if access_scope:
+        from base.report_access import scoped_values
+        from .personal_reports import choices as personal_choices
+        return personal_choices(kind, scoped_values(kind, values, access_scope), access_scope)
     queries = json.loads((SQL_ROOT / 'lookups.json').read_text(encoding='utf-8'))[kind]
     connection = None
     signature = hashlib.sha256(str(getattr(settings, 'DWH_SQL_CONN_STR', '')).encode()).hexdigest()[:16]
@@ -296,7 +300,10 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions'):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
+    if access_scope:
+        from base.report_access import scoped_values
+        values = scoped_values(kind, values, access_scope)
     if kind == 'manager-detail' and not values.get('TypeCoeff_'):
         raise ValidationError('Выберите вид работника.')
     if kind == 'manager' and any(not values.get(key) for key in ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')):
@@ -310,6 +317,8 @@ def load_report(kind, values, page=1, scope='subdivisions'):
         source_sql = (SQL_ROOT / f'{kind}.sql').read_text(encoding='utf-8')
         if kind == 'manager':
             source_sql = manager_currency_sql(source_sql, values.get('Currency', 'USD'))
+        if access_scope and kind == 'manager':
+            source_sql = 'SELECT * FROM (' + source_sql + ') AS personal_source WHERE [АвторСделки] IN (@DealAuthor)'
         sql, args = bind_sql(source_sql, values)
         if kind == 'deals':
             source = '(' + sql + ') AS report_source'
@@ -331,6 +340,7 @@ def load_report(kind, values, page=1, scope='subdivisions'):
                 'SUM([СуммаПланUSD]) AS [СуммаПланUSD],SUM([СуммаОтгрузокUSD]) AS [СуммаОтгрузокUSD] '
                 'FROM DataWH.motivation.ReportMotivationByDealAuthor '
                 'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ AND [Год] IN (@Years) '
+                + ('AND [АвторСделки] IN (@DealAuthor) ' if access_scope else '') +
                 'GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
             performance = fetch(cursor, performance_sql, performance_args)
             return manager_detail_report(rows, values.get('Currency', 'USD'), performance)

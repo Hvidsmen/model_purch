@@ -1,34 +1,92 @@
 from django import forms
 from django.contrib import admin
+from django.urls import reverse_lazy
 from django.contrib.auth.admin import UserAdmin, GroupAdmin
-from django.contrib.auth.forms import UserChangeForm, AdminUserCreationForm
+from django.contrib.auth.forms import UserChangeForm, AdminUserCreationForm, UsernameField
 from django.contrib.auth.models import User, Group
-from .access import ADMIN, ROLES, role_for
+from django.contrib.auth.validators import UnicodeUsernameValidator
+import re
+from .access import ADMIN, ROLES, POLITICIAN, role_for
+from .models import MotivationReportAccess
+from admin_motivation.models import Subdivision
 
 
 class PortalRoleFormMixin:
+    username = UsernameField(label='Логин', max_length=150, help_text='Локальный: обычный логин. Доменный: DOMAIN\\login, например DAICHI\\etladmin. Для доменного пользователя пароль не задавайте — его проверяет Windows.')
+
+    def clean_username(self):
+        username = self.cleaned_data['username']
+        if '\\' in username:
+            parts = username.split('\\')
+            if len(parts) != 2 or not re.fullmatch(r'[A-Za-z0-9_.-]+', parts[0]) or not parts[1] or '@' in parts[1]:
+                raise forms.ValidationError('Укажите доменный логин в формате DOMAIN\\login (не UPN).')
+            UnicodeUsernameValidator()(parts[1])
+            username = username.casefold()
+            self._domain_username = True
+        else:
+            UnicodeUsernameValidator()(username)
+        duplicate = User.objects.filter(username__iexact=username)
+        if self.instance.pk:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise forms.ValidationError('Пользователь с таким логином уже существует.')
+        return username
+
+    def _get_validation_exclusions(self):
+        exclusions = super()._get_validation_exclusions()
+        if getattr(self, '_domain_username', False):
+            # Django's default model validator forbids the Windows separator.
+            # The form above validates the full name and checks uniqueness.
+            exclusions.add('username')
+        return exclusions
+
+    report_subdivision = forms.ModelChoiceField(queryset=Subdivision.objects.all(), label='Подразделение для личных отчётов', required=False, widget=forms.Select(attrs={'data-author-url': reverse_lazy('portal_report_authors')}))
+    report_author = forms.CharField(label='Точное ФИО автора сделки', max_length=255, required=False, widget=forms.TextInput(attrs={'list': 'report-author-options', 'autocomplete': 'off'}), help_text='Для роли «Политик» обязательно. Выберите ФИО из отчётов по подразделению; одной фамилии недостаточно.')
+
     portal_role = forms.ChoiceField(label='Роль в портале', choices=[('', 'Без доступа')] + [(r, r) for r in ROLES], required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance.pk:
             self.fields['portal_role'].initial = role_for(self.instance)
+        if self.instance.pk:
+            access = MotivationReportAccess.objects.select_related('subdivision').filter(user=self.instance).first()
+            if access:
+                self.fields['report_subdivision'].initial = access.subdivision.merged_into_id or access.subdivision_id
+                self.fields['report_author'].initial = access.deal_author
         if 'groups' in self.fields:
+
             self.fields['groups'].queryset = Group.objects.exclude(name__in=ROLES)
 
     def clean(self):
         data = super().clean()
         if data.get('is_superuser') and data.get('portal_role') != ADMIN:
             self.add_error('portal_role', 'Суперпользователь должен иметь роль «Администратор». Для другой роли снимите признак суперпользователя.')
+        if data.get('portal_role') == POLITICIAN:
+            if not data.get('report_subdivision'):
+                self.add_error('report_subdivision', 'Назначьте подразделение для роли «Политик».')
+            if not data.get('report_author', '').strip():
+                self.add_error('report_author', 'Назначьте точное ФИО автора сделки для роли «Политик».')
         return data
 
 
 class PortalUserChangeForm(PortalRoleFormMixin, UserChangeForm):
+    username = PortalRoleFormMixin.username
     portal_role = PortalRoleFormMixin.portal_role
+    report_subdivision = PortalRoleFormMixin.report_subdivision
+    report_author = PortalRoleFormMixin.report_author
 
 
 class PortalUserCreationForm(PortalRoleFormMixin, AdminUserCreationForm):
+    username = PortalRoleFormMixin.username
     portal_role = PortalRoleFormMixin.portal_role
+    report_subdivision = PortalRoleFormMixin.report_subdivision
+    report_author = PortalRoleFormMixin.report_author
+
+    def validate_passwords(self, *args, **kwargs):
+        if getattr(self, '_domain_username', False):
+            self.cleaned_data['usable_password'] = 'false'
+        return super().validate_passwords(*args, **kwargs)
 
 
 admin.site.unregister(User)
@@ -38,8 +96,18 @@ admin.site.unregister(User)
 class PortalUserAdmin(UserAdmin):
     form = PortalUserChangeForm
     add_form = PortalUserCreationForm
-    fieldsets = UserAdmin.fieldsets + (('Доступ к порталу', {'fields': ('portal_role',)}),)
-    add_fieldsets = UserAdmin.add_fieldsets + (('Доступ к порталу', {'fields': ('portal_role',)}),)
+    list_display = ('username', 'first_name', 'last_name', 'email', 'portal_role_label', 'is_active')
+    list_filter = ('is_active', 'is_staff', 'groups')
+
+    @admin.display(description='Роль в портале')
+    def portal_role_label(self, obj):
+        return role_for(obj) or 'Без доступа'
+
+    fieldsets = UserAdmin.fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'report_subdivision', 'report_author')}),)
+    add_fieldsets = UserAdmin.add_fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'report_subdivision', 'report_author')}),)
+
+    class Media:
+        js = ('base/admin_report_access.js',)
 
     def save_model(self, request, obj, form, change):
         obj.is_staff = form.cleaned_data.get('portal_role') == ADMIN
@@ -52,6 +120,26 @@ class PortalUserAdmin(UserAdmin):
         role = form.cleaned_data.get('portal_role')
         if role:
             user.groups.add(Group.objects.get(name=role))
+        subdivision, author = form.cleaned_data.get('report_subdivision'), form.cleaned_data.get('report_author', '').strip()
+        if subdivision and author:
+            MotivationReportAccess.objects.update_or_create(user=user, defaults={'subdivision': subdivision, 'deal_author': author})
+        else:
+            MotivationReportAccess.objects.filter(user=user).delete()
+
+
+class PortalGroupForm(forms.ModelForm):
+    members = forms.ModelMultipleChoiceField(label='Участники группы', queryset=User.objects.order_by('username'), required=False,
+        widget=admin.widgets.FilteredSelectMultiple('Участники', is_stacked=False),
+        help_text='Дополнительная группа пользователей. Персональная роль и привязка к личным отчётам назначаются в карточке пользователя.')
+
+    class Meta:
+        model = Group
+        fields = ['name', 'permissions', 'members']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance.pk:
+            self.fields['members'].initial = self.instance.user_set.all()
 
 
 admin.site.unregister(Group)
@@ -59,6 +147,17 @@ admin.site.unregister(Group)
 
 @admin.register(Group)
 class PortalGroupAdmin(GroupAdmin):
+    form = PortalGroupForm
+    filter_horizontal = ('permissions',)
+
+    def get_fields(self, request, obj=None):
+        return ('name', 'permissions') if obj and obj.name in ROLES else ('name', 'permissions', 'members')
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        if form.instance.name not in ROLES:
+            form.instance.user_set.set(form.cleaned_data.get('members', []))
+
     def get_readonly_fields(self, request, obj=None):
         return ('name', 'permissions') if obj and obj.name in ROLES else ()
 

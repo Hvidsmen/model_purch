@@ -209,6 +209,7 @@
 {% endblock %}
 {% block module_navigation %}
     <ul class="portal-section-nav">
+{% if not portal_reports_only %}
 
         <li class="nav-item">
             <a class="nav-link {% if request.resolver_match.url_name == 'global_coeff_admin_motivation' or request.resolver_match.url_name == 'gb_act' %}active{% endif %}"
@@ -238,16 +239,19 @@
                 Выгрузка в DWH
             </a>
         </li>
-        <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
-        <li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
+        {% endif %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
+        {% if not portal_reports_only %}<li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
+        {% endif %}
     </ul>
 {% endblock %}
 {% block module_administration %}
+{% if not portal_reports_only %}
 <details class="portal-section-nav" {% if request.resolver_match.url_name == 'motivation_director_directory' %}open{% endif %}>
 <summary class="nav-link">Справочники</summary>
 {% if portal_is_admin %}<a class="nav-link" href="{% url 'motivation_subdivision_merge' %}">Объединить подразделения</a><a class="nav-link" href="{% url 'motivation_calculations' %}">Расчёт и задания</a>{% endif %}
 <a class="nav-link {% if request.resolver_match.url_name == 'motivation_director_directory' %}active{% endif %}" href="{% url 'motivation_director_directory' %}">Справочник директоров</a>
 </details>
+{% endif %}
 {% endblock %}
 {% block portal_content %}
 <div class="content-wrapper">
