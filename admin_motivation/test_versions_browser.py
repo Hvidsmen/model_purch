@@ -198,6 +198,12 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             summary = self.page.locator('.manager-period-summary')
             expect(summary).to_be_visible()
             expect(summary.locator('tbody tr')).to_have_count(3)
+            summary_scroll = summary.locator('.report-scroll')
+            summary_scroll.evaluate('(el) => {el.style.maxHeight="90px";el.scrollTop=60;}')
+            self.assertGreater(summary_scroll.evaluate('(el) => el.scrollTop'), 0)
+            self.assertAlmostEqual(summary.locator('thead th').first.bounding_box()['y'], summary_scroll.bounding_box()['y'], delta=2)
+            summary_scroll.evaluate('(el) => {el.scrollTop=0;el.style.maxHeight="";}')
+
             expect(summary.get_by_role('columnheader', name='4 кв.', exact=True)).to_be_visible()
             expect(summary.locator('tbody tr').first.locator('td').last).to_have_text('190')
             expect(self.page.locator('[data-manager-open=USD]')).to_have_count(1)
