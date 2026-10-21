@@ -189,3 +189,18 @@ if WINDOWS_AUTH_ENABLED:
 MIDDLEWARE.insert(MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware') + 1, 'base.preview.UserPreviewMiddleware')
 SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SECURE_COOKIES', '').lower() in {'1', 'true', 'yes'}
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+
+# AD form login is independent of IIS; bare usernames still use local passwords.
+AD_AUTH_ENABLED = os.environ.get('PORTAL_AD_AUTH', '').lower() in {'1', 'true', 'yes'}
+AD_LDAPS_URL = os.environ.get('PORTAL_AD_LDAPS_URL', '')
+AD_NETBIOS_DOMAIN = os.environ.get('PORTAL_AD_NETBIOS_DOMAIN', '')
+AD_UPN_SUFFIX = os.environ.get('PORTAL_AD_UPN_SUFFIX', '')
+AD_SEARCH_BASE = os.environ.get('PORTAL_AD_SEARCH_BASE', '')
+AD_CA_CERT_FILE = os.environ.get('PORTAL_AD_CA_CERT_FILE', '')
+AD_CONNECT_TIMEOUT = 5
+AD_REQUIRE_HTTPS = True
+if AD_AUTH_ENABLED:
+    if not all((AD_LDAPS_URL, AD_NETBIOS_DOMAIN, AD_UPN_SUFFIX, AD_SEARCH_BASE)):
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured('Для AD-входа задайте PORTAL_AD_LDAPS_URL, PORTAL_AD_NETBIOS_DOMAIN, PORTAL_AD_UPN_SUFFIX, PORTAL_AD_SEARCH_BASE.')
+    AUTHENTICATION_BACKENDS.insert(0, 'base.ad_auth.ActiveDirectoryBackend')

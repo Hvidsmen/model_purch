@@ -1,0 +1,6 @@
+# Pure Python: supports Windows without system LDAP libraries or admin rights.
+-r requirements.txt
+ldap3>=2.9.1,<3
+# Optional direct HTTPS deployment, also pure Python.
+cheroot>=10,<12
+whitenoise>=6.8,<7
