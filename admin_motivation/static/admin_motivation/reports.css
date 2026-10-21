@@ -67,3 +67,9 @@
 .native-report .motivation-earned{font-weight:700}
 .native-report .metric-heading.motivation-potential{background:#ebe5ff!important;color:#53399a}
 .native-report .metric-heading.motivation-earned{background:#dcf2e5!important;color:#146342}
+
+/* Keep the detailed report hierarchy visible during horizontal scrolling. */
+#manager-detail-report .division-report-grid>span:first-child,#manager-detail-report .division-report-grid>strong:first-child{position:sticky;left:0;z-index:2;background:#fff;box-shadow:1px 0 0 #dce3ec}
+#manager-detail-report .report-column-header>span:first-child,#manager-detail-report .report-period-header>span:first-child,#manager-detail-report .manager-division-execution>strong:first-child{background:#f1f5f9;z-index:3}
+#manager-detail-report .report-total-row>strong:first-child{background:#e8eff8;z-index:3}
+#manager-detail-report .native-division-node>summary:hover>.native-label{background:#f7f9fc}

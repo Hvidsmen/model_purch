@@ -221,6 +221,17 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.locator('#manager-detail-expand').click()
             expect(self.page.locator('#manager-detail-nodes').get_by_text('Иванов', exact=True)).to_be_visible()
             expect(self.page.locator('#manager-detail-nodes').get_by_text('<Brand>', exact=True)).to_be_visible()
+            viewport = root.locator('..')
+            viewport.evaluate('(el) => el.scrollLeft = 0')
+            label = root.locator('#manager-detail-nodes > details > summary > .native-label').first
+            initial_left = label.bounding_box()['x']
+            initial_metric_left = root.locator('.report-total-row > span:not([hidden])').first.bounding_box()['x']
+            viewport.evaluate('(el) => el.scrollLeft = 550')
+            self.assertAlmostEqual(label.bounding_box()['x'], initial_left, delta=2)
+            self.assertLess(root.locator('.report-total-row > span:not([hidden])').first.bounding_box()['x'], initial_metric_left - 400)
+            self.assertTrue(label.evaluate('(el) => {const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.left+30,r.top+r.height/2));}'))
+            viewport.evaluate('(el) => el.scrollLeft = 0')
+
             expect(self.page.locator('#manager-detail-report [data-manager-extra]').first).to_be_hidden()
             self.page.locator('#manager-detail-extra').check()
             expect(self.page.locator('#manager-detail-report [data-manager-extra]').first).to_be_visible()
