@@ -7,6 +7,7 @@
   pending?.abort(); pending = new AbortController(); results.replaceChildren();
   if (query.value.trim().length < 3) { status.textContent = 'Введите не менее трёх символов.'; return; }
   status.textContent = 'Поиск в домене…'; button.disabled = true;
+  const timeout = setTimeout(() => pending.abort(), 12000);
   try {
    const url = new URL(button.dataset.url, location.origin); url.searchParams.set('q', query.value.trim());
    const response = await fetch(url, {credentials: 'same-origin', signal: pending.signal}); const data = await response.json();
@@ -24,8 +25,8 @@
      status.textContent = 'Сотрудник выбран. Назначьте роль и доступ к отчётам, затем нажмите «Добавить пользователя».';
     }); results.append(item);
    });
-  } catch (error) { if (error.name !== 'AbortError') status.textContent = 'Поиск AD недоступен. Проверьте соединение с сервером.'; }
-  finally { button.disabled = false; }
+  } catch (error) { status.textContent = error.name === 'AbortError' ? 'AD не ответила вовремя. Можно указать DOMAIN\\login вручную и назначить права.' : 'Поиск AD недоступен. Проверьте соединение с сервером.'; }
+  finally { clearTimeout(timeout); button.disabled = false; }
  });
  query.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); button.click(); } });
 })();
