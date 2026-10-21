@@ -192,6 +192,7 @@ CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
 
 # AD form login is independent of IIS; bare usernames still use local passwords.
 AD_AUTH_ENABLED = os.environ.get('PORTAL_AD_AUTH', '').lower() in {'1', 'true', 'yes'}
+AD_AUTH_METHOD = os.environ.get('PORTAL_AD_AUTH_METHOD', 'ldaps').lower()
 AD_LDAPS_URL = os.environ.get('PORTAL_AD_LDAPS_URL', '')
 AD_NETBIOS_DOMAIN = os.environ.get('PORTAL_AD_NETBIOS_DOMAIN', '')
 AD_UPN_SUFFIX = os.environ.get('PORTAL_AD_UPN_SUFFIX', '')
@@ -200,7 +201,13 @@ AD_CA_CERT_FILE = os.environ.get('PORTAL_AD_CA_CERT_FILE', '')
 AD_CONNECT_TIMEOUT = 5
 AD_REQUIRE_HTTPS = True
 if AD_AUTH_ENABLED:
-    if not all((AD_LDAPS_URL, AD_NETBIOS_DOMAIN, AD_UPN_SUFFIX, AD_SEARCH_BASE)):
-        from django.core.exceptions import ImproperlyConfigured
-        raise ImproperlyConfigured('Для AD-входа задайте PORTAL_AD_LDAPS_URL, PORTAL_AD_NETBIOS_DOMAIN, PORTAL_AD_UPN_SUFFIX, PORTAL_AD_SEARCH_BASE.')
+    from django.core.exceptions import ImproperlyConfigured
+    if AD_AUTH_METHOD not in ('ldaps', 'windows'):
+        raise ImproperlyConfigured('PORTAL_AD_AUTH_METHOD должен быть windows или ldaps.')
+    if not AD_NETBIOS_DOMAIN or not AD_UPN_SUFFIX:
+        raise ImproperlyConfigured('Для AD-входа задайте PORTAL_AD_NETBIOS_DOMAIN и PORTAL_AD_UPN_SUFFIX.')
+    if AD_AUTH_METHOD == 'ldaps' and not all((AD_LDAPS_URL, AD_SEARCH_BASE)):
+        raise ImproperlyConfigured('Для LDAPS задайте PORTAL_AD_LDAPS_URL и PORTAL_AD_SEARCH_BASE.')
+    if AD_AUTH_METHOD == 'windows' and os.name != 'nt':
+        raise ImproperlyConfigured('Режим AD windows использует LogonUser и требует Windows-сервер.')
     AUTHENTICATION_BACKENDS.insert(0, 'base.ad_auth.ActiveDirectoryBackend')

@@ -1,4 +1,4 @@
-"""On-premises AD password authentication over certificate-verified LDAPS."""
+"""AD form login via native Windows validation or certificate-verified LDAPS."""
 import logging
 import ssl
 from urllib.parse import urlsplit
@@ -82,7 +82,11 @@ class ActiveDirectoryBackend(ModelBackend):
         if not password or (settings.AD_REQUIRE_HTTPS and (request is None or not request.is_secure())):
             raise PermissionDenied
         try:
-            identity = directory_identity(username, password)
+            if settings.AD_AUTH_METHOD == 'windows':
+                from .windows_password import windows_password_identity
+                identity = windows_password_identity(username, password)
+            else:
+                identity = directory_identity(username, password)
         except PermissionDenied:
             raise
         except Exception as error:
@@ -98,10 +102,12 @@ class ActiveDirectoryBackend(ModelBackend):
                 user.is_staff = False
                 user.is_superuser = False
             for field in ('first_name', 'last_name', 'email'):
-                setattr(user, field, identity[field])
-            fields = ['first_name', 'last_name', 'email']
+                if field in identity:
+                    setattr(user, field, identity[field])
+            fields = [field for field in ('first_name', 'last_name', 'email') if field in identity]
             if created:
                 fields += ['password', 'is_staff', 'is_superuser']
-            user.save(update_fields=fields)
+            if fields:
+                user.save(update_fields=fields)
         # No AD password is saved. Portal roles are assigned by an administrator.
         return user
