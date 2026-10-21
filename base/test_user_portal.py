@@ -115,3 +115,13 @@ class UserPortalTests(TestCase):
         self.assertEqual(response.status_code, 202)
         self.assertTrue(response.json()['pending'])
         self.assertNotIn('users', response.json())
+
+    def test_forest_domains_and_selected_domain_are_admin_only(self):
+        with patch('base.windows_domains.domain_map', return_value={'daichi': 'daichi.local', 'tt': 'tt.daichi.local'}):
+            response = self.client.get(reverse('portal_directory_domains'))
+        self.assertEqual(response.json()['domains'][1]['name'], 'TT')
+        with patch('base.user_views.search_accounts', return_value=[]) as lookup:
+            self.client.get(reverse('portal_directory_search'), {'q': 'Красноперов', 'domain': 'TT'})
+            lookup.assert_called_once_with('Красноперов', background=True, domain='TT')
+        self.client.logout()
+        self.assertEqual(self.client.get(reverse('portal_directory_domains')).status_code, 403)

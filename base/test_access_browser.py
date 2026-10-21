@@ -331,3 +331,31 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 finally:
                     browser.close()
         self.assertEqual(search.call_count, 3)
+
+    def test_ad_forest_domain_selector_sends_selected_domain_and_keeps_identity(self):
+        from playwright.sync_api import sync_playwright, expect
+        from unittest.mock import patch
+        ensure_roles()
+        actor = User.objects.create_user('forest-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        with patch('base.windows_domains.domain_map', return_value={'daichi': 'daichi.local', 'tt': 'tt.daichi.local'}), patch('base.user_views.search_accounts', return_value=[{'username': 'tt\\krasnoperov', 'full_name': 'Красноперов Иван'}]) as search:
+            with sync_playwright() as driver:
+                browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(self.live_server_url + '/accounts/login/')
+                    page.fill('#id_username', actor.username)
+                    page.fill('#id_password', 'browser-test-password')
+                    page.get_by_role('button', name='Войти', exact=True).click()
+                    page.goto(self.live_server_url + '/accounts/users/')
+                    page.get_by_text('Найти в Active Directory', exact=True).click()
+                    expect(page.locator('#ad-domain option')).to_have_count(2)
+                    page.select_option('#ad-domain', 'TT')
+                    page.fill('#ad-query', 'Красноперов')
+                    page.locator('#ad-find').click()
+                    page.locator('.user-ad-result').click()
+                    expect(page.locator('#id_username')).to_have_value('tt\\krasnoperov')
+                    expect(page.locator('#id_last_name')).to_have_value('Красноперов')
+                finally:
+                    browser.close()
+        search.assert_called_once_with('Красноперов', background=True, domain='TT')

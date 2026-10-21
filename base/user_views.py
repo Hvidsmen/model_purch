@@ -135,10 +135,27 @@ def directory(request):
     if len(query) < 3:
         return JsonResponse({'error': 'Введите не менее трёх символов имени или логина.'}, status=400)
     try:
-        return JsonResponse({'users': search_accounts(query, background=True)})
+        options = {'background': True}
+        if request.GET.get('domain'):
+            options['domain'] = request.GET['domain'][:150]
+        return JsonResponse({'users': search_accounts(query, **options)})
     except DirectoryPending as error:
         return JsonResponse({'pending': True, 'message': str(error)}, status=202)
     except RuntimeError as error:
         return JsonResponse({'error': str(error)}, status=503)
     except Exception:
         return JsonResponse({'error': 'Поиск AD недоступен. Проверьте доступ Windows-сервера к домену.'}, status=503)
+
+
+@require_GET
+def directory_domains(request):
+    if not can_access(request.user, 'admin'):
+        raise PermissionDenied
+    from .windows_domains import domain_map
+    try:
+        domains = domain_map(background=True)
+        return JsonResponse({'domains': [{'name': name.upper(), 'dns': dns} for name, dns in sorted(domains.items()) if name]})
+    except DirectoryPending as error:
+        return JsonResponse({'pending': True, 'message': str(error)}, status=202)
+    except Exception:
+        return JsonResponse({'error': 'Список доменов AD недоступен. Основной домен можно использовать; для остальных проверьте доступ Windows к лесу AD.'}, status=503)

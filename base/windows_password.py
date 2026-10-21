@@ -51,14 +51,24 @@ def _token_account(security, token):
 def windows_password_identity(username, password):
     if not password or '\x00' in password or '\x00' in username:
         raise PermissionDenied
+    from .windows_domains import domain_map
     if '\\' in username:
         parts = username.split('\\')
-        if len(parts) != 2 or parts[0].casefold() != settings.AD_NETBIOS_DOMAIN.casefold():
+        if len(parts) != 2:
             raise PermissionDenied
-        domain, account = settings.AD_NETBIOS_DOMAIN, parts[1]
+        domain, account = parts
+        expected_domain = domain.casefold()
+        if expected_domain != settings.AD_NETBIOS_DOMAIN.casefold() and expected_domain not in domain_map():
+            raise PermissionDenied
     else:
         parts = username.split('@')
-        if len(parts) != 2 or parts[1].casefold() != settings.AD_UPN_SUFFIX.casefold():
+        if len(parts) != 2:
+            raise PermissionDenied
+        domains = {settings.AD_NETBIOS_DOMAIN.casefold(): settings.AD_UPN_SUFFIX.casefold()}
+        if parts[1].casefold() != settings.AD_UPN_SUFFIX.casefold():
+            domains = domain_map()
+        expected_domain = next((name for name, suffix in domains.items() if suffix == parts[1].casefold()), None)
+        if expected_domain is None:
             raise PermissionDenied
         domain, account = None, username
     if not account or any(character.isspace() or ord(character) < 32 for character in account):
@@ -71,7 +81,7 @@ def windows_password_identity(username, password):
         raise PermissionDenied
     try:
         actual_domain, actual_name = _token_account(security, token)
-        if actual_domain.casefold() != settings.AD_NETBIOS_DOMAIN.casefold():
+        if actual_domain.casefold() != expected_domain:
             raise PermissionDenied
         canonical = (actual_domain + '\\' + actual_name).casefold()
         if not actual_name or '\\' in actual_name or len(canonical) > 150:

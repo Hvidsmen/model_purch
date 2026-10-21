@@ -75,3 +75,23 @@ class WindowsPasswordTests(TestCase):
                 with self.subTest(username=username), self.assertRaises(PermissionDenied):
                     windows_password_identity(username, 'secret')
         api.assert_not_called()
+
+    def test_child_domain_login_and_upn_use_windows_canonical_identity(self):
+        api, kernel = MagicMock(), MagicMock()
+        domains = {'daichi': 'daichi.local', 'tt': 'tt.daichi.local'}
+        with patch('base.windows_domains.domain_map', return_value=domains), patch('base.windows_password._load_api', return_value=(api, kernel)), patch('base.windows_password._token_account', return_value=('TT', 'Krasnoperov')):
+            self.assertEqual(windows_password_identity('TT\\Krasnoperov', 'test'), {'username': 'tt\\krasnoperov'})
+            self.assertEqual(api.LogonUserW.call_args.args[:2], ('Krasnoperov', 'TT'))
+            self.assertEqual(windows_password_identity('Krasnoperov@tt.daichi.local', 'test'), {'username': 'tt\\krasnoperov'})
+            self.assertEqual(api.LogonUserW.call_args.args[:2], ('Krasnoperov@tt.daichi.local', None))
+        self.assertEqual(kernel.CloseHandle.call_count, 2)
+
+    def test_another_forests_domain_and_mismatched_token_rejected(self):
+        api, kernel = MagicMock(), MagicMock()
+        with patch('base.windows_domains.domain_map', return_value={'daichi': 'daichi.local', 'tt': 'tt.daichi.local'}), patch('base.windows_password._load_api', return_value=(api, kernel)), patch('base.windows_password._token_account', return_value=('DAICHI', 'Krasnoperov')):
+            with self.assertRaises(PermissionDenied):
+                windows_password_identity('TT\\Krasnoperov', 'test')
+            with self.assertRaises(PermissionDenied):
+                windows_password_identity('EXTERNAL\\Krasnoperov', 'test')
+        self.assertEqual(api.LogonUserW.call_count, 1)
+        kernel.CloseHandle.assert_called_once()

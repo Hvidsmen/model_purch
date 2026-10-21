@@ -10,6 +10,8 @@
   const timeout = setTimeout(() => pending.abort(), 150000);
   try {
    const url = new URL(button.dataset.url, location.origin); url.searchParams.set('q', query.value.trim());
+   const selectedDomain = document.getElementById('ad-domain')?.value;
+   if (selectedDomain) url.searchParams.set('domain', selectedDomain);
    const started = Date.now();
    let data;
    while (true) {
@@ -36,6 +38,28 @@
    });
   } catch (error) { status.textContent = error.name === 'AbortError' ? 'AD не ответила вовремя. Можно указать DOMAIN\\login вручную и назначить права.' : 'Поиск AD недоступен. Проверьте соединение с сервером.'; }
   finally { clearTimeout(timeout); button.disabled = false; }
+ });
+ const domain = document.getElementById('ad-domain'), domainStatus = document.getElementById('ad-domain-status');
+ let domainsLoaded = false;
+ domain?.closest('details').addEventListener('toggle', async () => {
+  if (!domain.closest('details').open || domainsLoaded) return;
+  domainsLoaded = true; domainStatus.textContent = 'Определяем домены леса AD…';
+  try {
+   const started = Date.now();
+   while (true) {
+    const response = await fetch(domain.dataset.url, {credentials: 'same-origin'});
+    const data = await response.json();
+    if (!response.ok) { domainStatus.textContent = data.error; domainsLoaded = false; return; }
+    if (data.pending) {
+     if (Date.now() - started > 150000) throw new Error('timeout');
+     await new Promise(resolve => setTimeout(resolve, 1500)); continue;
+    }
+    const previous = domain.value.toLowerCase();
+    domain.replaceChildren(...data.domains.map(item => { const option = document.createElement('option'); option.value = item.name; option.textContent = `${item.name} · ${item.dns}`; option.selected = item.name.toLowerCase() === previous; return option; }));
+    domainStatus.textContent = `Доменов: ${data.domains.length}. Выберите домен сотрудника. Можно также указать DOMAIN\\login в поиске.`;
+    break;
+   }
+  } catch (error) { domainStatus.textContent = 'Не удалось получить домены AD. Основной домен остаётся доступен.'; domainsLoaded = false; }
  });
  query.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); button.click(); } });
 })();

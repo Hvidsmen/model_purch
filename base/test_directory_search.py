@@ -126,3 +126,14 @@ class DirectorySearchTests(SimpleTestCase):
             job.set_exception(RuntimeError('Контроллер недоступен'))
             with self.assertRaisesRegex(RuntimeError, 'Контроллер недоступен'):
                 search_accounts('Бурукин', background=True)
+
+    def test_selected_and_qualified_domain_searches_do_not_mix_accounts(self):
+        domains = {'daichi': 'daichi.local', 'tt': 'tt.daichi.local'}
+        result = SimpleNamespace(returncode=0, stdout=json.dumps([{'username': 'tt\\krasnoperov', 'full_name': 'Красноперов Иван'}]).encode('utf-8'))
+        with patch('base.windows_domains.domain_map', return_value=domains), patch('base.directory_search.subprocess.run', return_value=result) as run:
+            self.assertEqual(search_accounts('TT\\krasnoperov')[0]['username'], 'tt\\krasnoperov')
+            self.assertEqual(run.call_args.args[0][-3:], ['TT', '', 'krasnoperov'])
+            self.assertEqual(search_accounts('krasnoperov', domain='TT')[0]['username'], 'tt\\krasnoperov')
+            self.assertEqual(run.call_count, 1)
+            with self.assertRaisesRegex(RuntimeError, 'Домен не найден'):
+                search_accounts('EXTERNAL\\krasnoperov')

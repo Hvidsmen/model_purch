@@ -25,6 +25,7 @@ from django.conf.urls.static import static
 urlpatterns = ([
                    path('accounts/windows/', identity_views.windows_login, name='portal_windows_login'),
                    path('accounts/users/', user_views.users, name='portal_users'),
+                   path('accounts/directory/domains/', user_views.directory_domains, name='portal_directory_domains'),
                    path('accounts/directory/', user_views.directory, name='portal_directory_search'),
                    path('accounts/groups/', group_views.groups, name='portal_user_groups'),
                    path('accounts/report-authors/', identity_views.report_authors, name='portal_report_authors'),
