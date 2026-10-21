@@ -219,6 +219,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(root.locator('[data-manager-period-input]').first).to_be_visible()
             expect(root.locator('.report-column-header > .manager-period-bonus').first).to_be_hidden()
             expect(root.locator('.report-column-header > span').filter(has_text='Доплата за кварталы').last).to_be_visible()
+            motivation_totals = root.locator('.report-column-header > span').filter(has_text='Итого мотивация')
+            expect(motivation_totals.last).to_be_visible()
+            self.assertEqual(root.locator('.report-column-header > span:visible').filter(has_text='Итого мотивация').count(), 1)
+
             totals_before = root.locator('.report-total-row').inner_text()
             self.page.locator('[data-manager-period-toggle="0"]').uncheck()
             expect(root.locator('.report-period-header > [data-manager-period="0"]')).to_be_hidden()
@@ -289,6 +293,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             authors.locator('[data-multi-apply]').click()
             branches = self.page.locator('.manager-multi-filter[data-field=subdivision]')
             branches.locator('summary').click()
+            expect(branches.locator('input[type=search]')).to_be_focused()
             branches.locator('input[type=search]').fill('A')
             expect(branches.locator('.manager-multi-options label:visible')).to_have_count(1)
             branches.locator('[data-multi-all]').click()
