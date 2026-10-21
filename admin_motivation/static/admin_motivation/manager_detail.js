@@ -37,6 +37,7 @@
   const label = document.createElement('span'); label.className = 'native-label'; label.textContent = node.label; row.appendChild(label);
   node.values.forEach((block, blockIndex) => block.forEach((value, index) => {
    const cell = document.createElement('span'); cell.className = 'report-number';
+   if (index === 16) cell.classList.add('motivation-execution');
    cell.dataset.managerPeriod = blockIndex;
    cell.classList.toggle('manager-period-hidden', hiddenPeriods.has(blockIndex));
    cell.textContent = value == null ? '—' : index < 5 || index === 12 || index === 16 ? percent.format(Number(value) * 100) + '%' : money.format(Number(value));

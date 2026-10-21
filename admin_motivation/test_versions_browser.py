@@ -213,6 +213,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.assertEqual(execution.evaluate('(row) => row.nextElementSibling.classList.contains("report-total-row")'), True)
             expect(execution.locator('span:not([hidden])').nth(4)).to_have_text('90,00%')
             root = self.page.locator('#manager-detail-report')
+            self.assertEqual(root.locator('.report-column-header > .motivation-execution').first.evaluate('(el) => getComputedStyle(el).backgroundColor'), 'rgb(237, 233, 254)')
             totals_before = root.locator('.report-total-row').inner_text()
             self.page.locator('[data-manager-period-toggle="0"]').uncheck()
             expect(root.locator('.report-period-header > [data-manager-period="0"]')).to_be_hidden()
