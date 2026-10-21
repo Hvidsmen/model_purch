@@ -10,6 +10,7 @@ from concurrent.futures import ThreadPoolExecutor
 from django.core.cache import cache
 from ctypes import wintypes
 from django.conf import settings
+from .windows_directory import WindowsDirectoryError, lookup_account
 
 
 _catalog_lock = threading.Lock()
@@ -31,6 +32,12 @@ def _load_catalog(domain, server, exact, key):
             raise RuntimeError('Windows не определила домены AD за 15 секунд. Проверьте доступ к контроллеру домена.') from None
         raise RuntimeError('AD не ответила за 2 минуты. Проверьте доступ к контроллеру домена. Можно добавить DOMAIN\\login вручную.') from None
     if process.returncode:
+        try:
+            detail = json.loads(getattr(process, 'stdout', b'').decode('utf-8')).get('error', {})
+            if detail.get('stage') in {'LookupAccountNameW', 'LookupAccountSidW', 'NetGetDCName', 'NetUserEnum', 'DsEnumerateDomainTrustsW'} and isinstance(detail.get('code'), int):
+                raise WindowsDirectoryError(detail['stage'], detail['code'])
+        except (ValueError, AttributeError):
+            pass
         raise RuntimeError('Не удалось получить список AD. Проверьте контроллер домена и права учётной записи службы портала. Можно указать DOMAIN\\login вручную.')
     catalog = json.loads(process.stdout.decode('utf-8'))
     cache.set(key, catalog, timeout=300)
@@ -78,7 +85,7 @@ def search_accounts(query, *, background=False, domain=None):
     key = 'portal-domain-users:' + domain.casefold() + ':' + server.casefold()
     catalog = cache.get(key)
     exact = exact if re.fullmatch(r'[a-zA-Z0-9_.-]+', exact) else ''
-    if catalog is None and exact:
+    if exact:
         key += ':login:' + exact.casefold()
         catalog = cache.get(key)
     if catalog is None and background:
@@ -98,6 +105,8 @@ def search_accounts(query, *, background=False, domain=None):
 
 
 def _read_windows_accounts(domain, configured_server='', exact=''):
+    if exact:
+        return lookup_account(domain, exact)
     api = ctypes.WinDLL('Netapi32.dll')
     buffer = ctypes.c_void_p()
     server = ctypes.c_wchar_p()
@@ -106,8 +115,10 @@ def _read_windows_accounts(domain, configured_server='', exact=''):
     api.NetApiBufferFree.argtypes = [ctypes.c_void_p]
     if configured_server:
         server.value = '\\\\' + configured_server.lstrip('\\')
-    elif api.NetGetDCName(None, domain, ctypes.byref(buffer)):
-        raise RuntimeError('Контроллер домена недоступен для учётной записи службы портала.')
+    else:
+        status = api.NetGetDCName(None, domain, ctypes.byref(buffer))
+        if status:
+            raise WindowsDirectoryError('NetGetDCName', status)
     if not configured_server:
         try:
             server.value = ctypes.wstring_at(buffer)
@@ -115,21 +126,6 @@ def _read_windows_accounts(domain, configured_server='', exact=''):
             api.NetApiBufferFree(buffer)
     class UserInfo(ctypes.Structure):
         _fields_ = [('name', wintypes.LPWSTR), ('full_name', wintypes.LPWSTR), ('comment', wintypes.LPWSTR), ('flags', wintypes.DWORD), ('user_id', wintypes.DWORD)]
-    if exact:
-        api.NetUserGetInfo.argtypes = [wintypes.LPCWSTR, wintypes.LPCWSTR, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p)]
-        api.NetUserGetInfo.restype = wintypes.DWORD
-        buffer = ctypes.c_void_p()
-        status = api.NetUserGetInfo(server, exact, 20, ctypes.byref(buffer))
-        try:
-            if status == 2221:  # NERR_UserNotFound: distinguish absence from network failure.
-                return []
-            if status:
-                raise RuntimeError('Windows не разрешила чтение учётной записи AD.')
-            row = ctypes.cast(buffer, ctypes.POINTER(UserInfo)).contents
-            return [] if row.flags & 2 else [{'username': (domain + '\\' + row.name).casefold(), 'full_name': row.full_name or ''}]
-        finally:
-            if buffer:
-                api.NetApiBufferFree(buffer)
     api.NetUserEnum.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD, ctypes.POINTER(ctypes.c_void_p), wintypes.DWORD, ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(wintypes.DWORD), ctypes.POINTER(ctypes.c_size_t)]
     api.NetUserEnum.restype = wintypes.DWORD
     resume = ctypes.c_size_t(0)
@@ -141,7 +137,7 @@ def _read_windows_accounts(domain, configured_server='', exact=''):
         status = api.NetUserEnum(server, 20, 2, ctypes.byref(buffer), 262144, ctypes.byref(read), ctypes.byref(total), ctypes.byref(resume))
         try:
             if status not in (0, 234):
-                raise RuntimeError('Windows не разрешила чтение пользователей AD. Проверьте права учётной записи службы портала.')
+                raise WindowsDirectoryError('NetUserEnum', status)
             rows = ctypes.cast(buffer, ctypes.POINTER(UserInfo))
             for index in range(read.value):
                 row = rows[index]
@@ -163,5 +159,8 @@ if __name__ == '__main__':
     try:
         accounts = _read_windows_accounts(sys.argv[1], sys.argv[2], sys.argv[3])
         sys.stdout.buffer.write(json.dumps(accounts, ensure_ascii=False).encode('utf-8'))
+    except WindowsDirectoryError as error:
+        sys.stdout.buffer.write(json.dumps({'error': {'stage': error.stage, 'code': error.code}}).encode('utf-8'))
+        sys.exit(1)
     except Exception:
         sys.exit(1)

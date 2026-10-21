@@ -6,6 +6,7 @@ import sys
 from ctypes import wintypes
 from django.conf import settings
 from django.core.cache import cache
+from .windows_directory import WindowsDirectoryError
 
 
 def _read_forest_domains(server='', include_trusted=True):
@@ -24,7 +25,7 @@ def _read_forest_domains(server='', include_trusted=True):
         flags = 1 | 2 | 32 if include_trusted else 1
         status = api.DsEnumerateDomainTrustsW(server or None, flags, ctypes.byref(buffer), ctypes.byref(count))
         if status:
-            raise RuntimeError('Windows не смогла получить домены леса AD.')
+            raise WindowsDirectoryError('DsEnumerateDomainTrustsW', status)
         rows = ctypes.cast(buffer, ctypes.POINTER(DomainTrust))
         return [{'netbios': rows[i].netbios, 'dns': rows[i].dns or ''}
                 for i in range(count.value) if rows[i].netbios and rows[i].flags & flags]
@@ -53,5 +54,8 @@ def domain_map(*, background=False):
 if __name__ == '__main__':
     try:
         sys.stdout.buffer.write(json.dumps(_read_forest_domains(sys.argv[1], len(sys.argv) > 2 and sys.argv[2] == 'trusted'), ensure_ascii=False).encode('utf-8'))
+    except WindowsDirectoryError as error:
+        sys.stdout.buffer.write(json.dumps({'error': {'stage': error.stage, 'code': error.code}}).encode('utf-8'))
+        sys.exit(1)
     except Exception:
         sys.exit(1)
