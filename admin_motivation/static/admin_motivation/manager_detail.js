@@ -72,12 +72,16 @@
   root.style.setProperty('--report-blocks', periodToggles.length - hiddenPeriods.size + 1);
  }));
  nodes.forEach(node => target.appendChild(create(node)));
- const expandAll = () => {
-  const expand = element => { element._load?.(); element.open = true; [...element.children].forEach(child => child.querySelectorAll(':scope > details').forEach(expand)); };
-  target.querySelectorAll(':scope > details').forEach(expand);
+ const expandTree = (maxDepth = Infinity) => {
+  const expand = (element, depth) => {
+   if (depth >= maxDepth) return;
+   element._load?.(); element.open = true;
+   [...element.children].forEach(child => child.querySelectorAll(':scope > details').forEach(item => expand(item, depth + 1)));
+  };
+  target.querySelectorAll(':scope > details').forEach(element => expand(element, 0));
  };
- expandAll();
- document.getElementById('manager-detail-expand').addEventListener('click', expandAll);
+ expandTree(2);
+ document.getElementById('manager-detail-expand').addEventListener('click', () => expandTree());
  document.getElementById('manager-detail-collapse').addEventListener('click', () => target.querySelectorAll('details').forEach(element => element.open = false));
  const updateColumns = () => root.style.setProperty('--report-columns', 8 + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
  root.addEventListener('click', event => {
