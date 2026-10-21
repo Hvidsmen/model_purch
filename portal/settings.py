@@ -199,7 +199,7 @@ AD_UPN_SUFFIX = os.environ.get('PORTAL_AD_UPN_SUFFIX', '')
 AD_SEARCH_BASE = os.environ.get('PORTAL_AD_SEARCH_BASE', '')
 AD_CA_CERT_FILE = os.environ.get('PORTAL_AD_CA_CERT_FILE', '')
 AD_CONNECT_TIMEOUT = 5
-AD_REQUIRE_HTTPS = True
+AD_REQUIRE_HTTPS = os.environ.get('PORTAL_AD_ALLOW_HTTP', '').strip().lower() not in ('1', 'true', 'yes', 'on')
 if AD_AUTH_ENABLED:
     from django.core.exceptions import ImproperlyConfigured
     if AD_AUTH_METHOD not in ('ldaps', 'windows'):

@@ -47,6 +47,23 @@ class ActiveDirectoryTests(TestCase):
         self.assertFalse(get_user_model().objects.filter(username='contoso\\alice').exists())
         self.assertContains(self.client.get(reverse('portal_login')), 'не вводите доменный пароль')
 
+    @override_settings(AD_REQUIRE_HTTPS=False, AD_AUTH_METHOD='windows')
+    def test_explicit_http_windows_login_preserves_role_without_storing_password(self):
+        user = get_user_model().objects.create_user('contoso\\alice', is_staff=True)
+        user.groups.add(Group.objects.get(name=ADMIN))
+        with patch('base.windows_password.windows_password_identity', return_value={'username': user.username}) as windows:
+            response = self.client.post(reverse('portal_login'), {'username': 'CONTOSO\\alice', 'password': 'not-saved'})
+        self.assertEqual(response.status_code, 302)
+        windows.assert_called_once_with('CONTOSO\\alice', 'not-saved')
+        self.assertEqual(self.client.session['_auth_user_id'], str(user.pk))
+        self.assertNotIn('not-saved', str(dict(self.client.session)))
+        user.refresh_from_db()
+        self.assertTrue(user.groups.filter(name=ADMIN).exists())
+        self.client.logout()
+        response = self.client.get(reverse('portal_login'))
+        self.assertContains(response, 'CONTOSO\\логин')
+        self.assertNotContains(response, 'не вводите доменный пароль')
+
     def test_upn_reuses_directory_sam_name_and_preserves_existing_role(self):
         user = get_user_model().objects.create_user('contoso\\alice', is_staff=True)
         user.groups.add(Group.objects.get(name=ADMIN))

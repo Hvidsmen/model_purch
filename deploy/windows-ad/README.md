@@ -55,3 +55,24 @@ $env:PORTAL_WINDOWS_AUTH = 'false'
 - Для обычного локального пользователя укажите логин без домена и задайте локальный пароль.
 
 Это создаёт запись **в портале**, а не новую учётную запись в Active Directory. Сотрудник должен уже существовать в домене. При входе заранее назначенные роль и профиль сохраняются. Для проверки интерфейса выбранной роли используйте «Просмотреть как пользователь».
+
+
+### Доменный вход по HTTP по решению администратора
+
+Если портал должен работать по HTTP, явно разрешите этот режим перед запуском
+в том же окне PowerShell:
+
+```powershell
+$env:PORTAL_AD_AUTH = 'true'
+$env:PORTAL_AD_AUTH_METHOD = 'windows'
+$env:PORTAL_AD_NETBIOS_DOMAIN = 'DAICHI'
+$env:PORTAL_AD_UPN_SUFFIX = 'daichi.local'
+$env:PORTAL_AD_ALLOW_HTTP = 'true'
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\start.ps1 -Database .\db.sqlite3 -BindAddress 0.0.0.0 -Port 8000
+```
+
+Адрес: `http://192.168.221.178:8000`, логин `DAICHI\login`.
+Windows проверяет пароль без LDAP/LDAPS. Между браузером и порталом пароль
+передаётся без шифрования. По умолчанию разрешение HTTP выключено; удаление
+переменной или значение `false` возвращает требование HTTPS. Настройка не меняет
+роли, активность пользователей и проверку пароля Windows.
