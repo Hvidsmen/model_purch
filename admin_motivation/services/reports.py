@@ -306,7 +306,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
         values = scoped_values(kind, values, access_scope)
     if kind == 'manager-detail' and not values.get('TypeCoeff_'):
         raise ValidationError('Выберите вид работника.')
-    if kind == 'manager' and any(not values.get(key) for key in ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')):
+    if kind == 'manager' and any(not values.get(key) for key in (('TypeCoeff_', 'Subdivision', 'qm') if access_scope and access_scope.get('all_authors') else ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm'))):
         raise ValidationError('Выберите вид работника, подразделение, автора сделки и квартал.')
     if kind == 'deals' and (not values.get('TypeCoeff') or not values.get('Division')):
         raise ValidationError('Выберите тип коэффициента и подразделение.')
@@ -350,7 +350,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
             sums = ','.join('SUM(['+key+']) AS ['+key+']' for key in DIV_NUMBERS)
             rows = fetch(cursor, 'SELECT '+columns+','+sums+' FROM ('+sql+') AS report_source GROUP BY '+columns, args)
             return subdivision_report(rows, scope)
-        required = ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')
+        required = ('TypeCoeff_', 'Subdivision', 'qm') if access_scope and access_scope.get('all_authors') else ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')
         if any(not values.get(key) for key in required): raise ValidationError('Выберите вид работника, подразделение, автора сделки и квартал.')
         rows = fetch(cursor, sql, args)
         period_sql, period_args = bind_sql(

@@ -12,15 +12,23 @@
  const selectedGroups = () => [...document.querySelectorAll('input[name="groups"]:checked, select[name="groups"] option:checked')].some(input => configuredGroups.has(input.value));
  const roleField = role?.closest('.access-field') || role?.closest('.form-row');
  const branchField = branch.closest('.access-field') || branch.closest('.form-row');
+ const authorField = author.closest('.access-field') || author.closest('.form-row');
+ let editRole = false;
+ const changeRole = document.createElement('button'); changeRole.type = 'button'; changeRole.className = 'user-text-button'; changeRole.textContent = 'Изменить роль';
+ changeRole.addEventListener('click', () => { editRole = true; syncGroupAccess(); role?.focus(); });
  const groupHint = document.createElement('p'); groupHint.className = 'access-explanation';
  roleField?.before(groupHint);
  function syncGroupAccess() {
   const grouped = selectedGroups();
   const inherited = grouped && (!role?.value || role.value === 'Политик');
-  if (roleField) roleField.hidden = inherited;
-  if (branchField) branchField.hidden = grouped;
+  if (roleField) roleField.hidden = inherited && !editRole;
+  const branchLead = ['Зам. директора', 'Директор'].includes(role?.value);
+  if (authorField) authorField.hidden = branchLead;
+  if (branchField) branchField.hidden = grouped || branchLead;
   groupHint.hidden = !grouped;
   groupHint.textContent = inherited ? 'Роль: Политик · доступ из групп. Подразделения и вид работника берутся из выбранных групп.' : 'Подразделения и вид работника берутся из групп. Роль в портале задана отдельно.';
+  if (inherited) groupHint.append(' ', changeRole);
+  if (branchLead && grouped) groupHint.textContent = role.value === 'Директор' ? 'Директор: все виды работников и авторы сделок в филиалах выбранных групп.' : 'Зам. директора: все политики и авторы сделок в подразделениях выбранных групп.';
   if (grouped) status.textContent = 'Подразделения определяются группами. ФИО автора сделки можно исправить вручную.';
  }
  let generated = null;

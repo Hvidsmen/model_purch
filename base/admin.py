@@ -6,7 +6,7 @@ from django.contrib.auth.forms import UserChangeForm, AdminUserCreationForm, Use
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.validators import UnicodeUsernameValidator
 import re
-from .access import ADMIN, ROLES, POLITICIAN, role_for
+from .access import ADMIN, ROLES, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, role_for
 from .models import MotivationReportAccess, PortalReportGroup
 from admin_motivation.models import Subdivision
 
@@ -69,6 +69,10 @@ class PortalRoleFormMixin:
             # Access follows membership; do not retain a standalone role after removal.
             data['portal_role'] = ''
         effective_role = data.get('portal_role') or (POLITICIAN if report_groups else '')
+        if effective_role in (DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
+            if not report_groups or not any(group.subdivisions.exists() for group in report_groups):
+                self.add_error('groups' if 'groups' in self.fields else None, 'Выберите группу доступа с разрешёнными подразделениями для этой роли.')
+            data['report_author'] = ''
         if effective_role == POLITICIAN:
             if report_groups:
                 branch_ids = {branch.merged_into_id or branch.pk for group in report_groups for branch in group.subdivisions.all()}
@@ -138,7 +142,7 @@ class PortalUserAdmin(UserAdmin):
         user.groups.remove(*Group.objects.filter(name__in=ROLES))
         role = form.cleaned_data.get('portal_role')
         if role:
-            user.groups.add(Group.objects.get(name=role))
+            user.groups.add(Group.objects.get_or_create(name=role)[0])
         subdivision, author = form.cleaned_data.get('report_subdivision'), form.cleaned_data.get('report_author', '').strip()
         if subdivision and author:
             MotivationReportAccess.objects.update_or_create(user=user, defaults={'subdivision': subdivision, 'deal_author': author})

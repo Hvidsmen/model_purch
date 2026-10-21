@@ -18,8 +18,10 @@ def selections(params, field):
     return list(dict.fromkeys(str(value).strip() for value in values if str(value).strip()))
 
 
-def summary_filters(scenario, params):
+def summary_filters(scenario, params, allowed_subdivisions=None):
     lines = ensure_summary_groups(scenario)
+    if allowed_subdivisions is not None:
+        lines = lines.filter(subdivision__in=allowed_subdivisions)
     # Obtain both menus with one narrow scan of the plan, instead of two DISTINCT sorts.
     scopes = list(lines.order_by().values_list('subdivision', 'planning_group_sales').distinct())
     branch_keys = {sub for sub, pg in scopes}
@@ -39,7 +41,7 @@ def summary_filters(scenario, params):
         for value, label in sorted(choices, key=lambda item: item[1])]} for field, choices in options.items()]
 
 
-def summary_report(scenario, params):
+def summary_report(scenario, params, allowed_subdivisions=None):
     selected_types = selections(params, 'type')
     if set(selected_types) - {key for key, label in KINDS}:
         raise ValidationError('Неизвестный тип коэффициента.')
@@ -58,6 +60,8 @@ def summary_report(scenario, params):
     names = dict(DirectorEmployee.objects.values_list('pk', 'full_name'))
     branches = dict(Subdivision.objects.values_list('subdivision_key', 'subdivision_name'))
     lines = groups
+    if allowed_subdivisions is not None:
+        lines = lines.filter(subdivision__in=allowed_subdivisions)
     if selected_staff:
         allowed = {sub for (version, sub), staff in directors['local'].employees.items() if staff & selected_staff}
         lines = lines.filter(subdivision__in=allowed)

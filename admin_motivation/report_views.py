@@ -9,21 +9,21 @@ from .services.reports import CATALOG, FILTERS, parameters, choices, load_report
 from .services.versions import today
 from .models import Subdivision, SalesPlanScenario
 
-from base.access import role_for, POLITICIAN
-from base.report_access import politician_scope, scoped_query, PERSONAL_REPORTS
+from base.access import role_for, REPORT_ROLES, BRANCH_DIRECTOR
+from base.report_access import politician_scope, scoped_query, PERSONAL_REPORTS, report_kinds
 
 logger = logging.getLogger(__name__)
 
 
 def report_index(request):
-    catalog = {key: CATALOG[key] for key in PERSONAL_REPORTS} if role_for(request.user) == POLITICIAN else CATALOG
-    return render(request, 'admin_motivation/reports/index.html', {'reports': catalog, 'subdivisions': Subdivision.objects.none() if role_for(request.user) == POLITICIAN else Subdivision.objects.all()})
+    catalog = {key: CATALOG[key] for key in report_kinds(request.user)} if role_for(request.user) in REPORT_ROLES else CATALOG
+    return render(request, 'admin_motivation/reports/index.html', {'reports': catalog, 'subdivisions': Subdivision.objects.none() if role_for(request.user) in REPORT_ROLES else Subdivision.objects.all()})
 
 
 def report_page(request, kind):
     if kind not in CATALOG: raise Http404('Отчёт не найден.')
     access_scope = getattr(request, 'personal_report_scope', None) or politician_scope(request.user)
-    if role_for(request.user) == POLITICIAN and (not access_scope or kind not in PERSONAL_REPORTS):
+    if role_for(request.user) in REPORT_ROLES and (not access_scope or kind not in report_kinds(request.user)):
         raise PermissionDenied
     query = scoped_query(request.GET, access_scope, kind) if access_scope else request.GET.copy()
     if kind == 'deals':
@@ -115,6 +115,16 @@ def report_page(request, kind):
 def plan_summary(request):
     from .services.plan_summary import summary_report, summary_filters
     started = perf_counter()
+    access_scope = getattr(request, 'personal_report_scope', None) or politician_scope(request.user)
+    if role_for(request.user) in REPORT_ROLES and (role_for(request.user) != BRANCH_DIRECTOR or not access_scope):
+        raise PermissionDenied
+    query = request.GET.copy()
+    options = {}
+    if access_scope:
+        permitted = access_scope['subdivision']
+        selected_branches = [value for value in query.getlist('subdivision') if value in permitted] or permitted
+        query.setlist('subdivision', selected_branches)
+        options['allowed_subdivisions'] = permitted
     plans = SalesPlanScenario.objects.filter(is_deleted=False).order_by('-pk')
     plan = None
     summary = {}
@@ -127,13 +137,13 @@ def plan_summary(request):
         plan = plans.first()
     if plan:
         try:
-            summary = summary_report(plan, request.GET)
-            summary['summary_filters'] = summary_filters(plan, request.GET)
+            summary = summary_report(plan, query, **options)
+            summary['summary_filters'] = summary_filters(plan, query, **options)
         except ValidationError as error:
             summary = {'summary_error': ' '.join(error.messages)}
     calculated = perf_counter()
     response = render(request, 'admin_motivation/reports/plan_summary.html', {
-        'plans': plans, 'plan': plan, 'subdivisions': Subdivision.objects.all(), **summary,
+        'plans': plans, 'plan': plan, 'subdivisions': Subdivision.objects.none() if access_scope else Subdivision.objects.all(), **summary,
     })
     rendered = perf_counter()
     response['Server-Timing'] = f'calculation;dur={(calculated - started) * 1000:.1f}, render;dur={(rendered - calculated) * 1000:.1f}'

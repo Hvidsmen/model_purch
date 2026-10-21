@@ -449,3 +449,50 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
             finally:
                 browser.close()
+
+    def test_admin_assigns_director_roles_and_previews_branch_reports(self):
+        from admin_motivation.models import Chanel, Subdivision, TypeCoeff
+        from .models import PortalReportGroup
+        from .access import BRANCH_DIRECTOR, DEPUTY_DIRECTOR, role_for
+        from playwright.sync_api import sync_playwright, expect
+        ensure_roles()
+        actor = User.objects.create_user('branch-ui-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        channel = Chanel.objects.create(chanel_name='Branch UI')
+        branch = Subdivision.objects.create(subdivision_key='Allowed', subdivision_name='Allowed', subdivision_global='Allowed', chanel=channel)
+        worker = TypeCoeff.objects.create(type_coeff_name='Политики')
+        TypeCoeff.objects.create(type_coeff_name='Директора')
+        team = Group.objects.create(name='Выбранные филиалы')
+        scope = PortalReportGroup.objects.create(group=team, employee_type=worker)
+        scope.subdivisions.add(branch)
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            try:
+                page = browser.new_page()
+                page.goto(self.live_server_url + '/accounts/login/')
+                page.fill('#id_username', actor.username)
+                page.fill('#id_password', 'browser-test-password')
+                page.get_by_role('button', name='Войти', exact=True).click()
+                for index, role in enumerate((DEPUTY_DIRECTOR, BRANCH_DIRECTOR)):
+                    username = f'TT\\branch-ui-{index}'
+                    page.goto(self.live_server_url + '/accounts/users/')
+                    page.fill('#id_username', username)
+                    field = page.locator('#portal-user-form [data-access-multi]')
+                    field.locator('summary').click()
+                    field.get_by_label(team.name, exact=True).check()
+                    field.locator('[data-choice-close]').click()
+                    page.get_by_role('button', name='Изменить роль', exact=True).click()
+                    page.select_option('#id_portal_role', role)
+                    expect(page.locator('#id_report_author')).not_to_be_visible()
+                    expect(page.locator('#id_report_subdivision')).not_to_be_visible()
+                    page.get_by_role('button', name='Добавить пользователя', exact=True).click()
+                    expect(page.locator('.access-notice')).to_contain_text('сохранён')
+                    card = page.locator('.user-card').filter(has_text=username.lower())
+                    card.get_by_role('button', name='Посмотреть как пользователь', exact=True).click()
+                    page.locator('.portal-project-card').filter(has_text='Мотивация').click()
+                    expect(page.locator('.report-catalog-card')).to_have_count(5 if role == BRANCH_DIRECTOR else 3)
+                    page.get_by_role('button', name='Вернуться к администратору', exact=True).click()
+            finally:
+                browser.close()
+        for index, role in enumerate((DEPUTY_DIRECTOR, BRANCH_DIRECTOR)):
+            self.assertEqual(role_for(User.objects.get(username=f'tt\\branch-ui-{index}')), role)

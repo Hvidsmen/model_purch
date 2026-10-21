@@ -64,7 +64,7 @@ class UserForm(PortalRoleFormMixin, forms.ModelForm):
         user.save()
         user.groups.set(self.cleaned_data['groups'])
         if self.cleaned_data.get('portal_role'):
-            user.groups.add(Group.objects.get(name=self.cleaned_data['portal_role']))
+            user.groups.add(Group.objects.get_or_create(name=self.cleaned_data['portal_role'])[0])
         branch, author = self.cleaned_data.get('report_subdivision'), self.cleaned_data.get('report_author', '').strip()
         if branch and author:
             MotivationReportAccess.objects.update_or_create(user=user, defaults={'subdivision': branch, 'deal_author': author})

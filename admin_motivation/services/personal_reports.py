@@ -6,15 +6,20 @@ from .reports import FILTERS, bind_sql, fetch
 def choices(kind, values, scope):
     from base.report_access import identity_choices
     identity = identity_choices(kind, values, scope)
-    columns = {'planning': 'ГруппаПлановПродаж', 'goods': 'ГруппаТоваров', 'brand': 'Марка',
+    columns = {'author': 'АвторСделки', 'planning': 'ГруппаПлановПродаж', 'goods': 'ГруппаТоваров', 'brand': 'Марка',
                'year': 'Год', 'quarter': 'КварталМотивации', 'channel': 'Канал', 'partner': 'Партнер'}
     if kind == 'deals':
-        source = ('DataWH.motivation.Fact WHERE [Подразделение] IN (@Division) '
-                  'AND [АвторСделки] IN (@ManagerName) AND [ТипКоэф]=@TypeCoeff '
-                  'AND [ДатаЗакрытияСделки] BETWEEN @StartDate AND @EndDate')
+        base_source = ('DataWH.motivation.Fact WHERE [Подразделение] IN (@Division) '
+                  'AND [ТипКоэф]=@TypeCoeff AND [ДатаЗакрытияСделки] BETWEEN @StartDate AND @EndDate')
+        author_parameter = 'ManagerName'
     else:
-        source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE [Подразделение] IN (@Subdivision) '
-                  'AND [АвторСделки] IN (@DealAuthor) AND [ТипКоэф]=@TypeCoeff_')
+        type_parameter = 'type_coeff' if kind == 'subdivisions' else 'TypeCoeff_'
+        base_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE [Подразделение] IN (@Subdivision) '
+                       'AND [ТипКоэф] IN (@' + type_parameter + ')')
+        author_parameter = 'DealAuthor'
+    source = base_source
+    if kind != 'subdivisions':
+        source += ' AND [АвторСделки] IN (@' + author_parameter + ')'
     connection = None
     try:
         connection, cursor = connect_database('vm-dwh', 'DataWH')
@@ -28,7 +33,7 @@ def choices(kind, values, scope):
                 continue
             else:
                 column = columns[name]
-                sql, args = bind_sql('SELECT DISTINCT [' + column + '] AS value FROM ' + source, values)
+                sql, args = bind_sql('SELECT DISTINCT [' + column + '] AS value FROM ' + (base_source if name == 'author' and scope.get('all_authors') else source), values)
                 options = sorted({str(row['value']) for row in fetch(cursor, sql, args, limit=10000) if row.get('value') is not None})
             result.append({'name': name, 'label': caption, 'multiple': multiple, 'locked': False,
                 'locked_value': None, 'options': [{'value': value, 'selected': value in selected} for value in options]})

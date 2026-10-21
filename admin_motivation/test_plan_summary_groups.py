@@ -236,3 +236,15 @@ class PlanSummaryGroupsTests(TestCase):
         self.assertEqual(self.client.post(reverse('motivation_global_template')).status_code, 405)
         self.client.logout()
         self.assertEqual(self.client.get(reverse('motivation_global_template')).status_code, 302)
+
+    def test_branch_role_boundary_limits_summary_totals_and_lookup_options(self):
+        self.load()
+        scoped = summary_report(self.scenario, {}, allowed_subdivisions=['A'])
+        branch = summary_report(self.scenario, {'subdivision': ['A']})
+        self.assertEqual(scoped, branch)
+        blocked = summary_report(self.scenario, {'subdivision': ['B']}, allowed_subdivisions=['A'])
+        self.assertEqual(blocked['summary_nodes'], [])
+        self.assertEqual(summary_report(self.scenario, {}, allowed_subdivisions=[])['summary_nodes'], [])
+        menus = summary_filters(self.scenario, {}, allowed_subdivisions=['A'])
+        divisions = next(item for item in menus if item['name'] == 'subdivision')
+        self.assertEqual([option['value'] for option in divisions['options']], ['A'])
