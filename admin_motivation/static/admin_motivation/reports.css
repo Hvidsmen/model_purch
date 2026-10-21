@@ -1,4 +1,4 @@
-.native-report{font-family:'Segoe UI',Arial,sans-serif;color:#1e3a5f}
+.native-report{overflow:visible!important;font-family:'Segoe UI',Arial,sans-serif;color:#1e3a5f}
 .content-wrapper .native-report h1.report-title{margin:16px 0;background:#f5f3ff;color:#312e81;font-size:26px;font-weight:600;text-align:left;padding:16px 20px;border:1px solid #e5defa;border-left:4px solid #7964df;border-radius:8px}
 .report-subtitle{background:#f7f9fc;padding:10px 14px;margin:8px 0 20px;color:#526079}
 .report-filter-panel{padding:12px;border:1px solid #dce3ec;border-radius:8px;margin-bottom:18px}

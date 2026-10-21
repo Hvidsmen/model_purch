@@ -11,6 +11,21 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_manager_author_dropdown_is_visible_below_report_card(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .services.reports import FILTERS
+        options = [{'name': name, 'label': caption, 'multiple': multiple,
+                    'options': [{'value': f'Автор {i}', 'selected': False} for i in range(40)] if name == 'author' else []}
+                   for name, parameter, caption, dataset, multiple in FILTERS['manager']]
+        with patch('admin_motivation.report_views.choices', return_value=options):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager']))
+            self.page.locator('select[name=author] + .searchable-filter > button').click()
+            popup = self.page.locator('select[name=author] + .searchable-filter .searchable-filter-menu')
+            expect(popup).to_be_visible()
+            self.assertTrue(popup.evaluate('(el) => {const r=el.getBoundingClientRect(); return el.contains(document.elementFromPoint(r.left+20,r.bottom-15));}'))
+            self.assertEqual(self.errors, [])
+
     def test_director_matrix_upload_uses_selected_version_and_existing_bindings(self):
         from playwright.sync_api import expect
         from .models import DirectorEmployee, SubdivisionDirectorCoeff
