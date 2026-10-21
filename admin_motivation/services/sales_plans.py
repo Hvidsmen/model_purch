@@ -178,8 +178,10 @@ def calculate_plan(scenario_id, progress=None):
               'type_coeff__type_coeff_name', 'segment__segment_name', 'motivation_coeff']
     for model in [SubdivisionCoeff, GlobalCoeff]:
         field_names = [fields[0], 'subdivision__subdivision_key', *fields[1:]] if model is SubdivisionCoeff else fields
-        for row in model.objects.filter(version_id__in=[v.pk for v in versions]).values_list(*field_names).iterator(chunk_size=2000):
-            row = row if model is SubdivisionCoeff else (row[0], '', *row[1:])
+        from .subdivision_aliases import coefficient_rows as merged_rows
+        source_rows = model.objects.filter(version_id__in=[v.pk for v in versions]).values_list(*field_names).iterator(chunk_size=2000)
+        source_rows = source_rows if model is SubdivisionCoeff else ((row[0], '', *row[1:]) for row in source_rows)
+        for row in merged_rows(source_rows, 1, range(7)):
             key = (*row[:6], row[6].upper().replace('K', 'O', 1))
             if key in cells:
                 raise ValidationError('Найдены неоднозначные коэффициенты для одной классификации.')
@@ -207,7 +209,10 @@ def calculate_plan(scenario_id, progress=None):
     # Local lines populate global director snapshots; global amounts count each director.
     lines = chain(scenario.lines.exclude(subdivision='').order_by('pk').iterator(chunk_size=1000),
                   scenario.lines.filter(subdivision='').order_by('pk').iterator(chunk_size=1000))
+    from .subdivision_aliases import mapping, canonical
+    branch_names = mapping()
     for line in lines:
+        line.subdivision = canonical(line.subdivision, branch_names)
         if line.plan_date not in version_cache:
             version_cache[line.plan_date] = next((v for v in reversed(versions) if v.effective_from <= line.plan_date), None)
         version = version_cache[line.plan_date]

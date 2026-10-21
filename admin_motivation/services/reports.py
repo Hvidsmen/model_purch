@@ -62,6 +62,8 @@ def parameters(kind, query):
 
 def bind_sql(sql, parameters):
     """Expand lists without inserting values into SQL; empty optional lists mean all."""
+    from .subdivision_aliases import report_parameters
+    sql, parameters = report_parameters(sql, parameters)
     bound = []
     token = re.compile(r"(?P<column>COALESCE\([^\n]*?\)|[\w\[\].]+)\s+IN\s*\(\s*@(?P<list>\w+)\s*\)|@(?P<scalar>\w+)", re.I)
     def replace(match):
@@ -83,7 +85,8 @@ def fetch(cursor, sql, args=(), limit=50000):
     columns = [item[0] for item in cursor.description]
     rows = cursor.fetchmany(limit + 1)
     if len(rows) > limit: raise ValidationError('Слишком много строк. Уточните фильтры отчёта.')
-    return [dict(zip(columns, row)) for row in rows]
+    from .subdivision_aliases import report_rows
+    return report_rows([dict(zip(columns, row)) for row in rows])
 
 
 def choices(kind, values, refresh=False):
@@ -105,8 +108,10 @@ def choices(kind, values, refresh=False):
             # Keep large deal lookup lists scoped to the selected branch and date range.
             if kind == 'deals' and dataset not in ('Sub', 'TC', 'DataSet1') and values.get('Division'):
                 sql += ' AND ' if re.search(r'\bWHERE\b', sql, re.I) else ' WHERE '
-                sql += '[Подразделение] = ? AND [ДатаЗакрытияСделки] BETWEEN ? AND ?'
-                args.extend([values['Division'], values['StartDate'], values['EndDate']])
+                from .subdivision_aliases import expand, mapping
+                branches = expand(values['Division'], mapping())
+                sql += '[Подразделение] IN (' + ','.join('?' for _ in branches) + ') AND [ДатаЗакрытияСделки] BETWEEN ? AND ?'
+                args.extend([*branches, values['StartDate'], values['EndDate']])
                 if values.get('TypeCoeff'):
                     sql += ' AND [ТипКоэф] = ?'; args.append(values['TypeCoeff'])
             cache_key = 'motivation-report-choices-' + hashlib.sha256((signature+sql+repr(args)).encode()).hexdigest()
@@ -176,7 +181,7 @@ DIV_NUMBERS = [*[f'O{i}' for i in range(5)], 'СуммаПланUSDКварта�
  'СуммаПланUSDI', 'СуммаОтгрузокUSDI']
 
 
-DIV_INPUT_DIMENSIONS = ('Подразделение', 'АвторСделки', 'Год', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка')
+DIV_INPUT_DIMENSIONS = ('_source_subdivision', 'Подразделение', 'АвторСделки', 'Год', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка')
 DIV_INPUT_FIELDS = (*[f'O{i}' for i in range(5)], 'СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал',
                     'СуммаПланUSD', 'СуммаОтгрузокUSD', 'СуммаПланUSDI', 'СуммаОтгрузокUSDI')
 

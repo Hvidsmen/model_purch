@@ -39,7 +39,8 @@ class DirectorIndex:
                     yield current.pk, target_sub, target_staff, pg, group, brand, [
                         changes.get(f'{goods_id}:{i}', Decimal(0)) for i in range(5)]
 
-        for version, sub, staff, pg, group, brand, values in inputs():
+        from .subdivision_aliases import coefficient_rows as merged_rows
+        for version, sub, staff, pg, group, brand, values in merged_rows(inputs(), 1, range(6)):
             scope = (version, sub, staff, pg, group, brand)
             if scope in self.cells:
                 raise ValidationError('Неоднозначные коэффициенты директора для товарной классификации.')

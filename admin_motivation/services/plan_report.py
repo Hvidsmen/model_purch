@@ -15,6 +15,10 @@ def period_report(scenario, scope, params):
     # Aggregate once: derive filter choices and apply dimensional filters to period rows.
     all_rows = list(base.values(*DIMENSIONS).annotate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), policies=Sum('policies_usd'),
         sales=Sum('sales_usd'), directors=Sum('directors_usd'), directors_count=Count('directors_usd'), total=Sum('total_usd'), row_count=Count('pk'), ddp_count=Count('amount_ddp_usd'), calculated_count=Count('total_usd')).order_by(*DIMENSIONS))
+    from .subdivision_aliases import mapping, canonical, expand
+    names = mapping()
+    for row in all_rows:
+        row['subdivision'] = canonical(row['subdivision'], names)
     choices = {field: sorted({row[field] for row in all_rows}) for field in DIMENSIONS}
     rows = [row for row in all_rows if all(not value or row[field] == value for field, value in filters.items())]
     for row in rows:
@@ -26,7 +30,7 @@ def period_report(scenario, scope, params):
     lines = base
     for field, value in filters.items():
         if value:
-            lines = lines.filter(**{field: value})
+            lines = lines.filter(subdivision__in=expand(value, names)) if field == 'subdivision' else lines.filter(**{field: value})
     root = {'children': {}, **empty_totals()}
     for row in rows:
         current = root

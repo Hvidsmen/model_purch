@@ -18,7 +18,18 @@ class Chanel(models.Model):
         return self.chanel_name
 
 
+class ActiveSubdivisionManager(models.Manager):
+    def get_queryset(self):
+        return super().get_queryset().filter(merged_into__isnull=True)
+
+
 class Subdivision(models.Model):
+    objects = ActiveSubdivisionManager()
+    all_objects = models.Manager()
+    merged_into = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT, related_name='merged_sources')
+    merge_policy = models.CharField(max_length=10, default='target')
+    merged_at = models.DateTimeField(null=True, blank=True)
+
     id = models.AutoField(primary_key=True)
     subdivision_key = models.CharField(max_length=255, unique=True)
     subdivision_name = models.CharField(max_length=255)
@@ -46,11 +57,11 @@ class Subdivision(models.Model):
         for i, row in df.iterrows():
             subdivision_key, subdivision_name, subdivision_global, chanel = row
             chanel = Chanel.objects.get(chanel_name=chanel)
-            if len(cls.objects.filter(subdivision_key=subdivision_key)) == 0:
+            if len(cls.all_objects.filter(subdivision_key=subdivision_key)) == 0:
                 no = cls.objects.create(subdivision_key=subdivision_key,subdivision_name=subdivision_name,subdivision_global=subdivision_global,chanel=chanel)
                 no.save()
             else:
-                no = cls.objects.get(subdivision_key=subdivision_key)
+                no = cls.all_objects.get(subdivision_key=subdivision_key)
                 no.subdivision_name=subdivision_name
                 no.subdivision_global=subdivision_global
                 no.chanel=chanel
@@ -673,3 +684,26 @@ class SubdivisionDirectorCoeff(DirectorCoefficientBase):
             models.UniqueConstraint(fields=['version', 'subdivision', 'employee', 'goods'], name='unique_local_director_goods'),
             models.CheckConstraint(condition=models.Q(**{f'k{i}__gte': -1 for i in range(5)}, **{f'k{i}__lte': 1 for i in range(5)}), name='local_director_coeff_range'),
         ]
+
+
+class MotivationCalculationSchedule(models.Model):
+    key = models.UUIDField(default=uuid4, unique=True, editable=False)
+    name = models.CharField('Название задания', max_length=120)
+    enabled = models.BooleanField('Расписание включено', default=False)
+    mode = models.CharField('Расписание', max_length=10, choices=[('manual', 'Только вручную'), ('daily', 'Ежедневно'), ('once', 'Однократно')], default='manual')
+    run_at = models.DateTimeField('Дата и время по Москве', null=True, blank=True)
+    synced = models.BooleanField(default=False, editable=False)
+    error = models.TextField(blank=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return self.name
+
+
+class SubdivisionMergeLog(models.Model):
+    source = models.ForeignKey(Subdivision, on_delete=models.PROTECT, related_name='+')
+    target = models.ForeignKey(Subdivision, on_delete=models.PROTECT, related_name='+')
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
+    policy = models.CharField(max_length=10)
+    details = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)

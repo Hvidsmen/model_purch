@@ -21,7 +21,7 @@ def director_variation(good):
     return 'Группа планов продаж' if good.planning_group_sales in ('1. RAC', '2. VRF', '3. PROF') else 'Подразделение'
 
 
-def export_motivation(connector):
+def export_motivation(connector, manage_connection=True):
     versions = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
     if not versions:
         raise ValidationError('Нет утверждённых версий для выгрузки. Сначала утвердите версию коэффициентов.')
@@ -37,6 +37,8 @@ def export_motivation(connector):
             date_from = version.effective_from
             managers = SubdivisionManagerCoeff.objects.filter(version=version).select_related('subdivision', 'kind')
             manager_rows = [(date_from, row.subdivision.subdivision_key, row.kind.name if row.kind else None, row.coeff) for row in managers]
+            from .subdivision_aliases import coefficient_rows as merged_rows
+            manager_rows = list(merged_rows(manager_rows, 1, range(3)))
             if manager_rows:
                 cursor.executemany('INSERT INTO DataWH.motivation.SubdivisionManagerCoeff (Date_, Subdivision, Kind_, Coeff_) VALUES (?, ?, ?, ?)', manager_rows)
             coeffs = list(SubdivisionCoeff.objects.filter(version=version).select_related('subdivision', 'goods', 'type_coeff', 'segment', 'variation_calculate'))
@@ -48,18 +50,20 @@ def export_motivation(connector):
                  f'K{i}', director_variation(row.goods), getattr(row, f'k{i}'),
                  row.employee.employee_code, row.employee.full_name)
                 for row in directors for i in range(5))
+            coefficient_rows = list(merged_rows(coefficient_rows, 1, [0, 1, 2, 3, 4, 7]))
             if coefficient_rows:
                 cursor.executemany(COEFFICIENT_INSERT, coefficient_rows)
             good_ids = {row.goods_id for row in coeffs} | {row.goods_id for row in directors} | set(version.coefficients.values_list('goods_id', flat=True))
             good_rows = [(date_from, good.goods_key, good.planning_group_sales, good.group, good.brand) for good in Goods.objects.filter(pk__in=good_ids)]
             if good_rows:
                 cursor.executemany('INSERT INTO DataWH.motivation.GoodsMotivation (Date_, GoodsKey, PGSales, Group_, Brand) VALUES (?, ?, ?, ?, ?)', good_rows)
-        connection.commit()
+        if manage_connection:
+            connection.commit()
     except Exception:
-        if connection is not None:
+        if connection is not None and manage_connection:
             connection.rollback()
         raise
     finally:
-        if connection is not None:
+        if connection is not None and manage_connection:
             connection.close()
     return versions

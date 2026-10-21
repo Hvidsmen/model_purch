@@ -19,7 +19,10 @@ def summary_versions():
 
 
 def signature(versions):
+    from .subdivision_aliases import rules
     boundaries = [(v.pk, v.effective_from.isoformat()) for v in versions]
+    if rules():
+        boundaries.append(rules())
     return hashlib.sha256(json.dumps(boundaries).encode()).hexdigest()
 
 
@@ -51,7 +54,10 @@ def _rebuild(scenario, versions, wanted, force, number):
         lines = locked.lines.exclude(subdivision='').order_by().values_list(
             'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand',
             'amount_usd', 'amount_ddp_usd', 'segment_amounts')
+        from .subdivision_aliases import mapping, canonical
+        names = mapping()
         for day, sub, pg, group, brand, plan, ddp, segments in lines.iterator(chunk_size=2000):
+            sub = canonical(sub, names)
             if day not in dates:
                 dates[day] = next((v.pk for v in reversed(versions) if v.effective_from <= day), None)
             key = (dates[day], sub, pg, group, brand)

@@ -1,0 +1,85 @@
+from datetime import datetime
+from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
+from django.test import TestCase
+from django.urls import reverse
+from django.core.exceptions import ValidationError
+from base.testing import authorize_test_case
+from .models import MotivationCalculationSchedule
+from .operation_views import JobForm
+from .services import calculation_jobs as jobs
+
+
+class CalculationJobsTests(TestCase):
+    def setUp(self):
+        authorize_test_case(self)
+        self.job = MotivationCalculationSchedule.objects.create(name='Расчёт')
+        self.connection, self.cursor = MagicMock(), MagicMock()
+        self.connector = MagicMock(return_value=(self.connection, self.cursor))
+
+    def test_admin_page_and_manual_run(self):
+        url = reverse('motivation_calculations')
+        self.assertContains(self.client.get(url), 'Расчёт мотивации и задания')
+        with patch.object(jobs, 'start_job') as start:
+            response = self.client.post(url, {'job': self.job.pk, 'action': 'run'})
+        self.assertEqual(response.status_code, 302)
+        start.assert_called_once()
+        self.job.refresh_from_db()
+        self.assertTrue(self.job.synced)
+
+    def test_anonymous_cannot_run(self):
+        self.client.logout()
+        with patch.object(jobs, 'start_job') as start:
+            response = self.client.post(reverse('motivation_calculations'), {'job': self.job.pk, 'action': 'run'})
+        self.assertIn(response.status_code, (302, 403))
+        start.assert_not_called()
+
+    def test_moscow_input_and_future_validation(self):
+        form = JobForm({'name': 'Test', 'mode': 'daily', 'enabled': 'on', 'run_at': '2030-01-01T12:30'})
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.cleaned_data['run_at'].utcoffset().total_seconds(), 10800)
+        form = JobForm({'name': 'Test', 'mode': 'once', 'enabled': 'on', 'run_at': '2000-01-01T12:30'})
+        self.assertFalse(form.is_valid())
+
+    @patch.object(jobs, 'prepare')
+    def test_daily_schedule_converts_moscow_to_server_time(self, prepare):
+        self.job.enabled, self.job.mode = True, 'daily'
+        self.job.run_at = datetime(2030, 1, 1, 12, 30, tzinfo=ZoneInfo('Europe/Moscow'))
+        self.cursor.fetchone.side_effect = [None, None, (0,)]
+        jobs.sync_job(self.job, self.connector)
+        schedule = next(call.args for call in self.cursor.execute.call_args_list if 'sp_add_jobschedule' in call.args[0])
+        self.assertEqual(schedule[-3:], (4, 20300101, 93000))
+        self.connection.commit.assert_called_once()
+        self.connection.close.assert_called_once()
+
+    @patch.object(jobs, 'prepare', side_effect=ValidationError('Unavailable'))
+    def test_sync_failure_rolls_back_and_closes(self, prepare):
+        with self.assertRaises(ValidationError):
+            jobs.sync_job(self.job, self.connector)
+        self.connection.rollback.assert_called_once()
+        self.connection.commit.assert_not_called()
+        self.connection.close.assert_called_once()
+
+    @patch.object(jobs, 'rules', return_value=[('Old', 'New', 'target')])
+    def test_prepare_copies_procedure_and_redirects_reference(self, rules):
+        definition = 'ALTER PROCEDURE [motivation].[sp_CalcBySub] AS SELECT SubdivisionName FROM [DataWH].[dbo].[Subdivisions];'
+        self.cursor.fetchone.return_value = (definition, None)
+        self.cursor.fetchall.return_value = [('SubdivisionKey',), ('SubdivisionName',)]
+        jobs.prepare(self.cursor)
+        sql = self.cursor.execute.call_args.args[0]
+        self.assertIn('CREATE PROCEDURE motivation.PortalCalcBySub', sql)
+        self.assertIn('DataWH.motivation.PortalCalculationSubdivisions', sql)
+        self.assertNotIn('ALTER PROCEDURE [motivation].[sp_CalcBySub]', sql)
+        self.cursor.executemany.assert_called_once()
+
+    @patch.object(jobs, 'rules', return_value=[('Old', 'New', 'target')])
+    def test_prepare_rejects_unrecognized_merge_source(self, rules):
+        self.cursor.fetchone.return_value = ('CREATE PROC motivation.sp_CalcBySub AS SELECT 1;', None)
+        self.cursor.fetchall.return_value = [('SubdivisionName',)]
+        with self.assertRaises(ValidationError):
+            jobs.prepare(self.cursor)
+
+    def test_running_status_comes_from_agent(self):
+        self.cursor.fetchone.return_value = (datetime(2030, 1, 1), None, 1, 'Previous completed')
+        self.assertEqual(jobs.status(self.job, self.connector), 'Выполняется')
+        self.connection.close.assert_called_once()

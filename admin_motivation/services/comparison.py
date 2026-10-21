@@ -86,7 +86,7 @@ class Index:
         return self.cache[cache_key]
 
 
-def coefficient_rows(version_ids, subdivision=None, current=None, changes=None, deleted=None, changed_subdivision=None):
+def _coefficient_rows(version_ids, subdivision=None, current=None, changes=None, deleted=None, changed_subdivision=None):
     model = SubdivisionCoeff if subdivision else GlobalCoeff
     fields = ['version_id', 'goods__planning_group_sales', 'goods__group', 'goods__brand',
               'type_coeff__type_coeff_name', 'segment__segment_name', 'motivation_coeff', 'pk', 'goods_id']
@@ -101,6 +101,11 @@ def coefficient_rows(version_ids, subdivision=None, current=None, changes=None, 
                 continue
             value = (changes or {}).get(str(pk), value)
         yield (version, sub, pg, group, brand, kind, segment, value)
+
+
+def coefficient_rows(*args, **kwargs):
+    from .subdivision_aliases import coefficient_rows as merged_rows
+    return merged_rows(_coefficient_rows(*args, **kwargs), 1, range(7))
 
 
 def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, deleted=None, all_subdivisions=False, change_subdivision=None, director_changes=None, employee=None):
@@ -121,9 +126,11 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             current=current if name == 'current' else None, changes=director_changes if name == 'current' else None,
             subdivision=subdivision, employee=employee, deleted=deleted if name == 'current' else None)
         results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'directors': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
+    from .subdivision_aliases import mapping, expand, canonical
+    names = mapping()
     lines = plan.lines.exclude(subdivision='') if use_subdivision else plan.lines.filter(subdivision='')
     if subdivision:
-        lines = lines.filter(subdivision=subdivision.subdivision_key)
+        lines = lines.filter(subdivision__in=expand(subdivision.subdivision_key, names))
     costs = lines.aggregate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), rows=Count('pk'), ddp_rows=Count('amount_ddp_usd'))
     if costs['rows'] != costs['ddp_rows']:
         costs['ddp'] = None
@@ -131,6 +138,7 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
     affected_lines = 0
     for on_date, sub, pg, group, brand, amounts in lines.order_by('pk').values_list(
             'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts').iterator(chunk_size=2000):
+        sub = canonical(sub, names)
         found = True
         if on_date >= current.effective_from:
             affected_lines += 1

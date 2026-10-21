@@ -1,7 +1,9 @@
-from . import views, plan_views, comparison_views, director_views, report_views
+from . import operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path('administration/calculations/', operation_views.calculations, name='motivation_calculations'),
+    path('administration/subdivision-merge/', operation_views.merge_subdivisions, name='motivation_subdivision_merge'),
     path("directors/coefficients/import/", director_views.director_coeff_import, name="motivation_director_coeff_import"),
     path("coefficients/template/", views.download_coefficient_template, name="motivation_global_template"),
     path("coefficients/template/<int:subdivision>/", views.download_coefficient_template, name="motivation_subdivision_template"),
