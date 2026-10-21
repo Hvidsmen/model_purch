@@ -414,3 +414,38 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(role_for(user), POLITICIAN)
         self.assertFalse(user.groups.filter(name=POLITICIAN).exists())
         self.assertEqual(MotivationReportAccess.objects.get(user=user).deal_author, 'Гафуров Дамир Наилович')
+
+    def test_compact_user_cards_group_collapse_and_expand(self):
+        from playwright.sync_api import sync_playwright, expect
+        ensure_roles()
+        actor = User.objects.create_user('compact-groups-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        team = Group.objects.create(name='Команда продаж')
+        target = User.objects.create_user('compact-employee')
+        target.groups.add(Group.objects.get(name=DIRECTOR), team)
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            try:
+                page = browser.new_page(viewport={'width': 1280, 'height': 1000})
+                page.goto(self.live_server_url + '/accounts/login/')
+                page.fill('#id_username', actor.username)
+                page.fill('#id_password', 'browser-test-password')
+                page.get_by_role('button', name='Войти', exact=True).click()
+                page.goto(self.live_server_url + '/accounts/users/')
+                section = page.locator('.user-catalog-group').filter(has=page.locator('summary').filter(has_text=team.name))
+                card = section.locator('.user-card')
+                expect(card).to_be_visible()
+                self.assertLess(card.bounding_box()['height'], 110)
+                section.locator('summary').click()
+                expect(card).not_to_be_visible()
+                page.locator('[data-user-groups-expand]').click()
+                expect(card).to_be_visible()
+                page.locator('[data-user-groups-collapse]').click()
+                expect(page.locator('.user-catalog-group[open]')).to_have_count(0)
+                page.locator('[data-user-groups-expand]').click()
+                expect(page.locator('.user-catalog-group[open]')).to_have_count(2)
+                page.screenshot(path='/tmp/portal-user-grouped-compact.png', full_page=True)
+                page.set_viewport_size({'width': 390, 'height': 844})
+                self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
+            finally:
+                browser.close()

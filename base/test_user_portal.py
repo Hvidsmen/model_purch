@@ -178,3 +178,22 @@ class UserPortalTests(TestCase):
         form = UserForm(self.local_data(groups=[str(group.pk)], last_name='', report_author=''), actor=self.admin)
         self.assertFalse(form.is_valid())
         self.assertIn('report_author', form.errors)
+
+    def test_catalog_sections_follow_groups_and_filters_without_losing_shared_members(self):
+        from .access import DIRECTOR
+        first = Group.objects.create(name='Команда А')
+        second = Group.objects.create(name='Команда Б')
+        shared = User.objects.create(username='shared-member')
+        shared.groups.add(first, second)
+        role_only = User.objects.create(username='role-only')
+        role_only.groups.add(Group.objects.get(name=DIRECTOR))
+        unassigned = User.objects.create(username='no-group')
+        response = self.client.get(reverse('portal_users'))
+        sections = {section['name']: [user.pk for user in section['users']] for section in response.context['sections']}
+        self.assertEqual(sections[first.name], [shared.pk])
+        self.assertEqual(sections[second.name], [shared.pk])
+        self.assertEqual(sections[DIRECTOR], [role_only.pk])
+        self.assertEqual(sections['Без группы'], [unassigned.pk])
+        response = self.client.get(reverse('portal_users'), {'group': str(first.pk)})
+        self.assertEqual([section['name'] for section in response.context['sections']], [first.name])
+        self.assertEqual([user.pk for user in response.context['sections'][0]['users']], [shared.pk])

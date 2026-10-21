@@ -1,4 +1,6 @@
 (() => {
+ document.querySelector('[data-user-groups-expand]')?.addEventListener('click', () => document.querySelectorAll('.user-catalog-group').forEach(group => group.open=true));
+ document.querySelector('[data-user-groups-collapse]')?.addEventListener('click', () => document.querySelectorAll('.user-catalog-group').forEach(group => group.open=false));
  const button = document.getElementById('ad-find');
  if (!button) return;
  const query = document.getElementById('ad-query'), status = document.getElementById('ad-status'), results = document.getElementById('ad-results');

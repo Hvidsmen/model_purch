@@ -126,7 +126,20 @@ def users(request):
     catalog = list(catalog.distinct()[:200])
     for row in catalog:
         row.portal_role_label = role_for(row) or 'Без доступа'
-    return render(request, 'base/users.html', {'form': form, 'editing': editing, 'catalog': catalog, 'query': query, 'filters': filters, 'filter_query': request.GET.urlencode()})
+    sections = {}
+    selected = set(filters.cleaned_data.get('group', [])) if filters.is_valid() else set()
+    for row in catalog:
+        memberships = [group for group in row.groups.all() if group.name not in ROLES]
+        if selected:
+            memberships = [group for group in memberships if str(group.pk) in selected]
+        destinations = [(f'group-{group.pk}', group.name) for group in memberships]
+        if not destinations:
+            destinations = [('role-' + (role_for(row) or 'none'), role_for(row) or 'Без группы')]
+        for key, name in destinations:
+            section = sections.setdefault(key, {'key': key, 'name': name, 'users': []})
+            section['users'].append(row)
+    sections = sorted(sections.values(), key=lambda section: (section['name'] == 'Без группы', section['name'].casefold()))
+    return render(request, 'base/users.html', {'form': form, 'editing': editing, 'catalog': catalog, 'sections': sections, 'query': query, 'filters': filters, 'filter_query': request.GET.urlencode()})
 
 
 @require_GET
