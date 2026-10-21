@@ -266,3 +266,37 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 finally:
                     browser.close()
         self.assertTrue(User.objects.get(username='local-browser').check_password('Browser-local-2479!'))
+
+    def test_user_catalog_role_group_filters_work_together(self):
+        from playwright.sync_api import sync_playwright, expect
+        ensure_roles()
+        actor = User.objects.create_user('filter-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        region = Group.objects.create(name='Региональная команда')
+        target = User.objects.create_user('filter-director')
+        target.groups.add(Group.objects.get(name=DIRECTOR), region)
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            try:
+                page = browser.new_page(viewport={'width': 1200, 'height': 950})
+                page.goto(self.live_server_url + '/accounts/login/')
+                page.fill('#id_username', actor.username)
+                page.fill('#id_password', 'browser-test-password')
+                page.get_by_role('button', name='Войти', exact=True).click()
+                page.goto(self.live_server_url + '/accounts/users/')
+                page.locator('.user-filter-form [data-access-multi]').nth(0).locator('summary').click()
+                page.locator('.user-filter-form').get_by_label(DIRECTOR, exact=True).check()
+                page.locator('.user-filter-form [data-access-multi]').nth(0).locator('[data-choice-close]').click()
+                page.locator('.user-filter-form [data-access-multi]').nth(1).locator('summary').click()
+                page.locator('.user-filter-form').get_by_label(region.name, exact=True).check()
+                page.locator('.user-filter-form [data-access-multi]').nth(1).locator('[data-choice-close]').click()
+                page.locator('.user-filter-form').get_by_role('button', name='Найти', exact=True).click()
+                expect(page.locator('.access-group-card')).to_have_count(1)
+                expect(page.locator('.access-group-card')).to_contain_text(target.username)
+                page.screenshot(path='/tmp/portal-user-filters.png', full_page=True)
+                page.set_viewport_size({'width': 390, 'height': 844})
+                self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
+                page.get_by_role('link', name='Сбросить фильтры', exact=True).click()
+                expect(page.locator('.access-group-card')).to_have_count(2)
+            finally:
+                browser.close()

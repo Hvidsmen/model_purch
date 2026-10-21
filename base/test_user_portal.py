@@ -83,3 +83,27 @@ class UserPortalTests(TestCase):
         self.client.force_login(user)
         self.assertEqual(self.client.get(reverse('portal_users')).status_code, 403)
         self.assertEqual(self.client.get(reverse('portal_directory_search'), {'q': 'test'}).status_code, 403)
+
+    def test_role_and_group_filters_intersect_with_search_and_match_effective_role(self):
+        from .access import DIRECTOR, LOGISTICIAN
+        first, second = Group.objects.create(name='Регионы'), Group.objects.create(name='Центр')
+        director = User.objects.create(username='filter-director', first_name='Поиск')
+        director.groups.add(Group.objects.get(name=DIRECTOR), first, second)
+        logistician = User.objects.create(username='filter-logistician', first_name='Поиск')
+        logistician.groups.add(Group.objects.get(name=LOGISTICIAN), first)
+        unassigned = User.objects.create(username='filter-none')
+        conflicted = User.objects.create(username='filter-conflict')
+        conflicted.groups.add(Group.objects.get(name=DIRECTOR), Group.objects.get(name=LOGISTICIAN))
+        inactive = User.objects.create(username='filter-inactive', is_active=False)
+        inactive.groups.add(Group.objects.get(name=DIRECTOR))
+        def ids(**params):
+            response = self.client.get(reverse('portal_users'), params)
+            self.assertEqual(response.status_code, 200)
+            return [row.pk for row in response.context['catalog']]
+        self.assertEqual(ids(role=[DIRECTOR], group=[str(first.pk)], q='Поиск'), [director.pk])
+        self.assertCountEqual(ids(role=[DIRECTOR, LOGISTICIAN], group=[str(first.pk), str(second.pk)]), [director.pk, logistician.pk])
+        self.assertCountEqual(ids(role=['none']), [unassigned.pk, conflicted.pk, inactive.pk])
+        self.assertIn(self.admin.pk, ids(role=[ADMIN]))
+        self.assertNotIn(director.pk, ids(group=['none']))
+        self.assertIn(unassigned.pk, ids(group=['none']))
+        self.assertEqual(ids(group=['not-an-id']), [])

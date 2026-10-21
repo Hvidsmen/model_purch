@@ -28,7 +28,7 @@ class DirectorySearchTests(SimpleTestCase):
             self.assertEqual(search_accounts('Петров')[0]['username'], 'daichi\\petrov')
             self.assertEqual(search_accounts('неизвестный'), [])
             self.assertEqual(run.call_count, 1)
-            self.assertEqual(run.call_args.args[0][-2:], ['DAICHI', 'dc.example.test'])
+            self.assertEqual(run.call_args.args[0][-3:-1], ['DAICHI', 'dc.example.test'])
             self.assertEqual(run.call_args.kwargs['timeout'], 10)
 
     def test_timeout_returns_actionable_message_and_releases_lock(self):
@@ -56,3 +56,43 @@ class DirectorySearchTests(SimpleTestCase):
         with patch('base.directory_search.subprocess.run', return_value=self.result()) as run:
             self.assertTrue(search_accounts('Семенов'))
             run.assert_called_once()
+
+    def test_latin_login_uses_targeted_lookup_and_cache_is_per_account(self):
+        with patch('base.directory_search.subprocess.run', return_value=self.result()) as run:
+            self.assertEqual(search_accounts('semenov')[0]['username'], 'daichi\\semenov')
+            self.assertEqual(run.call_args.args[0][-1], 'semenov')
+            search_accounts('DAICHI\\semenov')
+            self.assertEqual(run.call_count, 1)
+            search_accounts('petrov')
+            self.assertEqual(run.call_count, 2)
+            self.assertEqual(run.call_args.args[0][-1], 'petrov')
+
+    @override_settings(AD_UPN_SUFFIX='example.test')
+    def test_dns_domain_used_when_no_controller_override(self):
+        with patch('base.directory_search.os', SimpleNamespace(name='nt', environ={})):
+            with patch('base.directory_search.subprocess.run', return_value=self.result()) as run:
+                search_accounts('semenov')
+                self.assertEqual(run.call_args.args[0][-2], 'example.test')
+
+    def test_native_exact_lookup_skips_enumeration_and_frees_buffer(self):
+        import ctypes
+        from ctypes import wintypes
+        from unittest.mock import MagicMock
+        from .directory_search import _read_windows_accounts
+        class Info(ctypes.Structure):
+            _fields_ = [('name', wintypes.LPWSTR), ('full_name', wintypes.LPWSTR), ('comment', wintypes.LPWSTR), ('flags', wintypes.DWORD), ('user_id', wintypes.DWORD)]
+        record = Info('krasnoperov', 'Красноперов Иван', '', 0, 123)
+        api = MagicMock()
+        def lookup(server, account, level, target):
+            self.assertEqual(server.value, '\\\\dc.example.test')
+            self.assertEqual(account, 'krasnoperov')
+            ctypes.cast(target, ctypes.POINTER(ctypes.c_void_p))[0] = ctypes.cast(ctypes.pointer(record), ctypes.c_void_p)
+            return 0
+        api.NetUserGetInfo.side_effect = lookup
+        with patch('base.directory_search.ctypes.WinDLL', return_value=api, create=True):
+            self.assertEqual(_read_windows_accounts('DAICHI', 'dc.example.test', 'krasnoperov'), [{'username': 'daichi\\krasnoperov', 'full_name': 'Красноперов Иван'}])
+            record.flags = 2
+            self.assertEqual(_read_windows_accounts('DAICHI', 'dc.example.test', 'krasnoperov'), [])
+        api.NetUserEnum.assert_not_called()
+        api.NetGetDCName.assert_not_called()
+        self.assertEqual(api.NetApiBufferFree.call_count, 2)

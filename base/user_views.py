@@ -4,7 +4,7 @@ from django.contrib.auth.models import User, Group
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import PermissionDenied
 from django.db import transaction
-from django.db.models import Q
+from django.db.models import Q, Count
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
@@ -73,6 +73,15 @@ class UserForm(PortalRoleFormMixin, forms.ModelForm):
         return user
 
 
+class UserFilters(forms.Form):
+    role = forms.MultipleChoiceField(label='Роли', required=False, choices=[(r, r) for r in ROLES] + [('none', 'Без доступа')], widget=forms.CheckboxSelectMultiple)
+    group = forms.MultipleChoiceField(label='Группы', required=False, widget=forms.CheckboxSelectMultiple)
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['group'].choices = [(str(pk), name) for pk, name in Group.objects.exclude(name__in=ROLES).order_by('name').values_list('pk', 'name')] + [('none', 'Без группы')]
+
+
 @require_http_methods(['GET', 'POST'])
 def users(request):
     if not can_access(request.user, 'admin'):
@@ -90,10 +99,32 @@ def users(request):
     catalog = User.objects.prefetch_related('groups').order_by('username')
     if query:
         catalog = catalog.filter(Q(username__icontains=query) | Q(first_name__icontains=query) | Q(last_name__icontains=query) | Q(email__icontains=query))
-    catalog = list(catalog[:200])
+    filters = UserFilters(request.GET)
+    if filters.is_valid():
+        roles, groups = filters.cleaned_data['role'], filters.cleaned_data['group']
+        if roles:
+            catalog = catalog.annotate(system_roles=Count('groups', filter=Q(groups__name__in=ROLES), distinct=True))
+            condition = Q(pk__in=[])
+            for role in roles:
+                if role == 'none':
+                    condition |= Q(is_active=False) | (Q(is_superuser=False) & ~Q(system_roles=1))
+                elif role == ADMIN:
+                    condition |= Q(is_active=True) & (Q(is_superuser=True) | Q(system_roles=1, groups__name=ADMIN))
+                else:
+                    condition |= Q(is_active=True, is_superuser=False, system_roles=1, groups__name=role)
+            catalog = catalog.filter(condition)
+        if groups:
+            condition = Q(groups__pk__in=[int(value) for value in groups if value != 'none'])
+            if 'none' in groups:
+                catalog = catalog.annotate(access_groups=Count('groups', filter=~Q(groups__name__in=ROLES), distinct=True))
+                condition |= Q(access_groups=0)
+            catalog = catalog.filter(condition)
+    else:
+        catalog = catalog.none()
+    catalog = list(catalog.distinct()[:200])
     for row in catalog:
         row.portal_role_label = role_for(row) or 'Без доступа'
-    return render(request, 'base/users.html', {'form': form, 'editing': editing, 'catalog': catalog, 'query': query})
+    return render(request, 'base/users.html', {'form': form, 'editing': editing, 'catalog': catalog, 'query': query, 'filters': filters, 'filter_query': request.GET.urlencode()})
 
 
 @require_GET
