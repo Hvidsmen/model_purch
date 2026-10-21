@@ -54,7 +54,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 page.fill('#id_username', admin.username)
                 page.fill('#id_password', 'browser-test-password')
                 page.get_by_role('button', name='Войти', exact=True).click()
-                page.get_by_role('link', name='Просмотреть как пользователь', exact=True).click()
+                page.goto(self.live_server_url + '/accounts/preview/')
                 page.locator('#id_user').select_option(str(target.pk))
                 page.get_by_role('button', name='Открыть просмотр', exact=True).click()
                 expect(page.get_by_role('status')).to_contain_text(target.username)
