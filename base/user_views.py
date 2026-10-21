@@ -11,7 +11,7 @@ from django.views.decorators.http import require_GET, require_http_methods
 from .access import ADMIN, ROLES, role_for, can_access
 from .admin import PortalRoleFormMixin
 from .models import MotivationReportAccess
-from .directory_search import search_accounts
+from .directory_search import search_accounts, DirectoryPending
 
 
 class UserForm(PortalRoleFormMixin, forms.ModelForm):
@@ -135,7 +135,9 @@ def directory(request):
     if len(query) < 3:
         return JsonResponse({'error': 'Введите не менее трёх символов имени или логина.'}, status=400)
     try:
-        return JsonResponse({'users': search_accounts(query)})
+        return JsonResponse({'users': search_accounts(query, background=True)})
+    except DirectoryPending as error:
+        return JsonResponse({'pending': True, 'message': str(error)}, status=202)
     except RuntimeError as error:
         return JsonResponse({'error': str(error)}, status=503)
     except Exception:

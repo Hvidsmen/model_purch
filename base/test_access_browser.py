@@ -300,3 +300,34 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('.access-group-card')).to_have_count(2)
             finally:
                 browser.close()
+
+    def test_ad_search_waits_for_background_result_and_fills_selected_user(self):
+        from playwright.sync_api import sync_playwright, expect
+        ensure_roles()
+        actor = User.objects.create_user('ad-poll-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        from .directory_search import DirectoryPending
+        from unittest.mock import patch
+        sequence = [DirectoryPending('Загружаем каталог AD…'), DirectoryPending('Загружаем каталог AD…'), [{'username': 'daichi\\burukin', 'full_name': 'Бурукин Иван'}]]
+        with patch('base.user_views.search_accounts', side_effect=sequence) as search:
+            with sync_playwright() as driver:
+                browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(self.live_server_url + '/accounts/login/')
+                    page.fill('#id_username', actor.username)
+                    page.fill('#id_password', 'browser-test-password')
+                    page.get_by_role('button', name='Войти', exact=True).click()
+                    page.goto(self.live_server_url + '/accounts/users/')
+                    page.get_by_text('Найти в Active Directory', exact=True).click()
+                    page.fill('#ad-query', 'Бурукин')
+                    page.locator('#ad-find').click()
+                    expect(page.locator('#ad-status')).to_contain_text('Загружаем каталог')
+                    expect(page.locator('#ad-find')).to_be_disabled()
+                    expect(page.locator('.user-ad-result')).to_have_count(1, timeout=10000)
+                    page.locator('.user-ad-result').click()
+                    expect(page.locator('#id_username')).to_have_value('daichi\\burukin')
+                    expect(page.locator('#ad-find')).to_be_enabled()
+                finally:
+                    browser.close()
+        self.assertEqual(search.call_count, 3)

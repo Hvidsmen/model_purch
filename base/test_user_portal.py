@@ -63,7 +63,7 @@ class UserPortalTests(TestCase):
         with patch('base.user_views.search_accounts', return_value=[{'username': 'daichi\\test', 'full_name': 'Тестовый Сотрудник'}]) as lookup:
             response = self.client.get(reverse('portal_directory_search'), {'q': 'Тест'})
             self.assertEqual(response.json()['users'][0]['username'], 'daichi\\test')
-            lookup.assert_called_once_with('Тест')
+            lookup.assert_called_once_with('Тест', background=True)
         with patch('base.user_views.search_accounts') as lookup:
             self.assertEqual(self.client.get(reverse('portal_directory_search'), {'q': 'ab'}).status_code, 400)
             lookup.assert_not_called()
@@ -107,3 +107,11 @@ class UserPortalTests(TestCase):
         self.assertNotIn(director.pk, ids(group=['none']))
         self.assertIn(unassigned.pk, ids(group=['none']))
         self.assertEqual(ids(group=['not-an-id']), [])
+
+    def test_directory_pending_response_does_not_claim_no_users(self):
+        from .directory_search import DirectoryPending
+        with patch('base.user_views.search_accounts', side_effect=DirectoryPending('Загружаем каталог AD…')):
+            response = self.client.get(reverse('portal_directory_search'), {'q': 'Бурукин'})
+        self.assertEqual(response.status_code, 202)
+        self.assertTrue(response.json()['pending'])
+        self.assertNotIn('users', response.json())

@@ -6,19 +6,58 @@ import re
 import subprocess
 import sys
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from django.core.cache import cache
 from ctypes import wintypes
 from django.conf import settings
 
 
 _catalog_lock = threading.Lock()
+_jobs_lock = threading.Lock()
+_jobs = {}
+_workers = ThreadPoolExecutor(max_workers=2, thread_name_prefix='portal-ad')
 
 
-def search_accounts(query):
+class DirectoryPending(RuntimeError):
+    pass
+
+
+def _load_catalog(domain, server, exact, key):
+    try:
+        process = subprocess.run([sys.executable, '-m', 'base.directory_search', domain, server, exact],
+            capture_output=True, timeout=120, check=False)
+    except subprocess.TimeoutExpired:
+        raise RuntimeError('AD не ответила за 2 минуты. Проверьте доступ к контроллеру домена. Можно добавить DOMAIN\\login вручную.') from None
+    if process.returncode:
+        raise RuntimeError('Не удалось получить список AD. Проверьте контроллер домена и права учётной записи службы портала. Можно указать DOMAIN\\login вручную.')
+    catalog = json.loads(process.stdout.decode('utf-8'))
+    cache.set(key, catalog, timeout=300)
+    return catalog
+
+
+def _background_catalog(domain, server, exact, key):
+    with _jobs_lock:
+        job = _jobs.get(key)
+        if job is not None and job.done():
+            del _jobs[key]
+            catalog = job.result()
+            cache.set(key, catalog, timeout=300)
+            return catalog
+        if job is None:
+            for old_key, old_job in list(_jobs.items()):
+                if old_job.done():
+                    del _jobs[old_key]
+            if len(_jobs) >= 2:
+                raise DirectoryPending('Ожидаем завершения текущей загрузки AD…')
+            _jobs[key] = _workers.submit(_load_catalog, domain, server, exact, key)
+    raise DirectoryPending('Загружаем каталог AD. Первая загрузка может занять до двух минут…')
+
+
+def search_accounts(query, *, background=False):
     if os.name != 'nt':
         raise RuntimeError('Поиск AD доступен на Windows-сервере, включённом в домен.')
     domain = settings.AD_NETBIOS_DOMAIN
-    server = os.environ.get('PORTAL_AD_DIRECTORY_SERVER', '').strip() or settings.AD_UPN_SUFFIX
+    server = os.environ.get('PORTAL_AD_DIRECTORY_SERVER', '').strip()
     if not domain:
         raise RuntimeError('Задайте PORTAL_AD_NETBIOS_DOMAIN для поиска AD.')
     key = 'portal-domain-users:' + domain.casefold() + ':' + server.casefold()
@@ -36,21 +75,15 @@ def search_accounts(query):
     if catalog is None and exact:
         key += ':login:' + exact.casefold()
         catalog = cache.get(key)
+    if catalog is None and background:
+        catalog = _background_catalog(domain, server, exact, key)
     if catalog is None:
         if not _catalog_lock.acquire(timeout=0.2):
-            raise RuntimeError('Список AD уже загружается. Повторите поиск через несколько секунд.')
+            raise DirectoryPending('Список AD уже загружается. Повторите поиск через несколько секунд.')
         try:
             catalog = cache.get(key)
             if catalog is None:
-                try:
-                    process = subprocess.run([sys.executable, '-m', 'base.directory_search', domain, server, exact],
-                        capture_output=True, timeout=10, check=False)
-                except subprocess.TimeoutExpired:
-                    raise RuntimeError('AD не ответила за 10 секунд. Укажите PORTAL_AD_DIRECTORY_SERVER или добавьте доменный логин вручную.') from None
-                if process.returncode:
-                    raise RuntimeError('Не удалось получить список AD. Проверьте контроллер домена и права учётной записи службы портала. Можно указать DOMAIN\\login вручную.')
-                catalog = json.loads(process.stdout.decode('utf-8'))
-                cache.set(key, catalog, timeout=300)
+                catalog = _load_catalog(domain, server, exact, key)
         finally:
             _catalog_lock.release()
     normalize = lambda text: text.casefold().replace('ё', 'е')
