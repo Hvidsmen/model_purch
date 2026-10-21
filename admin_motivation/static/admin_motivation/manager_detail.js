@@ -16,6 +16,9 @@
   if (Math.abs(topScroll.scrollLeft - viewport.scrollLeft) > 1) topScroll.scrollLeft = viewport.scrollLeft;
  });
  const scrollObserver = new ResizeObserver(syncScrollSize);
+ const stickyHeader = root.querySelector('.manager-sticky-header');
+ const headerObserver = new ResizeObserver(() => root.style.setProperty('--manager-header-height', stickyHeader.getBoundingClientRect().height + 'px'));
+ headerObserver.observe(stickyHeader);
  scrollObserver.observe(viewport);
  scrollObserver.observe(root.querySelector('.report-period-header'));
  syncScrollSize();
@@ -41,7 +44,7 @@
  const nodes = JSON.parse(document.getElementById('manager-detail-tree').textContent);
  const target = document.getElementById('manager-detail-nodes');
  const extra = document.getElementById('manager-detail-extra');
- const expanded = {segments: false, motivation: false};
+ const expanded = {segments: false, motivation: false, 'period-input': false};
  const periodToggles = [...document.querySelectorAll('[data-manager-period-toggle]')];
  const hiddenPeriods = new Set();
  const money = new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 0});
@@ -55,6 +58,7 @@
   const label = document.createElement('span'); label.className = 'native-label'; label.textContent = node.label; row.appendChild(label);
   node.values.forEach((block, blockIndex) => block.forEach((value, index) => {
    const cell = document.createElement('span'); cell.className = 'report-number';
+   if (index === 18 && blockIndex < node.values.length - 1) cell.classList.add('manager-period-bonus');
    if (index === 16) cell.classList.add('motivation-execution');
    cell.dataset.managerPeriod = blockIndex;
    cell.classList.toggle('manager-period-hidden', hiddenPeriods.has(blockIndex));
@@ -62,10 +66,11 @@
    if (index === 12 || index === 16) { if (value != null) cell.classList.add(Number(value) >= .8 ? 'percent-good' : 'percent-low'); }
    if (index < 5) { cell.dataset.managerExtra = ''; cell.hidden = !extra.checked; }
    else if (index < 10) { cell.dataset.managerSegments = ''; cell.hidden = !expanded.segments; }
+   else if (index === 10 || index === 11) { cell.dataset.managerPeriodInput = ''; cell.hidden = !expanded['period-input']; }
    else if (index === 14 || index === 15) { cell.dataset.managerMotivation = ''; cell.hidden = !expanded.motivation; }
-   if (index === 11 || index === 16) {
+   if (index === 11 || index === 12 || index === 16) {
     const button = document.createElement('button'); button.type = 'button'; button.className = 'division-metric-toggle';
-    button.dataset.managerReveal = index === 11 ? 'segments' : 'motivation';
+    button.dataset.managerReveal = index === 11 ? 'segments' : index === 12 ? 'period-input' : 'motivation';
     button.setAttribute('aria-expanded', String(expanded[button.dataset.managerReveal]));
     button.textContent = cell.textContent; cell.textContent = ''; cell.appendChild(button);
    }
@@ -102,7 +107,7 @@
  expandTree(2);
  document.getElementById('manager-detail-expand').addEventListener('click', () => expandTree());
  document.getElementById('manager-detail-collapse').addEventListener('click', () => target.querySelectorAll('details').forEach(element => element.open = false));
- const updateColumns = () => root.style.setProperty('--report-columns', 8 + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
+ const updateColumns = () => root.style.setProperty('--report-columns', 6 + (expanded['period-input'] ? 2 : 0) + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
  root.addEventListener('click', event => {
   const button = event.target.closest('[data-manager-reveal]');
   if (!button) return;
