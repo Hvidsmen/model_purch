@@ -1,6 +1,24 @@
 (() => {
  const root = document.getElementById('manager-detail-report');
  if (!root) return;
+ const viewport = document.getElementById('manager-detail-scroll');
+ const topScroll = document.getElementById('manager-detail-scroll-top');
+ const syncScrollSize = () => {
+  if (!viewport.clientWidth) return;
+  topScroll.hidden = viewport.scrollWidth <= viewport.clientWidth;
+  topScroll.firstElementChild.style.width = `${viewport.scrollWidth + topScroll.clientWidth - viewport.clientWidth}px`;
+  topScroll.scrollLeft = viewport.scrollLeft;
+ };
+ topScroll.addEventListener('scroll', () => {
+  if (Math.abs(viewport.scrollLeft - topScroll.scrollLeft) > 1) viewport.scrollLeft = topScroll.scrollLeft;
+ });
+ viewport.addEventListener('scroll', () => {
+  if (Math.abs(topScroll.scrollLeft - viewport.scrollLeft) > 1) topScroll.scrollLeft = viewport.scrollLeft;
+ });
+ const scrollObserver = new ResizeObserver(syncScrollSize);
+ scrollObserver.observe(viewport);
+ scrollObserver.observe(root.querySelector('.report-period-header'));
+ syncScrollSize();
  const panel = document.getElementById('manager-detail-panel');
  const cards = document.querySelectorAll('[data-manager-open]');
  const syncCards = () => cards.forEach(card => card.setAttribute('aria-expanded', String(panel.open && card.dataset.managerOpen === panel.dataset.currency)));

@@ -21,5 +21,5 @@
 {% elif not errors %}<p class="report-empty">Выберите параметры и нажмите «Сформировать отчёт».</p>{% endif %}
 </section>
 <script src="{% static 'admin_motivation/reports.js' %}?v=motivation-percent-accent-20261021" defer></script>
-{% if kind == 'manager-detail' or kind == 'subdivisions' %}<script src="{% static 'admin_motivation/manager_multiselect.js' %}?v=subdivisions-20261021" defer></script>{% endif %}{% if kind == 'manager-detail' %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=manager-initial-depth-20261021" defer></script>{% endif %}
+{% if kind == 'manager-detail' or kind == 'subdivisions' %}<script src="{% static 'admin_motivation/manager_multiselect.js' %}?v=subdivisions-20261021" defer></script>{% endif %}{% if kind == 'manager-detail' %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=manager-top-scroll-20261021" defer></script>{% endif %}
 {% endblock %}

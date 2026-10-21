@@ -239,6 +239,12 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(self.page.locator('#manager-detail-nodes').get_by_text('Иванов', exact=True)).to_be_visible()
             expect(self.page.locator('#manager-detail-nodes').get_by_text('<Brand>', exact=True)).to_be_visible()
             viewport = root.locator('..')
+            top_scroll = self.page.locator('#manager-detail-scroll-top')
+            expect(top_scroll).to_be_visible()
+            top_scroll.evaluate('(el) => el.scrollLeft = 300')
+            self.page.wait_for_function('Math.abs(document.getElementById("manager-detail-scroll").scrollLeft - 300) < 2')
+            viewport.evaluate('(el) => el.scrollLeft = 150')
+            self.page.wait_for_function('Math.abs(document.getElementById("manager-detail-scroll-top").scrollLeft - 150) < 2')
             viewport.evaluate('(el) => el.scrollLeft = 0')
             label = root.locator('#manager-detail-nodes > details > summary > .native-label').first
             label.scroll_into_view_if_needed()
