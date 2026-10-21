@@ -199,6 +199,7 @@ AD_UPN_SUFFIX = os.environ.get('PORTAL_AD_UPN_SUFFIX', '')
 AD_SEARCH_BASE = os.environ.get('PORTAL_AD_SEARCH_BASE', '')
 AD_CA_CERT_FILE = os.environ.get('PORTAL_AD_CA_CERT_FILE', '')
 AD_CONNECT_TIMEOUT = 5
+AD_TRUSTED_DOMAIN_DISCOVERY = os.environ.get('PORTAL_AD_TRUSTED_DOMAINS', 'true').lower() in {'1', 'true', 'yes'}
 AD_FOREST_DISCOVERY = os.environ.get('PORTAL_AD_FOREST_DISCOVERY', 'true').lower() in {'1', 'true', 'yes'}
 AD_REQUIRE_HTTPS = os.environ.get('PORTAL_AD_ALLOW_HTTP', '').strip().lower() not in ('1', 'true', 'yes', 'on')
 if AD_AUTH_ENABLED:

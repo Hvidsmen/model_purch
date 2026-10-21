@@ -43,7 +43,7 @@
  let domainsLoaded = false;
  domain?.closest('details').addEventListener('toggle', async () => {
   if (!domain.closest('details').open || domainsLoaded) return;
-  domainsLoaded = true; domainStatus.textContent = 'Определяем домены леса AD…';
+  domainsLoaded = true; domainStatus.textContent = 'Определяем домены AD и доверенные домены…';
   try {
    const started = Date.now();
    while (true) {
@@ -55,7 +55,7 @@
      await new Promise(resolve => setTimeout(resolve, 1500)); continue;
     }
     const previous = domain.value.toLowerCase();
-    domain.replaceChildren(...data.domains.map(item => { const option = document.createElement('option'); option.value = item.name; option.textContent = `${item.name} · ${item.dns}`; option.selected = item.name.toLowerCase() === previous; return option; }));
+    domain.replaceChildren(...data.domains.map(item => { const option = document.createElement('option'); option.value = item.name; option.textContent = item.dns ? `${item.name} · ${item.dns}` : item.name; option.selected = item.name.toLowerCase() === previous; return option; }));
     domainStatus.textContent = `Доменов: ${data.domains.length}. Выберите домен сотрудника. Можно также указать DOMAIN\\login в поиске.`;
     break;
    }

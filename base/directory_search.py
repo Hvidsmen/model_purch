@@ -23,12 +23,12 @@ class DirectoryPending(RuntimeError):
 
 
 def _load_catalog(domain, server, exact, key):
-    command = [sys.executable, '-m', 'base.windows_domains', server] if domain == '__forest__' else [sys.executable, '-m', 'base.directory_search', domain, server, exact]
+    command = [sys.executable, '-m', 'base.windows_domains', server, exact] if domain == '__forest__' else [sys.executable, '-m', 'base.directory_search', domain, server, exact]
     try:
         process = subprocess.run(command, capture_output=True, timeout=15 if domain == '__forest__' else 120, check=False)
     except subprocess.TimeoutExpired:
         if domain == '__forest__':
-            raise RuntimeError('Windows не определила домены леса AD за 15 секунд. Проверьте доступ к контроллеру домена.') from None
+            raise RuntimeError('Windows не определила домены AD за 15 секунд. Проверьте доступ к контроллеру домена.') from None
         raise RuntimeError('AD не ответила за 2 минуты. Проверьте доступ к контроллеру домена. Можно добавить DOMAIN\\login вручную.') from None
     if process.returncode:
         raise RuntimeError('Не удалось получить список AD. Проверьте контроллер домена и права учётной записи службы портала. Можно указать DOMAIN\\login вручную.')
@@ -70,7 +70,7 @@ def search_accounts(query, *, background=False, domain=None):
     if requested.casefold() != settings.AD_NETBIOS_DOMAIN.casefold():
         domains = domain_map(background=background)
         if requested.casefold() not in domains:
-            raise RuntimeError('Домен не найден в лесу AD. Выберите домен из списка.')
+            raise RuntimeError('Домен не найден среди доменов AD и доверенных доменов Windows. Выберите домен из списка.')
     domain = requested
     server = os.environ.get('PORTAL_AD_DIRECTORY_SERVER', '').strip() if domain.casefold() == settings.AD_NETBIOS_DOMAIN.casefold() else ''
     if not domain:

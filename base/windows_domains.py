@@ -1,4 +1,4 @@
-"""Discover domains in the Windows AD forest, without LDAP or passwords."""
+"""Discover domains in the Windows AD forest and trusted domains, without LDAP or passwords."""
 import ctypes
 import json
 import os
@@ -8,7 +8,7 @@ from django.conf import settings
 from django.core.cache import cache
 
 
-def _read_forest_domains(server=''):
+def _read_forest_domains(server='', include_trusted=True):
     api = ctypes.WinDLL('Netapi32.dll')
     class DomainTrust(ctypes.Structure):
         _fields_ = [('netbios', wintypes.LPWSTR), ('dns', wintypes.LPWSTR),
@@ -20,13 +20,14 @@ def _read_forest_domains(server=''):
     api.NetApiBufferFree.argtypes = [ctypes.c_void_p]
     buffer, count = ctypes.c_void_p(), wintypes.ULONG()
     try:
-        # DS_DOMAIN_IN_FOREST: do not grant login to arbitrary external trusts.
-        status = api.DsEnumerateDomainTrustsW(server or None, 1, ctypes.byref(buffer), ctypes.byref(count))
+        # Forest members plus direct outbound/inbound trusts reported by Windows.
+        flags = 1 | 2 | 32 if include_trusted else 1
+        status = api.DsEnumerateDomainTrustsW(server or None, flags, ctypes.byref(buffer), ctypes.byref(count))
         if status:
             raise RuntimeError('Windows не смогла получить домены леса AD.')
         rows = ctypes.cast(buffer, ctypes.POINTER(DomainTrust))
         return [{'netbios': rows[i].netbios, 'dns': rows[i].dns or ''}
-                for i in range(count.value) if rows[i].netbios and rows[i].flags & 1]
+                for i in range(count.value) if rows[i].netbios and rows[i].flags & flags]
     finally:
         if buffer:
             api.NetApiBufferFree(buffer)
@@ -37,19 +38,20 @@ def domain_map(*, background=False):
     if os.name != 'nt' or not getattr(settings, 'AD_FOREST_DISCOVERY', True):
         return result
     server = os.environ.get('PORTAL_AD_DIRECTORY_SERVER', '').strip()
-    key = 'portal-ad-forest:' + settings.AD_NETBIOS_DOMAIN.casefold() + ':' + server.casefold()
+    mode = 'trusted' if settings.AD_TRUSTED_DOMAIN_DISCOVERY else 'forest'
+    key = 'portal-ad-domains-v2:' + settings.AD_NETBIOS_DOMAIN.casefold() + ':' + server.casefold() + ':' + mode
     rows = cache.get(key)
     if rows is None:
         from .directory_search import _background_catalog, _load_catalog
-        rows = (_background_catalog if background else _load_catalog)('__forest__', server, '', key)
+        rows = (_background_catalog if background else _load_catalog)('__forest__', server, mode, key)
     for row in rows:
-        if row.get('netbios') and row.get('dns'):
-            result[row['netbios'].casefold()] = row['dns'].casefold()
+        if row.get('netbios'):
+            result[row['netbios'].casefold()] = (row.get('dns') or '').casefold()
     return result
 
 
 if __name__ == '__main__':
     try:
-        sys.stdout.buffer.write(json.dumps(_read_forest_domains(sys.argv[1]), ensure_ascii=False).encode('utf-8'))
+        sys.stdout.buffer.write(json.dumps(_read_forest_domains(sys.argv[1], len(sys.argv) > 2 and sys.argv[2] == 'trusted'), ensure_ascii=False).encode('utf-8'))
     except Exception:
         sys.exit(1)

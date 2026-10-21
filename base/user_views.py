@@ -158,4 +158,4 @@ def directory_domains(request):
     except DirectoryPending as error:
         return JsonResponse({'pending': True, 'message': str(error)}, status=202)
     except Exception:
-        return JsonResponse({'error': 'Список доменов AD недоступен. Основной домен можно использовать; для остальных проверьте доступ Windows к лесу AD.'}, status=503)
+        return JsonResponse({'error': 'Список доменов AD недоступен. Основной домен можно использовать; для остальных проверьте доступ Windows к доменам и доверительным отношениям.'}, status=503)

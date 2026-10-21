@@ -95,3 +95,10 @@ class WindowsPasswordTests(TestCase):
                 windows_password_identity('EXTERNAL\\Krasnoperov', 'test')
         self.assertEqual(api.LogonUserW.call_count, 1)
         kernel.CloseHandle.assert_called_once()
+
+    def test_trusted_domain_netbios_and_dns_are_independent(self):
+        api, kernel = MagicMock(), MagicMock()
+        with patch('base.windows_domains.domain_map', return_value={'daichi': 'daichi.local', 'tt': 'thermotrade.local'}), patch('base.windows_password._load_api', return_value=(api, kernel)), patch('base.windows_password._token_account', return_value=('TT', 'Krasnoperov')):
+            for login in ('TT\\Krasnoperov', 'Krasnoperov@thermotrade.local'):
+                self.assertEqual(windows_password_identity(login, 'test-password'), {'username': 'tt\\krasnoperov'})
+        self.assertEqual(kernel.CloseHandle.call_count, 2)
