@@ -50,7 +50,8 @@ class UserPortalTests(TestCase):
     def test_personal_profile_required_and_self_lockout_denied(self):
         form = UserForm(self.local_data(portal_role=POLITICIAN), actor=self.admin)
         self.assertFalse(form.is_valid())
-        self.assertIn('report_author', form.errors)
+        self.assertIn('report_subdivision', form.errors)
+        self.assertEqual(form.cleaned_data['report_author'], 'Иванов Иван')
         form = UserForm(self.local_data(username=self.admin.username, is_active='', portal_role=''), actor=self.admin, instance=self.admin)
         self.assertFalse(form.is_valid())
         self.assertIn('__all__', form.errors)
@@ -125,3 +126,55 @@ class UserPortalTests(TestCase):
             lookup.assert_called_once_with('Красноперов', background=True, domain='TT')
         self.client.logout()
         self.assertEqual(self.client.get(reverse('portal_directory_domains')).status_code, 403)
+
+    def report_group(self):
+        from admin_motivation.models import Chanel, Subdivision, TypeCoeff
+        from .models import PortalReportGroup
+        channel = Chanel.objects.create(chanel_name='Auto-profile')
+        branches = [Subdivision.objects.create(subdivision_key=name, subdivision_name=name, subdivision_global=name, chanel=channel) for name in ('Auto-Moscow', 'Auto-Termotrey')]
+        worker = TypeCoeff.objects.create(type_coeff_name='Политики')
+        group = Group.objects.create(name='Политики · Москва и Термотрейд')
+        scope = PortalReportGroup.objects.create(group=group, employee_type=worker)
+        scope.subdivisions.set(branches)
+        return group, branches
+
+    def test_group_only_user_gets_role_departments_and_full_author_without_duplicate_inputs(self):
+        from .access import role_for
+        from .models import MotivationReportAccess
+        from .report_access import politician_scope
+        group, branches = self.report_group()
+        data = self.local_data(username='tt\\dgafurov', password1='', password2='', groups=[str(group.pk)],
+            first_name='Дамир  Наилович', last_name='Гафуров', portal_role='', report_subdivision='', report_author='')
+        response = self.client.post(reverse('portal_users'), data)
+        self.assertEqual(response.status_code, 302)
+        user = User.objects.get(username='tt\\dgafurov')
+        self.assertFalse(user.groups.filter(name=POLITICIAN).exists())
+        self.assertEqual(role_for(user), POLITICIAN)
+        profile = MotivationReportAccess.objects.get(user=user)
+        self.assertEqual(profile.deal_author, 'Гафуров Дамир Наилович')
+        self.assertEqual(politician_scope(user)['subdivision'], sorted(branch.subdivision_key for branch in branches))
+        self.client.force_login(user)
+        self.assertEqual(self.client.get(reverse('motivation_reports')).status_code, 200)
+        self.assertEqual(self.client.get(reverse('portal_users')).status_code, 403)
+        user.groups.clear()
+        self.assertIsNone(role_for(User.objects.get(pk=user.pk)))
+        self.assertEqual(self.client.get(reverse('motivation_reports')).status_code, 403)
+
+    def test_explicit_politician_with_group_follows_group_and_preserves_manual_author(self):
+        from .models import MotivationReportAccess
+        from .access import role_for
+        group, branches = self.report_group()
+        form = UserForm(self.local_data(groups=[str(group.pk)], portal_role=POLITICIAN, report_author='Гафуров Д. Н.'), actor=self.admin)
+        self.assertTrue(form.is_valid(), form.errors)
+        user = form.save()
+        self.assertFalse(user.groups.filter(name=POLITICIAN).exists())
+        self.assertEqual(role_for(user), POLITICIAN)
+        self.assertEqual(MotivationReportAccess.objects.get(user=user).deal_author, 'Гафуров Д. Н.')
+        response = self.client.get(reverse('portal_users'), {'role': POLITICIAN, 'group': str(group.pk)})
+        self.assertEqual([row.pk for row in response.context['catalog']], [user.pk])
+
+    def test_missing_fullname_does_not_silently_assign_partial_author(self):
+        group, branches = self.report_group()
+        form = UserForm(self.local_data(groups=[str(group.pk)], last_name='', report_author=''), actor=self.admin)
+        self.assertFalse(form.is_valid())
+        self.assertIn('report_author', form.errors)

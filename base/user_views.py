@@ -103,13 +103,15 @@ def users(request):
     if filters.is_valid():
         roles, groups = filters.cleaned_data['role'], filters.cleaned_data['group']
         if roles:
-            catalog = catalog.annotate(system_roles=Count('groups', filter=Q(groups__name__in=ROLES), distinct=True))
+            catalog = catalog.annotate(system_roles=Count('groups', filter=Q(groups__name__in=ROLES), distinct=True), report_groups=Count('groups', filter=Q(groups__portal_scope__isnull=False), distinct=True))
             condition = Q(pk__in=[])
             for role in roles:
                 if role == 'none':
-                    condition |= Q(is_active=False) | (Q(is_superuser=False) & ~Q(system_roles=1))
+                    condition |= Q(is_active=False) | (Q(is_superuser=False) & ~(Q(system_roles=1) | Q(system_roles=0, report_groups__gt=0)))
                 elif role == ADMIN:
                     condition |= Q(is_active=True) & (Q(is_superuser=True) | Q(system_roles=1, groups__name=ADMIN))
+                elif role == 'Политик':
+                    condition |= Q(is_active=True, is_superuser=False) & (Q(system_roles=1, groups__name=role) | Q(system_roles=0, report_groups__gt=0))
                 else:
                     condition |= Q(is_active=True, is_superuser=False, system_roles=1, groups__name=role)
             catalog = catalog.filter(condition)

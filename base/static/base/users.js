@@ -28,10 +28,13 @@
     const item = document.createElement('button'); item.type = 'button'; item.className = 'user-ad-result'; item.textContent = user.full_name || user.username;
     const login = document.createElement('small'); login.textContent = user.username; item.append(login);
     item.addEventListener('click', () => {
-     document.getElementById('id_username').value = user.username;
+     const loginField = document.getElementById('id_username');
+     if (loginField.value && loginField.value.toLowerCase() !== user.username.toLowerCase()) document.getElementById('id_report_author').value = '';
+     loginField.value = user.username;
      const parts = user.full_name.trim().split(/\s+/);
      document.getElementById('id_last_name').value = parts.shift() || '';
      document.getElementById('id_first_name').value = parts.join(' ');
+     document.getElementById('id_last_name').dispatchEvent(new Event('input', {bubbles: true}));
      document.getElementById('id_password1').value = ''; document.getElementById('id_password2').value = '';
      status.textContent = 'Сотрудник выбран. Назначьте роль и доступ к отчётам, затем нажмите «Добавить пользователя».';
     }); results.append(item);

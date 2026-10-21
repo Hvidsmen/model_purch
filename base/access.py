@@ -22,7 +22,7 @@ def role_for(user):
         return ADMIN
     if not hasattr(user, '_portal_role'):
         names = list(user.groups.filter(name__in=ROLES).values_list('name', flat=True))
-        user._portal_role = names[0] if len(names) == 1 else None
+        user._portal_role = names[0] if len(names) == 1 else POLITICIAN if not names and user.groups.filter(portal_scope__isnull=False).exists() else None
     return user._portal_role
 
 

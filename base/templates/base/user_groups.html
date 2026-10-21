@@ -15,8 +15,8 @@
 <label class="access-field">{{ form.employee_type.label }}{{ form.employee_type }}{{ form.employee_type.errors }}</label>
 {% include 'base/_group_multi.html' with field=form.subdivisions hint='Обязателен выбор хотя бы одного подразделения.' %}
 {% include 'base/_group_multi.html' with field=form.members hint='Участников можно добавить сейчас или позже.' %}
-<p class="access-explanation">Участники получают доступ ко всем выбранным подразделениям для этого вида работника. Несколько групп объединяют доступ. У «Политика» автор сделки остаётся только своим; роль и ФИО задаются в карточке пользователя.</p>
+<p class="access-explanation">Участники получают доступ ко всем выбранным подразделениям для этого вида работника. Несколько групп объединяют доступ. Группа автоматически даёт роль «Политик» для личных отчётов. Автор сделки остаётся только своим и заполняется из ФИО пользователя; отдельное подразделение выбирать не нужно.</p>
 <div class="access-form-footer"><button type="submit" class="access-button">{% if editing %}Сохранить изменения{% else %}Создать группу{% endif %}</button>{% if editing %}<a href="{% url 'portal_user_groups' %}">Отмена</a>{% endif %}</div>
 </form></section>
-</div></section><script src="{% static 'base/user_groups.js' %}?v=20261021" defer></script>
+</div></section><script src="{% static 'base/user_groups.js' %}?v=20261021-auto-author" defer></script>
 {% endblock %}

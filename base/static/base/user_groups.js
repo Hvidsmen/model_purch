@@ -10,8 +10,8 @@
    caption.textContent = !selected.length ? 'Ничего не выбрано' : selected.length === 1 ? selected[0].closest('label').textContent.trim() : `Выбрано: ${selected.length}`;
   };
   checks.forEach(input => input.addEventListener('change', sync));
-  field.querySelector('[data-choice-all]').addEventListener('click', () => { checks.forEach(input => input.checked=true); sync(); });
-  field.querySelector('[data-choice-clear]').addEventListener('click', () => { checks.forEach(input => input.checked=false); sync(); });
+  field.querySelector('[data-choice-all]').addEventListener('click', () => { checks.forEach(input => input.checked=true); sync(); checks[0]?.dispatchEvent(new Event('change', {bubbles:true})); });
+  field.querySelector('[data-choice-clear]').addEventListener('click', () => { checks.forEach(input => input.checked=false); sync(); checks[0]?.dispatchEvent(new Event('change', {bubbles:true})); });
   field.querySelector('[data-choice-close]').addEventListener('click', () => dropdown.open=false);
   search.addEventListener('input', () => { const text=search.value.trim().toLocaleLowerCase(); labels.forEach(label => label.hidden=!label.textContent.toLocaleLowerCase().includes(text)); });
   dropdown.addEventListener('toggle', () => {

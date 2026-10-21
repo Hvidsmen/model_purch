@@ -5,10 +5,43 @@
  const options = document.createElement('datalist'); options.id = 'report-author-options';
  author.after(options);
  const status = document.createElement('small'); status.setAttribute('role', 'status'); author.after(status);
+ const role = document.getElementById('id_portal_role');
+ const first = document.getElementById('id_first_name');
+ const last = document.getElementById('id_last_name');
+ const configuredGroups = new Set((role?.dataset.reportGroups || '').split(',').filter(Boolean));
+ const selectedGroups = () => [...document.querySelectorAll('input[name="groups"]:checked, select[name="groups"] option:checked')].some(input => configuredGroups.has(input.value));
+ const roleField = role?.closest('.access-field') || role?.closest('.form-row');
+ const branchField = branch.closest('.access-field') || branch.closest('.form-row');
+ const groupHint = document.createElement('p'); groupHint.className = 'access-explanation';
+ roleField?.before(groupHint);
+ function syncGroupAccess() {
+  const grouped = selectedGroups();
+  const inherited = grouped && (!role?.value || role.value === 'Политик');
+  if (roleField) roleField.hidden = inherited;
+  if (branchField) branchField.hidden = grouped;
+  groupHint.hidden = !grouped;
+  groupHint.textContent = inherited ? 'Роль: Политик · доступ из групп. Подразделения и вид работника берутся из выбранных групп.' : 'Подразделения и вид работника берутся из групп. Роль в портале задана отдельно.';
+  if (grouped) status.textContent = 'Подразделения определяются группами. ФИО автора сделки можно исправить вручную.';
+ }
+ let generated = null;
+ const normalize = value => value.trim().replace(/\s+/g, ' ');
+ function fillAuthor() {
+  if (!(role?.value === 'Политик' || (!role?.value && selectedGroups())) || !first || !last) return;
+  const firstName = normalize(first.value), lastName = normalize(last.value);
+  if (!firstName || !lastName) return;
+  if (!author.value.trim() || author.value === generated) {
+   generated = `${lastName} ${firstName}`;
+   author.value = generated;
+  }
+ }
+ role?.addEventListener('change', () => { syncGroupAccess(); fillAuthor(); });
+ document.addEventListener('change', event => { if (event.target.name === 'groups') { syncGroupAccess(); fillAuthor(); } });
+ first?.addEventListener('input', fillAuthor);
+ last?.addEventListener('input', fillAuthor);
  let pending;
- async function load(clear) {
+ async function load() {
   pending?.abort(); pending = new AbortController(); options.replaceChildren();
-  if (clear) author.value = '';
+  if (selectedGroups()) { syncGroupAccess(); return; }
   if (!branch.value) { status.textContent = 'Выберите подразделение для загрузки ФИО из отчётов.'; return; }
   status.textContent = 'Загрузка авторов сделки…';
   const url = new URL(branch.dataset.authorUrl, location.origin);
@@ -23,6 +56,8 @@
    if (error.name !== 'AbortError') status.textContent = 'Список DWH недоступен. Можно указать точное ФИО вручную.';
   }
  }
- branch.addEventListener('change', () => load(true));
- load(false);
+ branch.addEventListener('change', load);
+ syncGroupAccess();
+ fillAuthor();
+ load();
 })();

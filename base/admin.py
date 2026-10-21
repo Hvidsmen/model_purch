@@ -7,7 +7,7 @@ from django.contrib.auth.models import User, Group
 from django.contrib.auth.validators import UnicodeUsernameValidator
 import re
 from .access import ADMIN, ROLES, POLITICIAN, role_for
-from .models import MotivationReportAccess
+from .models import MotivationReportAccess, PortalReportGroup
 from admin_motivation.models import Subdivision
 
 
@@ -41,19 +41,20 @@ class PortalRoleFormMixin:
         return exclusions
 
     report_subdivision = forms.ModelChoiceField(queryset=Subdivision.objects.all(), label='Подразделение для личных отчётов', required=False, widget=forms.Select(attrs={'data-author-url': reverse_lazy('portal_report_authors')}))
-    report_author = forms.CharField(label='Точное ФИО автора сделки', max_length=255, required=False, widget=forms.TextInput(attrs={'list': 'report-author-options', 'autocomplete': 'off'}), help_text='Для роли «Политик» обязательно. Выберите ФИО из отчётов по подразделению; одной фамилии недостаточно.')
+    report_author = forms.CharField(label='Точное ФИО автора сделки', max_length=255, required=False, widget=forms.TextInput(attrs={'list': 'report-author-options', 'autocomplete': 'off'}), help_text='Для роли «Политик» ФИО заполняется из карточки пользователя. При необходимости исправьте по точному ФИО из отчётов.')
 
-    portal_role = forms.ChoiceField(label='Роль в портале', choices=[('', 'Без доступа')] + [(r, r) for r in ROLES], required=False)
+    portal_role = forms.ChoiceField(label='Роль в портале', choices=[('', 'По группе · без группы нет доступа')] + [(r, r) for r in ROLES], required=False)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         if self.instance.pk:
-            self.fields['portal_role'].initial = role_for(self.instance)
+            self.fields['portal_role'].initial = ADMIN if self.instance.is_superuser else self.instance.groups.filter(name__in=ROLES).values_list('name', flat=True).first()
         if self.instance.pk:
             access = MotivationReportAccess.objects.select_related('subdivision').filter(user=self.instance).first()
             if access:
                 self.fields['report_subdivision'].initial = access.subdivision.merged_into_id or access.subdivision_id
                 self.fields['report_author'].initial = access.deal_author
+        self.fields['portal_role'].widget.attrs['data-report-groups'] = ','.join(str(value) for value in PortalReportGroup.objects.values_list('group_id', flat=True))
         if 'groups' in self.fields:
 
             self.fields['groups'].queryset = Group.objects.exclude(name__in=ROLES)
@@ -62,10 +63,28 @@ class PortalRoleFormMixin:
         data = super().clean()
         if data.get('is_superuser') and data.get('portal_role') != ADMIN:
             self.add_error('portal_role', 'Суперпользователь должен иметь роль «Администратор». Для другой роли снимите признак суперпользователя.')
-        if data.get('portal_role') == POLITICIAN:
+        selected_groups = data.get('groups', []) if 'groups' in self.fields else self.instance.groups.all() if self.instance.pk else []
+        report_groups = list(PortalReportGroup.objects.filter(group__in=selected_groups).prefetch_related('subdivisions__merged_into'))
+        if report_groups and data.get('portal_role') == POLITICIAN:
+            # Access follows membership; do not retain a standalone role after removal.
+            data['portal_role'] = ''
+        effective_role = data.get('portal_role') or (POLITICIAN if report_groups else '')
+        if effective_role == POLITICIAN:
+            if report_groups:
+                branch_ids = {branch.merged_into_id or branch.pk for group in report_groups for branch in group.subdivisions.all()}
+                data['report_subdivision'] = self.fields['report_subdivision'].queryset.filter(pk__in=branch_ids).order_by('subdivision_key').first()
+            if not data.get('report_author', '').strip() and 'report_author' not in self.errors:
+                first = data.get('first_name', '') if 'first_name' in self.fields else self.instance.first_name
+                last = data.get('last_name', '') if 'last_name' in self.fields else self.instance.last_name
+                if first and last:
+                    fullname = ' '.join((last + ' ' + first).split())
+                    try:
+                        data['report_author'] = self.fields['report_author'].clean(fullname)
+                    except forms.ValidationError as error:
+                        self.add_error('report_author', error)
             if not data.get('report_subdivision'):
                 self.add_error('report_subdivision', 'Назначьте подразделение для роли «Политик».')
-            if not data.get('report_author', '').strip():
+            if not data.get('report_author', '').strip() and 'report_author' not in self.errors:
                 self.add_error('report_author', 'Назначьте точное ФИО автора сделки для роли «Политик».')
         return data
 

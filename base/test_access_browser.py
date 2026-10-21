@@ -359,3 +359,58 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 finally:
                     browser.close()
         search.assert_called_once_with('Красноперов', background=True, domain='TT')
+
+    def test_politician_author_autofill_and_group_only_access_without_duplicate_fields(self):
+        from admin_motivation.models import Chanel, Subdivision, TypeCoeff
+        from .models import PortalReportGroup, MotivationReportAccess
+        from .access import POLITICIAN, role_for
+        from unittest.mock import patch
+        from playwright.sync_api import sync_playwright, expect
+        ensure_roles()
+        actor = User.objects.create_user('auto-profile-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        channel = Chanel.objects.create(chanel_name='Auto browser')
+        branch = Subdivision.objects.create(subdivision_key='Термотрейд', subdivision_name='Термотрейд', subdivision_global='Термотрейд', chanel=channel)
+        worker = TypeCoeff.objects.create(type_coeff_name='Политики')
+        group = Group.objects.create(name='Политики Москва и Термотрейд')
+        scope = PortalReportGroup.objects.create(group=group, employee_type=worker)
+        scope.subdivisions.add(branch)
+        with patch('base.user_views.search_accounts', return_value=[{'username': 'tt\\dgafurov', 'full_name': 'Гафуров Дамир Наилович'}]):
+            with sync_playwright() as driver:
+                browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+                try:
+                    page = browser.new_page()
+                    page.goto(self.live_server_url + '/accounts/login/')
+                    page.fill('#id_username', actor.username)
+                    page.fill('#id_password', 'browser-test-password')
+                    page.get_by_role('button', name='Войти', exact=True).click()
+                    page.goto(self.live_server_url + '/accounts/users/')
+                    page.fill('#id_first_name', 'Дамир Наилович')
+                    page.fill('#id_last_name', 'Гафуров')
+                    page.select_option('#id_portal_role', POLITICIAN)
+                    expect(page.locator('#id_report_author')).to_have_value('Гафуров Дамир Наилович')
+                    page.fill('#id_report_author', 'Ручное точное ФИО')
+                    page.fill('#id_first_name', 'Дамир')
+                    expect(page.locator('#id_report_author')).to_have_value('Ручное точное ФИО')
+                    page.fill('#id_report_author', '')
+                    page.select_option('#id_portal_role', '')
+                    field = page.locator('#portal-user-form [data-access-multi]')
+                    field.locator('summary').click()
+                    field.get_by_label(group.name, exact=True).check()
+                    field.locator('[data-choice-close]').click()
+                    expect(page.locator('#id_portal_role')).not_to_be_visible()
+                    expect(page.locator('#id_report_subdivision')).not_to_be_visible()
+                    page.get_by_text('Найти в Active Directory', exact=True).click()
+                    page.fill('#ad-query', 'Гафуров')
+                    page.locator('#ad-find').click()
+                    page.locator('.user-ad-result').click()
+                    expect(page.locator('#id_report_author')).to_have_value('Гафуров Дамир Наилович')
+                    page.screenshot(path='/tmp/portal-user-auto-group.png', full_page=True)
+                    page.get_by_role('button', name='Добавить пользователя', exact=True).click()
+                    expect(page.locator('.access-notice')).to_contain_text('сохранён')
+                finally:
+                    browser.close()
+        user = User.objects.get(username='tt\\dgafurov')
+        self.assertEqual(role_for(user), POLITICIAN)
+        self.assertFalse(user.groups.filter(name=POLITICIAN).exists())
+        self.assertEqual(MotivationReportAccess.objects.get(user=user).deal_author, 'Гафуров Дамир Наилович')
