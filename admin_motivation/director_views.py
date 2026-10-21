@@ -210,3 +210,30 @@ def director_coefficients(request, local=False, version_form=None):
         'subdivisions': Subdivision.objects.all(), 'employee_form': employee_form,
         'formset': formset, 'add_form': add_form, 'search': search,
     })
+
+
+@require_http_methods(['GET', 'POST'])
+def director_coeff_import(request):
+    from .models import GlobalCoeffVersion
+    from .services.director_coeff_import import import_director_coefficients
+    values = request.POST if request.method == 'POST' else request.GET
+    try:
+        version_id = int(values.get('version', ''))
+    except (ValueError, TypeError):
+        from django.http import Http404
+        raise Http404('Выберите версию коэффициентов.')
+    version = get_object_or_404(GlobalCoeffVersion, pk=version_id)
+    errors = []
+    if request.method == 'POST':
+        try:
+            result = import_director_coefficients(request.FILES.get('file'), version.pk)
+        except ValidationError as error:
+            errors = error.messages
+        except Exception:
+            import logging
+            logging.getLogger(__name__).exception('Director coefficient import failed for version %s', version.pk)
+            errors = ['Не удалось сохранить коэффициенты. Изменения отменены. Проверьте журнал сервера.']
+        else:
+            messages.success(request, f'Коэффициенты директоров загружены в «{version}». Директоров: {result["directors"]}; создано: {result["created"]}; обновлено: {result["updated"]}; без изменений: {result["unchanged"]}.')
+            return redirect(reverse('global_coeff_admin_motivation') + f'?version={version.pk}')
+    return render(request, 'admin_motivation/director_coeff_import.html', {'version': version, 'errors': errors})

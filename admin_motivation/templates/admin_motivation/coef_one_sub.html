@@ -737,6 +737,7 @@
                     <details class="editor-tools" id="coefficient-tools"><summary>Ещё: импорт, копирование и справочники</summary><div class="tool-options">
                     {% if employee and director_editable %}<button type="button" class="btn btn-outline-primary" onclick="document.getElementById('copy-director-dialog').showModal()">Копировать другому директору</button>{% endif %}
 
+                    <a class="btn btn-secondary" href="{% url 'motivation_director_coeff_import' %}?version={{ selected_version.pk }}">Загрузить коэффициенты директоров</a>
                     <div class="file-upload-wrapper">
                         <label class="file-input-label" id="fileLabel" for="fileInput">
                             <input type="file" name="myfile" id="fileInput" accept=".xlsx,.xls,.csv">

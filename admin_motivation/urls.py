@@ -2,6 +2,7 @@ from . import views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path("directors/coefficients/import/", director_views.director_coeff_import, name="motivation_director_coeff_import"),
     path("coefficients/template/", views.download_coefficient_template, name="motivation_global_template"),
     path("coefficients/template/<int:subdivision>/", views.download_coefficient_template, name="motivation_subdivision_template"),
     path("copy_group/", director_views.coefficient_group_copy, name="motivation_copy_group"),

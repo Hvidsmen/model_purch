@@ -898,6 +898,7 @@
                     <details class="editor-tools" id="coefficient-tools"><summary>Ещё: импорт, копирование и справочники</summary><div class="tool-options">
                     <button type="submit" class="btn btn-secondary" name="action_button" value="sync_references">Обновить справочники из DWH</button>
 
+                    <a class="btn btn-secondary" href="{% url 'motivation_director_coeff_import' %}?version={{ selected_version.pk }}">Загрузить коэффициенты директоров</a>
                     <div class="file-upload-wrapper">
                         <label class="file-input-label" id="fileLabel">
                             <input type="file" name="myfile" id="fileInput" accept=".xlsx,.xls,.csv">

@@ -11,6 +11,30 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_director_matrix_upload_uses_selected_version_and_existing_bindings(self):
+        from playwright.sync_api import expect
+        from .models import DirectorEmployee, SubdivisionDirectorCoeff
+        from .test_director_coeff_import import workbook
+        def setup():
+            channel = Chanel.objects.create(chanel_name='Import channel')
+            branch = Subdivision.objects.create(subdivision_key='Import', subdivision_name='Import', subdivision_global='Import', chanel=channel)
+            for name in ('Первый директор', 'Второй директор'):
+                employee = DirectorEmployee.objects.create(full_name=name)
+                employee.subdivisions.add(branch)
+            Goods.objects.create(goods_key='Import', planning_group_sales='1. RAC', group='Group', brand='*')
+            return branch.pk
+        branch = self.db(setup)
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation') + f'?version={self.first.pk}')
+        self.page.locator('#coefficient-tools').evaluate('(el) => el.open = true')
+        self.page.get_by_role('link', name='Загрузить коэффициенты директоров', exact=True).click()
+        expect(self.page.get_by_text('Выбранная версия:', exact=False)).to_contain_text('01.01.2001')
+        self.page.locator('[name=file]').set_input_files({'name': 'directors.xlsx', 'mimeType': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'buffer': workbook().read()})
+        with self.page.expect_navigation():
+            self.page.get_by_role('button', name='Загрузить в выбранную версию', exact=True).click()
+        expect(self.page.locator('.alert-success')).to_contain_text('создано: 2')
+        self.assertEqual(self.db(lambda: SubdivisionDirectorCoeff.objects.filter(version=self.first, subdivision_id=branch).count()), 2)
+        self.assertEqual(self.errors, [])
+
     def test_subdivision_summary_expands_types_and_keeps_company_total_first(self):
         from unittest.mock import patch
         from playwright.sync_api import expect
