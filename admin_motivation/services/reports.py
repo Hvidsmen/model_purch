@@ -37,12 +37,12 @@ FILTERS = {
 }
 
 
-def parameters(kind, query):
+def parameters(kind, query, trusted_identity=False):
     values = {}
     for name, parameter, _, _, multi in FILTERS[kind]:
         items = query.getlist(name) if hasattr(query, 'getlist') else query.get(name, [])
         if isinstance(items, str): items = [items]
-        if len(items) > 100 or any(len(value) > 255 for value in items):
+        if (len(items) > 100 and not (trusted_identity and name == 'subdivision')) or any(len(value) > 255 for value in items):
             raise ValidationError('Слишком много значений фильтра или слишком длинное значение.')
         values[parameter] = list(dict.fromkeys(items)) if multi else (items[0] if items else None)
     if kind in ('manager', 'manager-detail'):

@@ -10,3 +10,16 @@ class MotivationReportAccess(models.Model):
     class Meta:
         verbose_name = 'Доступ к личным отчётам мотивации'
         verbose_name_plural = 'Доступ к личным отчётам мотивации'
+
+
+class PortalReportGroup(models.Model):
+    group = models.OneToOneField('auth.Group', on_delete=models.CASCADE, related_name='portal_scope')
+    employee_type = models.ForeignKey('admin_motivation.TypeCoeff', on_delete=models.PROTECT, verbose_name='Вид работника')
+    subdivisions = models.ManyToManyField('admin_motivation.Subdivision', verbose_name='Подразделения', related_name='portal_report_groups')
+
+    class Meta:
+        verbose_name = 'Группа доступа к отчётам'
+        verbose_name_plural = 'Группы доступа к отчётам'
+
+    def __str__(self):
+        return self.group.name

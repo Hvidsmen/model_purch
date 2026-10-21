@@ -25,7 +25,7 @@ def report_page(request, kind):
     access_scope = getattr(request, 'personal_report_scope', None) or politician_scope(request.user)
     if role_for(request.user) == POLITICIAN and (not access_scope or kind not in PERSONAL_REPORTS):
         raise PermissionDenied
-    query = scoped_query(request.GET, access_scope) if access_scope else request.GET.copy()
+    query = scoped_query(request.GET, access_scope, kind) if access_scope else request.GET.copy()
     if kind == 'deals':
         query.setdefault('start', today().replace(month=1, day=1).isoformat())
         query.setdefault('end', today().isoformat())
@@ -34,7 +34,7 @@ def report_page(request, kind):
     data = None
     values = {}
     try:
-        values = parameters(kind, query)
+        values = parameters(kind, query, trusted_identity=True) if access_scope else parameters(kind, query)
         excel = kind == 'manager-detail' and query.get('export') == 'xlsx'
         if excel and query.get('table', 'all') not in ('all', 'summary', 'detail'):
             raise ValidationError('Неизвестная таблица для выгрузки.')
@@ -69,11 +69,11 @@ def report_page(request, kind):
     if not filters:
         filters = [{'name': name, 'label': caption, 'multiple': multiple, 'options': []} for name, _, caption, _, multiple in FILTERS[kind]]
     if access_scope:
-        fixed = {'type': access_scope['type'], 'subdivision': access_scope['subdivision'], 'author': access_scope['author']}
+        from base.report_access import identity_choices
+        fixed = identity_choices(kind, values, access_scope)
         for item in filters:
             if item['name'] in fixed:
-                item.update(locked=True, locked_value=fixed[item['name']])
-                item['options'] = [{'value': fixed[item['name']], 'selected': True}]
+                item.update(fixed[item['name']])
     if kind == 'deals' and data:
         columns = [('АвторСделки','Автор сделки','text'), ('Канал','Канал','text'), ('Подразделение','Подразделение','text'),
             ('ДатаЗакрытияСделки','Дата закрытия','date'), ('ДатаОтгрузки','Дата отгрузки','date'), ('Партнер','Партнёр','text'),
@@ -107,7 +107,7 @@ def report_page(request, kind):
     return render(request, 'admin_motivation/reports/report.html', {
         'kind': kind, 'definition': CATALOG[kind], 'filters': filters, 'query': query,
         'selected_parameters': selected_parameters, 'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
-        'subdivisions': Subdivision.objects.filter(subdivision_key=access_scope['subdivision']) if access_scope else Subdivision.objects.all(),
+        'subdivisions': Subdivision.objects.none() if access_scope else Subdivision.objects.all(),
         'scope': query.get('scope','subdivisions'),
     })
 

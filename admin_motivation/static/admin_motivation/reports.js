@@ -40,7 +40,7 @@
  const form = document.getElementById('native-report-filters');
  if (['manager', 'manager-detail'].includes(form?.dataset.kind)) {
   ['type', 'subdivision'].forEach(name => form.elements[name]?.addEventListener('change', () => {
-   [...form.elements.author.options].forEach(option => option.selected = false);
+   if (form.elements.author?.tagName === 'SELECT') [...form.elements.author.options].forEach(option => option.selected = false);
    form.requestSubmit(document.getElementById('report-filter-refresh'));
   }));
  }
