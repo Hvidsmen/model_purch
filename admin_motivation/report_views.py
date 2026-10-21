@@ -82,9 +82,16 @@ def report_page(request, kind):
                 values = ["'"+value if isinstance(value,str) and value.lstrip().startswith(('=','+','-','@')) else value for value in values]
                 writer.writerow([row['number'],*values])
             return response
+    selected_parameters = []
+    if kind == 'manager-detail' and data:
+        for name, parameter, caption, dataset, multiple in FILTERS[kind]:
+            selected = values.get(parameter)
+            selected = selected if isinstance(selected, list) else [selected]
+            selected_parameters.append({'label': caption, 'value': ', '.join(str(item) for item in selected if item not in (None, '')) or 'Все'})
+        selected_parameters.append({'label': 'Валюта мотивации', 'value': data['currency']})
     return render(request, 'admin_motivation/reports/report.html', {
         'kind': kind, 'definition': CATALOG[kind], 'filters': filters, 'query': query,
-        'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
+        'selected_parameters': selected_parameters, 'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
         'subdivisions': Subdivision.objects.all(),
         'scope': query.get('scope','subdivisions'),
     })

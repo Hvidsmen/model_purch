@@ -73,3 +73,7 @@
 #manager-detail-report .report-column-header>span:first-child,#manager-detail-report .report-period-header>span:first-child,#manager-detail-report .manager-division-execution>strong:first-child{background:#f1f5f9;z-index:3}
 #manager-detail-report .report-total-row>strong:first-child{background:#e8eff8;z-index:3}
 #manager-detail-report .native-division-node>summary:hover>.native-label{background:#f7f9fc}
+
+.report-filter-summary{background:#f5f7fc;color:#405477;padding:12px 14px;margin:16px 0;line-height:1.7;overflow-wrap:anywhere}
+
+#manager-detail-report .manager-period-hidden{display:none!important}

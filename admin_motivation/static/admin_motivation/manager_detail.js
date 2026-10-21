@@ -24,6 +24,8 @@
  const target = document.getElementById('manager-detail-nodes');
  const extra = document.getElementById('manager-detail-extra');
  const expanded = {segments: false, motivation: false};
+ const periodToggles = [...document.querySelectorAll('[data-manager-period-toggle]')];
+ const hiddenPeriods = new Set();
  const money = new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 0});
  const percent = new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
  function create(node) {
@@ -33,8 +35,10 @@
   row.classList.add('division-report-grid');
   row.style.setProperty('--level', node.level);
   const label = document.createElement('span'); label.className = 'native-label'; label.textContent = node.label; row.appendChild(label);
-  node.values.forEach(block => block.forEach((value, index) => {
+  node.values.forEach((block, blockIndex) => block.forEach((value, index) => {
    const cell = document.createElement('span'); cell.className = 'report-number';
+   cell.dataset.managerPeriod = blockIndex;
+   cell.classList.toggle('manager-period-hidden', hiddenPeriods.has(blockIndex));
    cell.textContent = value == null ? '—' : index < 5 || index === 12 || index === 16 ? percent.format(Number(value) * 100) + '%' : money.format(Number(value));
    if (index === 12 || index === 16) { if (value != null) cell.classList.add(Number(value) >= .8 ? 'percent-good' : 'percent-low'); }
    if (index < 5) { cell.dataset.managerExtra = ''; cell.hidden = !extra.checked; }
@@ -56,11 +60,24 @@
   }
   return parent;
  }
+ root.querySelectorAll('.division-report-grid').forEach(row => {
+  [...row.children].slice(1).forEach((cell, index) => {
+   cell.dataset.managerPeriod = row.classList.contains('report-period-header') ? index : Math.floor(index / 20);
+  });
+ });
+ periodToggles.forEach(toggle => toggle.addEventListener('change', () => {
+  const index = Number(toggle.dataset.managerPeriodToggle);
+  if (toggle.checked) hiddenPeriods.delete(index); else hiddenPeriods.add(index);
+  root.querySelectorAll('[data-manager-period="' + index + '"]').forEach(cell => cell.classList.toggle('manager-period-hidden', !toggle.checked));
+  root.style.setProperty('--report-blocks', periodToggles.length - hiddenPeriods.size + 1);
+ }));
  nodes.forEach(node => target.appendChild(create(node)));
- document.getElementById('manager-detail-expand').addEventListener('click', () => {
+ const expandAll = () => {
   const expand = element => { element._load?.(); element.open = true; [...element.children].forEach(child => child.querySelectorAll(':scope > details').forEach(expand)); };
   target.querySelectorAll(':scope > details').forEach(expand);
- });
+ };
+ expandAll();
+ document.getElementById('manager-detail-expand').addEventListener('click', expandAll);
  document.getElementById('manager-detail-collapse').addEventListener('click', () => target.querySelectorAll('details').forEach(element => element.open = false));
  const updateColumns = () => root.style.setProperty('--report-columns', 8 + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
  root.addEventListener('click', event => {

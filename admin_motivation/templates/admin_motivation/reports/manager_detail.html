@@ -1,4 +1,5 @@
 {% load report_format %}
+<p class="report-filter-summary" aria-label="Выбранные параметры отчёта">{% for parameter in selected_parameters %}<span><strong>{{ parameter.label }}:</strong> {{ parameter.value }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
 <div class="report-buttons"><a class="btn btn-primary" href="{{ data.excel_urls.all }}">Скачать весь отчёт Excel</a></div>
 {% if not data.nodes %}<p class="report-empty">Нет данных по выбранным параметрам.</p>{% endif %}
 <div class="manager-detail-cards">{% for card in data.cards %}<button type="button" data-manager-open="{{ card.currency }}" aria-controls="manager-detail-panel" aria-expanded="true"><strong>{{ card.currency }}</strong><span>С учётом выполнения: {{ card.paid|report_money }}</span><span>Доплата за кварталы: {{ card.bonus|report_money }}</span><strong>Итого: {{ card.total|report_money }}</strong><span class="manager-card-hint">Перейти к расширенной таблице →</span></button>{% endfor %}</div>
@@ -16,6 +17,7 @@
 <details id="manager-detail-panel" class="manager-detail-panel" data-currency="{{ data.currency }}" open><summary>Расширенная таблица мотивации · {{ data.currency }}</summary>
 <p class="report-filter-hint">План и отгрузки — USD. Мотивация — {{ data.currency }}. В блоке «Итого» план, факт и процент выполнения берутся из строк «Год». Мотивация и доплата суммируются по всем периодам. При отсутствии полных годовых данных план, факт и процент показаны прочерком. Коэффициенты K0–K4 на каждом уровне взвешены по отгрузкам соответствующих сегментов O0–O4.</p>
 <div class="report-buttons"><a class="btn btn-outline-secondary" href="{{ data.excel_urls.detail }}">Скачать расширенную таблицу Excel</a><button type="button" class="btn btn-outline-secondary" id="manager-detail-expand">Развернуть всё</button><button type="button" class="btn btn-outline-secondary" id="manager-detail-collapse">Свернуть всё</button><label><input type="checkbox" id="manager-detail-extra"> Коэффициенты K0–K4</label></div>
+<div class="report-buttons" aria-label="Показать периоды"><strong>Показать периоды:</strong>{% for period in data.periods %}<label><input type="checkbox" data-manager-period-toggle="{{ forloop.counter0 }}" checked> {{ period }}</label>{% endfor %}<span>Итого — всегда</span></div>
 {{ data.nodes|json_script:'manager-detail-tree' }}
 <div class="report-scroll"><div id="manager-detail-report" style="--report-blocks:{{ data.periods|length|add:1 }};--report-columns:8">
 <div class="division-report-grid report-period-header"><span>Подразделение / автор сделки / товарная матрица</span>{% for period in data.periods %}<strong>{{ period }}</strong>{% endfor %}<strong>Итого</strong></div>
