@@ -1,7 +1,7 @@
 {% extends 'admin_motivation/base.html' %}
 {% load static report_format %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=manager-selected-parameters-20261021">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=dashboard-drilldowns-20261021">
 <section class="content native-report">
 <a href="{% url 'motivation_reports' %}">← Все отчёты</a>
 <h1 class="report-title">{{ definition.title }}{% if data.years %} · {{ data.years|join:", " }}{% endif %}{% if kind == 'manager' or kind == 'manager-detail' %} · {% if query.currency == 'RUB' %}RUB{% else %}USD{% endif %}{% endif %}</h1>
@@ -20,6 +20,6 @@
 {% if kind == 'manager-detail' %}{% include 'admin_motivation/reports/manager_detail.html' %}{% elif kind == 'manager' %}{% include 'admin_motivation/reports/manager.html' %}{% elif kind == 'deals' %}{% include 'admin_motivation/reports/deals.html' %}{% else %}{% include 'admin_motivation/reports/subdivisions.html' %}{% endif %}
 {% elif not errors %}<p class="report-empty">Выберите параметры и нажмите «Сформировать отчёт».</p>{% endif %}
 </section>
-<script src="{% static 'admin_motivation/reports.js' %}?v=manager-selected-parameters-20261021" defer></script>
+<script src="{% static 'admin_motivation/reports.js' %}?v=dashboard-drilldowns-20261021" defer></script>
 {% if kind == 'manager-detail' or kind == 'subdivisions' %}<script src="{% static 'admin_motivation/manager_multiselect.js' %}?v=subdivisions-20261021" defer></script>{% endif %}{% if kind == 'manager-detail' %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=manager-expanded-20261021" defer></script>{% endif %}
 {% endblock %}

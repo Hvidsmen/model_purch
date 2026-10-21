@@ -1,4 +1,18 @@
 (() => {
+ const dashboard = document.getElementById('manager-dashboard');
+ if (dashboard) {
+  const expanded = new Set();
+  dashboard.addEventListener('click', event => {
+   const button = event.target.closest('[data-dashboard-reveal]');
+   if (!button) return;
+   event.preventDefault(); event.stopPropagation();
+   const key = button.dataset.dashboardReveal;
+   if (expanded.has(key)) expanded.delete(key); else expanded.add(key);
+   dashboard.querySelectorAll('[data-dashboard-column="' + key + '"]').forEach(cell => cell.hidden = !expanded.has(key));
+   dashboard.querySelectorAll('[data-dashboard-reveal="' + key + '"]').forEach(item => item.setAttribute('aria-expanded', String(expanded.has(key))));
+   ['quarter', 'year'].forEach(scope => dashboard.style.setProperty('--dashboard-' + scope, (scope === 'quarter' ? 4 : 6) + 2 * Number(expanded.has(scope + '-period')) + 2 * Number(expanded.has(scope + '-motivation'))));
+  });
+ }
  const csv = document.getElementById('report-page-csv');
  if (csv) csv.addEventListener('click', () => { const url = new URL(location.href); url.searchParams.set('run','1'); url.searchParams.set('export','csv'); location.href=url; });
  const detail = document.getElementById('deal-detail-toggle');

@@ -77,3 +77,5 @@
 .report-filter-summary{background:#f5f7fc;color:#405477;padding:12px 14px;margin:16px 0;line-height:1.7;overflow-wrap:anywhere}
 
 #manager-detail-report .manager-period-hidden{display:none!important}
+
+#manager-dashboard{min-width:1180px;width:max-content}#manager-dashboard .manager-grid{grid-template-columns:250px repeat(calc(var(--dashboard-quarter) + var(--dashboard-year)),112px)}#manager-dashboard .manager-periods{grid-template-columns:250px calc(var(--dashboard-quarter)*118px - 6px) calc(var(--dashboard-year)*118px - 6px)}

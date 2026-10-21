@@ -121,7 +121,7 @@ class NativeMotivationReportTests(TestCase):
         with patch('admin_motivation.report_views.choices', return_value=first):
             page = self.client.get(reverse('motivation_report', args=['manager']), {'type': 'Директора', 'subdivision': 'Д-Астрахань'})
         self.assertContains(page, 'В расчётных данных нет авторов сделки')
-        self.assertContains(page, '?v=manager-selected-parameters-20261021')
+        self.assertContains(page, '?v=dashboard-drilldowns-20261021')
 
     def test_manager_currency_uses_rur_source_fields_without_changing_plan_metrics(self):
         from .services.reports import SQL_ROOT, manager_currency_sql
@@ -141,17 +141,27 @@ class NativeMotivationReportTests(TestCase):
         connection, cursor = Mock(), Mock()
         values = {'Currency': 'RUB', 'TypeCoeff_': 'Директора', 'Subdivision': 'A', 'DealAuthor': 'Иванов', 'qm': '1 Квартал', 'gp_sales': []}
         with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch(
-            'admin_motivation.services.reports.fetch', side_effect=[self.manager_rows(), [{'Год': 2024}]],
+            'admin_motivation.services.reports.fetch', side_effect=[self.manager_rows(), [], [{'Год': 2024}]],
         ) as read:
             data = load_report('manager', values)
         self.assertIn('[СуммаМотивацииRUR]', read.call_args_list[0].args[1])
         self.assertEqual(data['currency'], 'RUB')
 
+    def test_dashboard_drilldown_uses_distinct_period_and_motivation_bases(self):
+        from .services.reports import dashboard_blocks
+        rows = self.manager_rows()
+        blocks = dashboard_blocks(rows, period_rows=[{'QPeriodPlan': 300, 'QPeriodFact': 200, 'YPeriodPlan': 1200, 'YPeriodFact': 1100}])
+        self.assertEqual([cell['value'] for cell in blocks[2:4]], [300, 200])
+        self.assertEqual([cell['value'] for cell in blocks[5:7]], [1000, 900])
+        self.assertEqual([cell['value'] for cell in blocks[10:12]], [1200, 1100])
+        self.assertEqual([cell['value'] for cell in blocks[13:15]], [4000, 4200])
+        self.assertEqual(blocks[-1]['value'], manager_report(rows)['totals'][-1])
+
     def test_manager_header_years_come_from_filtered_source_data(self):
         connection, cursor = Mock(), Mock()
         values = {'TypeCoeff_': 'Директора', 'Subdivision': "Branch's", 'DealAuthor': 'Иванов', 'qm': '1 Квартал', 'gp_sales': []}
         with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch(
-            'admin_motivation.services.reports.fetch', side_effect=[self.manager_rows(), [{'Год': 2025}, {'Год': 2024}, {'Год': 2025}]],
+            'admin_motivation.services.reports.fetch', side_effect=[self.manager_rows(), [], [{'Год': 2025}, {'Год': 2024}, {'Год': 2025}]],
         ) as read:
             data = load_report('manager', values)
         self.assertEqual(data['years'], ['2024', '2025'])

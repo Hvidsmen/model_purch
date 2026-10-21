@@ -162,7 +162,32 @@ def manager_metrics(rows, group=False):
             possible_y, max(y_plan-y_fact, 0) or None, ratio(y_fact, y_plan), available_y, bonus, available_y+bonus]
 
 
-def manager_report(rows):
+def dashboard_blocks(rows, group=False, period_rows=()):
+    metrics = manager_metrics(rows, group)
+    result = []
+    for scope, offset in [('quarter', 0), ('year', 4)]:
+        prefix = 'Q' if scope == 'quarter' else 'Y'
+        plan_key = 'СуммаПланUSDКварталValue' + ('QG' if group else 'Q') if scope == 'quarter' else 'СуммаПланUSDКварталValue' + ('YG' if group else '_Y')
+        fact_key = 'СуммаОтгрузокUSDКварталValue' + ('Q' if scope == 'quarter' else '_Y')
+        def value(items, key):
+            return total(items, key) if any(row.get(key) is not None for row in items) else None
+        cells = [
+            {'value': metrics[offset]},
+            {'value': metrics[offset + 1], 'reveal': scope + '-period'},
+            {'value': value(period_rows, prefix + 'PeriodPlan'), 'hidden': scope + '-period'},
+            {'value': value(period_rows, prefix + 'PeriodFact'), 'hidden': scope + '-period'},
+            {'value': metrics[offset + 2], 'percent': True, 'reveal': scope + '-motivation'},
+            {'value': value(rows, plan_key), 'hidden': scope + '-motivation'},
+            {'value': value(rows, fact_key), 'hidden': scope + '-motivation'},
+            {'value': metrics[offset + 3]},
+        ]
+        if scope == 'year':
+            cells += [{'value': metrics[8]}, {'value': metrics[9]}]
+        result.extend(cells)
+    return result
+
+
+def manager_report(rows, period_rows=()):
     sections = []
     grouped = defaultdict(list)
     for row in rows: grouped[row.get('VariationCalculate') or 'Без группы'].append(row)
@@ -170,8 +195,8 @@ def manager_report(rows):
         groups = defaultdict(list)
         for row in subset: groups[row.get('ГруппаПлановПродаж') or '—'].append(row)
         sections.append({'label': label, 'open': label.strip().casefold() != 'подразделение',
-            'values': manager_metrics(subset, True), 'children': [{'label': name, 'values': manager_metrics(items, True)} for name, items in sorted(groups.items())]})
-    return {'totals': manager_metrics(rows), 'sections': sections,
+            'values': manager_metrics(subset, True), 'blocks': dashboard_blocks(subset, True, [row for row in period_rows if row.get('VariationCalculate') == label]), 'children': [{'label': name, 'values': manager_metrics(items, True), 'blocks': dashboard_blocks(items, True, [row for row in period_rows if row.get('VariationCalculate') == label and (row.get('ГруппаПлановПродаж') or '—') == name])} for name, items in sorted(groups.items())]})
+    return {'totals': manager_metrics(rows), 'total_blocks': dashboard_blocks(rows, period_rows=period_rows), 'sections': sections,
         'division_ratios': [ratio(total(rows, 'СуммаОтгрузокUSD_S_Q'), total(rows, 'СуммаПланUSD_S_Q')),
                             ratio(total(rows, 'СуммаОтгрузокUSD_S_Y'), total(rows, 'СуммаПланUSD_S_Y'))]}
 
@@ -307,7 +332,18 @@ def load_report(kind, values, page=1, scope='subdivisions'):
         required = ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')
         if any(not values.get(key) for key in required): raise ValidationError('Выберите вид работника, подразделение, автора сделки и квартал.')
         rows = fetch(cursor, sql, args)
-        report = manager_report(rows)
+        period_sql, period_args = bind_sql(
+            'SELECT [VariationCalculate],[ГруппаПлановПродаж],'
+            'SUM(CASE WHEN [КварталМотивации]=@qm THEN [СуммаПланUSDКвартал] END) AS QPeriodPlan,'
+            'SUM(CASE WHEN [КварталМотивации]=@qm THEN [СуммаОтгрузокUSDКвартал] END) AS QPeriodFact,'
+            "SUM(CASE WHEN [КварталМотивации]='Год' THEN [СуммаПланUSDКвартал] END) AS YPeriodPlan,"
+            "SUM(CASE WHEN [КварталМотивации]='Год' THEN [СуммаОтгрузокUSDКвартал] END) AS YPeriodFact "
+            'FROM DataWH.motivation.ReportMotivationByDealAuthor '
+            'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ '
+            'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales) '
+            'GROUP BY [VariationCalculate],[ГруппаПлановПродаж]', values)
+        period_rows = fetch(cursor, period_sql, period_args)
+        report = manager_report(rows, period_rows)
         # Read years from the source table: the legacy presentation view may omit Год.
         year_sql, year_args = bind_sql('SELECT DISTINCT [Год] FROM DataWH.motivation.ReportMotivationByDealAuthor '
             'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ '

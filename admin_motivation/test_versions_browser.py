@@ -316,6 +316,19 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             with self.page.expect_navigation():
                 self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
             expect(self.page.locator('.report-title')).to_have_text('Мотивация. Дашборд · 2024 · USD')
+            dashboard = self.page.locator('#manager-dashboard')
+            total_before = dashboard.locator('.report-total-row').inner_text()
+            expect(dashboard.locator('[data-dashboard-column="quarter-motivation"]').first).to_be_hidden()
+            dashboard.locator('[data-dashboard-reveal="quarter-motivation"]').first.click()
+            expect(dashboard.locator('[data-dashboard-column="quarter-motivation"]').first).to_be_visible()
+            expect(dashboard.locator('[data-dashboard-column="quarter-period"]').first).to_be_hidden()
+            dashboard.locator('[data-dashboard-reveal="quarter-period"]').first.click()
+            expect(dashboard.locator('[data-dashboard-column="quarter-period"]').first).to_be_visible()
+            expect(dashboard.locator('[data-dashboard-column="year-period"]').first).to_be_hidden()
+            dashboard.locator('[data-dashboard-reveal="quarter-motivation"]').first.click()
+            dashboard.locator('[data-dashboard-reveal="quarter-period"]').first.click()
+            self.assertEqual(dashboard.locator('.report-total-row').inner_text(), total_before)
+
             if self.page.locator('.report-filter-panel').get_attribute('open') is None:
                 self.page.locator('.report-filter-panel > summary').click()
             self.choose_filter('select[name=currency]', 'RUB')
