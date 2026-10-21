@@ -13,3 +13,6 @@ venv/
 
 .idea/
 backups/
+
+# Machine-specific IIS configuration may contain secrets.
+/web.config

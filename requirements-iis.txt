@@ -1,0 +1,3 @@
+# IIS FastCGI bridge for the existing Windows Python 3.10 environment.
+-r requirements.txt
+wfastcgi==3.0.0; sys_platform == 'win32'

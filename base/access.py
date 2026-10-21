@@ -31,7 +31,8 @@ def can_access(user, project):
 
 
 def portal_access(request):
-    return {'portal_is_admin': can_access(request.user, 'admin'),
+    from django.conf import settings
+    return {'windows_auth_enabled': settings.WINDOWS_AUTH_ENABLED, 'portal_is_admin': can_access(request.user, 'admin'),
             'portal_can_purchases': can_access(request.user, 'purchases'),
             'portal_can_motivation': can_access(request.user, 'motivation'),
             'portal_role_label': role_for(request.user) or 'Роль не назначена'}

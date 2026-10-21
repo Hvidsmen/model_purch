@@ -19,13 +19,14 @@
     </nav>
     {% if request.user.is_authenticated %}<span class="portal-user">{{ request.user.get_full_name|default:request.user.username }}<small>{{ portal_role_label }}</small></span><form class="portal-logout" method="post" action="{% url 'portal_logout' %}">{% csrf_token %}<button type="submit">Выйти</button></form>{% endif %}
 </header>
+{% if request.portal_preview_user %}<div style="background:#ede9fe;color:#312e81;padding:12px 24px;display:flex;gap:16px;align-items:center;flex-wrap:wrap" role="status"><strong>Просмотр как {{ request.user.get_full_name|default:request.user.username }} · {{ portal_role_label }}. Только просмотр.</strong><form method="post" action="{% url 'portal_stop_preview' %}">{% csrf_token %}<button type="submit">Вернуться к администратору</button></form></div>{% endif %}
 <div class="portal-layout">
     <button type="button" class="portal-menu-toggle" id="portal-menu-toggle" aria-controls="portal-sidebar" aria-expanded="false">Меню раздела</button>
     <aside class="portal-sidebar" id="portal-sidebar" aria-label="Навигация раздела">
         <a class="portal-home" href="{% url 'index_base' %}">← Главная портала</a>
         <h2>{% block project_name %}Рабочие разделы{% endblock %}</h2>
         {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы">{% if portal_can_purchases %}<a href="{% url 'scenario_list' %}">Модель закупок</a>{% endif %}{% if portal_can_motivation %}<a href="{% url 'global_coeff_admin_motivation' %}">Мотивация</a>{% endif %}</nav>{% endblock %}
-        {% if portal_is_admin %}<a class="portal-admin" href="{% url 'admin:index' %}">Администрирование</a>{% endif %}
+        {% if portal_is_admin %}<a class="portal-admin" href="{% url 'admin:index' %}">Администрирование</a><a class="portal-admin" href="{% url 'portal_user_preview' %}">Просмотреть как пользователь</a>{% endif %}
         {% block module_administration %}{% endblock %}
     </aside>
     <main class="portal-main" id="portal-main" tabindex="-1">{% block portal_content %}{% block content %}{% endblock %}{% endblock %}</main>

@@ -38,3 +38,30 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                         page.close()
             finally:
                 browser.close()
+
+    def test_admin_can_preview_user_and_return_without_changing_login(self):
+        ensure_roles()
+        admin = User.objects.create_user('browser-preview-admin', password='browser-test-password', is_staff=True)
+        admin.groups.add(Group.objects.get(name=ADMIN))
+        target = User.objects.create_user('browser-preview-director')
+        target.groups.add(Group.objects.get(name=DIRECTOR))
+        from playwright.sync_api import sync_playwright, expect
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            try:
+                page = browser.new_page()
+                page.goto(self.live_server_url + '/accounts/login/')
+                page.fill('#id_username', admin.username)
+                page.fill('#id_password', 'browser-test-password')
+                page.get_by_role('button', name='Войти', exact=True).click()
+                page.get_by_role('link', name='Просмотреть как пользователь', exact=True).click()
+                page.locator('#id_user').select_option(str(target.pk))
+                page.get_by_role('button', name='Открыть просмотр', exact=True).click()
+                expect(page.get_by_role('status')).to_contain_text(target.username)
+                expect(page.locator('.portal-project-card')).to_have_count(1)
+                expect(page.locator('.portal-project-card')).to_contain_text('Мотивация')
+                page.get_by_role('button', name='Вернуться к администратору', exact=True).click()
+                expect(page.locator('.portal-project-card')).to_have_count(2)
+                expect(page.locator('.portal-user')).to_contain_text(admin.username)
+            finally:
+                browser.close()

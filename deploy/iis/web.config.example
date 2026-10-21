@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Replace paths/host/domain first. Place the completed web.config in the
+     application root; keep credentials out of source control. Python 3.10. -->
+<configuration>
+  <appSettings>
+    <add key="WSGI_HANDLER" value="portal.wsgi.application" />
+    <add key="PYTHONPATH" value="C:\Portal\model_purch" />
+    <add key="DJANGO_SETTINGS_MODULE" value="portal.settings_local" />
+    <add key="DJANGO_DB_PATH" value="C:\Portal\model_purch\db.sqlite3" />
+    <add key="DJANGO_ALLOWED_HOSTS" value="portal.example.local" />
+    <add key="PORTAL_WINDOWS_AUTH" value="true" />
+    <add key="PORTAL_WINDOWS_DOMAINS" value="YOURDOMAIN" />
+    <!-- Set DJANGO_SECRET_KEY securely in the worker environment, then
+         set DJANGO_DEBUG=false. Do not reuse the development key. -->
+    <add key="DJANGO_DEBUG" value="false" />
+  </appSettings>
+  <location path="accounts/windows">
+    <system.webServer><security><authentication>
+      <anonymousAuthentication enabled="false" />
+      <windowsAuthentication enabled="true" />
+    </authentication></security></system.webServer>
+  </location>
+  <system.webServer>
+    <handlers>
+      <add name="PortalPython" path="*" verb="*" modules="FastCgiModule"
+           scriptProcessor="C:\Portal\model_purch\.venv310\Scripts\python.exe|C:\Portal\model_purch\.venv310\Lib\site-packages\wfastcgi.py"
+           resourceType="Unspecified" requireAccess="Script" />
+    </handlers>
+    <security>
+      <authentication>
+        <anonymousAuthentication enabled="true" />
+        <windowsAuthentication enabled="false" />
+      </authentication>
+    </security>
+  </system.webServer>
+</configuration>

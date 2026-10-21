@@ -173,3 +173,19 @@ ENABLE_LEGACY_DASH = os.environ.get('ENABLE_LEGACY_DASH', 'false').lower() in {'
 LOGIN_URL = "portal_login"
 LOGIN_REDIRECT_URL = "index_base"
 LOGOUT_REDIRECT_URL = "portal_login"
+
+# Only IIS/FastCGI's server variable REMOTE_USER is trusted. HTTP_REMOTE_USER
+# and X-Remote-User are intentionally not accepted.
+WINDOWS_AUTH_ENABLED = os.environ.get('PORTAL_WINDOWS_AUTH', '').lower() in {'1', 'true', 'yes'}
+WINDOWS_AUTH_DOMAINS = tuple(value.strip() for value in os.environ.get('PORTAL_WINDOWS_DOMAINS', '').split(',') if value.strip())
+AUTHENTICATION_BACKENDS = ['django.contrib.auth.backends.ModelBackend']
+if WINDOWS_AUTH_ENABLED:
+    if not WINDOWS_AUTH_DOMAINS:
+        from django.core.exceptions import ImproperlyConfigured
+        raise ImproperlyConfigured('Для Windows-входа задайте PORTAL_WINDOWS_DOMAINS: разрешённые NetBIOS-имена доменов.')
+    AUTHENTICATION_BACKENDS.insert(0, 'base.windows_auth.WindowsRemoteUserBackend')
+
+
+MIDDLEWARE.insert(MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware') + 1, 'base.preview.UserPreviewMiddleware')
+SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SECURE_COOKIES', '').lower() in {'1', 'true', 'yes'}
+CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
