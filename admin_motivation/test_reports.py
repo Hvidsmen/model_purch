@@ -121,7 +121,7 @@ class NativeMotivationReportTests(TestCase):
         with patch('admin_motivation.report_views.choices', return_value=first):
             page = self.client.get(reverse('motivation_report', args=['manager']), {'type': 'Директора', 'subdivision': 'Д-Астрахань'})
         self.assertContains(page, 'В расчётных данных нет авторов сделки')
-        self.assertContains(page, '?v=manager-summary-sticky-20261021')
+        self.assertContains(page, '?v=dashboard-year-breakdown-20261021')
 
     def test_manager_currency_uses_rur_source_fields_without_changing_plan_metrics(self):
         from .services.reports import SQL_ROOT, manager_currency_sql
@@ -146,6 +146,18 @@ class NativeMotivationReportTests(TestCase):
             data = load_report('manager', values)
         self.assertIn('[СуммаМотивацииRUR]', read.call_args_list[0].args[1])
         self.assertEqual(data['currency'], 'RUB')
+
+    def test_dashboard_annual_money_breakdown_sums_to_original_totals(self):
+        rows = [{'КварталМотивации': period, 'СуммаМотивацииUSDQ_Y': index * 10 if index < 5 else 0,
+                 'СуммаМотивацииUSDY_Y': 50 if index == 5 else 0,
+                 'СуммаМотивацииUSDУчетПроцентаQ_Y': index * 7 if index < 5 else 0,
+                 'СуммаМотивацииUSDУчетПроцентаY_Y': 35 if index == 5 else 0}
+                for index, period in enumerate(['1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', '4 Квартал(1-4 кв)', 'Год'], 1)]
+        report = manager_report(rows)
+        for key, total_index, expected in [('year-possible', 4, [10,20,30,40,50]), ('year-available', 7, [7,14,21,28,35])]:
+            values = [cell['value'] for cell in report['total_blocks'] if cell.get('hidden') == key]
+            self.assertEqual(values, expected)
+            self.assertEqual(sum(values), report['totals'][total_index])
 
     def test_dashboard_drilldown_uses_distinct_period_and_motivation_bases(self):
         from .services.reports import dashboard_blocks

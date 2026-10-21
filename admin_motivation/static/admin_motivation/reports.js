@@ -10,7 +10,7 @@
    if (expanded.has(key)) expanded.delete(key); else expanded.add(key);
    dashboard.querySelectorAll('[data-dashboard-column="' + key + '"]').forEach(cell => cell.hidden = !expanded.has(key));
    dashboard.querySelectorAll('[data-dashboard-reveal="' + key + '"]').forEach(item => item.setAttribute('aria-expanded', String(expanded.has(key))));
-   ['quarter', 'year'].forEach(scope => dashboard.style.setProperty('--dashboard-' + scope, (scope === 'quarter' ? 4 : 6) + 2 * Number(expanded.has(scope + '-period')) + 2 * Number(expanded.has(scope + '-motivation'))));
+   ['quarter', 'year'].forEach(scope => dashboard.style.setProperty('--dashboard-' + scope, (scope === 'quarter' ? 4 : 6) + 2 * Number(expanded.has(scope + '-period')) + 2 * Number(expanded.has(scope + '-motivation')) + (scope === 'year' ? 5 * Number(expanded.has('year-possible')) + 5 * Number(expanded.has('year-available')) : 0)));
   });
  }
  const csv = document.getElementById('report-page-csv');

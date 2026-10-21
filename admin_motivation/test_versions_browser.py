@@ -346,6 +346,12 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
                 self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
             expect(self.page.locator('.report-title')).to_have_text('Мотивация. Дашборд · 2024 · USD')
             dashboard = self.page.locator('#manager-dashboard')
+            for key in ['year-possible', 'year-available']:
+                expect(dashboard.locator('[data-dashboard-column="' + key + '"]').first).to_be_hidden()
+                dashboard.locator('[data-dashboard-reveal="' + key + '"]').first.click()
+                expect(dashboard.locator('[data-dashboard-column="' + key + '"]').first).to_be_visible()
+                self.assertEqual(dashboard.locator('.report-total-row > [data-dashboard-column="' + key + '"]').count(), 5)
+                dashboard.locator('[data-dashboard-reveal="' + key + '"]').first.click()
             total_before = dashboard.locator('.report-total-row').inner_text()
             expect(dashboard.locator('[data-dashboard-column="quarter-motivation"]').first).to_be_hidden()
             dashboard.locator('[data-dashboard-reveal="quarter-motivation"]').first.click()

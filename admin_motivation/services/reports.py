@@ -182,6 +182,17 @@ def dashboard_blocks(rows, group=False, period_rows=()):
             {'value': metrics[offset + 3]},
         ]
         if scope == 'year':
+            cells[0]['reveal'] = 'year-possible'
+            cells[7]['reveal'] = 'year-available'
+            for kind, quarter_field, year_field in [
+                ('possible', 'СуммаМотивацииUSDQ_Y', 'СуммаМотивацииUSDY_Y'),
+                ('available', 'СуммаМотивацииUSDУчетПроцентаQ_Y', 'СуммаМотивацииUSDУчетПроцентаY_Y'),
+            ]:
+                for period in range(1, 6):
+                    subset = [row for row in rows if (
+                        str(row.get('КварталМотивации') or '').strip().casefold() == 'год' if period == 5
+                        else re.match(r'^' + str(period) + r'\s*Квартал', str(row.get('КварталМотивации') or ''), flags=re.I))]
+                    cells.append({'value': value(subset, year_field if period == 5 else quarter_field), 'hidden': 'year-' + kind})
             cells += [{'value': metrics[8]}, {'value': metrics[9]}]
         result.extend(cells)
     return result
