@@ -23,6 +23,7 @@
  const nodes = JSON.parse(document.getElementById('manager-detail-tree').textContent);
  const target = document.getElementById('manager-detail-nodes');
  const extra = document.getElementById('manager-detail-extra');
+ const expanded = {segments: false, motivation: false};
  const money = new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 0});
  const percent = new Intl.NumberFormat('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
  function create(node) {
@@ -36,7 +37,15 @@
    const cell = document.createElement('span'); cell.className = 'report-number';
    cell.textContent = value == null ? '—' : index < 5 || index === 12 || index === 16 ? percent.format(Number(value) * 100) + '%' : money.format(Number(value));
    if (index === 12 || index === 16) { if (value != null) cell.classList.add(Number(value) >= .8 ? 'percent-good' : 'percent-low'); }
-   if (index < 13) { cell.dataset.managerExtra = ''; cell.hidden = !extra.checked; }
+   if (index < 5) { cell.dataset.managerExtra = ''; cell.hidden = !extra.checked; }
+   else if (index < 10) { cell.dataset.managerSegments = ''; cell.hidden = !expanded.segments; }
+   else if (index === 14 || index === 15) { cell.dataset.managerMotivation = ''; cell.hidden = !expanded.motivation; }
+   if (index === 11 || index === 16) {
+    const button = document.createElement('button'); button.type = 'button'; button.className = 'division-metric-toggle';
+    button.dataset.managerReveal = index === 11 ? 'segments' : 'motivation';
+    button.setAttribute('aria-expanded', String(expanded[button.dataset.managerReveal]));
+    button.textContent = cell.textContent; cell.textContent = ''; cell.appendChild(button);
+   }
    row.appendChild(cell);
   }));
   if (node.children.length) {
@@ -53,8 +62,18 @@
   target.querySelectorAll(':scope > details').forEach(expand);
  });
  document.getElementById('manager-detail-collapse').addEventListener('click', () => target.querySelectorAll('details').forEach(element => element.open = false));
+ const updateColumns = () => root.style.setProperty('--report-columns', 8 + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
+ root.addEventListener('click', event => {
+  const button = event.target.closest('[data-manager-reveal]');
+  if (!button) return;
+  event.preventDefault(); event.stopPropagation();
+  const kind = button.dataset.managerReveal; expanded[kind] = !expanded[kind];
+  root.querySelectorAll('[data-manager-' + kind + ']').forEach(cell => cell.hidden = !expanded[kind]);
+  root.querySelectorAll('[data-manager-reveal="' + kind + '"]').forEach(item => item.setAttribute('aria-expanded', String(expanded[kind])));
+  updateColumns();
+ });
  extra.addEventListener('change', () => {
-  root.style.setProperty('--report-columns', extra.checked ? 20 : 7);
+  updateColumns();
   root.querySelectorAll('[data-manager-extra]').forEach(cell => cell.hidden = !extra.checked);
  });
 })();
