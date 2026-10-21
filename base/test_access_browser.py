@@ -81,7 +81,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 page.fill('#id_password', 'browser-test-password')
                 page.get_by_role('button', name='Войти', exact=True).click()
                 page.get_by_role('link', name='Пользователи и права', exact=True).click()
-                page.locator('a[href="' + reverse('admin:auth_user_add') + '"]').first.click()
+                page.goto(self.live_server_url + reverse('admin:auth_user_add'))
                 page.fill('#id_username', 'DAICHI\\BrowserEmployee')
                 page.select_option('#id_portal_role', DIRECTOR)
                 page.locator('input[name=_save]').click()
@@ -223,3 +223,46 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(errors, [])
             finally:
                 browser.close()
+
+    def test_portal_users_local_creation_ad_selection_and_preview(self):
+        from unittest.mock import patch
+        from playwright.sync_api import sync_playwright, expect
+        ensure_roles()
+        actor = User.objects.create_user('user-ui-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        with patch('base.user_views.search_accounts', return_value=[{'username': 'daichi\\employee', 'full_name': 'Иванов Иван Иванович'}]):
+            with sync_playwright() as driver:
+                browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+                try:
+                    page = browser.new_page(viewport={'width': 1440, 'height': 1100})
+                    page.goto(self.live_server_url + '/accounts/login/')
+                    page.fill('#id_username', actor.username)
+                    page.fill('#id_password', 'browser-test-password')
+                    page.get_by_role('button', name='Войти', exact=True).click()
+                    page.get_by_role('link', name='Пользователи и права', exact=True).click()
+                    page.fill('#id_username', 'local-browser')
+                    page.fill('#id_first_name', 'Иван')
+                    page.fill('#id_last_name', 'Иванов')
+                    page.fill('#id_password1', 'Browser-local-2479!')
+                    page.fill('#id_password2', 'Browser-local-2479!')
+                    page.select_option('#id_portal_role', DIRECTOR)
+                    page.get_by_role('button', name='Добавить пользователя', exact=True).click()
+                    expect(page.locator('.access-notice')).to_contain_text('сохранён')
+                    page.screenshot(path='/tmp/portal-users.png', full_page=True)
+                    card = page.locator('.access-group-card').filter(has_text='local-browser')
+                    card.get_by_role('button', name='Посмотреть как пользователь').click()
+                    expect(page.locator('[role=status]')).to_contain_text('Иванов')
+                    page.get_by_role('button', name='Вернуться к администратору').click()
+                    page.goto(self.live_server_url + '/accounts/users/')
+                    page.get_by_text('Найти в Active Directory', exact=True).click()
+                    page.fill('#ad-query', 'Иванов')
+                    page.locator('#ad-find').click()
+                    page.locator('.user-ad-result').click()
+                    expect(page.locator('#id_username')).to_have_value('daichi\\employee')
+                    expect(page.locator('#id_last_name')).to_have_value('Иванов')
+                    expect(page.locator('#id_first_name')).to_have_value('Иван Иванович')
+                    page.set_viewport_size({'width': 390, 'height': 844})
+                    self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
+                finally:
+                    browser.close()
+        self.assertTrue(User.objects.get(username='local-browser').check_password('Browser-local-2479!'))
