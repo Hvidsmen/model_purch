@@ -848,7 +848,8 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
         plan_threshold = 10
     if not math.isfinite(plan_threshold) or plan_threshold < 0:
         plan_threshold = 10
-    request.session['ddp_threshold'] = str(plan_threshold)
+    if request.session.get('ddp_threshold') != str(plan_threshold):
+        request.session['ddp_threshold'] = str(plan_threshold)
     warning_filter = request.GET.get('plan_warning', '')
     warning_counts = dict.fromkeys(['ddp', 'volume', 'fact_ddp', 'fact_volume', 'missing', 'any'], 0)
     warning_map = {}

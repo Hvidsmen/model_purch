@@ -26,6 +26,15 @@ def check_database(selected):
             raise RuntimeError('SQLite не прошла проверку целостности.')
 
 
+def configure_sqlite(selected):
+    # WAL is persistent for this database and lets readers coexist with a writer.
+    # Enable once during startup, not on every request/connection.
+    with closing(sqlite3.connect(selected, timeout=30)) as database:
+        mode = database.execute('PRAGMA journal_mode=WAL').fetchone()[0]
+        if mode.lower() != 'wal':
+            raise RuntimeError(f'Не удалось включить WAL для SQLite: {mode}')
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--database')
@@ -42,6 +51,7 @@ def main():
     if options.check_database and selected.exists():
         stage('Полная проверка базы SQLite', lambda: check_database(selected))
     selected.parent.mkdir(parents=True, exist_ok=True)
+    stage('Настройка параллельного доступа SQLite (WAL)', lambda: configure_sqlite(selected))
     os.environ['DJANGO_DB_PATH'] = str(selected)
     os.environ['DJANGO_SETTINGS_MODULE'] = 'portal.settings_local'
     import django

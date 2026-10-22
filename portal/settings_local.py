@@ -6,6 +6,7 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': database_path(BASE_DIR),
+        'OPTIONS': {'timeout': 30},
     }
 }
 MS_SQL_CONN_STR = os.environ.get('MS_SQL_CONN_STR') or None

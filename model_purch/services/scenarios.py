@@ -18,11 +18,12 @@ def current_scenario(request):
     if scenario is None:
         scenario = scenarios.first()
     if scenario:
-        request.session[SESSION_KEY] = scenario.pk
-    else:
-        request.session.pop(SESSION_KEY, None)
+        remember_scenario(request, scenario)
+    elif SESSION_KEY in request.session:
+        request.session.pop(SESSION_KEY)
     return scenario, scenarios
 
 
 def remember_scenario(request, scenario):
-    request.session[SESSION_KEY] = scenario.pk
+    if request.session.get(SESSION_KEY) != scenario.pk:
+        request.session[SESSION_KEY] = scenario.pk
