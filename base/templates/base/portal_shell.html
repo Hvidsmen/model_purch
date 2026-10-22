@@ -26,8 +26,21 @@
         <a class="portal-home" href="{% url 'index_base' %}">← Главная портала</a>
         <h2>{% block project_name %}Рабочие разделы{% endblock %}</h2>
         {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы">{% if portal_can_purchases %}<a href="{% url 'scenario_list' %}">Модель закупок</a>{% endif %}{% if portal_can_motivation %}<a href="{% if portal_reports_only %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}">Мотивация</a>{% endif %}</nav>{% endblock %}
-        {% if portal_is_admin %}<a class="portal-admin" href="{% url 'admin:index' %}">Администрирование</a><a class="portal-admin" href="{% url 'portal_users' %}">Пользователи и права</a><a class="portal-admin" href="{% url 'portal_user_groups' %}">Группы пользователей</a><a class="portal-admin" href="{% url 'motivation_subdivision_merge' %}">Слияние подразделений</a>{% endif %}
         {% block module_administration %}{% endblock %}
+        {% if portal_is_admin %}
+        <details class="portal-admin-panel" open>
+            <summary><span class="portal-admin-symbol" aria-hidden="true">⚙</span> Администратор<span class="portal-admin-chevron" aria-hidden="true">⌄</span></summary>
+            <nav aria-label="Действия администратора">
+                <p class="portal-admin-caption">Доступ сотрудников</p>
+                <a href="{% url 'portal_users' %}" {% if request.resolver_match.url_name == 'portal_users' %}aria-current="page"{% endif %}>Пользователи и права</a>
+                <a href="{% url 'portal_user_groups' %}" {% if request.resolver_match.url_name == 'portal_user_groups' %}aria-current="page"{% endif %}>Группы пользователей</a>
+                <p class="portal-admin-caption">Управление порталом</p>
+                <a href="{% url 'motivation_calculations' %}" {% if request.resolver_match.url_name == 'motivation_calculations' %}aria-current="page"{% endif %}>Расчёт и задания</a>
+                <a href="{% url 'motivation_subdivision_merge' %}" {% if request.resolver_match.url_name == 'motivation_subdivision_merge' %}aria-current="page"{% endif %}>Слияние подразделений</a>
+                <a href="{% url 'admin:index' %}">Настройки системы <span aria-hidden="true">↗</span></a>
+            </nav>
+        </details>
+        {% endif %}
     </aside>
     <main class="portal-main" id="portal-main" tabindex="-1">{% block portal_content %}{% block content %}{% endblock %}{% endblock %}</main>
 </div>

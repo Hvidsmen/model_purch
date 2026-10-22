@@ -44,3 +44,16 @@
 .searchable-filter-options button { display: block; width: 100%; border: 0; border-radius: 4px; padding: 7px 8px; text-align: left; white-space: normal; background: #fff; color: #334155; font-size: 13px; }
 .searchable-filter-options button:hover, .searchable-filter-options button:focus, .searchable-filter-options button.selected { background: #eff6ff; color: #1d4ed8; }
 .searchable-filter-options p { margin: 6px; color: #64748b; font-size: 13px; }
+
+/* Administration is a distinct area, separate from everyday module navigation. */
+.portal-sidebar .portal-admin-panel{margin-top:22px;border:1px solid #e2ddf4;border-radius:10px;background:#faf9fe;overflow:hidden}
+.portal-admin-panel>summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:12px 10px;color:#4c4189;font-size:13px;font-weight:650}
+.portal-admin-panel>summary::-webkit-details-marker{display:none}
+.portal-admin-symbol{font-size:17px;font-weight:400;color:#7966bc}
+.portal-admin-chevron{margin-left:auto;transition:transform .15s}
+.portal-admin-panel:not([open]) .portal-admin-chevron{transform:rotate(-90deg)}
+.portal-admin-panel nav{padding:0 6px 8px;border-top:1px solid #ebe7f5}
+.portal-admin-panel .portal-admin-caption{margin:12px 7px 5px;font-size:10px;font-weight:650;line-height:1.5;letter-spacing:.025em;color:#8a839f}
+.portal-body .portal-admin-panel a{display:flex;justify-content:space-between;gap:6px;padding:8px 7px;border-radius:6px;font-size:12px;line-height:1.5;text-decoration:none;color:#59536d}
+.portal-body .portal-admin-panel a:hover,.portal-body .portal-admin-panel a[aria-current=page]{background:#ece7fa;color:#5140a0}
+.portal-admin-panel a:focus-visible,.portal-admin-panel summary:focus-visible{outline:2px solid #a78bfa;outline-offset:-2px}
