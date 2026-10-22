@@ -4,12 +4,12 @@
 .portal-body .portal-projects{display:flex;gap:8px;flex-wrap:wrap}.portal-body .portal-projects a{display:block;padding:7px 12px;border-radius:7px;text-decoration:none;color:#526079;font-size:14px;font-weight:500}
 .portal-body .portal-projects a[aria-current=page],.portal-body .portal-projects a:hover{color:#5b21b6;background:#eeeafd}
 .portal-user{margin-left:auto;font-size:13px;color:#64748b}
-.portal-layout{display:grid;grid-template-columns:196px minmax(0,1fr);gap:12px;max-width:1920px;margin:0 auto;padding:12px}
+.portal-layout{display:grid;grid-template-columns:248px minmax(0,1fr);gap:12px;max-width:1920px;margin:0 auto;padding:12px}
 .portal-body .portal-sidebar{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 8px}
-.portal-sidebar h2{font-size:14px;font-weight:700;margin:12px 8px 6px;color:#334155}
+.portal-sidebar h2{font-size:16px;font-weight:700;margin:12px 8px 6px;color:#334155}
 .portal-body .portal-home,.portal-body .portal-admin{display:block;padding:8px;font-size:12px;text-decoration:none;color:#64748b}.portal-admin{border-top:1px solid #e2e8f0;margin-top:16px}
 .portal-body .portal-section-nav{display:flex;flex-direction:column;gap:4px;margin:0;padding:0;list-style:none}
-.portal-body .portal-section-nav a,.portal-body .portal-section-nav>li>a,.portal-body .portal-section-nav summary{display:block;text-decoration:none;font-size:13px;line-height:19px;text-align:left;padding:7px 9px;border-radius:6px;color:#475569;background:transparent;transform:none;box-shadow:none;white-space:normal}
+.portal-body .portal-section-nav a,.portal-body .portal-section-nav>li>a,.portal-body .portal-section-nav summary{display:block;text-decoration:none;font-size:15px;line-height:22px;text-align:left;padding:8px 10px;border-radius:6px;color:#475569;background:transparent;transform:none;box-shadow:none;white-space:normal}
 .portal-body .portal-section-nav a.active,.portal-body .portal-section-nav a[aria-current=page],.portal-body .portal-section-nav summary.active,.portal-body .portal-section-nav a:hover{background:#eeeafd;color:#5b21b6!important}
 .portal-main{min-width:0}.portal-main:focus{outline:none}.portal-main>.content-wrapper{max-width:none;padding:0}
 .portal-main>.container-fluid.px-4{padding:0!important}.portal-main .content:first-child,.portal-main #version-panel{margin-top:0}
@@ -22,7 +22,7 @@
 .portal-body .portal-projects a:focus-visible,.portal-body .portal-section-nav a:focus-visible,.portal-menu-toggle:focus-visible{outline:2px solid #a78bfa;outline-offset:2px}
 .portal-welcome{padding:16px;background:#fff;border:1px solid #e2e8f0;border-radius:10px}.portal-welcome h1{font-size:24px;margin:0 0 8px}.portal-welcome p{color:#64748b;font-size:14px;margin-bottom:18px}
 .portal-cards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.portal-project-card{padding:16px;border:1px solid #e2e8f0;border-radius:10px;text-decoration:none;color:#334155;background:#fff}.portal-project-card:hover{border-color:#b6a9eb;background:#faf9ff;color:#334155}.portal-project-card h2{font-size:18px;margin-bottom:8px}.portal-project-card span{font-size:13px;color:#64748b}.portal-other-links{padding-top:20px;margin-top:20px;border-top:1px solid #e2e8f0}.portal-other-links h2{font-size:16px}.portal-other-links a{display:inline-block;margin:6px 20px 0 0;font-size:14px;color:#5b4bc4}
-@media(max-width:1100px){.portal-layout{grid-template-columns:185px minmax(0,1fr);gap:10px;padding:12px}.portal-body .portal-sidebar{padding:12px 8px}.portal-sidebar h2{margin-left:8px}}
+@media(max-width:1100px){.portal-layout{grid-template-columns:232px minmax(0,1fr);gap:10px;padding:12px}.portal-body .portal-sidebar{padding:12px 8px}.portal-sidebar h2{margin-left:8px}}
 @media(max-width:850px){.portal-layout{display:block;padding:12px}.portal-menu-toggle{display:block;margin-bottom:12px;padding:8px 12px;border:1px solid #cbd5e1;background:#fff;border-radius:6px;color:#475569;font-size:13px}.portal-body .portal-sidebar{position:static;max-height:none;margin-bottom:12px;display:none}.portal-body .portal-sidebar.portal-menu-open{display:block}.portal-body .portal-topbar{padding:8px 12px;gap:8px}.portal-body .portal-projects a{padding:7px 10px;font-size:13px}.portal-user{font-size:12px}.portal-main .editor-toolbar{position:static}.portal-cards{grid-template-columns:1fr}.portal-welcome{padding:18px}}
 @media(prefers-reduced-motion:reduce){.portal-body *{scroll-behavior:auto!important}}
 
@@ -45,15 +45,19 @@
 .searchable-filter-options button:hover, .searchable-filter-options button:focus, .searchable-filter-options button.selected { background: #eff6ff; color: #1d4ed8; }
 .searchable-filter-options p { margin: 6px; color: #64748b; font-size: 13px; }
 
-/* Administration is a distinct area, separate from everyday module navigation. */
-.portal-sidebar .portal-admin-panel{margin-top:14px;border:1px solid #e2ddf4;border-radius:10px;background:#faf9fe;overflow:hidden}
-.portal-admin-panel>summary{display:flex;align-items:center;gap:7px;list-style:none;cursor:pointer;padding:9px 9px;color:#4c4189;font-size:13px;font-weight:650}
+/* Administration has a clear heading and individually separated destinations. */
+.portal-sidebar .portal-admin-panel{margin-top:18px;border:1px solid #d8cef1;border-radius:10px;background:#fff;overflow:hidden}
+.portal-admin-panel>summary{display:flex;align-items:center;gap:8px;list-style:none;cursor:pointer;padding:12px 10px;color:#4c348c;background:#f0eafa;font-size:15px;font-weight:700}
 .portal-admin-panel>summary::-webkit-details-marker{display:none}
-.portal-admin-symbol{font-size:17px;font-weight:400;color:#7966bc}
+.portal-admin-symbol{font-size:19px;color:#7051b6}
 .portal-admin-chevron{margin-left:auto;transition:transform .15s}
 .portal-admin-panel:not([open]) .portal-admin-chevron{transform:rotate(-90deg)}
-.portal-admin-panel nav{padding:0 6px 8px;border-top:1px solid #ebe7f5}
-.portal-admin-panel .portal-admin-caption{margin:9px 7px 3px;font-size:10px;font-weight:650;line-height:1.5;letter-spacing:.025em;color:#8a839f}
-.portal-body .portal-admin-panel a{display:flex;justify-content:space-between;gap:6px;padding:6px 7px;border-radius:6px;font-size:12px;line-height:1.5;text-decoration:none;color:#59536d}
-.portal-body .portal-admin-panel a:hover,.portal-body .portal-admin-panel a[aria-current=page]{background:#ece7fa;color:#5140a0}
+.portal-admin-panel nav{padding:0 8px 8px;border-top:1px solid #ded4f3}
+.portal-admin-panel .portal-admin-caption{margin:14px 3px 7px;font-size:11px;font-weight:750;line-height:1.5;letter-spacing:.04em;text-transform:uppercase;color:#7357a4}
+.portal-admin-panel .portal-admin-caption:not(:first-child){border-top:1px solid #e5dfef;padding-top:13px;margin-top:13px}
+.portal-body .portal-admin-panel a{display:flex;align-items:center;gap:9px;margin:4px 0;padding:9px 8px;border:1px solid #eae5f2;border-radius:7px;font-size:14px;font-weight:500;line-height:21px;text-decoration:none;color:#41394f;background:#fff}
+.portal-admin-panel a span{min-width:0}
+.portal-admin-icon{width:18px;height:18px;flex:0 0 18px;stroke:#8265b6;stroke-width:1.6;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.portal-body .portal-admin-panel a:hover{background:#f5f1fd;border-color:#c7b6e8;color:#51318e}
+.portal-body .portal-admin-panel a[aria-current=page]{background:#eae1fa;border-color:#c4afe8;color:#4e2a8c;box-shadow:inset 3px 0 #8060bd;font-weight:650}
 .portal-admin-panel a:focus-visible,.portal-admin-panel summary:focus-visible{outline:2px solid #a78bfa;outline-offset:-2px}

@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}Рабочий портал{% endblock %}</title>
     {% block module_css %}<link rel="stylesheet" href="{% static 'vendor/bootstrap-5.3.2/bootstrap.min.css' %}">{% endblock %}
-    <link rel="stylesheet" href="{% static 'base/portal.css' %}?v=compact-20261023">
+    <link rel="stylesheet" href="{% static 'base/portal.css' %}?v=clear-navigation-20261023">
     <script src="{% static 'base/portal.js' %}" defer></script>
 </head>
 <body class="portal-body">
@@ -29,15 +29,15 @@
         {% block module_administration %}{% endblock %}
         {% if portal_is_admin %}
         <details class="portal-admin-panel" open>
-            <summary><span class="portal-admin-symbol" aria-hidden="true">⚙</span> Администратор<span class="portal-admin-chevron" aria-hidden="true">⌄</span></summary>
+            <summary><span class="portal-admin-symbol" aria-hidden="true">⚙</span> Администрирование<span class="portal-admin-chevron" aria-hidden="true">⌄</span></summary>
             <nav aria-label="Действия администратора">
                 <p class="portal-admin-caption">Доступ сотрудников</p>
-                <a href="{% url 'portal_users' %}" {% if request.resolver_match.url_name == 'portal_users' %}aria-current="page"{% endif %}>Пользователи и права</a>
-                <a href="{% url 'portal_user_groups' %}" {% if request.resolver_match.url_name == 'portal_user_groups' %}aria-current="page"{% endif %}>Группы пользователей</a>
+                <a href="{% url 'portal_users' %}" {% if request.resolver_match.url_name == 'portal_users' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="user" %}<span>Пользователи и права</span></a>
+                <a href="{% url 'portal_user_groups' %}" {% if request.resolver_match.url_name == 'portal_user_groups' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="group" %}<span>Группы пользователей</span></a>
                 <p class="portal-admin-caption">Управление порталом</p>
-                <a href="{% url 'motivation_calculations' %}" {% if request.resolver_match.url_name == 'motivation_calculations' %}aria-current="page"{% endif %}>Расчёт и задания</a>
-                <a href="{% url 'motivation_subdivision_merge' %}" {% if request.resolver_match.url_name == 'motivation_subdivision_merge' %}aria-current="page"{% endif %}>Слияние подразделений</a>
-                <a href="{% url 'admin:index' %}">Настройки системы <span aria-hidden="true">↗</span></a>
+                <a href="{% url 'motivation_calculations' %}" {% if request.resolver_match.url_name == 'motivation_calculations' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="clock" %}<span>Расчёт и задания</span></a>
+                <a href="{% url 'motivation_subdivision_merge' %}" {% if request.resolver_match.url_name == 'motivation_subdivision_merge' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="merge" %}<span>Слияние подразделений</span></a>
+                <a href="{% url 'admin:index' %}">{% include "base/_nav_icon.html" with kind="settings" %}<span>Настройки системы</span></a>
             </nav>
         </details>
         {% endif %}
