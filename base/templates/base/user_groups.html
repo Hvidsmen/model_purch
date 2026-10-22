@@ -1,7 +1,7 @@
 {% extends 'base/base.html' %}{% load static %}
 {% block title %}Группы пользователей · Рабочий портал{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'base/user_groups.css' %}?v=20261021">
+<link rel="stylesheet" href="{% static 'base/user_groups.css' %}?v=compact-20261023?v=20261021">
 <section class="access-groups">
 <header class="access-groups-heading"><div><p class="access-eyebrow">Администрирование · Доступ к отчётам</p><h1>Группы пользователей</h1><p>Одна группа — вид работника, подразделения и участники.</p></div><a class="access-button access-secondary" href="{% url 'portal_users' %}">Пользователи и роли</a></header>
 {% for message in messages %}<p class="access-notice" role="status">{{ message }}</p>{% endfor %}
