@@ -1,10 +1,11 @@
-.portal-body{margin:0;background:#f4f6fa!important;color:#334155;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;--portal-accent:#5b4bc4;--workspace-blue:var(--portal-accent)}
+html{scrollbar-gutter:stable}
+.portal-body{margin:0;font-size:14px;line-height:1.5;background:#f4f6fa!important;color:#334155;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;--portal-accent:#5b4bc4;--workspace-blue:var(--portal-accent)}
 .portal-body .portal-topbar{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:8px 16px;background:#fff;border-bottom:1px solid #e2e8f0;min-height:54px;box-sizing:border-box}
 .portal-body .portal-brand{font-size:17px;font-weight:700;color:#334155;text-decoration:none;white-space:nowrap}
 .portal-body .portal-projects{display:flex;gap:8px;flex-wrap:wrap}.portal-body .portal-projects a{display:block;padding:7px 12px;border-radius:7px;text-decoration:none;color:#526079;font-size:14px;font-weight:500}
 .portal-body .portal-projects a[aria-current=page],.portal-body .portal-projects a:hover{color:#5b21b6;background:#eeeafd}
 .portal-user{margin-left:auto;font-size:13px;color:#64748b}
-.portal-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:12px;max-width:1920px;margin:0 auto;padding:12px}
+.portal-layout{display:grid;grid-template-columns:280px minmax(0,1fr);gap:12px;width:100%;max-width:none;box-sizing:border-box;margin:0;padding:12px}
 .portal-body .portal-sidebar{position:sticky;top:12px;align-self:start;max-height:calc(100vh - 24px);overflow:auto;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:10px 8px}
 .portal-sidebar h2{font-size:16px;font-weight:700;margin:12px 8px 6px;color:#334155}
 .portal-body .portal-home,.portal-body .portal-admin{display:block;padding:8px;font-size:12px;text-decoration:none;color:#64748b}.portal-admin{border-top:1px solid #e2e8f0;margin-top:16px}
@@ -61,3 +62,12 @@
 .portal-body .portal-admin-panel a:hover{background:#f5f1fd;border-color:#c7b6e8;color:#51318e}
 .portal-body .portal-admin-panel a[aria-current=page]{background:#eae1fa;border-color:#c4afe8;color:#4e2a8c;box-shadow:inset 3px 0 #8060bd;font-weight:650}
 .portal-admin-panel a:focus-visible,.portal-admin-panel summary:focus-visible{outline:2px solid #a78bfa;outline-offset:-2px}
+
+/* Shell dimensions do not inherit Bootstrap/CoreUI defaults from a module. */
+.portal-body .portal-topbar{font-size:14px;line-height:20px}
+.portal-body .portal-brand,.portal-body .portal-projects,.portal-body .portal-user{margin-top:0;margin-bottom:0;line-height:20px}
+.portal-body .portal-brand{margin-right:0}
+.portal-body .portal-logout button{font-family:inherit;font-size:13px;line-height:20px}
+.portal-body .portal-sidebar{box-sizing:border-box;font-size:14px;line-height:1.5}
+.portal-body .portal-home{line-height:20px}
+.portal-body .portal-sidebar h2{line-height:22px}

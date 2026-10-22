@@ -39,6 +39,39 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
             finally:
                 browser.close()
 
+    def test_switching_projects_preserves_shell_geometry(self):
+        from playwright.sync_api import sync_playwright
+        ensure_roles()
+        actor = User.objects.create_user('shell-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            try:
+                page = browser.new_page()
+                page.goto(self.live_server_url + '/accounts/login/')
+                page.fill('#id_username', actor.username)
+                page.fill('#id_password', 'browser-test-password')
+                page.get_by_role('button', name='Войти', exact=True).click()
+                for width in (1280, 2560):
+                    page.set_viewport_size({'width': width, 'height': 900})
+                    measurements = []
+                    for path in ('/model_purch/scenarios/', '/admin_motivationglobal_coeff'):
+                        response = page.goto(self.live_server_url + path)
+                        self.assertEqual(response.status, 200)
+                        page.evaluate('window.scrollTo(0,0)')
+                        measurements.append(page.evaluate("""() => Object.fromEntries(
+                            ['.portal-topbar','.portal-brand','.portal-projects','.portal-sidebar','.portal-main'].map(selector => {
+                                const r=document.querySelector(selector).getBoundingClientRect();
+                                return [selector, {x:r.x,y:r.y,width:r.width,height:r.height}];
+                            }))"""))
+                    for selector in measurements[0]:
+                        dimensions = ('x', 'y', 'width', 'height') if selector != '.portal-main' and selector != '.portal-sidebar' else ('x', 'y', 'width')
+                        for dimension in dimensions:
+                            self.assertAlmostEqual(measurements[0][selector][dimension], measurements[1][selector][dimension], delta=1, msg=f'{width}: {selector} {dimension}')
+                    self.assertLess(measurements[1]['.portal-sidebar']['x'], 20)
+            finally:
+                browser.close()
+
     def test_admin_can_preview_user_and_return_without_changing_login(self):
         ensure_roles()
         admin = User.objects.create_user('browser-preview-admin', password='browser-test-password', is_staff=True)

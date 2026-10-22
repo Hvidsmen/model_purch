@@ -51,13 +51,6 @@ body .table tbody tr:hover { background: #f4f7ff; }
 
 body .page-header p { font-size: .85rem; }
 
-/* Purchase pages use the available viewport rather than a centered width cap. */
-.portal-layout:has(.product-table),
-.portal-layout:has(.workspace-panel) {
-    max-width: none;
-    padding: 12px;
-    gap: 12px;
-}
 body .product-table { width: 100%; }
 body .product-table thead th { white-space: normal; padding: 8px 6px; }
 body .product-table tbody td { padding: 8px 6px; }
