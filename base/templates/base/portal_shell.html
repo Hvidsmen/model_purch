@@ -4,15 +4,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Рабочий портал{% endblock %}</title>
+    <link rel="icon" type="image/svg+xml" href="{% static 'base/da-icon.svg' %}">
+    <title>{% block title %}DA портал{% endblock %}</title>
     {% block module_css %}<link rel="stylesheet" href="{% static 'vendor/bootstrap-5.3.2/bootstrap.min.css' %}">{% endblock %}
-    <link rel="stylesheet" href="{% static 'base/portal.css' %}?v=unified-shell-20261023">
+    <link rel="stylesheet" href="{% static 'base/portal.css' %}?v=da-brand-20261023">
     <script src="{% static 'base/portal.js' %}" defer></script>
 </head>
 <body class="portal-body">
 <a class="portal-skip" href="#portal-main">Перейти к содержимому</a>
 <header class="portal-topbar">
-    <a class="portal-brand header-brand" href="{% url 'index_base' %}">Рабочий портал</a>
+    <a class="portal-brand header-brand" href="{% url 'index_base' %}"><img class="portal-brand-icon" src="{% static 'base/da-icon.svg' %}" alt="" width="30" height="30">DA портал</a>
     <nav class="portal-projects" aria-label="Проекты портала">
         {% if portal_can_purchases %}<a href="{% url 'scenario_list' %}" {% if '/model_purch/' in request.path %}aria-current="page"{% endif %}>Модель закупок</a>{% endif %}
         {% if portal_can_motivation %}<a href="{% if portal_reports_only %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}" {% if '/admin_motivation' in request.path %}aria-current="page"{% endif %}>Мотивация</a>{% endif %}

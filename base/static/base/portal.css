@@ -71,3 +71,7 @@ html{scrollbar-gutter:stable}
 .portal-body .portal-sidebar{box-sizing:border-box;font-size:14px;line-height:1.5}
 .portal-body .portal-home{line-height:20px}
 .portal-body .portal-sidebar h2{line-height:22px}
+
+.portal-body .portal-brand{display:inline-flex;align-items:center;gap:9px}
+.portal-brand-icon{display:block;flex:0 0 30px;border-radius:7px}
+.portal-login-brand{display:flex;align-items:center;gap:12px}
