@@ -1,13 +1,26 @@
-{% extends 'admin_motivation/base.html' %}{% load tz %}
-{% block content %}<section class="content">
-<h1>Расчёт мотивации и задания</h1>
-<p>Запуск расчёта <code>motivation.sp_CalcBySub</code> через подготовленную копию <code>motivation.PortalCalcBySub</code>. Копия учитывает объединённые подразделения; исходная процедура сохраняется. Задания выполняет SQL Server Agent, в том числе после перезапуска портала. Одновременные запуски из портала блокируются.</p>
-<p>Настройки подключения: DWH_SQL_CONN_STR. Нужны работающая служба SQL Server Agent, права на задания msdb, чтение определения исходной процедуры и создание объектов в схеме motivation.</p>
-<p><a href="{% url 'motivation_subdivision_merge' %}">Объединение подразделений и синхронизация с SQL Server</a></p>
-<h2>Создать задание</h2><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary" type="submit">Сохранить задание в SQL Server</button></form>
-<h2>Задания</h2><a class="btn btn-secondary" href="{% url 'motivation_calculations' %}">Обновить статусы</a>
-<table class="table"><thead><tr><th>Название</th><th>Расписание (Москва)</th><th>Статус SQL Server</th><th>Действия</th></tr></thead><tbody>{% for job in jobs %}<tr><td>{{ job.name }}{% if job.error %}<p class="text-danger">{{ job.error }}</p>{% endif %}</td><td>{{ job.get_mode_display }}{% timezone 'Europe/Moscow' %}{% if job.run_at %} · {{ job.run_at|date:'d.m.Y H:i' }}{% endif %}{% endtimezone %}<br>{% if job.enabled %}Расписание включено{% else %}Расписание отключено{% endif %}</td><td>{{ job.current_status }}</td><td>
-<form method="post">{% csrf_token %}<input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" name="action" value="run" type="submit">Запустить сейчас</button></form>
-<details><summary>Изменить расписание</summary><form method="post">{% csrf_token %}<input type="hidden" name="job" value="{{ job.pk }}"><label>Название <input name="name" value="{{ job.name }}" required></label><label>Расписание <select name="mode"><option value="manual" {% if job.mode == 'manual' %}selected{% endif %}>Только вручную</option><option value="daily" {% if job.mode == 'daily' %}selected{% endif %}>Ежедневно</option><option value="once" {% if job.mode == 'once' %}selected{% endif %}>Однократно</option></select></label><label>Дата и время (Москва) {% timezone 'Europe/Moscow' %}<input type="datetime-local" name="run_at" value="{{ job.run_at|date:'Y-m-d\TH:i' }}">{% endtimezone %}</label><label><input type="checkbox" name="enabled" {% if job.enabled %}checked{% endif %}>Расписание включено</label><button class="btn btn-secondary" type="submit">Сохранить</button></form></details>
-</td></tr>{% empty %}<tr><td colspan="4">Заданий пока нет.</td></tr>{% endfor %}</tbody></table>
-</section>{% endblock %}
+{% extends 'admin_motivation/base.html' %}{% load static tz %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'admin_motivation/calculations.css' %}?v=20261023">
+<section class="calculation-page">
+<header class="calculation-heading"><div><p class="calculation-eyebrow">Администрирование · Мотивация</p><h1>Расчёт и задания</h1><p>Запускайте расчёт вручную или настройте автоматическое расписание. Время — московское.</p></div><a class="calculation-button calculation-secondary" href="{% url 'motivation_subdivision_merge' %}">Слияние подразделений →</a></header>
+{% for message in messages %}<div class="calculation-notice {% if message.tags == 'error' %}calculation-error{% endif %}" role="status">{{ message }}</div>{% endfor %}
+<div class="calculation-layout">
+<section class="calculation-card"><header><h2>Создать задание</h2><p>Сохраните параметры, затем запустите расчёт или дождитесь времени по расписанию.</p></header>
+<form method="post" class="calculation-form">{% csrf_token %}{{ form.non_field_errors }}
+{% for field in form %}{% if field.name == 'enabled' %}<label class="calculation-check">{{ field }}<span>{{ field.label }}</span></label>{{ field.errors }}{% else %}<label class="calculation-field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{{ field.errors }}{% if field.name == 'run_at' %}<small>Для ежедневного задания используется выбранное время. Для однократного — дата и время.</small>{% endif %}</label>{% endif %}{% endfor %}
+<button class="calculation-button" type="submit">Сохранить задание в SQL Server</button>
+</form></section>
+<section class="calculation-list"><header class="calculation-list-heading"><h2>Задания <span class="calculation-count">{{ jobs|length }}</span></h2><a class="calculation-button calculation-secondary" href="{% url 'motivation_calculations' %}">Обновить статусы</a></header>
+{% for job in jobs %}<article class="calculation-card calculation-job"><header class="calculation-job-heading"><h3>{{ job.name }}</h3><span class="calculation-status">{{ job.current_status }}</span></header>
+<div class="calculation-job-meta"><span><small>Расписание</small><strong>{{ job.get_mode_display }}</strong>{% timezone 'Europe/Moscow' %}{% if job.run_at %}<span>{% if job.mode == 'daily' %}{{ job.run_at|date:'H:i' }}{% else %}{{ job.run_at|date:'d.m.Y H:i' }}{% endif %} МСК</span>{% endif %}{% endtimezone %}</span><span><small>Автоматический запуск</small><strong>{% if job.mode == 'manual' %}Не используется{% elif job.enabled %}Включён{% else %}Отключён{% endif %}</strong></span></div>
+{% if job.error %}<p class="calculation-notice calculation-error" role="status">{{ job.error }}</p>{% endif %}
+<div class="calculation-job-actions"><form method="post">{% csrf_token %}<input type="hidden" name="job" value="{{ job.pk }}"><button class="calculation-button" name="action" value="run" type="submit">Запустить сейчас</button></form></div>
+<details class="calculation-edit"><summary>Изменить расписание</summary><form method="post" class="calculation-form">{% csrf_token %}<input type="hidden" name="job" value="{{ job.pk }}">
+<label class="calculation-field"><span>Название задания</span><input name="name" value="{{ job.name }}" required></label>
+<div class="calculation-edit-grid"><label class="calculation-field"><span>Расписание</span><select name="mode"><option value="manual" {% if job.mode == 'manual' %}selected{% endif %}>Только вручную</option><option value="daily" {% if job.mode == 'daily' %}selected{% endif %}>Ежедневно</option><option value="once" {% if job.mode == 'once' %}selected{% endif %}>Однократно</option></select></label><label class="calculation-field"><span>Дата и время (Москва)</span>{% timezone 'Europe/Moscow' %}<input type="datetime-local" name="run_at" value="{{ job.run_at|date:'Y-m-d\TH:i' }}">{% endtimezone %}</label></div>
+<label class="calculation-check"><input type="checkbox" name="enabled" {% if job.enabled %}checked{% endif %}><span>Расписание включено</span></label><button class="calculation-button calculation-secondary" type="submit">Сохранить</button></form></details>
+</article>{% empty %}<div class="calculation-card calculation-empty"><div class="calculation-empty-icon" aria-hidden="true">◷</div><h3>Заданий пока нет</h3><p>Создайте первое задание в форме рядом. После сохранения здесь появятся расписание, статус и кнопка запуска.</p></div>{% endfor %}
+</section></div>
+<details class="calculation-help"><summary>Как выполняется расчёт и что нужно для подключения</summary><p>Задания выполняет SQL Server Agent, в том числе после перезапуска портала. Одновременные запуски из портала блокируются.</p><p>Процедура <code>motivation.sp_CalcBySub</code> запускается через подготовленную копию <code>motivation.PortalCalcBySub</code>, которая учитывает объединённые подразделения. Исходная процедура сохраняется.</p><p>Подключение: <code>DWH_SQL_CONN_STR</code>. Нужны работающая служба SQL Server Agent, права на задания msdb, чтение определения исходной процедуры и создание объектов в схеме motivation.</p></details>
+</section>
+{% endblock %}
