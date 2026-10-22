@@ -58,9 +58,6 @@ body .page-header p { font-size: .85rem; }
     padding: 12px;
     gap: 12px;
 }
-@media (min-width: 851px) {
-    .portal-layout:has(.workspace-panel) { grid-template-columns: 180px minmax(0, 1fr); }
-}
 body .product-table { width: 100%; }
 body .product-table thead th { white-space: normal; padding: 8px 6px; }
 body .product-table tbody td { padding: 8px 6px; }
