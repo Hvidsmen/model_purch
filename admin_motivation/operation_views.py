@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 from django import forms
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core import signing
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
 from django.utils import timezone
@@ -84,7 +85,7 @@ def calculations(request):
 def merge_subdivisions(request):
     admin_required(request)
     data = request.POST if request.method == 'POST' else request.GET
-    info, errors = None, []
+    info, errors, preview_token = None, [], None
     selected = data.get('version') or GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk').values_list('pk', flat=True).first()
     if request.method == 'POST':
         try:
@@ -96,15 +97,27 @@ def merge_subdivisions(request):
             if data.get('action') == 'apply':
                 if data.get('confirm') != 'yes':
                     raise ValidationError('Подтвердите объединение после проверки предварительного результата.')
-                log = subdivision_merge.apply(data.get('source'), data.get('target'), selected, data.get('policy'))
+                try:
+                    reviewed = signing.loads(data.get('preview_token', ''), salt='subdivision-merge-review', max_age=1800)
+                except signing.BadSignature:
+                    raise ValidationError('Сначала проверьте объединение. Предварительный просмотр действует 30 минут.')
+                if reviewed['selection'] != [str(data.get('source')), str(data.get('target')), str(selected), data.get('policy')]:
+                    raise ValidationError('Параметры изменились после проверки. Нажмите «Проверить объединение» ещё раз.')
+                log = subdivision_merge.apply(data.get('source'), data.get('target'), selected, data.get('policy'), expected_fingerprint=reviewed['fingerprint'])
                 messages.success(request, f'Подразделения объединены под именем «{log.target}». Повторите расчёт планов продаж. Для расчёта MS SQL синхронизируйте настройки кнопкой ниже.')
                 return redirect('motivation_subdivision_merge')
+            if data.get('policy') not in ('source', 'target'):
+                raise ValidationError('Выберите приоритет коэффициентов перед проверкой.')
+            preview_token = signing.dumps({'selection': [str(data.get('source')), str(data.get('target')), str(selected), data.get('policy')], 'fingerprint': info['fingerprint']}, salt='subdivision-merge-review')
         except (ValidationError, Subdivision.DoesNotExist, ValueError, TypeError) as error:
             errors = error.messages if isinstance(error, ValidationError) else ['Проверьте выбранные подразделения и версию.']
         except Exception:
             logger.exception('Subdivision merge failed')
             errors = ['Не удалось выполнить действие. Проверьте настройки SQL Server и журнал сервера.']
+    branches = list(Subdivision.objects.order_by('subdivision_key'))
+    pair_source = next((branch for branch in branches if branch.subdivision_key.strip().casefold() == 'термотрейд'), None)
+    pair_target = next((branch for branch in branches if branch.subdivision_key.strip().casefold() == 'д-москва'), None)
     return render(request, 'admin_motivation/subdivision_merge.html', {
-        'branches': Subdivision.objects.order_by('subdivision_key'), 'versions': GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk'),
-        'selected_version': str(selected), 'values': data, 'preview': info, 'errors': errors,
+        'branches': branches, 'pair_source': pair_source, 'pair_target': pair_target, 'versions': GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk'),
+        'selected_version': str(selected), 'values': data, 'preview': info if preview_token else None, 'preview_token': preview_token, 'errors': errors,
         'logs': SubdivisionMergeLog.objects.select_related('source', 'target', 'version').order_by('-pk')[:20]})

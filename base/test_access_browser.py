@@ -496,3 +496,46 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 browser.close()
         for index, role in enumerate((DEPUTY_DIRECTOR, BRANCH_DIRECTOR)):
             self.assertEqual(role_for(User.objects.get(username=f'tt\\branch-ui-{index}')), role)
+
+    def test_subdivision_merge_preview_keeps_access_and_requires_review_again_after_edit(self):
+        from datetime import date
+        from django.urls import reverse
+        from admin_motivation.models import Chanel, Subdivision, GlobalCoeffVersion
+        from playwright.sync_api import sync_playwright, expect
+        ensure_roles()
+        actor = User.objects.create_user('merge-ui-admin', password='browser-test-password', is_staff=True)
+        actor.groups.add(Group.objects.get(name=ADMIN))
+        channel = Chanel.objects.create(chanel_name='Merge browser')
+        source, target = [Subdivision.objects.create(subdivision_key=name, subdivision_name=name, subdivision_global=name, chanel=channel) for name in ('ТЕРМОТРЕЙД', 'Д-Москва')]
+        version = GlobalCoeffVersion.objects.create(title='Merge test', effective_from=date(2026, 1, 1))
+        merge_url = reverse('motivation_subdivision_merge')
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            try:
+                page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+                page.goto(self.live_server_url + '/accounts/login/')
+                page.fill('#id_username', actor.username)
+                page.fill('#id_password', 'browser-test-password')
+                page.get_by_role('button', name='Войти', exact=True).click()
+                page.get_by_role('link', name='Слияние подразделений', exact=True).click()
+                page.get_by_role('link', name='Термотрейд → Д-Москва', exact=True).click()
+                expect(page.locator('select[name=source]')).to_have_value(str(source.pk))
+                expect(page.locator('select[name=target]')).to_have_value(str(target.pk))
+                page.select_option('select[name=version]', str(version.pk))
+                page.select_option('select[name=policy]', 'target')
+                page.get_by_role('button', name='Проверить объединение', exact=True).click()
+                expect(page.locator('#merge-review')).to_be_visible()
+                page.screenshot(path='/tmp/portal-subdivision-merge.png', full_page=True)
+                page.select_option('select[name=policy]', 'source')
+                expect(page.locator('#merge-review')).not_to_be_visible()
+                expect(page.locator('#merge-review-status')).to_contain_text('Параметры изменились')
+                page.get_by_role('button', name='Проверить объединение', exact=True).click()
+                page.get_by_label('Подтверждаю слияние по показанным параметрам').check()
+                page.get_by_role('button', name='Объединить подразделения', exact=True).click()
+                expect(page.locator('.merge-notice')).to_contain_text('Подразделения объединены')
+                page.set_viewport_size({'width': 390, 'height': 844})
+                self.assertLessEqual(page.evaluate('document.documentElement.scrollWidth'), 390)
+            finally:
+                browser.close()
+        source.refresh_from_db()
+        self.assertEqual(source.merged_into_id, target.pk)
