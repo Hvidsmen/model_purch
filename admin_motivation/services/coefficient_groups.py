@@ -17,7 +17,7 @@ def coefficient_matrix(version, subdivision=None, employee=None):
     model = SubdivisionDirectorCoeff if subdivision else GlobalDirectorCoeff
     scope = {'subdivision': subdivision, 'employee': employee} if subdivision else {}
     queryset = model.objects.filter(version=version, **scope) if not subdivision or employee else model.objects.none()
-    directors = {row.goods_id: row for row in queryset.select_related('goods')}
+    directors = {row.goods_id: row for row in queryset.select_related('goods', 'variation_calculate')}
     types = list(TypeCoeff.objects.order_by('pk'))
     segments = list(SegmentCoeff.objects.order_by('pk'))
     for row in directors.values():
@@ -28,6 +28,7 @@ def coefficient_matrix(version, subdivision=None, employee=None):
         for goods in groups.values():
             for good in goods:
                 row = directors.get(good.pk)
+                good.director_formula_label = row.variation_calculate.variation_name if row and row.variation_calculate_id else ''
                 good.director_cells = [{'index': i, 'value': getattr(row, f'k{i}') if row else Decimal(0)} for i in range(5)]
     return matrix
 

@@ -90,9 +90,10 @@ def prepare(cursor):
                                   'DataWH.motivation.PortalCalculationSubdivisions', changed, flags=re.I)
     if config and not references:
         raise ValidationError('В процедуре не найдена точка объединения подразделений. Расчёт не запущен.')
-    from ..models import SubdivisionCoeff
+    from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff
     from .pilot_formula import GLOBAL_SUBDIVISION, patch_calculation
-    if SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists():
+    if (SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
+            or SubdivisionDirectorCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()):
         changed = patch_calculation(changed)
     from .payout_threshold import parameterize
     changed = parameterize(changed)

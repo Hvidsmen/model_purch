@@ -117,7 +117,7 @@
                 }
                 warning = `Заменить выбранные группы коэффициентов выбранных подразделений (${selected}) сохранёнными глобальными значениями? Несохранённые правки таблицы не копируются.`;
             }
-            if (action === 'file_load' && !form.querySelector('input[type=file]')?.files.length) {
+            if (action === 'file_load' && ![...form.elements].find(field => field.type === 'file')?.files.length) {
                 event.preventDefault(); fail('Сначала выберите файл для импорта.'); return;
             }
             const savedForm = ['save_coeff', 'update_motive_coeff', 'update_approved_manager', 'add_product'].includes(action) ? form : null;

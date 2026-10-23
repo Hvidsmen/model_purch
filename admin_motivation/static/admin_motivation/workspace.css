@@ -242,3 +242,22 @@ body{background:#f4f6fa!important;color:#334155}
 .bulk-good{width:15px;height:15px;accent-color:#6550c4;vertical-align:middle;cursor:pointer}
 
 .director-delete{margin-top:8px;font-size:13px}.director-delete>summary{color:#b2445a;cursor:pointer}.director-delete form{padding:10px;border:1px solid #efccd4;border-radius:6px;margin-top:5px}.director-delete label{display:block;margin-bottom:8px}
+.coefficient-action-hub{border:1px solid #ded6f5;background:#faf8ff;border-radius:8px;padding:10px 12px;margin:10px 0 12px;min-width:0}
+.coefficient-action-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.coefficient-action-row>strong{font-size:13px;color:#51428c}
+.coefficient-action-buttons{display:flex;align-items:center;gap:7px;flex-wrap:wrap;min-width:0}
+.coefficient-action-buttons>.btn,.coefficient-action-buttons button{font-size:13px;min-height:30px;padding:5px 9px}
+.coefficient-action-buttons .is-active{background:#654ac5!important;color:white!important}
+.coefficient-action-buttons .coefficient-copy-between{margin:0!important}
+.coefficient-action-buttons form,.coefficient-action-buttons fieldset{display:inline-flex;margin:0;padding:0;border:0;min-width:0}
+.coefficient-action-panel{margin:10px 0 0!important;padding:10px 0 0!important;border:0!important;border-top:1px solid #e4def3!important;border-radius:0!important;background:transparent!important;box-shadow:none!important;min-width:0}
+.coefficient-action-panel>summary{display:none}
+.coefficient-action-panel .row{margin:0}
+.coefficient-action-panel .actions{margin:0!important;padding:0!important}
+.coefficient-action-panel .tool-options{padding:0}
+.coefficient-action-panel .bulk-formula-controls{margin:0;gap:8px}
+.bulk-formula-help{margin-top:8px;font-size:12px;color:#6b6482}
+.bulk-formula-help>summary{cursor:pointer}
+.coefficient-action-panel #addProductForm .table-wrapper{margin:0}
+@media(max-width:600px){.coefficient-action-hub{padding:9px}.coefficient-action-buttons{gap:6px}.coefficient-action-buttons>.btn,.coefficient-action-buttons button{font-size:12px}.coefficient-action-buttons .dropdown-menu{max-width:calc(100vw - 48px)!important}}
+.coefficient-action-panel:not([open]){margin:0!important;padding:0!important;border:0!important}

@@ -13,7 +13,7 @@ from .directors import lock_editable
 from .plan_operations import scenario_operation
 
 SPECS = [(SubdivisionCoeff, ('goods_id', 'type_coeff_id', 'segment_id'), ('motivation_coeff', 'manager_coeff', 'variation_calculate_id')),
-         (SubdivisionDirectorCoeff, ('goods_id', 'employee_id'), ('k0', 'k1', 'k2', 'k3', 'k4')),
+         (SubdivisionDirectorCoeff, ('goods_id', 'employee_id'), ('k0', 'k1', 'k2', 'k3', 'k4', 'variation_calculate_id')),
          (SubdivisionManagerCoeff, ('kind_id',), ('coeff',))]
 LABELS = {SubdivisionCoeff: 'Мотивация по товарной матрице', SubdivisionDirectorCoeff: 'Коэффициенты директоров', SubdivisionManagerCoeff: 'Коэффициенты менеджеров'}
 

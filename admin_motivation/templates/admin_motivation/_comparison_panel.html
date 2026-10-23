@@ -1,6 +1,12 @@
 {% load static %}
 <style>
 #comparison-panel{padding:16px 20px;margin:18px 0;border-radius:12px;background:white;color:#334155}#comparison-panel h2{font-size:18px;margin-bottom:10px}#comparison-panel .compare-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end}#comparison-panel label{font-size:13px}#comparison-panel select{max-width:400px;width:100%;min-height:32px}#comparison-panel .compare-table{width:100%;min-width:780px;border-collapse:collapse;margin-top:12px}#comparison-panel th,#comparison-panel td{padding:9px 12px;border-bottom:1px solid #e2e8f0;text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}#comparison-panel th:first-child,#comparison-panel td:first-child{text-align:left}#comparison-panel tr:last-child td{font-weight:700;background:#f3f4ff}#comparison-panel [hidden]{display:none!important}#comparison-panel .compare-note{font-size:13px;margin-top:8px}#approval-dialog{max-width:800px;width:95%;border:0;border-radius:14px;padding:24px;color:#334155}#approval-dialog::backdrop{background:#0008}#approval-dialog ul{max-height:200px;overflow:auto}#approval-dialog button{margin-right:8px}#approval-dialog .alert{margin-top:12px}#comparison-panel .delta-down{color:#15803d}#comparison-panel .delta-up{color:#b91c1c}
+#comparison-panel .compare-variants{display:flex;gap:8px 14px;align-items:center;flex-wrap:wrap;padding:0 0 5px 12px;font-size:12px}
+#comparison-panel .compare-variants label{display:flex;align-items:center;gap:4px;margin:0;white-space:nowrap}
+#comparison-panel .compare-controls .comparison-help{position:relative;margin:0 0 0 auto;align-self:flex-end;padding-bottom:5px}
+#comparison-panel .comparison-help>summary{white-space:nowrap;padding:0}
+#comparison-panel .comparison-help>p{position:absolute;right:0;top:100%;z-index:25;width:min(360px,calc(100vw - 72px));padding:14px;border:1px solid #ddd5f4;border-radius:8px;background:white;box-shadow:0 8px 24px #30204f20;line-height:1.5}
+@media(max-width:850px){#comparison-panel .compare-variants{padding-left:0}#comparison-panel .compare-controls .comparison-help{margin-left:0}}
 </style>
 <div id="comparison-panel" data-endpoint="{% url 'motivation_coefficient_comparison' %}" data-version="{{ selected_version.pk }}" data-employee="{{ employee.pk|default:'' }}" data-subdivision="{{ sub.pk|default:'' }}">
 <h2>Сравнение мотивации{% if sub %} · {{ sub.subdivision_key }}{% endif %}</h2>
@@ -9,10 +15,11 @@
 <label>План продаж<select id="comparison-plan" class="form-select"><option value="">Выберите загруженный план</option>{% for plan in comparison_plans %}<option value="{{ plan.pk }}" {% if plan.pk == comparison_plan %}selected{% endif %}>{{ plan.title }}</option>{% endfor %}</select></label>
 <label>Базовая версия на весь период<select id="comparison-baseline" class="form-select"><option value="">Не выбрана</option>{% for version in comparison_baselines %}<option value="{{ version.pk }}" {% if version.pk == comparison_baseline %}selected{% endif %}>{{ version }} · {{ version.get_status_display }}</option>{% endfor %}</select></label>
 <button type="button" class="btn btn-outline-primary" id="comparison-refresh">Сравнить</button>
+<div class="compare-variants"><label><input type="checkbox" id="comparison-show-approved" checked> Утверждённый</label><label><input type="checkbox" id="comparison-show-baseline"> Базовый</label><span>Предлагаемый — показан всегда</span></div>
+<details class="comparison-help"><summary>Как считаются варианты</summary><p class="compare-note">Утверждённый: история утверждённых версий. Базовый: выбранная версия на весь план. Предлагаемый: история до {{ selected_version.effective_from|date:'d.m.Y' }}, затем выбранная версия, включая изменения в ячейках.</p></details>
 
 </div>
-<div class="compare-controls mt-2"><label><input type="checkbox" id="comparison-show-approved" checked> Утверждённый</label><label><input type="checkbox" id="comparison-show-baseline"> Базовый</label><span>Предлагаемый — показан всегда</span></div>
-<details class="comparison-help"><summary>Как считаются варианты</summary><p class="compare-note">Утверждённый: история утверждённых версий. Базовый: выбранная версия на весь план. Предлагаемый: история до {{ selected_version.effective_from|date:'d.m.Y' }}, затем выбранная версия, включая изменения в ячейках.</p></details>
+
 <div id="comparison-status" class="compare-note" role="status" aria-live="polite">Выберите план для сравнения.</div>
 </details>
 <div id="comparison-error" class="text-danger compare-note" hidden></div>

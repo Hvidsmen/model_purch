@@ -51,10 +51,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             original = GlobalCoeff.objects.get(pk=self.coeff.pk)
             good = Goods.objects.create(goods_key='OtherKey', planning_group_sales='Other', group='Other ERP', brand='Other brand')
             row = GlobalCoeff.objects.create(version=self.first, goods=good, type_coeff=original.type_coeff, segment=original.segment, variation_calculate=original.variation_calculate, motivation_coeff=.2, manager_coeff=1)
-            return good.pk, row.pk, VariationCalculate.objects.get(variation_name=GLOBAL_SUBDIVISION).pk
+            return good.pk, row.pk, VariationCalculate.objects.get_or_create(variation_name=GLOBAL_SUBDIVISION)[0].pk
         good, row, formula = self.db(setup_second)
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
-        self.page.locator('.bulk-formula>summary').click()
+        self.page.get_by_role('button',name='Формула для товаров',exact=True).click()
         self.page.locator('#coefficient-search').fill('OtherKey')
         self.page.locator('[data-bulk-visible]').click()
         expect(self.page.locator('[data-bulk-count]')).to_have_text('Выбрано: 1')
@@ -81,6 +81,49 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.get_by_role('status')).to_contain_text('Директор удалён')
         self.assertFalse(self.db(lambda: DirectorEmployee.objects.filter(pk=director).exists()))
         self.assertEqual(self.errors, [])
+
+    def test_version_tools_compact_layout_and_director_bulk_formula(self):
+        from .models import GlobalDirectorCoeff
+        from playwright.sync_api import expect
+        self.good = self.db(lambda: self.coeff.goods)
+        formula = self.db(lambda: VariationCalculate.objects.get_or_create(variation_name='Подразделение(Глобально)')[0].pk)
+        row = self.db(lambda: GlobalDirectorCoeff.objects.create(version=self.first,goods=self.good,k0='.01',k4='.05').pk)
+        self.page.set_viewport_size({'width':1920,'height':1080})
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        self.page.get_by_role('button',name='Добавить товар',exact=True).click()
+        expect(self.page.locator('#coefficient-action-hub #add-product-details')).to_have_attribute('open','')
+        self.page.get_by_role('button',name='Импорт и справочники',exact=True).click()
+        expect(self.page.locator('#add-product-details')).not_to_have_attribute('open','')
+        self.assertEqual(self.page.locator('#coefficient-tools input[type=file]').evaluate('(el) => el.form.id'),'mainCoeffForm')
+        self.page.get_by_role('button',name='Импорт и справочники',exact=True).click()
+        geometry = self.page.evaluate("""() => {
+            const box = selector => document.querySelector(selector).getBoundingClientRect();
+            return {tools:box('.version-tools').x,picker:box('.version-picker').right,
+                    variants:box('.compare-variants').x,compare:box('#comparison-refresh').right};
+        }""")
+        self.assertGreater(geometry['tools'],geometry['picker'])
+        self.assertGreater(geometry['variants'],geometry['compare'])
+        self.page.locator('#version-history > summary').click()
+        expect(self.page.locator('#version-history table')).to_be_visible()
+        self.page.locator('#create-version-details > summary').click()
+        expect(self.page.locator('#version-history')).not_to_have_attribute('open','')
+        self.page.keyboard.press('Escape')
+        expect(self.page.locator('#create-version-details')).not_to_have_attribute('open','')
+        self.page.get_by_role('button',name='Формула для товаров',exact=True).click()
+        self.page.locator('#bulk-variation-form input[value="Политики"]').uncheck()
+        self.page.locator('#bulk-variation-form input[value="Директора"]').check()
+        self.page.locator('#bulk-variation-form select[name=variation]').select_option(str(formula))
+        self.page.locator(f'.bulk-good[value="{self.good.pk}"]').check()
+        with self.page.expect_navigation():
+            self.page.get_by_role('button',name='Применить формулу',exact=True).click()
+        self.assertEqual(self.db(lambda: GlobalDirectorCoeff.objects.get(pk=row).variation_calculate_id),formula)
+        self.assertEqual(str(self.db(lambda: GlobalDirectorCoeff.objects.get(pk=row).k0)),'0.010000')
+        expect(self.page.get_by_text('Директор: Подразделение(Глобально)',exact=True)).to_be_visible()
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.locator('#version-history > summary').click()
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),391)
+        self.assertLessEqual(self.page.locator('#version-history .version-tool-content').bounding_box()['x'] + self.page.locator('#version-history .version-tool-content').bounding_box()['width'],391)
+        self.page.screenshot(path='/tmp/portal-compact-version-tools.png',full_page=True)
 
     def test_admin_calculation_job_create_and_run(self):
         from .models import SalesPlanScenario
@@ -519,7 +562,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         for route, args, filename in [('global_coeff_admin_motivation', [], 'global'),
                 ('coeff_subdivisions_admin_motivation', [fixture.subs[0].pk], f'subdivision-{fixture.subs[0].pk}')]:
             self.page.goto(self.live_server_url + reverse(route, args=args) + f'?version={fixture.version.pk}')
-            self.page.locator('#coefficient-tools > summary').click()
+            self.page.get_by_role('button',name='Импорт и справочники',exact=True).click()
             with self.page.expect_download() as download_info:
                 self.page.get_by_role('link', name='Скачать шаблон', exact=False).click()
             download = download_info.value
@@ -1113,7 +1156,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.db(lambda: SubdivisionManagerCoeff.objects.get(pk=manager).coeff), .9)
         local_input = self.page.locator(f'input[name="sub_coeff={row}"]')
         local_input.fill('.25'); local_input.press('Tab')
-        self.page.locator('#coefficient-tools summary').click()
+        self.page.get_by_role('button',name='Импорт и справочники',exact=True).click()
         dialogs = []
         def cancel(dialog): dialogs.append(dialog.message); dialog.dismiss()
         self.page.on('dialog', cancel)
@@ -1146,7 +1189,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.page.goto(self.live_server_url + reverse('motivation_directors_global'))
         expect(self.page.get_by_label('Директор K0', exact=True)).to_have_value('12.3456%')
         self.page.goto(self.live_server_url + reverse('motivation_directors_local') + f'?subdivision={sub}&employee={employee}')
-        self.page.locator('#coefficient-tools > summary').click()
+        self.page.get_by_role('button',name='Импорт и справочники',exact=True).click()
         self.page.get_by_role('button', name='Копировать из глобальных', exact=True).click()
         self.page.locator('#copy-coefficient-group').select_option('directors')
         self.page.once('dialog', lambda dialog: dialog.accept())
@@ -1188,7 +1231,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.get_by_role('button', name='Сохранить изменения', exact=True).click()
         self.assertEqual(self.db(lambda: GlobalDirectorCoeff.objects.get().k0), Decimal('.07'))
         self.page.goto(self.live_server_url + reverse('coeff_subdivisions_admin_motivation', args=[sub]))
-        self.page.locator('#coefficient-tools > summary').click()
+        self.page.get_by_role('button',name='Импорт и справочники',exact=True).click()
         self.page.get_by_role('button', name='Копировать из глобальных', exact=True).click()
         expect(self.page.locator('#copy-global-dialog')).to_be_visible()
         self.page.locator('#copy-coefficient-group').select_option('directors')
@@ -1227,7 +1270,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.choose_filter('#director-employee-choice', str(second))
         expect(self.page.get_by_label('Директор K0', exact=True)).to_have_value('20%')
-        self.page.locator('#coefficient-tools > summary').click()
+        self.page.get_by_role('button',name='Импорт и справочники',exact=True).click()
         self.page.get_by_role('button', name='Копировать другому директору', exact=True).click()
         self.page.locator('[name=copy_to_employee]').select_option(str(first))
         self.page.once('dialog', lambda dialog: dialog.accept())

@@ -50,7 +50,7 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
             ])
             for model in (GlobalDirectorCoeff, SubdivisionDirectorCoeff):
                 scope_fields = ['subdivision_id', 'employee_id'] if model is SubdivisionDirectorCoeff else []
-                model.objects.bulk_create([model(version=version, goods_id=row.goods_id,
+                model.objects.bulk_create([model(version=version, goods_id=row.goods_id, variation_calculate_id=row.variation_calculate_id,
                     **{field: getattr(row, field) for field in scope_fields},
                     **{f'k{i}': getattr(row, f'k{i}') for i in range(5)})
                     for row in model.objects.filter(version=latest)])
@@ -163,7 +163,7 @@ def copy_from_version(destination_id, source_id, subdivision=None, employee=None
         variation_calculate_id=c.variation_calculate_id) for c in rows])
     if not subdivision or employee:
         director_model.objects.filter(version=destination, **director_scope).delete()
-        director_model.objects.bulk_create([director_model(version=destination, goods_id=row.goods_id, **director_scope,
+        director_model.objects.bulk_create([director_model(version=destination, goods_id=row.goods_id, variation_calculate_id=row.variation_calculate_id, **director_scope,
             **{f'k{i}': getattr(row, f'k{i}') for i in range(5)}) for row in directors])
     if subdivision:
         managers = list(SubdivisionManagerCoeff.objects.filter(version=source, subdivision=subdivision))

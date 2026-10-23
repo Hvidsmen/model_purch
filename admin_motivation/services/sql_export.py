@@ -51,10 +51,10 @@ def export_motivation(connector, manage_connection=True):
             coeffs = list(SubdivisionCoeff.objects.filter(version=version).select_related('subdivision', 'goods', 'type_coeff', 'segment', 'variation_calculate'))
             coefficient_rows = [(date_from, row.subdivision.subdivision_key, row.goods.goods_key, row.type_coeff.type_coeff_name,
                                  row.segment.segment_name, row.variation_calculate.variation_name, row.motivation_coeff, None, None) for row in coeffs]
-            directors = list(SubdivisionDirectorCoeff.objects.filter(version=version).select_related('subdivision', 'goods', 'employee').order_by('subdivision_id', 'employee_id', 'goods_id'))
+            directors = list(SubdivisionDirectorCoeff.objects.filter(version=version).select_related('subdivision', 'goods', 'employee', 'variation_calculate').order_by('subdivision_id', 'employee_id', 'goods_id'))
             coefficient_rows.extend(
                 (date_from, row.subdivision.subdivision_key, row.goods.goods_key, DIRECTOR_TYPE,
-                 f'K{i}', director_variation(row.goods), getattr(row, f'k{i}'),
+                 f'K{i}', (row.variation_calculate.variation_name if row.variation_calculate_id else director_variation(row.goods)), getattr(row, f'k{i}'),
                  row.employee.employee_code, row.employee.full_name)
                 for row in directors for i in range(5))
             coefficient_rows = list(merged_rows(coefficient_rows, 1, [0, 1, 2, 3, 4, 7]))
@@ -67,6 +67,7 @@ def export_motivation(connector, manage_connection=True):
         if manage_connection:
             from .pilot_formula import GLOBAL_SUBDIVISION
             if (SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
+                    or SubdivisionDirectorCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
                     or SubdivisionManagerCoeff.objects.filter(version__in=versions).exists()):
                 from .calculation_jobs import prepare
                 prepare(cursor)

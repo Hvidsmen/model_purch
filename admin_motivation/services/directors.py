@@ -18,7 +18,7 @@ def copy_rows(source, target_model, version, **scope):
     if not rows:
         raise ValidationError('В источнике нет коэффициентов директоров. Текущие настройки сохранены.')
     target_model.objects.filter(version=version, **scope).delete()
-    target_model.objects.bulk_create([target_model(version=version, goods_id=row.goods_id,
+    target_model.objects.bulk_create([target_model(version=version, goods_id=row.goods_id, variation_calculate_id=row.variation_calculate_id,
         **scope, **{key: getattr(row, key) for key in KEYS}) for row in rows])
     return len(rows)
 

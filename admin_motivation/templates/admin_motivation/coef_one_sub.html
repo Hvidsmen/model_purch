@@ -738,6 +738,7 @@
         {% include 'admin_motivation/_coefficient_filters.html' %}
         {% include 'admin_motivation/_coefficient_visibility.html' %}
 <button type="button" class="btn btn-warning" id="copy-global-open" {% if not version_editable and not portal_is_admin %}disabled{% endif %}>Копировать из глобальных</button>
+        {% include 'admin_motivation/_coefficient_action_hub.html' %}
         {% include 'admin_motivation/_bulk_formula.html' %}
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
@@ -792,7 +793,7 @@
                         <tr class="coefficient-row" data-pg="{{ pg_sales }}" data-group="{{ gp }}" data-brand="{{ good.brand }}" data-key="{{ good.goods_key }}">
                             <td class="classification-cell">{% if portal_is_admin and version_editable %}<input type="checkbox" class="bulk-good" name="goods" value="{{ good.pk }}" form="bulk-variation-form" aria-label="Выбрать {{ good.brand }}"> {% endif %}{{ pg_sales }}</td>
                             <td class="classification-cell">{{ gp }}</td>
-                            <td class="classification-cell"><strong>{{ good.brand }}</strong><details class="brand-settings"><summary>Настройки</summary><div class="brand-options">
+                            <td class="classification-cell"><strong>{{ good.brand }}</strong>{% if good.director_formula_label %}<small class="d-block">Директор: {{ good.director_formula_label }}</small>{% endif %}<details class="brand-settings"><summary>Настройки</summary><div class="brand-options">
                                 <input type="hidden" name="original_var_calc={{ good.id }}" value="{{ gb_coefs.0.0.variation_calculate_id }}">
                                 <label>Формула <select name="select_var_calc={{ good.id }}" class="select-var-calc" title="Вариант формулы для {{ good.brand }}">
                                     {% for vc in var_calcs %}<option value="{{ vc.id }}" {% if vc.id == gb_coefs.0.0.variation_calculate.id %}selected{% endif %}>{{ vc }}</option>{% endfor %}

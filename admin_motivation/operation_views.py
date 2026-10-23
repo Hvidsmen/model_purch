@@ -188,12 +188,16 @@ def bulk_coefficient_formula(request):
     subdivision = request.POST.get('subdivision')
     route = reverse('coeff_subdivisions_admin_motivation', args=[subdivision]) if subdivision and subdivision.isdigit() else reverse('global_coeff_admin_motivation')
     try:
-        count, cells = apply_formula(request.POST.get('version'), request.POST.get('revision'), request.POST.getlist('goods'), request.POST.get('variation'), request.POST.getlist('kinds'), subdivision)
-        messages.success(request, f'Формула применена к товарам: {count}, ячеек коэффициентов: {cells}. Проценты коэффициентов сохранены.')
+        count, cells = apply_formula(request.POST.get('version'), request.POST.get('revision'), request.POST.getlist('goods'), request.POST.get('variation'), request.POST.getlist('kinds'), subdivision, request.POST.get('employee'))
+        messages.success(request, f'Формула применена к товарам: {count}, записей коэффициентов: {cells}. Проценты коэффициентов сохранены.')
     except (ValidationError, VariationCalculate.DoesNotExist, ValueError, TypeError) as error:
         messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Проверьте выбранную формулу и товары.')
     version = request.POST.get('version', '')
-    return redirect(route + (f'?version={version}' if version.isdigit() else ''))
+    suffix = f'?version={version}' if version.isdigit() else ''
+    employee = request.POST.get('employee', '')
+    if subdivision and employee.isdigit():
+        suffix += ('&' if suffix else '?') + f'employee={employee}'
+    return redirect(route + suffix)
 
 
 @require_http_methods(['GET'])

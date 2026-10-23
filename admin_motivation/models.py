@@ -637,6 +637,7 @@ class DirectorEmployee(models.Model):
 
 
 class DirectorCoefficientBase(models.Model):
+    variation_calculate = models.ForeignKey(VariationCalculate, null=True, blank=True, on_delete=models.PROTECT)
     objects = GlobalCoeffQuerySet.as_manager()
     version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
     goods = models.ForeignKey(Goods, on_delete=models.PROTECT)
