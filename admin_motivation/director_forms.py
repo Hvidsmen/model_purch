@@ -13,6 +13,12 @@ class DirectorEmployeeForm(forms.ModelForm):
                    'position': forms.TextInput(attrs={'class': 'form-control'}),
                    'subdivisions': forms.SelectMultiple(attrs={'class': 'form-select'})}
 
+    def clean(self):
+        cleaned = super().clean()
+        if self.instance.is_archived:
+            raise forms.ValidationError('Директор удалён из справочника. Историческая запись недоступна для изменения.')
+        return cleaned
+
     def clean_full_name(self):
         return self.cleaned_data['full_name'].strip()
 

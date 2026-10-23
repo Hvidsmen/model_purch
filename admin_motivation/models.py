@@ -620,6 +620,7 @@ class CoefficientGroupCopyLog(models.Model):
 
 
 class DirectorEmployee(models.Model):
+    is_archived = models.BooleanField('Удалён из справочника', default=False)
     full_name = models.CharField('ФИО сотрудника', max_length=255)
     position = models.CharField('Должность', max_length=255, blank=True)
     employee_code = models.CharField('Код сотрудника', max_length=64, unique=True, default=director_employee_code)

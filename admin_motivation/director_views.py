@@ -56,7 +56,6 @@ def director_directory(request):
     from .services.director_import import template, import_directors
     if request.method == 'POST' and request.POST.get('action') == 'delete':
         from .operation_views import admin_required
-        from django.db.models.deletion import ProtectedError
         admin_required(request)
         employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('employee'))
         if request.POST.get('confirm') != 'yes':
@@ -65,12 +64,15 @@ def director_directory(request):
             try:
                 with transaction.atomic():
                     employee = DirectorEmployee.objects.select_for_update().get(pk=employee.pk)
-                    employee.delete()
+                    if employee.subdivisiondirectorcoeff_set.exists():
+                        employee.is_archived = True
+                        employee.save(update_fields=['is_archived'])
+                        employee.subdivisions.clear()
+                    else:
+                        employee.delete()
                 messages.success(request, 'Директор удалён из справочника.')
             except DirectorEmployee.DoesNotExist:
                 messages.info(request, 'Директор уже удалён.')
-            except ProtectedError:
-                messages.error(request, 'Директор используется в коэффициентах. Удаление запрещено для сохранения истории. При необходимости измените привязку к филиалам.')
         return redirect('motivation_director_directory')
     if request.method == 'GET' and request.GET.get('template'):
         response = HttpResponse(template(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -85,7 +87,7 @@ def director_directory(request):
         return redirect('motivation_director_directory')
     data = request.POST if request.method == 'POST' else request.GET
     employee_id = data.get('edit_employee')
-    employee = get_object_or_404(DirectorEmployee, pk=employee_id) if employee_id else None
+    employee = get_object_or_404(DirectorEmployee, pk=employee_id, is_archived=False) if employee_id else None
     form = DirectorEmployeeForm(request.POST if request.method == 'POST' else None, instance=employee)
     if request.method == 'POST' and form.is_valid():
         form.save()
@@ -95,7 +97,7 @@ def director_directory(request):
     branch_id = request.GET.get('branch', '')
     branches = list(Subdivision.objects.all())
     selected_branch = next((branch for branch in branches if str(branch.pk) == branch_id), None)
-    employees = DirectorEmployee.objects.order_by('full_name').prefetch_related('subdivisions')
+    employees = DirectorEmployee.objects.filter(is_archived=False).order_by('full_name').prefetch_related('subdivisions')
     if selected_branch:
         employees = employees.filter(subdivisions=selected_branch).distinct()
     # SQLite does not implement case-insensitive matching for Cyrillic.

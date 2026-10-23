@@ -107,7 +107,7 @@ def import_director_coefficients(upload, version_id):
     with transaction.atomic():
         version = lock_editable(version_id)
         employees, goods = defaultdict(list), defaultdict(list)
-        for employee in DirectorEmployee.objects.prefetch_related('subdivisions'):
+        for employee in DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions'):
             employees[identity(employee.full_name)].append(employee)
         for good in Goods.objects.all():
             goods[tuple(identity(value) for value in (good.planning_group_sales, good.group, good.brand))].append(good)

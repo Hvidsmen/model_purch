@@ -42,7 +42,7 @@ def gloabal_coeff(request, version_form=None):
     selected = context['selected_version']
     from .services.coefficient_groups import global_matrix
     return render(request, 'admin_motivation/gloabal_coeff.html', {
-        **context, 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.all(),
+        **context, 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.filter(is_archived=False),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
@@ -185,14 +185,14 @@ def gloabal_coeff_action(request):
                         recipients = {}
                         for branch in subdivisions:
                             ids = set(request.POST.getlist(f'director_employees_{branch.pk}'))
-                            employees = list(DirectorEmployee.objects.filter(pk__in=ids))
+                            employees = list(DirectorEmployee.objects.filter(pk__in=ids, is_archived=False))
                             if len(employees) != len(ids):
                                 raise ValidationError('Выбранный сотрудник не найден.')
                             recipients[branch.pk] = employees
                     else:
                         if not request.POST.get('director_employee'):
                             raise ValidationError('Выберите сотрудника-директора.')
-                        employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee'))
+                        employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee'), is_archived=False)
                 skipped = apply_to_subdivisions(version, subdivisions, groups=groups, employee=employee, employees_by_subdivision=recipients, user=request.user)
                 if skipped:
                     messages.warning(request, 'Коэффициенты директоров пропущены в филиалах без сотрудников: ' + ', '.join(skipped) + '. Политики и продажи скопированы, если были выбраны.')
@@ -248,7 +248,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     return render(request, 'admin_motivation/coef_one_sub.html', {
         **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
         'director_editable': bool(context['version_editable'] and employee_bound),
-        'employee_form': employee_form, 'all_employees': DirectorEmployee.objects.prefetch_related('subdivisions'),
+        'employee_form': employee_form, 'all_employees': DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions'),
         'copy_employee_options': sub.directors.exclude(pk=employee.pk) if employee else sub.directors.all(),
         'goods': coefficient_matrix(selected, sub, employee),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
@@ -310,7 +310,7 @@ def sub_act(request, subdivision):
                 groups = selected_groups(request.POST.getlist('copy_groups'), default=() if request.POST.get('copy_group_selection') == 'yes' else ('policies', 'sales'))
                 if 'directors' in groups and not request.POST.get('director_employee'):
                     raise ValidationError('Выберите сотрудника-директора.')
-                employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee')) if 'directors' in groups else None
+                employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('director_employee'), is_archived=False) if 'directors' in groups else None
                 apply_to_subdivisions(version, [sub], groups=groups, employee=employee, user=request.user)
                 if groups == {'directors'}:
                     messages.success(request, 'Глобальные коэффициенты директора скопированы выбранному сотруднику.')
