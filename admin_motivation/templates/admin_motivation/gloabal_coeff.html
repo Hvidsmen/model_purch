@@ -762,7 +762,7 @@
 <!-- ================= ФОРМА ДОБАВЛЕНИЯ ТОВАРА ================= -->
 <details class="container-fluid content secondary-block" id="add-product-details"><summary>Добавить товар</summary>
     <div class="row">
-        <form method="post" action="{% url 'gb_act' %}" id="addProductForm">
+        <form method="post" action="{% url 'gb_act' %}" id="addProductForm">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
             <div class="col-12">
                 <div class="table-wrapper">
@@ -836,7 +836,7 @@
                     </button>
                 </div>
             </div>
-        </form>
+        {% if portal_motivation_readonly %}</fieldset>{% endif %}</form>
     </div>
 </details>
 
@@ -853,7 +853,7 @@
         {% include 'admin_motivation/_coefficient_filters.html' %}
         <div class="coefficient-controls-bar">
         {% include 'admin_motivation/_coefficient_visibility.html' %}
-        <form method="post" action="{% url 'gb_act' %}" id="globalBranchCopyForm">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+        <form method="post" action="{% url 'gb_act' %}" id="globalBranchCopyForm">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
         <fieldset {% if not version_editable and not portal_is_admin %}disabled{% endif %}>
 
                     <!-- Выпадающий список с чекбоксами подразделений -->
@@ -888,11 +888,11 @@
                         </div>
                     </div>
 
-        </fieldset></form>
+        </fieldset>{% if portal_motivation_readonly %}</fieldset>{% endif %}</form>
         </div>
         {% include 'admin_motivation/_coefficient_action_hub.html' %}
         {% include 'admin_motivation/_bulk_formula.html' %}
-        <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">
+        <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}
             {% csrf_token %}<input type="hidden" name="revision" value="{{ selected_version.revision }}"><input type="hidden" name="version" value="{{ selected_version.pk }}">
             <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
@@ -977,7 +977,7 @@
                 </div>
             </div>
             </fieldset>
-        </form>
+        {% if portal_motivation_readonly %}</fieldset>{% endif %}</form>
     </div>
 </div>
 

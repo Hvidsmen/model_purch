@@ -46,7 +46,7 @@ def record_export(cursor, snapshot):
     cursor.execute('DELETE FROM motivation.PortalMotivationExport WHERE Id=1; INSERT INTO motivation.PortalMotivationExport (Id,Snapshot_) VALUES (1,?);',json.dumps(snapshot,ensure_ascii=False,default=str))
 
 
-def observe(job, connector=None):
+def observe(job, connector=None, *, persist=True):
     connection = None
     try:
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
@@ -61,9 +61,13 @@ def observe(job, connector=None):
         if state not in {'running','completed','failed'}:
             return None
         aware=lambda value: value.replace(tzinfo=timezone.utc) if value and django_timezone.is_naive(value) else value
-        execution,_=MotivationExecution.objects.update_or_create(run_id=run,defaults={'job_key':key,'state':state,
-            'started_at':aware(started),'completed_at':aware(completed),'parameters':json.loads(params),
-            'export_snapshot':json.loads(snapshot) if snapshot else {}})
+        values={'job_key':key,'state':state,'started_at':aware(started),'completed_at':aware(completed),
+                'parameters':json.loads(params),'export_snapshot':json.loads(snapshot) if snapshot else {}}
+        if not persist:
+            execution=MotivationExecution(run_id=run,**values)
+            execution.pk=MotivationExecution.objects.filter(run_id=run).values_list('pk',flat=True).first()
+            return execution
+        execution,_=MotivationExecution.objects.update_or_create(run_id=run,defaults=values)
         return execution
     except Exception:
         # Old Agent steps have no audit yet. Never infer a completed run from a timer.

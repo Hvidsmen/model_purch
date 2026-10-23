@@ -2,7 +2,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR
+from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER, motivation_viewer_read_request
 
 
 class PortalAccessMiddleware:
@@ -46,4 +46,8 @@ class PortalAccessMiddleware:
             if json_request:
                 return JsonResponse({'error': 'Ваша роль не разрешает доступ к этому разделу.'}, status=403)
             return render(request, 'base/forbidden.html', status=403)
+        if project == 'motivation' and role_for(request.user) == MOTIVATION_VIEWER and not motivation_viewer_read_request(request):
+            if json_request:
+                return JsonResponse({'error':'Роль «Смотрящий»: разрешён только просмотр мотивации.'},status=403)
+            return render(request,'base/forbidden.html',{'readonly_reason':'Роль «Смотрящий»: изменение данных мотивации запрещено.'},status=403)
         return None

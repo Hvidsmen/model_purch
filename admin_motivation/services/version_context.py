@@ -1,4 +1,5 @@
 from datetime import timedelta
+from base.access import role_for, MOTIVATION_VIEWER
 from django.db.models import Count
 from ..models import GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 from django.http import Http404
@@ -36,7 +37,7 @@ def version_context(request, version_form=None):
         form.fields['effective_from'].widget.attrs['min'] = '2001-01-01'
     return {'versions': versions, 'selected_version': selected, 'latest_version': latest, 'reopen_logs': selected.reopen_history.select_related('actor').order_by('-pk')[:20] if selected else [],
             'effective_version': effective_version(), 'last_approved_version': last_approved, 'version_form': form,
-            'version_editable': bool(selected and selected.is_editable),
+            'version_editable': bool(selected and selected.is_editable and role_for(request.user) != MOTIVATION_VIEWER),
             'comparison_plans': SalesPlanScenario.objects.filter(is_deleted=False),
             'comparison_plan': request.session.get('motivation_comparison_plan'),
             'comparison_baselines': [v for v in versions if not v.is_editable],

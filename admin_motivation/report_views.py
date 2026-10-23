@@ -9,7 +9,7 @@ from .services.reports import CATALOG, FILTERS, parameters, choices, load_report
 from .services.versions import today
 from .models import Subdivision, SalesPlanScenario
 
-from base.access import role_for, REPORT_ROLES, BRANCH_DIRECTOR
+from base.access import role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER
 from base.report_access import politician_scope, scoped_query, PERSONAL_REPORTS, report_kinds
 
 logger = logging.getLogger(__name__)
@@ -107,6 +107,12 @@ def report_page(request, kind):
     from .models import MotivationExecution
     from .services.workflow import export_snapshot
     latest_execution=MotivationExecution.objects.order_by('-started_at').first()
+    if role_for(request.user)==MOTIVATION_VIEWER and str(query.get('job','')).isdigit():
+        from .models import MotivationCalculationSchedule
+        from .services.execution_tracking import observe
+        job=MotivationCalculationSchedule.objects.filter(pk=query['job']).first()
+        if job:
+            latest_execution=observe(job,persist=False) or latest_execution
     requested_execution=query.get('execution')
     receipt=None
     if latest_execution:

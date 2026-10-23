@@ -16,6 +16,12 @@
                 if (event.key === 'Escape') { navigation.open = false; navigation.querySelector('summary').focus(); }
             });
         }
+        const readonly = document.querySelector('.motivation-viewer');
+        if (readonly) {
+            readonly.querySelectorAll('form[method=post]').forEach(form => {
+                form.querySelectorAll('input,select,textarea,button').forEach(control=>control.disabled=true);
+            });
+        }
         const toolbar = document.getElementById('editor-toolbar');
         if (!toolbar) return;
         const main = document.getElementById(toolbar.dataset.form);

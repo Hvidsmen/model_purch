@@ -3,7 +3,7 @@ from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from .access import can_access
+from .access import can_access, role_for, MOTIVATION_VIEWER, motivation_viewer_read_request
 
 SESSION_KEY = 'portal_user_preview'
 
@@ -27,7 +27,7 @@ class UserPreviewMiddleware:
                 else:
                     request.portal_preview_user = target
                     request.user = target
-                    if request.method not in ('GET', 'HEAD', 'OPTIONS'):
+                    if request.method not in ('GET', 'HEAD', 'OPTIONS') and not (role_for(target)==MOTIVATION_VIEWER and motivation_viewer_read_request(request)):
                         if '/api/' in request.path or 'application/json' in request.headers.get('Accept', ''):
                             return JsonResponse({'error': 'В режиме просмотра нельзя изменять данные.'}, status=403)
                         return render(request, 'base/preview_readonly.html', status=403)

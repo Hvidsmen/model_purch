@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.views.decorators.cache import never_cache
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from base.access import can_access
+from base.access import can_access, role_for, MOTIVATION_VIEWER
 from .models import Subdivision, GlobalCoeffVersion, MotivationCalculationSchedule, SubdivisionMergeLog, SalesPlanScenario
 from .services import calculation_jobs, subdivision_merge
 
@@ -59,7 +59,7 @@ class JobForm(forms.ModelForm):
 
 
 def admin_required(request):
-    if not can_access(request.user, 'admin'):
+    if not can_access(request.user, 'admin') and not (role_for(request.user)==MOTIVATION_VIEWER and request.method in ('GET','HEAD','OPTIONS')):
         raise PermissionDenied
 
 
@@ -116,17 +116,17 @@ def calculation_monitor(request, job_id):
     from .services.execution_tracking import observe
     from .services.workflow import context as workflow_context
     from urllib.parse import urlencode
-    execution = observe(job)
+    execution = observe(job,persist=False) if role_for(request.user)==MOTIVATION_VIEWER else observe(job)
     state=workflow_context()
     data['workflow']={key:state[key] for key in ('export_current','calculated_current','export_label','calculation_label')}
     if data.get('status') in {'Выполняется','Ожидает запуска','Ошибка'}:
         data['workflow'].update(calculated_current=False,calculation_label=data['status'])
     if execution and execution.state == 'completed' and data.get('status') == 'Завершено':
         params = execution.parameters
-        data['report_url'] = reverse('motivation_report',args=['manager-detail']) + '?' + urlencode({'year':params['fact_year'],'execution':execution.pk,'run':'1'})
+        data['report_url'] = reverse('motivation_report',args=['manager-detail']) + '?' + urlencode({'year':params['fact_year'],'job':job.pk,'run':'1',**({'execution':execution.pk} if execution.pk else {})})
         data['execution'] = {'completed':execution.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S') if execution.completed_at else '',
             'year':params['fact_year'],'plan':params['plan_version'],
-            'stale': not state['calculated_current']}
+            'stale': not (state['export_current'] and state['exported'] and state['exported'].fingerprint==execution.export_snapshot.get('fingerprint'))}
     else:
         data['report_url'] = None
     data['checked_at'] = timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%H:%M:%S')

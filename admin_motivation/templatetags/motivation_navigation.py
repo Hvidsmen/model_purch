@@ -18,7 +18,12 @@ def motivation_workflow(context):
     request=context.get('request')
     selected=context.get('selected_version')
     result['selected']=selected if isinstance(selected,GlobalCoeffVersion) else GlobalCoeffVersion.objects.filter(pk=request.session.get('motivation_version')).first() if request else None
-    if result['selected'] and result['selected'].is_editable:
+    from base.access import role_for, MOTIVATION_VIEWER
+    if request and role_for(request.user)==MOTIVATION_VIEWER:
+        from django.urls import reverse
+        result['next_label']='Открыть отчёты'
+        result['next_url']=reverse('motivation_reports')
+    elif result['selected'] and result['selected'].is_editable:
         from django.urls import reverse
         result['next_label']='Проверить и утвердить черновик'
         result['next_url']=reverse('global_coeff_admin_motivation')+'?version='+str(result['selected'].pk)+'#version-approval-actions'

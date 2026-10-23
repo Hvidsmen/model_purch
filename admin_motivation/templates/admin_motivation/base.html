@@ -202,8 +202,8 @@
         }
     </style>
 
-    <link rel="stylesheet" href="{% static 'admin_motivation/workspace.css' %}?v=motivation-ux-20261024">
-    <script src="{% static 'admin_motivation/workspace.js' %}?v=motivation-ux-20261024" defer></script>
+    <link rel="stylesheet" href="{% static 'admin_motivation/workspace.css' %}?v=motivation-viewer-20261024">
+    <script src="{% static 'admin_motivation/workspace.js' %}?v=motivation-viewer-20261024" defer></script>
     <script src="{% static 'admin_motivation/coefficient_groups.js' %}" defer></script>
     <script src="{% static 'admin_motivation/editor_ux.js' %}?v=ux-20261024" defer></script>
 
@@ -212,7 +212,7 @@
 <ul class="portal-section-nav">
 {% if not portal_reports_only %}
     <li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
-    {% if portal_is_admin %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_discount_segments' %}active{% endif %}" href="{% url 'motivation_discount_segments' %}{% if selected_version %}?version={{ selected_version.pk }}{% endif %}">Сегменты скидок</a></li>{% endif %}
+    {% if portal_can_view_motivation_settings %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_discount_segments' %}active{% endif %}" href="{% url 'motivation_discount_segments' %}{% if selected_version %}?version={{ selected_version.pk }}{% endif %}">Сегменты скидок</a></li>{% endif %}
     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'global_coeff_admin_motivation' or request.resolver_match.url_name == 'gb_act' %}active{% endif %}" href="{% url 'global_coeff_admin_motivation' %}">Глобальные коэффициенты</a></li>
     <li class="nav-item">
         <details class="subdivision-nav" id="subdivision-nav">
@@ -238,6 +238,7 @@
 </ul>
 {% endblock %}
 {% block module_administration %}
+{% if portal_motivation_readonly %}<nav class="portal-section-nav" aria-label="Наблюдение за мотивацией"><a class="nav-link" href="{% url 'motivation_calculations' %}">Расчёт и задания</a><a class="nav-link" href="{% url 'motivation_subdivision_merge' %}">Слияние подразделений</a></nav>{% endif %}
 {% if not portal_reports_only %}
 <details class="portal-section-nav" {% if request.resolver_match.url_name == 'motivation_director_directory' %}open{% endif %}>
 <summary class="nav-link">Справочники</summary>
@@ -246,7 +247,8 @@
 {% endif %}
 {% endblock %}
 {% block portal_content %}
-<div class="content-wrapper">
+<div class="content-wrapper{% if portal_motivation_readonly %} motivation-viewer{% endif %}">
+    {% if portal_motivation_readonly %}<p class="viewer-notice" role="status">Смотрящий · Мотивация · Только просмотр. Изменение настроек, утверждение, выгрузка в MS SQL и запуск расчётов недоступны.</p>{% endif %}
     {% if not portal_reports_only %}{% motivation_workflow as workflow %}{% include "admin_motivation/_workflow.html" %}{% endif %}
     {% if coefficient_attempt %}{{ coefficient_attempt|json_script:'coefficient-attempt' }}{% endif %}
     {% block content %}

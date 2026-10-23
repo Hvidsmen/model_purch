@@ -3,11 +3,65 @@ import os
 from unittest import skipUnless
 from django.contrib.auth.models import User, Group
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from .access import ADMIN, DIRECTOR, LOGISTICIAN, ensure_roles
+from .access import ADMIN, DIRECTOR, LOGISTICIAN, ROLES, ensure_roles
 
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class PortalLoginBrowserTests(StaticLiveServerTestCase):
+    def test_motivation_viewer_sees_all_sections_and_cannot_write(self):
+        from datetime import date
+        from unittest.mock import patch
+        from django.urls import reverse
+        from playwright.sync_api import sync_playwright, expect
+        from .access import MOTIVATION_VIEWER
+        from admin_motivation.models import (GlobalCoeffVersion,Goods,GlobalCoeff,TypeCoeff,SegmentCoeff,VariationCalculate,DiscountSegment,MotivationCalculationSchedule,Chanel,Subdivision,SalesPlanScenario)
+        ensure_roles()
+        viewer=User.objects.create_user('motivation-viewer-ui',password='browser-test-password')
+        viewer.groups.add(Group.objects.get(name=MOTIVATION_VIEWER))
+        version,_=GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001,1,1))
+        good=Goods.objects.create(goods_key='Viewer',planning_group_sales='Viewer group',group='Viewer ERP',brand='Viewer brand')
+        kind=TypeCoeff.objects.create(type_coeff_name='Политики')
+        segment=SegmentCoeff.objects.create(segment_name='K0')
+        formula=VariationCalculate.objects.get_or_create(variation_name='Группа планов продаж')[0]
+        row=GlobalCoeff.objects.create(version=version,goods=good,type_coeff=kind,segment=segment,variation_calculate=formula,motivation_coeff=.1,manager_coeff=1)
+        DiscountSegment.objects.create(version=version,type_discount='MASS',o1=10)
+        job=MotivationCalculationSchedule.objects.create(name='Visible job')
+        plan=SalesPlanScenario.objects.create(title='Saved plan',source_version='Saved plan')
+        channel=Chanel.objects.create(chanel_name='Viewer')
+        branch=Subdivision.objects.create(subdivision_key='Viewer branch',subdivision_name='Viewer branch',subdivision_global='Viewer branch',chanel=channel)
+        with sync_playwright() as driver,patch('admin_motivation.services.calculation_jobs.monitor',return_value={'status':'Завершено','history':[]}):
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+            page.goto(self.live_server_url+'/accounts/login/')
+            page.fill('#id_username',viewer.username);page.fill('#id_password','browser-test-password')
+            page.get_by_role('button',name='Войти',exact=True).click()
+            page.goto(self.live_server_url+reverse('global_coeff_admin_motivation'))
+            expect(page.locator('.viewer-notice')).to_contain_text('Только просмотр')
+            expect(page.locator(f'input[name="global_coeff={row.pk}"]')).to_be_disabled()
+            expect(page.locator('#editor-save')).not_to_be_visible()
+            expect(page.locator('#approval-review')).not_to_be_visible()
+            expect(page.locator('#create-version-details')).not_to_be_visible()
+            page.locator('#subdivision-nav > summary').click()
+            expect(page.locator('#subdivision-links')).to_contain_text('Viewer branch')
+            csrf=next(cookie['value'] for cookie in page.context.cookies() if cookie['name']=='csrftoken')
+            headers={'X-CSRFToken':csrf}
+            blocked=page.request.post(self.live_server_url+reverse('loader_motive'),form={'version':str(version.pk)},headers=headers)
+            self.assertEqual(blocked.status,403)
+            with patch('admin_motivation.comparison_views.compare_plan',return_value={'saved_comparison':True}):
+                result=page.request.post(self.live_server_url+reverse('motivation_coefficient_comparison'),data={'action':'compare','version':version.pk,'plan':plan.pk},headers=headers)
+                self.assertEqual(result.status,200)
+            page.goto(self.live_server_url+reverse('motivation_discount_segments'))
+            expect(page.locator('input[name="segments-0-o1"]')).to_be_disabled()
+            page.goto(self.live_server_url+reverse('motivation_calculations'))
+            expect(page.get_by_text('Visible job',exact=True)).to_be_visible()
+            expect(page.get_by_role('button',name='Запустить сейчас',exact=True)).not_to_be_visible()
+            page.locator('.calculation-edit > summary').click()
+            expect(page.locator('.calculation-edit input[name=name]')).to_be_disabled()
+            page.goto(self.live_server_url+reverse('motivation_reports'))
+            expect(page.get_by_text('Мотивация по подразделениям',exact=True)).to_be_visible()
+            self.assertEqual(errors,[])
+            browser.close()
+
     def test_login_navigation_denied_project_and_logout_for_each_role(self):
         ensure_roles()
         for index, role in enumerate((ADMIN, DIRECTOR, LOGISTICIAN)):
@@ -186,7 +240,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('link', name='Группы пользователей', exact=True).click()
                 page.fill('#id_name', 'Политики · Москва и регионы')
                 page.select_option('#id_portal_role', 'Политик')
-                expect(page.locator('#id_portal_role option')).to_have_count(8)
+                expect(page.locator('#id_portal_role option')).to_have_count(len(ROLES)+1)
                 branches_field = page.locator('[data-access-multi]').filter(has=page.locator('input[name=subdivisions]'))
                 branches_field.locator('summary').click()
                 branches_field.locator('input[type=search]').fill('Moscow')

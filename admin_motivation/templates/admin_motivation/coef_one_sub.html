@@ -674,7 +674,7 @@
 <!-- ================= Коэф руководителя ================= -->
 <details class="container-fluid content secondary-block" id="manager-details"><summary>Коэффициенты руководителя · {{ sub }}</summary>
     <div class="row">
-        <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data">
+        <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
             <fieldset {% if not version_editable and not manager_approved_editable %}disabled{% endif %}>
             <div class="col-12">
@@ -713,7 +713,7 @@
                 </div>
             </div>
             </fieldset>
-        </form>
+        {% if portal_motivation_readonly %}</fieldset>{% endif %}</form>
     </div>
 {% if manager_correction_history %}<details><summary>Журнал изменений поправок</summary>
     <ul>{% for log in manager_correction_history %}<li>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }} МСК{% endtimezone %} · {{ log.actor.get_username }} · {{ log.reason }}
@@ -740,7 +740,7 @@
 <button type="button" class="btn btn-warning" id="copy-global-open" {% if not version_editable and not portal_is_admin %}disabled{% endif %}>Копировать из глобальных</button>
         {% include 'admin_motivation/_coefficient_action_hub.html' %}
         {% include 'admin_motivation/_bulk_formula.html' %}
-        <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
+        <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}
             {% csrf_token %}<input type="hidden" name="revision" value="{{ selected_version.revision }}"><input type="hidden" name="version" value="{{ selected_version.pk }}">{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
             <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
@@ -829,11 +829,11 @@
                 </div>
             </div>
             </fieldset>
-        </form>
+        {% if portal_motivation_readonly %}</fieldset>{% endif %}</form>
     </div>
 </div>
 
-{% if employee and director_editable %}<dialog id="copy-director-dialog" class="coefficient-copy-dialog"><form method="post" action="{% url 'sub_act' sub.pk %}">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="employee" value="{{ employee.pk }}"><input type="hidden" name="confirm_copy" value="yes"><h2>Копировать другому директору</h2><p>Будут скопированы сохранённые коэффициенты {{ employee.full_name }}. Настройки политик, продаж и остальных директоров сохранятся.</p><label>Получатель<select name="copy_to_employee" class="form-select" required><option value="">Выберите другого директора филиала</option>{% for item in copy_employee_options %}<option value="{{ item.pk }}">{{ item }}</option>{% endfor %}</select></label><div class="director-copy-tools mt-3"><button class="btn btn-outline-secondary" type="button" onclick="this.closest('dialog').close()">Отмена</button><button class="btn btn-primary" name="action_button" value="copy_to_director">Скопировать коэффициенты</button></div></form></dialog>{% endif %}
+{% if employee and director_editable %}<dialog id="copy-director-dialog" class="coefficient-copy-dialog"><form method="post" action="{% url 'sub_act' sub.pk %}">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="employee" value="{{ employee.pk }}"><input type="hidden" name="confirm_copy" value="yes"><h2>Копировать другому директору</h2><p>Будут скопированы сохранённые коэффициенты {{ employee.full_name }}. Настройки политик, продаж и остальных директоров сохранятся.</p><label>Получатель<select name="copy_to_employee" class="form-select" required><option value="">Выберите другого директора филиала</option>{% for item in copy_employee_options %}<option value="{{ item.pk }}">{{ item }}</option>{% endfor %}</select></label><div class="director-copy-tools mt-3"><button class="btn btn-outline-secondary" type="button" onclick="this.closest('dialog').close()">Отмена</button><button class="btn btn-primary" name="action_button" value="copy_to_director">Скопировать коэффициенты</button></div>{% if portal_motivation_readonly %}</fieldset>{% endif %}</form></dialog>{% endif %}
 {% include 'admin_motivation/_director_employee_directory.html' %}
 {% include 'admin_motivation/_copy_coefficient_groups.html' %}
 <script>
