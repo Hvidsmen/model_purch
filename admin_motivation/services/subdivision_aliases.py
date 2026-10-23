@@ -29,7 +29,9 @@ def coefficient_rows(rows, sub_index, key_indexes):
         yield from rows
         return
     names = {source: target for source, target, policy in config}
-    preferred = {source if policy == 'source' else target for source, target, policy in config}
+    preferred_sources = {source for source, target, policy in config if policy == 'source'}
+    def rank(original, target):
+        return (0 if original in preferred_sources else 1 if original == target else 2, str(original).casefold(), str(original))
     chosen = {}
     for raw in rows:
         row = list(raw)
@@ -40,7 +42,7 @@ def coefficient_rows(rows, sub_index, key_indexes):
             old_original, old_row = chosen[key]
             if original == old_original:
                 raise ValidationError('Неоднозначные коэффициенты для одной классификации.')
-            if original not in preferred:
+            if rank(original, row[sub_index]) >= rank(old_original, row[sub_index]):
                 continue
         chosen[key] = (original, tuple(row))
     yield from (row for original, row in chosen.values())

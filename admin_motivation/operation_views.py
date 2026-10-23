@@ -86,14 +86,20 @@ def merge_subdivisions(request):
     admin_required(request)
     data = request.POST if request.method == 'POST' else request.GET
     info, errors, preview_token = None, [], None
+    source_ids = sorted(set(data.getlist('source')))
+    priority_source = data.get('priority_source') or (source_ids[0] if len(source_ids) == 1 else '')
     selected = data.get('version') or GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk').values_list('pk', flat=True).first()
+
+    def selection():
+        return [source_ids, str(data.get('target')), str(selected), data.get('policy'), priority_source if data.get('policy') == 'source' else '']
+
     if request.method == 'POST':
         try:
             if data.get('action') == 'sync_sql':
                 calculation_jobs.sync_merge_configuration()
                 messages.success(request, 'Объединение и утверждённые коэффициенты синхронизированы с SQL Server. Запускайте расчёт из административного раздела портала.')
                 return redirect('motivation_subdivision_merge')
-            info = subdivision_merge.preview(data.get('source'), data.get('target'), selected)
+            info = subdivision_merge.preview_many(source_ids, data.get('target'), selected)
             if data.get('action') == 'apply':
                 if data.get('confirm') != 'yes':
                     raise ValidationError('Подтвердите объединение после проверки предварительного результата.')
@@ -101,14 +107,17 @@ def merge_subdivisions(request):
                     reviewed = signing.loads(data.get('preview_token', ''), salt='subdivision-merge-review', max_age=1800)
                 except signing.BadSignature:
                     raise ValidationError('Сначала проверьте объединение. Предварительный просмотр действует 30 минут.')
-                if reviewed['selection'] != [str(data.get('source')), str(data.get('target')), str(selected), data.get('policy')]:
+                if reviewed['selection'] != selection():
                     raise ValidationError('Параметры изменились после проверки. Нажмите «Проверить объединение» ещё раз.')
-                log = subdivision_merge.apply(data.get('source'), data.get('target'), selected, data.get('policy'), expected_fingerprint=reviewed['fingerprint'])
+                logs = subdivision_merge.apply_many(source_ids, data.get('target'), selected, data.get('policy'), expected_fingerprint=reviewed['fingerprint'], priority_source_id=priority_source)
+                log = logs[0]
                 messages.success(request, f'Подразделения объединены под именем «{log.target}». Повторите расчёт планов продаж. Для расчёта MS SQL синхронизируйте настройки кнопкой ниже.')
                 return redirect('motivation_subdivision_merge')
             if data.get('policy') not in ('source', 'target'):
                 raise ValidationError('Выберите приоритет коэффициентов перед проверкой.')
-            preview_token = signing.dumps({'selection': [str(data.get('source')), str(data.get('target')), str(selected), data.get('policy')], 'fingerprint': info['fingerprint']}, salt='subdivision-merge-review')
+            if data.get('policy') == 'source' and priority_source not in source_ids:
+                raise ValidationError('Выберите присоединяемое подразделение с приоритетом коэффициентов.')
+            preview_token = signing.dumps({'selection': selection(), 'fingerprint': info['fingerprint']}, salt='subdivision-merge-review')
         except (ValidationError, Subdivision.DoesNotExist, ValueError, TypeError) as error:
             errors = error.messages if isinstance(error, ValidationError) else ['Проверьте выбранные подразделения и версию.']
         except Exception:
@@ -119,5 +128,5 @@ def merge_subdivisions(request):
     pair_target = next((branch for branch in branches if branch.subdivision_key.strip().casefold() == 'д-москва'), None)
     return render(request, 'admin_motivation/subdivision_merge.html', {
         'branches': branches, 'pair_source': pair_source, 'pair_target': pair_target, 'versions': GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk'),
-        'selected_version': str(selected), 'values': data, 'preview': info if preview_token else None, 'preview_token': preview_token, 'errors': errors,
+        'selected_version': str(selected), 'values': data, 'selected_sources': source_ids, 'priority_source': priority_source, 'preview': info if preview_token else None, 'preview_token': preview_token, 'errors': errors,
         'logs': SubdivisionMergeLog.objects.select_related('source', 'target', 'version').order_by('-pk')[:20]})
