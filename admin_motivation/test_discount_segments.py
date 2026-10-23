@@ -22,6 +22,17 @@ class DiscountSegmentTests(TestCase):
         variation, _ = VariationCalculate.objects.get_or_create(variation_name='Группа планов продаж')
         GlobalCoeff.objects.create(version=self.first, goods=good, type_coeff=kind, segment=segment, variation_calculate=variation, motivation_coeff=.1, manager_coeff=1)
 
+    def test_subdivision_navigation_is_populated_on_segments_and_directory(self):
+        from .models import Subdivision, Chanel
+        channel = Chanel.objects.create(chanel_name='Navigation')
+        branch = Subdivision.objects.create(subdivision_key='NAV',subdivision_name='Navigation branch',subdivision_global='Navigation branch',chanel=channel)
+        for route in ('motivation_discount_segments', 'motivation_director_directory'):
+            with self.subTest(route=route):
+                response = self.client.get(reverse(route))
+                self.assertContains(response, reverse('coeff_subdivisions_admin_motivation',args=[branch.pk]))
+                self.assertContains(response, 'Navigation branch')
+                self.assertNotContains(response, '<li>Подразделения не найдены</li>')
+
     def row(self, version=None, name='MASS', **values):
         return DiscountSegment.objects.create(version=version or self.first, type_discount=name, **{'o1': Decimal('10'), 'o2': Decimal('17'), 'o3': Decimal('19'), 'o4': Decimal('24'), **values})
 

@@ -95,6 +95,8 @@ class SharedMotivationVersionTests(TestCase):
         foreign = latest.subdivision_coefficients.get(subdivision=self.other)
         self.post(latest, 'save_coeff', **{f'sub_coeff={target.pk}': '25%', f'sub_coeff={foreign.pk}': '99%',
             f'sub_coeff={self.local_coeff.pk}': '99%', f'select_var_calc={self.good.pk}': self.variation.pk})
+        self.assertEqual(latest.subdivision_coefficients.get(subdivision=self.sub).motivation_coeff, 0.15)
+        self.post(latest, 'save_coeff', **{f'sub_coeff={target.pk}': '25%', f'select_var_calc={self.good.pk}': self.variation.pk})
         self.post(latest, 'update_motive_coeff', **{f'kind_coeff={self.manager_kind.pk}': '0.9'})
         self.assertEqual(latest.subdivision_coefficients.get(subdivision=self.sub).motivation_coeff, 0.25)
         self.assertEqual(latest.subdivision_coefficients.get(subdivision=self.other).motivation_coeff, 0.3)

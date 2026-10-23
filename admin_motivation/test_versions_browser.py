@@ -125,6 +125,44 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertLessEqual(self.page.locator('#version-history .version-tool-content').bounding_box()['x'] + self.page.locator('#version-history .version-tool-content').bounding_box()['width'],391)
         self.page.screenshot(path='/tmp/portal-compact-version-tools.png',full_page=True)
 
+    def test_segments_subdivision_search_and_navigation(self):
+        from playwright.sync_api import expect
+        def setup_branch():
+            channel=Chanel.objects.create(chanel_name='Search nav')
+            return Subdivision.objects.create(subdivision_key='NAV',subdivision_name='Д-Москва',subdivision_global='Д-Москва',chanel=channel).pk
+        branch=self.db(setup_branch)
+        self.page.goto(self.live_server_url + reverse('motivation_discount_segments'))
+        labels = self.page.evaluate("""() => [...document.querySelector('#subdivision-nav').closest('ul').children].map(li => li.querySelector(':scope > a,:scope > details > summary').textContent.trim())""")
+        self.assertEqual(labels, ['Планы продаж','Сегменты скидок','Глобальные коэффициенты','Подразделения','Отчёты','Выгрузка в DWH'])
+        self.page.locator('#subdivision-nav > summary').click()
+        self.page.locator('#subdivision-search').fill('Москва')
+        link=self.page.locator('#subdivision-links a').filter(has_text='Москва')
+        expect(link).to_be_visible()
+        expect(self.page.locator('#subdivision-search-empty')).not_to_be_visible()
+        with self.page.expect_navigation(): link.click()
+        self.assertIn(reverse('coeff_subdivisions_admin_motivation',args=[branch]),self.page.url)
+        self.assertEqual(self.errors, [])
+
+    def test_verified_save_receipt_and_stale_tab_rejection(self):
+        from playwright.sync_api import expect
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        cell = self.page.locator(f'input[name="global_coeff={self.coeff.pk}"]')
+        cell.fill('25%');cell.press('Tab')
+        with self.page.expect_navigation():
+            self.page.locator('#editor-save').click()
+        expect(self.page.locator('#version-panel')).to_contain_text('Сохранение проверено. Изменено полей:')
+        self.assertEqual(self.db(lambda: GlobalCoeff.objects.get(pk=self.coeff.pk).motivation_coeff), .25)
+        def another_save():
+            row=GlobalCoeff.objects.get(pk=self.coeff.pk)
+            row.motivation_coeff=.3;row.save()
+        self.db(another_save)
+        cell.fill('40%');cell.press('Tab')
+        with self.page.expect_navigation():
+            self.page.locator('#editor-save').click()
+        expect(self.page.locator('#version-panel')).to_contain_text('Версия изменилась')
+        self.assertEqual(self.db(lambda: GlobalCoeff.objects.get(pk=self.coeff.pk).motivation_coeff), .3)
+        self.assertEqual(self.errors, [])
+
     def test_admin_calculation_job_create_and_run(self):
         from .models import SalesPlanScenario
         from django.utils import timezone
@@ -1199,6 +1237,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.page.get_by_label('Директор K0', exact=True).fill('25%')
         with self.page.expect_navigation():
             self.page.get_by_role('button', name='Сохранить изменения', exact=True).click()
+        expect(self.page.locator('#version-panel')).to_contain_text('Сохранение проверено')
         expect(self.page.get_by_label('Директор K0', exact=True)).to_have_value('25%')
         self.assertEqual(self.db(lambda: SubdivisionDirectorCoeff.objects.get(employee_id=employee).k0), Decimal('.25'))
         self.assertFalse(self.db(lambda: SubdivisionDirectorCoeff.objects.filter(employee_id=other).exists()))

@@ -700,8 +700,8 @@
                         </tbody>
                     </table>
                 </div>
-                 {% if manager_approved_editable %}
                  <input type="hidden" name="revision" value="{{ selected_version.revision }}">
+                 {% if manager_approved_editable %}
                  <p>В утверждённой версии разрешено менять только поправки. После выгрузки и пересчёта они изменят суммы мотивации, включая директорские.</p>
                  <label>Причина изменения<textarea name="manager_reason" class="form-control" maxlength="2000" required></textarea></label>
                  <label><input type="checkbox" name="confirm_manager_change" value="yes" required> Подтверждаю: после выгрузки и пересчёта суммы выбранных периодов, в том числе прошлых, могут измениться</label>
@@ -741,7 +741,7 @@
         {% include 'admin_motivation/_coefficient_action_hub.html' %}
         {% include 'admin_motivation/_bulk_formula.html' %}
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data" id="subCoeffForm">
-            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
+            {% csrf_token %}<input type="hidden" name="revision" value="{{ selected_version.revision }}"><input type="hidden" name="version" value="{{ selected_version.pk }}">{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
             <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="actions">
@@ -795,7 +795,7 @@
                             <td class="classification-cell">{{ gp }}</td>
                             <td class="classification-cell"><strong>{{ good.brand }}</strong>{% if good.director_formula_label %}<small class="d-block">Директор: {{ good.director_formula_label }}</small>{% endif %}<details class="brand-settings"><summary>Настройки</summary><div class="brand-options">
                                 <input type="hidden" name="original_var_calc={{ good.id }}" value="{{ gb_coefs.0.0.variation_calculate_id }}">
-                                <label>Формула <select name="select_var_calc={{ good.id }}" class="select-var-calc" title="Вариант формулы для {{ good.brand }}">
+                                <label>Формула <select name="select_var_calc={{ good.id }}" class="select-var-calc" {% if not good.has_core_coefficients %}disabled{% endif %} title="Вариант формулы для {{ good.brand }}">
                                     {% for vc in var_calcs %}<option value="{{ vc.id }}" {% if vc.id == gb_coefs.0.0.variation_calculate.id %}selected{% endif %}>{{ vc }}</option>{% endfor %}
                                 </select></label>
 

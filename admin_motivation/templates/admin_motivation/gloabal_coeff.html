@@ -893,7 +893,7 @@
         {% include 'admin_motivation/_coefficient_action_hub.html' %}
         {% include 'admin_motivation/_bulk_formula.html' %}
         <form method="post" action="{% url 'gb_act' %}" enctype="multipart/form-data" id="mainCoeffForm">
-            {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">
+            {% csrf_token %}<input type="hidden" name="revision" value="{{ selected_version.revision }}"><input type="hidden" name="version" value="{{ selected_version.pk }}">
             <fieldset {% if not version_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="actions">
@@ -947,7 +947,7 @@
                             <td class="classification-cell">{{ gp }}</td>
                             <td class="classification-cell"><strong>{{ good.brand }}</strong>{% if good.director_formula_label %}<small class="d-block">Директор: {{ good.director_formula_label }}</small>{% endif %}<details class="brand-settings"><summary>Настройки</summary><div class="brand-options">
                                 <input type="hidden" name="original_var_calc={{ good.id }}" value="{{ gb_coefs.0.0.variation_calculate_id }}">
-                                <label>Формула <select name="select_var_calc={{ good.id }}" class="select-var-calc" title="Вариант формулы для {{ good.brand }}">
+                                <label>Формула <select name="select_var_calc={{ good.id }}" class="select-var-calc" {% if not good.has_core_coefficients %}disabled{% endif %} title="Вариант формулы для {{ good.brand }}">
                                     {% for vc in var_calcs %}<option value="{{ vc.id }}" {% if vc.id == gb_coefs.0.0.variation_calculate.id %}selected{% endif %}>{{ vc }}</option>{% endfor %}
                                 </select></label>
                                 <label class="row-delete-control"><input type="checkbox" name="delete_coeff={{ good.id }}" onchange="toggleRowDelete(this)"> Удалить товар</label>

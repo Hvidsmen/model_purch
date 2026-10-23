@@ -1,5 +1,5 @@
 {% extends 'base/portal_shell.html' %}
-{% load static %}
+{% load static motivation_navigation %}
 {% block title %}Мотивация · DA портал{% endblock %}
 {% block project_name %}Мотивация{% endblock %}
 {% block module_css %}
@@ -208,42 +208,33 @@
 
 {% endblock %}
 {% block module_navigation %}
-    <ul class="portal-section-nav">
+<ul class="portal-section-nav">
 {% if not portal_reports_only %}
-
-        <li class="nav-item">
-            <a class="nav-link {% if request.resolver_match.url_name == 'global_coeff_admin_motivation' or request.resolver_match.url_name == 'gb_act' %}active{% endif %}"
-               href="{% url 'global_coeff_admin_motivation' %}">
-                Глобальные коэффициенты
-            </a>
-        </li>
-
-        {% if portal_is_admin %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_discount_segments' %}active{% endif %}" href="{% url 'motivation_discount_segments' %}{% if selected_version %}?version={{ selected_version.pk }}{% endif %}">Сегменты скидок</a></li>{% endif %}
-        <li class="nav-item">
-            <details class="subdivision-nav" id="subdivision-nav">
-                <summary class="nav-link {% if sub %}active{% endif %}">Подразделения{% if sub %} · {{ sub }}{% endif %}</summary>
-                <div class="subdivision-menu">
-                    <label for="subdivision-search">Найти подразделение</label>
-                    <input type="search" id="subdivision-search" class="form-control" placeholder="Название подразделения" autocomplete="off">
-                    <ul id="subdivision-links">
-                    {% for subdivision in subdivisions %}
-                        <li><a {% if subdivision.pk == sub.pk %}aria-current="page"{% endif %} href="{% url 'coeff_subdivisions_admin_motivation' subdivision.pk %}">{{ subdivision }}</a></li>
-                    {% empty %}<li>Подразделения не найдены</li>{% endfor %}
-                    </ul>
-                    <p id="subdivision-search-empty" hidden>Совпадений нет</p>
-                </div>
-            </details>
-        </li>
-         <li class="nav-item">
-            <a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}"
-               href="{% url 'loader_motive' %}">
-                Выгрузка в DWH
-            </a>
-        </li>
-        {% endif %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
-        {% if not portal_reports_only %}<li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
-        {% endif %}
-    </ul>
+    <li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>
+    {% if portal_is_admin %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_discount_segments' %}active{% endif %}" href="{% url 'motivation_discount_segments' %}{% if selected_version %}?version={{ selected_version.pk }}{% endif %}">Сегменты скидок</a></li>{% endif %}
+    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'global_coeff_admin_motivation' or request.resolver_match.url_name == 'gb_act' %}active{% endif %}" href="{% url 'global_coeff_admin_motivation' %}">Глобальные коэффициенты</a></li>
+    <li class="nav-item">
+        <details class="subdivision-nav" id="subdivision-nav">
+            <summary class="nav-link {% if sub %}active{% endif %}">Подразделения{% if sub %} · {{ sub }}{% endif %}</summary>
+            <div class="subdivision-menu">
+                <label for="subdivision-search">Найти подразделение</label>
+                <input type="search" id="subdivision-search" class="form-control" placeholder="Название подразделения" autocomplete="off">
+                <ul id="subdivision-links">
+                {% motivation_subdivisions as navigation_subdivisions %}
+                {% for subdivision in navigation_subdivisions %}
+                    <li><a {% if subdivision.pk == sub.pk %}aria-current="page"{% endif %} href="{% url 'coeff_subdivisions_admin_motivation' subdivision.pk %}">{{ subdivision.subdivision_name }}</a></li>
+                {% empty %}<li>Подразделения не найдены</li>{% endfor %}
+                </ul>
+                <p id="subdivision-search-empty" hidden>Совпадений нет</p>
+            </div>
+        </details>
+    </li>
+{% endif %}
+    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
+{% if not portal_reports_only %}
+    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}" href="{% url 'loader_motive' %}">Выгрузка в DWH</a></li>
+{% endif %}
+</ul>
 {% endblock %}
 {% block module_administration %}
 {% if not portal_reports_only %}

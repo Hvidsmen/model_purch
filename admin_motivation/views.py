@@ -25,6 +25,7 @@ import pandas as pd
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
+from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
 from django.utils import timezone
@@ -197,6 +198,8 @@ def gloabal_coeff_action(request):
                 if skipped:
                     messages.warning(request, 'Коэффициенты директоров пропущены в филиалах без сотрудников: ' + ', '.join(skipped) + '. Политики и продажи скопированы, если были выбраны.')
             elif action == 'save_coeff':
+                from .services.save_verification import SaveVerification
+                verification = SaveVerification(latest, request.POST)
                 ids = [key.split('=', 1)[1] for key in request.POST if key.startswith('select_var_calc=')]
                 deleted = [key.split('=', 1)[1] for key in request.POST if key.startswith('delete_coeff=')]
                 # Update existing cells only; never delete cells just because a POST is partial.
@@ -212,6 +215,7 @@ def gloabal_coeff_action(request):
                 version.coefficients.filter(goods_id__in=deleted).delete()
                 from .services.coefficient_groups import save_global_directors
                 save_global_directors(version, request.POST, deleted)
+                saved_count = verification.verify()
                 # Keep Goods and previous versions' coefficients intact.
             else:
                 raise ValidationError('Неизвестное действие.')
@@ -221,7 +225,10 @@ def gloabal_coeff_action(request):
     except RuntimeError as error:
         messages.error(request, str(error))
     else:
-        messages.success(request, 'Изменения сохранены в выбранной версии.')
+        if action == 'save_coeff':
+            messages.success(request, f'Сохранение проверено. Изменено полей: {saved_count}. Версия: {version}. Выгрузка в MS SQL выполняется отдельно.' if saved_count else 'Проверено: значения уже сохранены, новых изменений нет.')
+        else:
+            messages.success(request, 'Изменения сохранены в выбранной версии.')
     return redirect(reverse('global_coeff_admin_motivation') + f'?version={version.pk}')
 
 
@@ -232,16 +239,17 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     kinds = list(KindManagerCoeff.objects.order_by('pk'))
     existing = {row.kind_id: row for row in SubdivisionManagerCoeff.objects.filter(version=selected, subdivision=sub).select_related('kind')}
     managers = [existing.get(kind.pk) or SubdivisionManagerCoeff(version=selected, subdivision=sub, kind=kind, coeff=1) for kind in kinds]
-    from django.db.models import Q
     from .services.coefficient_groups import coefficient_matrix
     from .director_forms import DirectorEmployeeForm
-    employees = DirectorEmployee.objects.filter(Q(subdivisions=sub) | Q(subdivisiondirectorcoeff__subdivision=sub,
+    employees = DirectorEmployee.objects.filter(is_archived=False).filter(Q(subdivisions=sub) | Q(subdivisiondirectorcoeff__subdivision=sub,
         subdivisiondirectorcoeff__version=selected)).distinct()
     employee_id = request.GET.get('employee')
-    employee = get_object_or_404(employees, pk=employee_id) if employee_id else employees.first()
+    employee = (employees.filter(pk=employee_id).first() if str(employee_id).isdigit() else None) if employee_id else employees.first()
+    if employee_id and employee is None:
+        messages.warning(request, 'Директор удалён или недоступен в этом подразделении. Выберите действующего сотрудника. Прежние коэффициенты сохранены в истории.')
     employee_form = DirectorEmployeeForm(initial={'subdivisions': [sub.pk]})
     if request.GET.get('edit_employee'):
-        employee_form = DirectorEmployeeForm(instance=get_object_or_404(DirectorEmployee, pk=request.GET['edit_employee']))
+        employee_form = DirectorEmployeeForm(instance=get_object_or_404(DirectorEmployee, pk=request.GET['edit_employee'], is_archived=False))
     if employee_form_override is not None:
         employee_form = employee_form_override
     employee_bound = bool(employee and employee.subdivisions.filter(pk=sub.pk).exists())
@@ -283,13 +291,20 @@ def sub_act(request, subdivision):
             if (version.status != 'draft' or version.pk != latest.pk) and not (action == 'copy_from_global' and can_access(request.user, 'admin')):
                 raise ValidationError('Историческая версия доступна только для просмотра.')
             if action == 'update_motive_coeff':
+                from .services.save_verification import SaveVerification
+                verification = SaveVerification(latest, request.POST, subdivision=sub, manager=True)
                 for kind in KindManagerCoeff.objects.all():
                     key = f'kind_coeff={kind.pk}'
                     if key in request.POST:
                         SubdivisionManagerCoeff.objects.update_or_create(version=version, subdivision=sub, kind=kind,
                             defaults={'coeff': coefficient_number(request.POST[key])})
+                saved_count = verification.verify()
             elif action == 'save_coeff':
-                employee = get_object_or_404(DirectorEmployee, pk=request.POST['employee']) if request.POST.get('employee') else None
+                employee = DirectorEmployee.objects.filter(pk=request.POST['employee'], is_archived=False).first() if request.POST.get('employee') else None
+                if request.POST.get('employee') and employee is None:
+                    raise ValidationError('Директор удалён. Изменения не сохранены. Выберите действующего сотрудника.')
+                from .services.save_verification import SaveVerification
+                verification = SaveVerification(latest, request.POST, subdivision=sub, employee=employee)
                 for coeff in SubdivisionCoeff.objects.filter(version=version, subdivision=sub):
                     key = f'sub_coeff={coeff.pk}'
                     if key in request.POST:
@@ -301,6 +316,7 @@ def sub_act(request, subdivision):
                         coeff.save()
                 from .services.coefficient_groups import save_global_directors
                 save_global_directors(version, request.POST, subdivision=sub, employee=employee)
+                saved_count = verification.verify()
             elif action == 'copy_to_director':
                 from .services.directors import copy_to_employee
                 if request.POST.get('confirm_copy') != 'yes':
@@ -338,9 +354,12 @@ def sub_act(request, subdivision):
     except (ValidationError, ValueError, TypeError) as error:
         messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Некорректное число или формат файла.')
     else:
-        messages.success(request, 'Настройки подразделения сохранены в выбранной версии.')
+        if action in {'save_coeff', 'update_motive_coeff'}:
+            messages.success(request, f'Сохранение проверено. Изменено полей: {saved_count}. Подразделение: {sub}. Версия: {version}. Выгрузка в MS SQL выполняется отдельно.' if saved_count else 'Проверено: значения уже сохранены, новых изменений нет.')
+        else:
+            messages.success(request, 'Настройки подразделения сохранены в выбранной версии.')
     chosen = employee.pk if employee else request.POST.get('employee', '')
-    allowed = str(chosen).isdigit() and (DirectorEmployee.objects.filter(pk=chosen, subdivisions=sub).exists() or SubdivisionDirectorCoeff.objects.filter(version=version, subdivision=sub, employee_id=chosen).exists())
+    allowed = str(chosen).isdigit() and (DirectorEmployee.objects.filter(pk=chosen, is_archived=False).filter(Q(subdivisions=sub) | Q(subdivisiondirectorcoeff__version=version, subdivisiondirectorcoeff__subdivision=sub)).exists())
     suffix = f'&employee={chosen}' if allowed else ''
     return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + f'?version={version.pk}' + suffix)
 
@@ -372,7 +391,6 @@ def download_coefficient_template(request, subdivision=None):
         raise Http404('Версия коэффициентов не найдена.')
     version = get_object_or_404(GlobalCoeffVersion, pk=selected) if selected else latest_version()
     sub = get_object_or_404(Subdivision, pk=subdivision) if subdivision is not None else None
-    from django.db.models import Q
     employee = None
     selected_employee = request.GET.get('employee', '')
     if sub and selected_employee:

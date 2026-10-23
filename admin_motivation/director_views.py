@@ -70,7 +70,7 @@ def director_directory(request):
                         employee.subdivisions.clear()
                     else:
                         employee.delete()
-                messages.success(request, 'Директор удалён из справочника.')
+                messages.success(request, 'Директор удалён из справочника. Он больше не доступен для новых настроек. Прежние коэффициенты сохранены для истории расчётов.' if employee.is_archived else 'Директор удалён из справочника.')
             except DirectorEmployee.DoesNotExist:
                 messages.info(request, 'Директор уже удалён.')
         return redirect('motivation_director_directory')

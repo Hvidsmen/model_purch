@@ -27,6 +27,7 @@ def coefficient_matrix(version, subdivision=None, employee=None):
     for groups in matrix.values():
         for goods in groups.values():
             for good in goods:
+                good.has_core_coefficients = any(cell is not None for group in goods[good] for cell in group)
                 row = directors.get(good.pk)
                 good.director_formula_label = row.variation_calculate.variation_name if row and row.variation_calculate_id else ''
                 good.director_cells = [{'index': i, 'value': getattr(row, f'k{i}') if row else Decimal(0)} for i in range(5)]
