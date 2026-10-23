@@ -1,6 +1,7 @@
 """Consistent SQLite snapshots, including committed WAL data."""
 import sqlite3
 import logging
+import re
 from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
@@ -11,6 +12,29 @@ from time import monotonic
 SQLITE_DONE = 101
 SQLITE_BUSY = 5
 SQLITE_LOCKED = 6
+
+
+def prune_backups(database, directory, keep=3, protected=()):
+    """Remove only older portal-generated backups for this database."""
+    if not isinstance(keep, int) or keep < 1:
+        raise ValueError('At least one backup must be retained.')
+    database = Path(database).resolve()
+    directory = Path(directory)
+    pattern = re.compile(re.escape(database.stem) + r'-\d{8}T\d{12}Z-[0-9a-f]{8}\.sqlite3$')
+    candidates = sorted((path for path in directory.iterdir()
+                         if pattern.fullmatch(path.name) and not path.is_symlink() and path.is_file()),
+                        key=lambda path: path.name, reverse=True)
+    preserved = {Path(path).resolve() for path in protected} | {database}
+    removed = []
+    for path in candidates[keep:]:
+        if path.resolve() in preserved:
+            continue
+        try:
+            path.unlink()
+            removed.append(path)
+        except OSError:
+            logging.getLogger(__name__).warning('Could not remove old backup: %s', path)
+    return removed
 
 
 def backup_sqlite(database, directory, notify=None):
@@ -70,5 +94,10 @@ def backup_sqlite(database, directory, notify=None):
         except OSError:
             logging.getLogger(__name__).warning('Не удалось удалить неполную резервную копию: %s', destination)
         raise
+    try:
+        removed = prune_backups(database, directory, keep=3, protected=[destination])
+        emit(f'Backup cleanup: removed {len(removed)} old copies; keeping the latest 3.')
+    except OSError:
+        logging.getLogger(__name__).warning('Could not clean old backups in %s', directory, exc_info=True)
     emit(f'Backup verified; elapsed {monotonic() - started:.1f}s')
     return destination
