@@ -5,7 +5,8 @@ from django.test import TestCase
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 from base.testing import authorize_test_case
-from .models import MotivationCalculationSchedule
+from .models import MotivationCalculationSchedule, SalesPlanScenario
+from django.utils import timezone
 from .operation_views import JobForm
 from .services import calculation_jobs as jobs
 
@@ -13,6 +14,8 @@ from .services import calculation_jobs as jobs
 class CalculationJobsTests(TestCase):
     def setUp(self):
         authorize_test_case(self)
+        for version in ('Test plan', 'Selected plan', 'Other plan'):
+            SalesPlanScenario.objects.create(title=version, source_version=version, loaded_at=timezone.now())
         self.job = MotivationCalculationSchedule.objects.create(name='Расчёт', fact_year=2026, plan_version='Test plan')
         self.connection, self.cursor = MagicMock(), MagicMock()
         self.connector = MagicMock(return_value=(self.connection, self.cursor))
@@ -133,3 +136,19 @@ class CalculationJobsTests(TestCase):
         self.job.refresh_from_db()
         self.assertEqual(self.job.fact_year, 2025)
         self.assertFalse(self.job.synced)
+
+    def test_job_plan_choices_only_include_loaded_active_portal_versions(self):
+        SalesPlanScenario.objects.create(title='Not imported', source_version='Remote only')
+        SalesPlanScenario.objects.create(title='Deleted', source_version='Deleted plan', loaded_at=timezone.now(), is_deleted=True)
+        SalesPlanScenario.objects.create(title='Second name', source_version='Test plan', loaded_at=timezone.now())
+        field = JobForm().fields['plan_version']
+        values = [value for value, label in field.choices]
+        self.assertEqual(values.count('Test plan'), 1)
+        self.assertNotIn('Remote only', values)
+        self.assertNotIn('Deleted plan', values)
+        data = {'name': 'Job', 'mode': 'manual', 'fact_year': 2026, 'plan_version': 'Remote only', 'quarter_share': 80, 'year_share': 20}
+        self.assertIn('plan_version', JobForm(data).errors)
+        data['plan_version'] = 'Test plan'
+        form = JobForm(data)
+        self.assertTrue(form.is_valid(), form.errors)
+        self.assertEqual(form.save(commit=False).plan_version, 'Test plan')

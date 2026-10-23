@@ -83,19 +83,23 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.errors, [])
 
     def test_admin_calculation_job_create_and_run(self):
+        from .models import SalesPlanScenario
+        from django.utils import timezone
+        for version in ('Selected SQL plan', 'Other SQL plan'):
+            self.db(lambda version=version: SalesPlanScenario.objects.create(title=version, source_version=version, loaded_at=timezone.now()))
         from unittest.mock import patch
         from playwright.sync_api import expect
         with patch('admin_motivation.services.calculation_jobs.sync_job') as sync, patch('admin_motivation.services.calculation_jobs.start_job') as start, patch('admin_motivation.services.calculation_jobs.status', return_value='Выполняется'):
             self.page.goto(self.live_server_url + reverse('motivation_calculations'))
             self.page.locator('#id_name').fill('Browser calculation')
             self.page.locator('#id_fact_year').fill('2026')
-            self.page.locator('#id_plan_version').fill('Selected SQL plan')
+            self.page.locator('#id_plan_version').select_option('Selected SQL plan')
             self.page.get_by_role('button', name='Сохранить задание в SQL Server', exact=True).click()
             expect(self.page.get_by_text('Browser calculation', exact=True)).to_be_visible()
             card = self.page.locator('.calculation-job')
             card.locator('summary').click()
             card.locator('[name=fact_year]').fill('2025')
-            card.locator('[name=plan_version]').fill('Other SQL plan')
+            card.locator('[name=plan_version]').select_option('Other SQL plan')
             card.locator('[name=quarter_share]').fill('75')
             card.locator('[name=year_share]').fill('25')
             card.get_by_role('button', name='Сохранить параметры и расписание', exact=True).click()

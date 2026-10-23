@@ -6,10 +6,9 @@
 {% for message in messages %}<div class="calculation-notice {% if message.tags == 'error' %}calculation-error{% endif %}" role="status">{{ message }}</div>{% endfor %}
 <div class="calculation-layout">
 <section class="calculation-card"><header><h2>Создать задание</h2><p>Сохраните параметры, затем запустите расчёт или дождитесь времени по расписанию.</p></header>
-<p><a href="?load_plans=1">Загрузить список версий плана из MS SQL</a></p>
-<datalist id="calculation-plan-versions">{% for version in plan_versions %}<option value="{{ version }}"></option>{% endfor %}</datalist>
+<p>Версии берутся из загруженных планов портала. <a href="{% url 'motivation_sales_plans' %}">Открыть планы продаж →</a></p>
 <form method="post" class="calculation-form">{% csrf_token %}{{ form.non_field_errors }}
-{% for field in form %}{% if field.name == 'enabled' %}<label class="calculation-check">{{ field }}<span>{{ field.label }}</span></label>{{ field.errors }}{% else %}<label class="calculation-field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{{ field.errors }}{% if field.name == 'run_at' %}<small>Для ежедневного задания используется выбранное время. Для однократного — дата и время.</small>{% endif %}</label>{% endif %}{% endfor %}
+{% for field in form %}{% if field.name == 'enabled' %}<label class="calculation-check">{{ field }}<span>{{ field.label }}</span></label>{{ field.errors }}{% else %}<label class="calculation-field" for="{{ field.id_for_label }}"><span>{{ field.label }}</span>{{ field }}{{ field.errors }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}{% if field.name == 'run_at' %}<small>Для ежедневного задания используется выбранное время. Для однократного — дата и время.</small>{% endif %}</label>{% endif %}{% endfor %}
 <button class="calculation-button" type="submit">Сохранить задание в SQL Server</button>
 </form></section>
 <section class="calculation-list"><header class="calculation-list-heading"><h2>Задания <span class="calculation-count">{{ jobs|length }}</span></h2><a class="calculation-button calculation-secondary" href="{% url 'motivation_calculations' %}">Обновить статусы</a></header>
@@ -19,7 +18,7 @@
 {% if job.error %}<p class="calculation-notice calculation-error" role="status">{{ job.error }}</p>{% endif %}
 <div class="calculation-job-actions"><form method="post">{% csrf_token %}<input type="hidden" name="job" value="{{ job.pk }}"><button class="calculation-button" name="action" value="run" type="submit">Запустить сейчас</button></form></div>
 <details class="calculation-edit"><summary>Изменить параметры и расписание</summary><form method="post" class="calculation-form">{% csrf_token %}<input type="hidden" name="job" value="{{ job.pk }}">
-{% for field in job.edit_form %}{% if field.name == 'enabled' %}<label class="calculation-check">{{ field }}<span>{{ field.label }}</span></label>{% else %}<label class="calculation-field"><span>{{ field.label }}</span>{{ field }}</label>{% endif %}{% endfor %}
+{% for field in job.edit_form %}{% if field.name == 'enabled' %}<label class="calculation-check">{{ field }}<span>{{ field.label }}</span></label>{% else %}<label class="calculation-field"><span>{{ field.label }}</span>{{ field }}{% if field.help_text %}<small>{{ field.help_text }}</small>{% endif %}</label>{% endif %}{% endfor %}
 <button class="calculation-button calculation-secondary" type="submit">Сохранить параметры и расписание</button></form></details>
 </article>{% empty %}<div class="calculation-card calculation-empty"><div class="calculation-empty-icon" aria-hidden="true">◷</div><h3>Заданий пока нет</h3><p>Создайте первое задание в форме рядом. После сохранения здесь появятся расписание, статус и кнопка запуска.</p></div>{% endfor %}
 </section></div>

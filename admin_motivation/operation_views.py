@@ -9,7 +9,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from base.access import can_access
-from .models import Subdivision, GlobalCoeffVersion, MotivationCalculationSchedule, SubdivisionMergeLog
+from .models import Subdivision, GlobalCoeffVersion, MotivationCalculationSchedule, SubdivisionMergeLog, SalesPlanScenario
 from .services import calculation_jobs, subdivision_merge
 
 logger = logging.getLogger(__name__)
@@ -17,8 +17,7 @@ logger = logging.getLogger(__name__)
 
 class JobForm(forms.ModelForm):
     fact_year = forms.IntegerField(label='Год факта', min_value=1, max_value=9999)
-    plan_version = forms.CharField(label='Версия плана продаж в MS SQL', max_length=500,
-                                  widget=forms.TextInput(attrs={'list': 'calculation-plan-versions'}))
+    plan_version = forms.ChoiceField(label='Загруженная версия плана продаж')
     quarter_share = forms.DecimalField(label='Квартальная доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=80)
     year_share = forms.DecimalField(label='Годовая доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=20)
     run_at = forms.DateTimeField(label='Дата и время (Москва)', required=False,
@@ -26,6 +25,18 @@ class JobForm(forms.ModelForm):
     class Meta:
         model = MotivationCalculationSchedule
         fields = ['name', 'fact_year', 'plan_version', 'quarter_share', 'year_share', 'mode', 'run_at', 'enabled']
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        versions = {}
+        for plan in SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).exclude(source_version='').order_by('title', 'pk'):
+            versions.setdefault(plan.source_version, []).append(plan.title)
+        self.fields['plan_version'].choices = [('', 'Выберите загруженную версию плана')] + [
+            (version, f"{' / '.join(titles)} · {version}") for version, titles in versions.items()]
+        if not versions:
+            self.fields['plan_version'].help_text = 'Сначала загрузите план в разделе «Планы продаж».'
+        elif self.instance.plan_version and self.instance.plan_version not in versions:
+            self.fields['plan_version'].help_text = 'Сохранённой версии нет среди загруженных планов. Загрузите её или выберите другую.'
 
     def clean_run_at(self):
         value = self.cleaned_data['run_at']
@@ -77,13 +88,6 @@ def calculations(request):
                 job.synced, job.error = False, text
                 job.save(update_fields=['synced', 'error'])
             messages.error(request, text)
-    plan_versions = []
-    if request.GET.get('load_plans') == '1':
-        try:
-            from .services.sales_plans import source_versions
-            plan_versions = source_versions()
-        except Exception:
-            messages.error(request, 'Не удалось получить версии плана из MS SQL. Можно ввести точное название вручную.')
     jobs = list(MotivationCalculationSchedule.objects.order_by('pk'))
     for job in jobs:
         job.edit_form = JobForm(instance=job, auto_id=f'job_{job.pk}_%s')
@@ -95,7 +99,7 @@ def calculations(request):
                 job.current_status = calculation_jobs.status(job)
             except Exception:
                 job.current_status = 'Статус SQL Server недоступен'
-    return render(request, 'admin_motivation/calculations.html', {'form': form, 'jobs': jobs, 'plan_versions': plan_versions})
+    return render(request, 'admin_motivation/calculations.html', {'form': form, 'jobs': jobs})
 
 
 @require_http_methods(['GET', 'POST'])
