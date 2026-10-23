@@ -60,7 +60,7 @@ class BranchRoleTests(TestCase):
             self.client.force_login(user)
             response = self.client.get(reverse('motivation_reports'))
             self.assertEqual(response.status_code, 200)
-            self.assertEqual(response.content.count(b'report-catalog-card" href='), 5 if role == BRANCH_DIRECTOR else 3)
+            self.assertEqual(response.content.count(b'report-catalog-card" href='), 3)
             for url in ('/accounts/users/', '/accounts/groups/', '/admin/', reverse('scenario_list'), reverse('global_coeff_admin_motivation')):
                 self.assertEqual(self.client.get(url).status_code, 403)
             self.assertEqual(self.client.post(reverse('motivation_reports')).status_code, 403)
@@ -92,7 +92,7 @@ class BranchRoleTests(TestCase):
                 self.assertIn('Allowed-A', call.args[2])
                 self.assertIn('Политики', call.args[2])
                 self.assertNotIn('Denied-C', call.args[2])
-            kinds = ('manager', 'manager-detail', 'deals', 'subdivisions') if role == BRANCH_DIRECTOR else ('manager', 'manager-detail', 'deals')
+            kinds = ('manager', 'manager-detail', 'deals')
             for kind in kinds:
                 params = {**values, 'Years': [], 'gp_sales': [], 'GPGoods': [], 'Brend': [], 'TypeCoeff': 'Директора', 'Division': 'Denied-C', 'Channel': [], 'ManagerName': [], 'GPSales': [], 'Partner': [], 'StartDate': date(2025, 1, 1), 'EndDate': date(2025, 12, 31), 'type_coeff': ['Директора']}
                 with patch('admin_motivation.services.reports.connect_database', return_value=(MagicMock(), MagicMock())), patch('admin_motivation.services.reports.fetch', return_value=[]) as fetch:
@@ -133,15 +133,70 @@ class BranchRoleTests(TestCase):
             self.assertEqual(load.call_args.args[1]['Division'], 'Allowed-A')
             self.assertEqual(load.call_args.args[1]['TypeCoeff'], 'Политики' if role == DEPUTY_DIRECTOR else 'Директора')
 
-    def test_director_plan_summary_scopes_filters_and_source_before_calculation(self):
-        from admin_motivation.models import SalesPlanScenario
-        plan = SalesPlanScenario.objects.create(title='Branch plan', source_version='Test')
-        self.client.force_login(self.users[BRANCH_DIRECTOR])
-        with patch('admin_motivation.services.plan_summary.summary_report', return_value={}) as report, patch('admin_motivation.services.plan_summary.summary_filters', return_value=[]) as filters:
-            response = self.client.get(reverse('motivation_plan_summary'), {'plan': plan.pk, 'subdivision': 'Denied-C'})
+    def test_director_only_has_three_reports_and_cannot_open_other_report_urls(self):
+        for user in self.users.values():
+            self.client.force_login(user)
+            self.assertEqual(self.client.get(reverse('motivation_plan_summary')).status_code, 403)
+            self.assertEqual(self.client.get(reverse('motivation_report', args=['subdivisions'])).status_code, 403)
+            self.assertEqual(self.client.get(reverse('motivation_report', args=['subdivisions']), {'export': 'xlsx'}).status_code, 403)
+
+    def test_deputy_director_bonus_uses_own_identity_for_all_reports_and_queries(self):
+        from admin_motivation.models import DirectorEmployee
+        user = self.users[DEPUTY_DIRECTOR]
+        user.first_name, user.last_name = 'Максим Игоревич', 'Волков'
+        user.save()
+        DirectorEmployee.objects.create(full_name='Волков Максим Игоревич')
+        scope = politician_scope(user)
+        self.assertEqual(scope['type'], ['Политики', 'Директора'])
+        for kind in ('manager', 'manager-detail', 'deals'):
+            with self.subTest(kind=kind):
+                type_key, branch_key, author_key = ('TypeCoeff', 'Division', 'ManagerName') if kind == 'deals' else ('TypeCoeff_', 'Subdivision', 'DealAuthor')
+                values = {type_key: 'Директора', branch_key: ['Denied-C'], author_key: ['Чужой директор'],
+                          'Years': [], 'qm': '1 Квартал', 'gp_sales': [], 'GPGoods': [], 'Brend': [],
+                          'StartDate': date(2025, 1, 1), 'EndDate': date(2025, 12, 31),
+                          'Channel': [], 'GPSales': [], 'Partner': []}
+                bounded = scoped_values(kind, values, scope)
+                self.assertEqual(bounded[author_key], ['Волков Максим Игоревич'] if kind != 'manager' else 'Волков Максим Игоревич')
+                identity = identity_choices(kind, bounded, scope)
+                self.assertTrue(identity['author']['locked'])
+                self.assertEqual(identity['author']['locked_value'], 'Волков Максим Игоревич')
+                with patch('admin_motivation.services.personal_reports.connect_database', return_value=(MagicMock(), MagicMock())), patch('admin_motivation.services.personal_reports.fetch', return_value=[]) as fetch:
+                    choices(kind, values, access_scope=scope)
+                self.assertTrue(fetch.called)
+                for call in fetch.call_args_list:
+                    self.assertIn('Волков Максим Игоревич', call.args[2])
+                    self.assertNotIn('Чужой директор', call.args[2])
+                    self.assertNotIn('Denied-C', call.args[2])
+                with patch('admin_motivation.services.reports.connect_database', return_value=(MagicMock(), MagicMock())), patch('admin_motivation.services.reports.fetch', return_value=[]) as fetch:
+                    load_report(kind, values, access_scope=scope)
+                self.assertTrue(fetch.called)
+                for call in fetch.call_args_list:
+                    self.assertIn('Волков Максим Игоревич', call.args[2])
+                    self.assertIn('Директора', call.args[2])
+                    self.assertNotIn('Чужой директор', call.args[2])
+                    self.assertNotIn('Denied-C', call.args[2])
+        politicians = scoped_values('manager-detail', {'TypeCoeff_': 'Политики', 'DealAuthor': ['Другой политик']}, scope)
+        self.assertEqual(politicians['DealAuthor'], ['Другой политик'])
+        self.assertNotIn('author', identity_choices('manager-detail', politicians, scope))
+
+    def test_deputy_director_own_author_cannot_be_changed_in_page_or_export(self):
+        from io import BytesIO
+        user = self.users[DEPUTY_DIRECTOR]
+        user.first_name, user.last_name = 'Максим Игоревич', 'Волков'
+        user.save()
+        self.client.force_login(user)
+        url = reverse('motivation_report', args=['manager-detail'])
+        query = {'type': 'Директора', 'author': 'Чужой директор', 'subdivision': 'Denied-C', 'run': '1'}
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value={'currency': 'USD'}) as load:
+            response = self.client.get(url, query)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(report.call_args.args[1].getlist('subdivision'), ['Allowed-A', 'Allowed-B'])
-        self.assertEqual(report.call_args.kwargs['allowed_subdivisions'], ['Allowed-A', 'Allowed-B'])
-        self.assertEqual(filters.call_args.kwargs['allowed_subdivisions'], ['Allowed-A', 'Allowed-B'])
-        self.client.force_login(self.users[DEPUTY_DIRECTOR])
-        self.assertEqual(self.client.get(reverse('motivation_plan_summary')).status_code, 403)
+        self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Волков Максим Игоревич'])
+        author = next(item for item in response.context['filters'] if item['name'] == 'author')
+        self.assertTrue(author['locked'])
+        self.assertEqual(author['locked_value'], 'Волков Максим Игоревич')
+        with patch('admin_motivation.report_views.load_report', return_value={'currency': 'USD'}) as load, patch('admin_motivation.services.report_excel.report_excel', return_value=BytesIO(b'file')) as export:
+            response = self.client.get(url, {**query, 'export': 'xlsx'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Волков Максим Игоревич'])
+            self.assertEqual(export.call_args.args[1]['DealAuthor'], ['Волков Максим Игоревич'])
+            response.close()

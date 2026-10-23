@@ -42,4 +42,4 @@ def portal_access(request):
     return {'ad_auth_enabled': settings.AD_AUTH_ENABLED, 'ad_forest_discovery': settings.AD_AUTH_METHOD == 'windows' and settings.AD_FOREST_DISCOVERY, 'ad_netbios_domain': settings.AD_NETBIOS_DOMAIN, 'ad_upn_suffix': settings.AD_UPN_SUFFIX, 'ad_https_ready': request.is_secure(), 'ad_password_login_ready': request.is_secure() or not settings.AD_REQUIRE_HTTPS, 'windows_auth_enabled': settings.WINDOWS_AUTH_ENABLED, 'portal_is_admin': can_access(request.user, 'admin'),
             'portal_can_purchases': can_access(request.user, 'purchases'),
             'portal_can_motivation': can_access(request.user, 'motivation'),
-            'portal_reports_only': role_for(request.user) in REPORT_ROLES, 'portal_can_plan_summary': role_for(request.user) in (ADMIN, DIRECTOR, BRANCH_DIRECTOR), 'portal_role_label': role_for(request.user) or 'Роль не назначена'}
+            'portal_reports_only': role_for(request.user) in REPORT_ROLES, 'portal_can_plan_summary': role_for(request.user) in (ADMIN, DIRECTOR), 'portal_role_label': role_for(request.user) or 'Роль не назначена'}

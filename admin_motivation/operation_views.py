@@ -16,11 +16,16 @@ logger = logging.getLogger(__name__)
 
 
 class JobForm(forms.ModelForm):
+    fact_year = forms.IntegerField(label='Год факта', min_value=1, max_value=9999)
+    plan_version = forms.CharField(label='Версия плана продаж в MS SQL', max_length=500,
+                                  widget=forms.TextInput(attrs={'list': 'calculation-plan-versions'}))
+    quarter_share = forms.DecimalField(label='Квартальная доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=80)
+    year_share = forms.DecimalField(label='Годовая доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=20)
     run_at = forms.DateTimeField(label='Дата и время (Москва)', required=False,
                                  widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'))
     class Meta:
         model = MotivationCalculationSchedule
-        fields = ['name', 'mode', 'run_at', 'enabled']
+        fields = ['name', 'fact_year', 'plan_version', 'quarter_share', 'year_share', 'mode', 'run_at', 'enabled']
 
     def clean_run_at(self):
         value = self.cleaned_data['run_at']
@@ -34,6 +39,8 @@ class JobForm(forms.ModelForm):
             self.add_error('run_at', 'Укажите дату и время запуска.')
         if values.get('enabled') and values.get('mode') == 'once' and values.get('run_at') and values['run_at'] <= timezone.now():
             self.add_error('run_at', 'Однократный запуск должен быть в будущем.')
+        if values.get('quarter_share') is not None and values.get('year_share') is not None and values['quarter_share'] + values['year_share'] != 100:
+            self.add_error(None, 'Квартальная и годовая доли должны в сумме составлять 100%.')
         return values
 
 
@@ -57,28 +64,38 @@ def calculations(request):
                 return redirect('motivation_calculations')
             form = JobForm(request.POST, instance=job)
             if form.is_valid():
-                job = form.save()
+                job = form.save(commit=False)
                 calculation_jobs.sync_job(job)
                 job.synced, job.error = True, ''
-                job.save(update_fields=['synced', 'error'])
+                job.save()
                 messages.success(request, 'Задание сохранено в SQL Server Agent.')
                 return redirect('motivation_calculations')
         except Exception as error:
             text = ' '.join(error.messages) if isinstance(error, ValidationError) else 'Не удалось настроить или запустить SQL Agent. Проверьте DWH_SQL_CONN_STR, службу Agent и права на создание заданий и процедур; подробности в журнале.'
             logger.exception('Motivation calculation job operation failed')
-            if job:
+            if job and job.pk:
                 job.synced, job.error = False, text
                 job.save(update_fields=['synced', 'error'])
             messages.error(request, text)
+    plan_versions = []
+    if request.GET.get('load_plans') == '1':
+        try:
+            from .services.sales_plans import source_versions
+            plan_versions = source_versions()
+        except Exception:
+            messages.error(request, 'Не удалось получить версии плана из MS SQL. Можно ввести точное название вручную.')
     jobs = list(MotivationCalculationSchedule.objects.order_by('pk'))
     for job in jobs:
+        job.edit_form = JobForm(instance=job, auto_id=f'job_{job.pk}_%s')
+        if job.run_at:
+            job.edit_form.initial['run_at'] = job.run_at.astimezone(ZoneInfo('Europe/Moscow')).replace(tzinfo=None)
         job.current_status = 'Не синхронизировано'
         if job.synced:
             try:
                 job.current_status = calculation_jobs.status(job)
             except Exception:
                 job.current_status = 'Статус SQL Server недоступен'
-    return render(request, 'admin_motivation/calculations.html', {'form': form, 'jobs': jobs})
+    return render(request, 'admin_motivation/calculations.html', {'form': form, 'jobs': jobs, 'plan_versions': plan_versions})
 
 
 @require_http_methods(['GET', 'POST'])

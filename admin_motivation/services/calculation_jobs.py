@@ -1,5 +1,6 @@
 """Durable SQL Server Agent jobs for the portal's motivation calculation."""
 import re
+from decimal import Decimal, InvalidOperation
 from datetime import timedelta
 from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
@@ -13,6 +14,39 @@ EXEC @result = sys.sp_getapplock @Resource=N'PortalMotivationCalculation',
 IF @result < 0 THROW 50001, N'Расчёт мотивации уже выполняется', 1;
 EXEC motivation.PortalCalcBySub;
 EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';"""
+
+
+def calculation_command(job):
+    if type(job.fact_year) is not int or not 1 <= job.fact_year <= 9999:
+        raise ValidationError('Укажите год факта в параметрах задания.')
+    plan = (job.plan_version or '').strip()
+    if not plan or len(plan) > 500:
+        raise ValidationError('Укажите версию плана продаж в параметрах задания.')
+    try:
+        quarter, year = Decimal(str(job.quarter_share)), Decimal(str(job.year_share))
+        if not all(value.is_finite() and 0 <= value <= 100 for value in (quarter, year)) or quarter + year != 100:
+            raise ValueError()
+        fractions = [value / 100 for value in (quarter, year)]
+        if any(value != value.quantize(Decimal('0.00000001')) for value in fractions):
+            raise ValueError()
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValidationError('Доли должны быть от 0 до 100%, в сумме 100%, не более 6 знаков после запятой.')
+    # SQL Agent stores a command string, so quote the only text literal explicitly.
+    escaped_plan = plan.replace("'", "''")
+    statement = (f"EXEC motivation.PortalCalcBySub @FactYear={job.fact_year}, "
+                 f"@PlanVersion=N'{escaped_plan}', "
+                 f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f};")
+    return LOCKED_COMMAND.replace('EXEC motivation.PortalCalcBySub;', statement)
+
+
+def validate_sql_parameters(cursor, job):
+    cursor.execute("SELECT name FROM sys.parameters WHERE object_id=OBJECT_ID(N'motivation.PortalCalcBySub')")
+    names = {row[0].casefold() for row in cursor.fetchall()}
+    if not {'@factyear', '@planversion', '@quartershare', '@yearshare'} <= names:
+        raise ValidationError('Процедура MS SQL не поддерживает параметры года, версии плана и долей. Установите параметризованную версию sp_CalcBySub. Задание не изменено.')
+    cursor.execute('SELECT TOP (1) 1 FROM planning.PlanSales WHERE Version_=?', job.plan_version.strip())
+    if not cursor.fetchone():
+        raise ValidationError('Указанная версия плана не найдена в MS SQL planning.PlanSales. Проверьте точное название.')
 
 
 def job_name(job):
@@ -58,6 +92,7 @@ def prepare(cursor):
 
 
 def sync_job(job, connector=None):
+    command = calculation_command(job)
     connection = None
     try:
         connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
@@ -70,15 +105,16 @@ def sync_job(job, connector=None):
           @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;
           IF @r < 0 THROW 50001,N'Дождитесь завершения расчёта мотивации',1;""")
         prepare(cursor)
+        validate_sql_parameters(cursor, job)
         name = job_name(job)
         cursor.execute('SELECT job_id FROM msdb.dbo.sysjobs WHERE name=?', name)
         exists = cursor.fetchone()
         if not exists:
             cursor.execute('EXEC msdb.dbo.sp_add_job @job_name=?, @enabled=1, @description=?', name, 'Расчёт мотивации из портала')
-            cursor.execute('EXEC msdb.dbo.sp_add_jobstep @job_name=?, @step_name=?, @subsystem=N\'TSQL\', @database_name=N\'DataWH\', @command=?', name, 'Расчёт мотивации', LOCKED_COMMAND)
+            cursor.execute('EXEC msdb.dbo.sp_add_jobstep @job_name=?, @step_name=?, @subsystem=N\'TSQL\', @database_name=N\'DataWH\', @command=?', name, 'Расчёт мотивации', command)
             cursor.execute('EXEC msdb.dbo.sp_add_jobserver @job_name=?', name)
         else:
-            cursor.execute('EXEC msdb.dbo.sp_update_jobstep @job_name=?, @step_id=1, @command=?', name, LOCKED_COMMAND)
+            cursor.execute('EXEC msdb.dbo.sp_update_jobstep @job_name=?, @step_id=1, @command=?', name, command)
         cursor.execute('SELECT schedule_id FROM msdb.dbo.sysschedules WHERE name=?', name)
         schedule = cursor.fetchone()
         if schedule:

@@ -109,6 +109,7 @@ def report_page(request, kind):
         'selected_parameters': selected_parameters, 'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
         'subdivisions': Subdivision.objects.none() if access_scope else Subdivision.objects.all(),
         'scope': query.get('scope','subdivisions'),
+        'deputy_director_author': access_scope.get('director_author') if access_scope else None,
     })
 
 
@@ -116,7 +117,7 @@ def plan_summary(request):
     from .services.plan_summary import summary_report, summary_filters
     started = perf_counter()
     access_scope = getattr(request, 'personal_report_scope', None) or politician_scope(request.user)
-    if role_for(request.user) in REPORT_ROLES and (role_for(request.user) != BRANCH_DIRECTOR or not access_scope):
+    if role_for(request.user) in REPORT_ROLES:
         raise PermissionDenied
     query = request.GET.copy()
     options = {}

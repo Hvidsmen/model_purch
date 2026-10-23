@@ -688,6 +688,10 @@ class SubdivisionDirectorCoeff(DirectorCoefficientBase):
 
 
 class MotivationCalculationSchedule(models.Model):
+    fact_year = models.PositiveSmallIntegerField('Год факта', null=True, blank=True)
+    plan_version = models.CharField('Версия плана продаж в MS SQL', max_length=500, blank=True)
+    quarter_share = models.DecimalField('Квартальная доля, %', max_digits=9, decimal_places=6, default=80)
+    year_share = models.DecimalField('Годовая доля, %', max_digits=9, decimal_places=6, default=20)
     key = models.UUIDField(default=uuid4, unique=True, editable=False)
     name = models.CharField('Название задания', max_length=120)
     enabled = models.BooleanField('Расписание включено', default=False)

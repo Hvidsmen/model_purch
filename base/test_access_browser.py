@@ -519,6 +519,8 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                     username = f'TT\\branch-ui-{index}'
                     page.goto(self.live_server_url + '/accounts/users/')
                     page.fill('#id_username', username)
+                    page.fill('#id_first_name', 'Максим Игоревич')
+                    page.fill('#id_last_name', 'Волков')
                     field = page.locator('#portal-user-form [data-access-multi]')
                     field.locator('summary').click()
                     field.get_by_label(team.name, exact=True).check()
@@ -532,7 +534,17 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                     card = page.locator('.user-card').filter(has_text=username.lower())
                     card.get_by_role('button', name='Посмотреть как пользователь', exact=True).click()
                     page.locator('.portal-project-card').filter(has_text='Мотивация').click()
-                    expect(page.locator('.report-catalog-card')).to_have_count(5 if role == BRANCH_DIRECTOR else 3)
+                    expect(page.locator('.report-catalog-card')).to_have_count(3)
+                    if role == DEPUTY_DIRECTOR:
+                        from unittest.mock import patch
+                        with patch('admin_motivation.report_views.choices', return_value=[]):
+                            from django.urls import reverse
+                            page.goto(self.live_server_url + reverse('motivation_report', args=['manager']) + '?type=Директора')
+                            expect(page.locator('input[name=author]')).to_have_value('Волков Максим Игоревич')
+                            expect(page.locator('select[name=author]')).to_have_count(0)
+                            page.locator('select[name=type] + .searchable-filter > button').click()
+                            page.locator('select[name=type] + .searchable-filter .searchable-filter-menu').get_by_role('button', name='Политики', exact=True).click()
+                            expect(page.locator('select[name=author]')).to_have_count(1)
                     page.get_by_role('button', name='Вернуться к администратору', exact=True).click()
             finally:
                 browser.close()

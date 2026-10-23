@@ -7,7 +7,7 @@ PERSONAL_REPORTS = ('manager', 'manager-detail', 'deals')
 
 
 def report_kinds(user):
-    return (*PERSONAL_REPORTS, 'subdivisions') if role_for(user) == BRANCH_DIRECTOR else PERSONAL_REPORTS
+    return PERSONAL_REPORTS
 
 
 def politician_scope(user):
@@ -21,7 +21,16 @@ def politician_scope(user):
         types = ['Политики'] if role == DEPUTY_DIRECTOR else sorted({name.strip() for name in TypeCoeff.objects.values_list('type_coeff_name', flat=True) if name and name.strip()})
         if not branches or not types:
             return None
-        return {'subdivision': branches, 'type': types, 'all_authors': True, 'reports': report_kinds(user)}
+        result = {'subdivision': branches, 'type': types, 'all_authors': True, 'reports': report_kinds(user)}
+        if role == DEPUTY_DIRECTOR and user.last_name.strip() and user.first_name.strip():
+            # Use the trusted user identity, never a name supplied in the report URL.
+            author = ' '.join(f'{user.last_name} {user.first_name}'.split())
+            from admin_motivation.models import DirectorEmployee
+            matches = [employee.full_name for employee in DirectorEmployee.objects.filter(is_archived=False)
+                       if ' '.join(employee.full_name.split()).casefold() == author.casefold()]
+            result['director_author'] = matches[0] if matches else author
+            result['type'] = [*types, 'Директора']
+        return result
     access = MotivationReportAccess.objects.select_related('subdivision__merged_into').filter(user=user).first()
     if not access or not access.deal_author.strip():
         return None
@@ -53,9 +62,21 @@ def allowed_values(scope, worker=None):
     return types, worker, branches
 
 
+def worker_scope(scope, kind, values):
+    """Deputies see all politicians, but only their own director compensation."""
+    if not scope or not scope.get('director_author'):
+        return scope
+    parameter = 'TypeCoeff' if kind == 'deals' else 'type_coeff' if kind == 'subdivisions' else 'TypeCoeff_'
+    _, worker, _ = allowed_values(scope, values.get(parameter))
+    if worker == 'Директора':
+        return {**scope, 'all_authors': False, 'author': scope['director_author']}
+    return scope
+
+
 def scoped_values(kind, values, scope):
     if not scope:
         return values
+    scope = worker_scope(scope, kind, values)
     if kind not in scope.get('reports', PERSONAL_REPORTS) or any(not scope.get(key) for key in ('subdivision', 'type')) or (not scope.get('all_authors') and not scope.get('author')):
         raise PermissionDenied
     from admin_motivation.services.reports import FILTERS
@@ -95,6 +116,7 @@ def scoped_query(query, scope, kind='manager-detail'):
 
 
 def identity_choices(kind, values, scope):
+    scope = worker_scope(scope, kind, values)
     from admin_motivation.services.reports import FILTERS
     type_key = 'TypeCoeff' if kind == 'deals' else 'type_coeff' if kind == 'subdivisions' else 'TypeCoeff_'
     types, worker, branches = allowed_values(scope, values.get(type_key))

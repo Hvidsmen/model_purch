@@ -325,8 +325,9 @@ def manager_currency_sql(sql, currency):
 
 def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
     if access_scope:
-        from base.report_access import scoped_values
+        from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
+        access_scope = worker_scope(access_scope, kind, values)
     if kind == 'manager-detail' and not values.get('TypeCoeff_'):
         raise ValidationError('Выберите вид работника.')
     if kind == 'manager' and any(not values.get(key) for key in (('TypeCoeff_', 'Subdivision', 'qm') if access_scope and access_scope.get('all_authors') else ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm'))):

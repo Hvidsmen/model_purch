@@ -4,7 +4,8 @@ from .reports import FILTERS, bind_sql, fetch
 
 
 def choices(kind, values, scope):
-    from base.report_access import identity_choices
+    from base.report_access import identity_choices, worker_scope
+    scope = worker_scope(scope, kind, values)
     identity = identity_choices(kind, values, scope)
     columns = {'author': 'АвторСделки', 'planning': 'ГруппаПлановПродаж', 'goods': 'ГруппаТоваров', 'brand': 'Марка',
                'year': 'Год', 'quarter': 'КварталМотивации', 'channel': 'Канал', 'partner': 'Партнер'}

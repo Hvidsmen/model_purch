@@ -20,7 +20,7 @@ class PortalAccessMiddleware:
             from .report_access import politician_scope, report_kinds
             name = match.url_name if match else None
             account_pages = {'index_base', 'portal_login', 'portal_logout', 'portal_windows_login'}
-            personal = name == 'motivation_reports' or (name == 'motivation_plan_summary' and role_for(request.user) == BRANCH_DIRECTOR) or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
+            personal = name == 'motivation_reports' or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
             static = module == 'django.views.static' and request.path.startswith(settings.STATIC_URL)
             if personal:
                 request.personal_report_scope = politician_scope(request.user)
