@@ -92,5 +92,7 @@ if ($Action -in @('start', 'restart')) {
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse($settings.BindAddress), [int]$settings.Port)
     try { $listener.Start() } finally { $listener.Stop() }
     Start-ScheduledTask -InputObject (Get-PortalTask)
-    Write-Host "Start requested. Check .\portal-task.ps1 status and $localDirectory\portal-task.log"
+    & $pythonExecutable -u (Join-Path $PSScriptRoot 'scripts\portal_wait_ready.py') --address $settings.BindAddress --port $settings.Port --log "$localDirectory\portal-task.log"
+    if ($LASTEXITCODE -ne 0) { throw 'Portal readiness was not confirmed. Check status and log; the task has not been stopped.' }
+    Write-Host "PORTAL READY - HTTP OK. You can refresh the browser now." -ForegroundColor Green
 }
