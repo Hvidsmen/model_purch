@@ -248,6 +248,8 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     return render(request, 'admin_motivation/coef_one_sub.html', {
         **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
         'director_editable': bool(context['version_editable'] and employee_bound),
+        'manager_approved_editable': bool(selected and selected.status == 'approved' and can_access(request.user, 'admin')),
+        'manager_correction_history': ManagerCorrectionLog.objects.filter(version=selected, subdivision=sub).select_related('actor').order_by('-pk')[:30],
         'employee_form': employee_form, 'all_employees': DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions'),
         'copy_employee_options': sub.directors.exclude(pk=employee.pk) if employee else sub.directors.all(),
         'goods': coefficient_matrix(selected, sub, employee),
@@ -264,6 +266,17 @@ def sub_act(request, subdivision):
     version = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
     action = request.POST.get('action_button')
     employee = None
+    if action == 'update_approved_manager':
+        from .services.approved_manager_correction import update
+        try:
+            if request.POST.get('confirm_manager_change') != 'yes':
+                raise ValidationError('Подтвердите изменение поправки в утверждённой версии.')
+            changes = {key.split('=', 1)[1]: value for key, value in request.POST.items() if key.startswith('kind_coeff=')}
+            update(request.user, version.pk, sub, request.POST.get('revision'), request.POST.get('manager_reason'), changes)
+            messages.success(request, 'Поправочные коэффициенты сохранены с журналом изменений. Выгрузите в MS SQL и выполните пересчёт для применения.')
+        except ValidationError as error:
+            messages.error(request, ' '.join(error.messages))
+        return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + f'?version={version.pk}')
     try:
         with transaction.atomic():
             latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()

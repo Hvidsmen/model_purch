@@ -1,5 +1,6 @@
 import pandas as pd
 from uuid import uuid4
+from decimal import Decimal
 from django.db import models, transaction
 from django.utils.translation.template import dot_re
 from sqlalchemy import ForeignKey
@@ -688,6 +689,7 @@ class SubdivisionDirectorCoeff(DirectorCoefficientBase):
 
 
 class MotivationCalculationSchedule(models.Model):
+    payout_threshold = models.DecimalField('Порог выполнения плана для выплаты', max_digits=9, decimal_places=8, default=Decimal('0.8'))
     fact_year = models.PositiveSmallIntegerField('Год факта', null=True, blank=True)
     plan_version = models.CharField('Версия плана продаж в MS SQL', max_length=500, blank=True)
     quarter_share = models.DecimalField('Квартальная доля, %', max_digits=9, decimal_places=6, default=80)
@@ -777,3 +779,13 @@ class VersionReopenLog(models.Model):
     reason = models.TextField()
     snapshot = models.JSONField()
     restored_version_ids = models.JSONField(default=list)
+
+
+class ManagerCorrectionLog(models.Model):
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='manager_correction_history')
+    subdivision = models.ForeignKey(Subdivision, on_delete=models.PROTECT)
+    actor = models.ForeignKey('auth.User', on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField()
+    changes = models.JSONField()
+    previous_revision = models.PositiveBigIntegerField()

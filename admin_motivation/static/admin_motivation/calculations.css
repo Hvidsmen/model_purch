@@ -43,3 +43,12 @@
 .calculation-help p{font-size:13px;margin:12px 0 0;overflow-wrap:anywhere}
 @media(max-width:1100px){.calculation-layout{grid-template-columns:minmax(0,1fr)}.calculation-heading{align-items:start;flex-wrap:wrap}.calculation-edit-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:600px){.calculation-card{padding:16px}.calculation-heading h1{font-size:22px}.calculation-empty{padding:24px 16px}}
+.calculation-monitor-note{font-size:12px;color:#67758c;margin:12px 0}
+.calculation-history{margin:12px 0;border-top:1px solid #e6e0f2;padding-top:12px}
+.calculation-history summary{cursor:pointer;color:#6146bc;font-weight:600}
+.calculation-history p{font-size:12px;color:#67758c}
+.calculation-history-scroll{overflow:auto;max-height:360px}
+.calculation-history table{width:100%;border-collapse:collapse;font-size:13px}
+.calculation-history th,.calculation-history td{padding:8px;text-align:left;border-bottom:1px solid #e6e0f2;vertical-align:top}
+.calculation-history th{white-space:nowrap;background:#f7f5fc}
+.calculation-history td:last-child{min-width:220px;white-space:pre-wrap;overflow-wrap:anywhere}

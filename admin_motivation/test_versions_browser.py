@@ -89,7 +89,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.db(lambda version=version: SalesPlanScenario.objects.create(title=version, source_version=version, loaded_at=timezone.now()))
         from unittest.mock import patch
         from playwright.sync_api import expect
-        with patch('admin_motivation.services.calculation_jobs.sync_job') as sync, patch('admin_motivation.services.calculation_jobs.start_job') as start, patch('admin_motivation.services.calculation_jobs.status', return_value='Выполняется'):
+        with patch('admin_motivation.services.calculation_jobs.sync_job') as sync, patch('admin_motivation.services.calculation_jobs.start_job') as start, patch('admin_motivation.services.calculation_jobs.status', return_value='Выполняется'), patch('admin_motivation.services.calculation_jobs.monitor', return_value={'status': 'Выполняется', 'history': []}):
             self.page.goto(self.live_server_url + reverse('motivation_calculations'))
             self.page.locator('#id_name').fill('Browser calculation')
             self.page.locator('#id_fact_year').fill('2026')
@@ -97,11 +97,12 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.get_by_role('button', name='Сохранить задание в SQL Server', exact=True).click()
             expect(self.page.get_by_text('Browser calculation', exact=True)).to_be_visible()
             card = self.page.locator('.calculation-job')
-            card.locator('summary').click()
+            card.locator('.calculation-edit > summary').click()
             card.locator('[name=fact_year]').fill('2025')
             card.locator('[name=plan_version]').select_option('Other SQL plan')
             card.locator('[name=quarter_share]').fill('75')
             card.locator('[name=year_share]').fill('25')
+            card.locator('[name=payout_threshold]').fill('0.85')
             card.get_by_role('button', name='Сохранить параметры и расписание', exact=True).click()
             expect(self.page.locator('.calculation-job')).to_contain_text('Год факта: 2025')
             self.page.get_by_role('button', name='Запустить сейчас', exact=True).click()
@@ -109,6 +110,58 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.assertEqual(sync.call_count, 2)
             start.assert_called_once()
             self.assertEqual(self.errors, [])
+
+    def test_approved_manager_correction_has_reason_confirmation_and_audit(self):
+        from playwright.sync_api import expect
+        from .models import ManagerCorrectionLog
+        from .services.approval import approve_review, review_approval
+        def prepare():
+            channel = Chanel.objects.create(chanel_name='Correction UI')
+            sub = Subdivision.objects.create(subdivision_key='Correction',subdivision_name='Correction',subdivision_global='Correction',chanel=channel)
+            kind = KindManagerCoeff.objects.create(name='Год')
+            row = SubdivisionManagerCoeff.objects.create(version=self.first,subdivision=sub,kind=kind,coeff=.8)
+            approve_review(review_approval(GlobalCoeffVersion.objects.get(pk=self.first.pk))['token'])
+            return sub.pk,kind.pk,row.pk
+        sub,kind,row = self.db(prepare)
+        self.page.goto(self.live_server_url + reverse('coeff_subdivisions_admin_motivation',args=[sub]))
+        panel = self.page.locator('#manager-details')
+        panel.locator(':scope > summary').click()
+        field = panel.locator(f'input[name="kind_coeff={kind}"]')
+        expect(field).to_be_enabled()
+        field.fill('90%')
+        panel.locator('[name=manager_reason]').fill('Итоги квартала')
+        panel.locator('[name=confirm_manager_change]').check()
+        with self.page.expect_navigation():
+            panel.get_by_role('button',name='Сохранить руководителя',exact=True).click()
+        self.assertEqual(self.db(lambda: SubdivisionManagerCoeff.objects.get(pk=row).coeff),.9)
+        self.assertEqual(self.db(lambda: ManagerCorrectionLog.objects.get().reason),'Итоги квартала')
+        self.assertEqual(self.db(lambda: GlobalCoeffVersion.objects.get(pk=self.first.pk).status),'approved')
+        panel.locator(':scope > summary').click()
+        panel.get_by_text('Журнал изменений поправок',exact=True).click()
+        expect(panel.get_by_text('Итоги квартала',exact=False)).to_be_visible()
+        expect(self.page.locator('#subCoeffForm fieldset')).to_have_attribute('disabled', '')
+
+    def test_calculation_status_and_history_refresh_without_losing_form_edits(self):
+        from unittest.mock import patch
+        from playwright.sync_api import expect
+        from .models import MotivationCalculationSchedule
+        self.db(lambda: MotivationCalculationSchedule.objects.create(name='Live monitor', synced=True))
+        snapshot = {'status': 'Выполняется', 'history': []}
+        with patch('admin_motivation.services.calculation_jobs.status', return_value='Выполняется'), patch('admin_motivation.services.calculation_jobs.monitor', side_effect=lambda job: snapshot.copy()):
+            self.page.clock.install()
+            self.page.goto(self.live_server_url + reverse('motivation_calculations'))
+            expect(self.page.locator('[data-job-monitor-note]')).to_contain_text('Проверено в')
+            self.page.locator('#id_name').fill('Несохранённый текст')
+            self.page.locator('.calculation-history summary').click()
+            snapshot.update(status='Завершено', history=[{'id': 1, 'started': '24.10.2026 12:00:00',
+                'duration': '00:05:42', 'status': 'Завершено', 'message': '<script>history message</script>'}])
+            self.page.clock.fast_forward(10000)
+            expect(self.page.locator('[data-job-status]')).to_have_text('Завершено')
+            expect(self.page.locator('[data-job-history]')).to_contain_text('00:05:42')
+            expect(self.page.locator('[data-job-history]')).to_contain_text('<script>history message</script>')
+            expect(self.page.locator('[data-job-history] script')).to_have_count(0)
+            expect(self.page.locator('#id_name')).to_have_value('Несохранённый текст')
+            expect(self.page.locator('.calculation-history')).to_have_attribute('open', '')
 
     def test_manager_author_dropdown_is_visible_below_report_card(self):
         from unittest.mock import patch

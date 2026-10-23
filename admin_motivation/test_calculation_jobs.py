@@ -19,7 +19,7 @@ class CalculationJobsTests(TestCase):
         self.job = MotivationCalculationSchedule.objects.create(name='Расчёт', fact_year=2026, plan_version='Test plan')
         self.connection, self.cursor = MagicMock(), MagicMock()
         self.connector = MagicMock(return_value=(self.connection, self.cursor))
-        self.cursor.fetchall.return_value = [(name,) for name in ('@FactYear', '@PlanVersion', '@QuarterShare', '@YearShare')]
+        self.cursor.fetchall.return_value = [(name,) for name in ('@FactYear', '@PlanVersion', '@QuarterShare', '@YearShare', '@PayoutThreshold')]
 
     def test_admin_page_and_manual_run(self):
         url = reverse('motivation_calculations')
@@ -39,10 +39,10 @@ class CalculationJobsTests(TestCase):
         start.assert_not_called()
 
     def test_moscow_input_and_future_validation(self):
-        form = JobForm({'name': 'Test', 'fact_year': 2026, 'plan_version': 'Test plan', 'quarter_share': 80, 'year_share': 20, 'mode': 'daily', 'enabled': 'on', 'run_at': '2030-01-01T12:30'})
+        form = JobForm({'name': 'Test', 'fact_year': 2026, 'plan_version': 'Test plan', 'quarter_share': 80, 'year_share': 20, 'payout_threshold': '0.8', 'mode': 'daily', 'enabled': 'on', 'run_at': '2030-01-01T12:30'})
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['run_at'].utcoffset().total_seconds(), 10800)
-        form = JobForm({'name': 'Test', 'fact_year': 2026, 'plan_version': 'Test plan', 'quarter_share': 80, 'year_share': 20, 'mode': 'once', 'enabled': 'on', 'run_at': '2000-01-01T12:30'})
+        form = JobForm({'name': 'Test', 'fact_year': 2026, 'plan_version': 'Test plan', 'quarter_share': 80, 'year_share': 20, 'payout_threshold': '0.8', 'mode': 'once', 'enabled': 'on', 'run_at': '2000-01-01T12:30'})
         self.assertFalse(form.is_valid())
 
     @patch.object(jobs, 'prepare')
@@ -66,7 +66,7 @@ class CalculationJobsTests(TestCase):
 
     @patch.object(jobs, 'rules', return_value=[('Old', 'New', 'target')])
     def test_prepare_copies_procedure_and_redirects_reference(self, rules):
-        definition = 'ALTER PROCEDURE [motivation].[sp_CalcBySub] AS SELECT SubdivisionName FROM [DataWH].[dbo].[Subdivisions];'
+        definition = 'ALTER PROCEDURE [motivation].[sp_CalcBySub] AS SELECT IIF(SUM(Fact) OVER(PARTITION BY SubdivisionName)/SUM(Plan_) OVER(PARTITION BY SubdivisionName)<0.8,1,0) FROM [DataWH].[dbo].[Subdivisions];'
         self.cursor.fetchone.return_value = (definition, None)
         self.cursor.fetchall.return_value = [('SubdivisionKey',), ('SubdivisionName',)]
         jobs.prepare(self.cursor)
@@ -101,9 +101,9 @@ class CalculationJobsTests(TestCase):
             jobs.calculation_command(self.job)
 
     def test_form_validates_year_plan_and_share_sum(self):
-        data = {'name': 'Job', 'mode': 'manual', 'fact_year': 2025, 'plan_version': 'Selected plan', 'quarter_share': 75, 'year_share': 25}
+        data = {'name': 'Job', 'mode': 'manual', 'fact_year': 2025, 'plan_version': 'Selected plan', 'quarter_share': 75, 'year_share': 25, 'payout_threshold': '0.8'}
         self.assertTrue(JobForm(data).is_valid())
-        for changes in ({'fact_year': 0}, {'plan_version': ''}, {'year_share': 20}, {'quarter_share': -1}, {'quarter_share': 'NaN'}):
+        for changes in ({'fact_year': 0}, {'plan_version': ''}, {'year_share': 20, 'payout_threshold': '0.8'}, {'quarter_share': -1}, {'quarter_share': 'NaN'}):
             with self.subTest(changes=changes):
                 self.assertFalse(JobForm({**data, **changes}).is_valid())
 
@@ -125,7 +125,7 @@ class CalculationJobsTests(TestCase):
     @patch.object(jobs, 'sync_job')
     def test_editing_job_persists_parameters_only_after_successful_sql_sync(self, sync):
         data = {'job': self.job.pk, 'name': 'Updated', 'mode': 'manual', 'fact_year': 2025,
-                'plan_version': 'Other plan', 'quarter_share': 70, 'year_share': 30}
+                'plan_version': 'Other plan', 'quarter_share': 70, 'year_share': 30, 'payout_threshold': '0.8'}
         response = self.client.post(reverse('motivation_calculations'), data)
         self.assertEqual(response.status_code, 302)
         self.job.refresh_from_db()
@@ -146,9 +146,69 @@ class CalculationJobsTests(TestCase):
         self.assertEqual(values.count('Test plan'), 1)
         self.assertNotIn('Remote only', values)
         self.assertNotIn('Deleted plan', values)
-        data = {'name': 'Job', 'mode': 'manual', 'fact_year': 2026, 'plan_version': 'Remote only', 'quarter_share': 80, 'year_share': 20}
+        data = {'name': 'Job', 'mode': 'manual', 'fact_year': 2026, 'plan_version': 'Remote only', 'quarter_share': 80, 'year_share': 20, 'payout_threshold': '0.8'}
         self.assertIn('plan_version', JobForm(data).errors)
         data['plan_version'] = 'Test plan'
         form = JobForm(data)
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.save(commit=False).plan_version, 'Test plan')
+
+    def test_monitor_reads_only_own_agent_job_history_and_converts_moscow_time(self):
+        self.cursor.fetchone.return_value = (datetime(2026, 10, 23, 23, 30), None, 1, 'Previous success', datetime(2026, 10, 23, 23, 29), 0)
+        self.cursor.fetchall.return_value = [
+            (91, 20261023, 233000, 253045, 0, '<script>SQL error</script>'),
+            (90, 20261022, 10000, 42, 1, 'Completed')]
+        result = jobs.monitor(self.job, self.connector)
+        self.assertEqual(result['status'], 'Выполняется')
+        self.assertEqual(result['history'][0]['started'], '24.10.2026 02:30:00')
+        self.assertEqual(result['history'][0]['duration'], '25:30:45')
+        self.assertEqual(result['history'][0]['status'], 'Ошибка')
+        self.assertEqual(result['history'][1]['duration'], '00:00:42')
+        self.assertEqual(self.cursor.execute.call_count, 2)
+        for call in self.cursor.execute.call_args_list:
+            self.assertEqual(call.args[1], jobs.job_name(self.job))
+            self.assertTrue(call.args[0].lstrip().startswith('SELECT'))
+        self.connection.close.assert_called_once()
+        self.connection.commit.assert_not_called()
+
+    def test_monitor_unknown_job_and_failed_connection_close_safely(self):
+        self.cursor.fetchone.return_value = None
+        self.assertEqual(jobs.monitor(self.job, self.connector)['history'], [])
+        self.cursor.execute.side_effect = RuntimeError('Private connection details')
+        with self.assertRaises(RuntimeError):
+            jobs.monitor(self.job, self.connector)
+        self.assertEqual(self.connection.close.call_count, 2)
+
+    def test_monitor_endpoint_is_admin_only_read_only_and_not_cached(self):
+        url = reverse('motivation_calculation_monitor', args=[self.job.pk])
+        with patch.object(jobs, 'monitor', return_value={'status': 'Завершено', 'history': []}) as monitor:
+            response = self.client.get(url)
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()['status'], 'Завершено')
+            self.assertIn('checked_at', response.json())
+            self.assertIn('no-store', response['Cache-Control'])
+            self.assertEqual(self.client.post(url).status_code, 405)
+            monitor.assert_called_once()
+            self.client.logout()
+            self.assertIn(self.client.get(url).status_code, (302, 401, 403))
+            monitor.assert_called_once()
+        from django.contrib.auth.models import User, Group
+        from base.access import BRANCH_DIRECTOR
+        user = User.objects.create_user('monitor-denied')
+        user.groups.add(Group.objects.get(name=BRANCH_DIRECTOR))
+        self.client.force_login(user)
+        with patch.object(jobs, 'monitor') as monitor:
+            self.assertEqual(self.client.get(url).status_code, 403)
+            monitor.assert_not_called()
+
+    def test_monitor_failure_returns_safe_error_without_claiming_completion(self):
+        with patch.object(jobs, 'monitor', side_effect=RuntimeError('Private connection details')):
+            response = self.client.get(reverse('motivation_calculation_monitor', args=[self.job.pk]))
+        self.assertEqual(response.status_code, 503)
+        self.assertNotContains(response, 'Private connection details', status_code=503)
+        self.assertNotIn('status', response.json())
+
+    def test_monitor_distinguishes_queued_run_from_previous_success(self):
+        self.cursor.fetchone.return_value = (None, None, 1, 'Previous success', datetime(2026, 10, 24, 12), 180)
+        self.cursor.fetchall.return_value = []
+        self.assertEqual(jobs.monitor(self.job, self.connector)['status'], 'Ожидает запуска')

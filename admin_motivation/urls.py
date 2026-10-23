@@ -6,6 +6,7 @@ urlpatterns = [
     path('coefficients/bulk-formula/', operation_views.bulk_coefficient_formula, name='motivation_bulk_formula'),
     path('versions/reopen/', operation_views.reopen_coefficient_version, name='motivation_version_reopen'),
     path('discount-segments/', discount_views.discount_segments, name='motivation_discount_segments'),
+    path('administration/calculations/<int:job_id>/monitor/', operation_views.calculation_monitor, name='motivation_calculation_monitor'),
     path('administration/calculations/', operation_views.calculations, name='motivation_calculations'),
     path('administration/subdivision-merge/', operation_views.merge_subdivisions, name='motivation_subdivision_merge'),
     path("directors/coefficients/import/", director_views.director_coeff_import, name="motivation_director_coeff_import"),

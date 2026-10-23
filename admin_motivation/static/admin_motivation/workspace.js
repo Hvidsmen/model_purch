@@ -120,7 +120,7 @@
             if (action === 'file_load' && !form.querySelector('input[type=file]')?.files.length) {
                 event.preventDefault(); fail('Сначала выберите файл для импорта.'); return;
             }
-            const savedForm = ['save_coeff', 'update_motive_coeff', 'add_product'].includes(action) ? form : null;
+            const savedForm = ['save_coeff', 'update_motive_coeff', 'update_approved_manager', 'add_product'].includes(action) ? form : null;
             if (!warning && changed().some(field => field.form !== savedForm)) warning = 'Несохранённые правки, не относящиеся к этому действию, будут потеряны. Продолжить?';
             if (warning && !window.confirm(warning)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
             leaving = true;

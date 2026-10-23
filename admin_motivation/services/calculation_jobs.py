@@ -1,7 +1,7 @@
 """Durable SQL Server Agent jobs for the portal's motivation calculation."""
 import re
 from decimal import Decimal, InvalidOperation
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone as datetime_timezone
 from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
 from ..conns import connect_database
@@ -32,17 +32,23 @@ def calculation_command(job):
     except (InvalidOperation, ValueError, TypeError):
         raise ValidationError('Доли должны быть от 0 до 100%, в сумме 100%, не более 6 знаков после запятой.')
     # SQL Agent stores a command string, so quote the only text literal explicitly.
+    try:
+        threshold = Decimal(str(job.payout_threshold))
+        if not threshold.is_finite() or not 0 <= threshold <= 1 or threshold != threshold.quantize(Decimal('0.00000001')):
+            raise ValueError()
+    except (InvalidOperation, ValueError, TypeError):
+        raise ValidationError('Порог выплаты должен быть от 0 до 1, не более 8 знаков после запятой.')
     escaped_plan = plan.replace("'", "''")
     statement = (f"EXEC motivation.PortalCalcBySub @FactYear={job.fact_year}, "
                  f"@PlanVersion=N'{escaped_plan}', "
-                 f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f};")
+                 f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f}, @PayoutThreshold={threshold:.8f};")
     return LOCKED_COMMAND.replace('EXEC motivation.PortalCalcBySub;', statement)
 
 
 def validate_sql_parameters(cursor, job):
     cursor.execute("SELECT name FROM sys.parameters WHERE object_id=OBJECT_ID(N'motivation.PortalCalcBySub')")
     names = {row[0].casefold() for row in cursor.fetchall()}
-    if not {'@factyear', '@planversion', '@quartershare', '@yearshare'} <= names:
+    if not {'@factyear', '@planversion', '@quartershare', '@yearshare', '@payoutthreshold'} <= names:
         raise ValidationError('Процедура MS SQL не поддерживает параметры года, версии плана и долей. Установите параметризованную версию sp_CalcBySub. Задание не изменено.')
     cursor.execute('SELECT TOP (1) 1 FROM planning.PlanSales WHERE Version_=?', job.plan_version.strip())
     if not cursor.fetchone():
@@ -88,6 +94,12 @@ def prepare(cursor):
     from .pilot_formula import GLOBAL_SUBDIVISION, patch_calculation
     if SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists():
         changed = patch_calculation(changed)
+    from .payout_threshold import parameterize
+    changed = parameterize(changed)
+    from ..models import SubdivisionManagerCoeff
+    if SubdivisionManagerCoeff.objects.filter(version__status='approved').exists():
+        from .manager_correction import patch
+        changed = patch(changed)
     cursor.execute(changed)
 
 
@@ -164,10 +176,61 @@ def status(job, connector=None):
         row = cursor.fetchone()
         if not row:
             return 'Не настроено в SQL Agent'
-        started, stopped, result, message = row
-        if started and not stopped:
-            return 'Выполняется'
-        return {0: 'Ошибка', 1: 'Завершено', 3: 'Отменено'}.get(result, 'Ещё не запускалось')
+        return status_label(row)
+    finally:
+        if connection is not None:
+            connection.close()
+
+
+def status_label(row):
+    if not row:
+        return 'Не настроено в SQL Agent'
+    started, stopped, result, message = row
+    if started and not stopped:
+        return 'Выполняется'
+    return {0: 'Ошибка', 1: 'Завершено', 3: 'Отменено'}.get(result, 'Ещё не запускалось')
+
+
+def monitor(job, connector=None):
+    """Read current Agent activity and the last 30 completed runs, without writes."""
+    connection = None
+    try:
+        connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
+        connection.timeout = 10
+        cursor.execute("""SELECT a.start_execution_date,a.stop_execution_date,h.run_status,h.message,
+          a.run_requested_date,DATEPART(TZOFFSET,SYSDATETIMEOFFSET())
+          FROM msdb.dbo.sysjobs j
+          LEFT JOIN msdb.dbo.sysjobactivity a ON a.job_id=j.job_id
+            AND a.session_id=(SELECT MAX(session_id) FROM msdb.dbo.syssessions)
+          OUTER APPLY (SELECT TOP (1) run_status,message FROM msdb.dbo.sysjobhistory
+            WHERE job_id=j.job_id AND step_id=0 ORDER BY instance_id DESC) h
+          WHERE j.name=?""", job_name(job))
+        row = cursor.fetchone()
+        if not row:
+            return {'status': status_label(None), 'history': []}
+        server_zone = datetime_timezone(timedelta(minutes=int(row[5])))
+        cursor.execute("""SELECT TOP (30) h.instance_id,h.run_date,h.run_time,h.run_duration,h.run_status,
+          CASE WHEN h.run_status=0 THEN COALESCE(failure.message,h.message) ELSE h.message END
+          FROM msdb.dbo.sysjobhistory h JOIN msdb.dbo.sysjobs j ON j.job_id=h.job_id
+          OUTER APPLY (SELECT TOP (1) f.message FROM msdb.dbo.sysjobhistory f
+            WHERE f.job_id=h.job_id AND f.step_id>0 AND f.run_status=0
+              AND f.instance_id<h.instance_id AND f.instance_id>COALESCE(
+                (SELECT MAX(p.instance_id) FROM msdb.dbo.sysjobhistory p
+                 WHERE p.job_id=h.job_id AND p.step_id=0 AND p.instance_id<h.instance_id),0)
+            ORDER BY f.instance_id DESC) failure
+          WHERE j.name=? AND h.step_id=0 ORDER BY h.instance_id DESC""", job_name(job))
+        history = []
+        for instance, on_date, at_time, duration, result, message in cursor.fetchall():
+            started = datetime.strptime(f'{on_date:08d}{at_time:06d}', '%Y%m%d%H%M%S')
+            started = started.replace(tzinfo=server_zone).astimezone(ZoneInfo('Europe/Moscow'))
+            history.append({'id': instance, 'started': started.strftime('%d.%m.%Y %H:%M:%S'),
+                'duration': f'{duration // 10000:02d}:{duration // 100 % 100:02d}:{duration % 100:02d}',
+                'status': {0: 'Ошибка', 1: 'Завершено', 2: 'Повтор', 3: 'Отменено', 4: 'Выполняется'}.get(result, 'Неизвестно'),
+                'message': message or ''})
+        current = status_label(row[:4])
+        if row[4] and (not row[0] or (row[1] and row[4] > row[1])):
+            current = 'Ожидает запуска'
+        return {'status': current, 'history': history}
     finally:
         if connection is not None:
             connection.close()

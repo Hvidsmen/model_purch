@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}
 
-{% load crispy_forms_tags l10n %}
+{% load crispy_forms_tags l10n tz %}
 
 {% block content %}
 
@@ -676,7 +676,7 @@
     <div class="row">
         <form method="post" action="{% url 'sub_act' sub.id %}" enctype="multipart/form-data">
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}">{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
-            <fieldset {% if not version_editable %}disabled{% endif %}>
+            <fieldset {% if not version_editable and not manager_approved_editable %}disabled{% endif %}>
             <div class="col-12">
                 <div class="table-wrapper">
                     <table>
@@ -700,8 +700,14 @@
                         </tbody>
                     </table>
                 </div>
+                 {% if manager_approved_editable %}
+                 <input type="hidden" name="revision" value="{{ selected_version.revision }}">
+                 <p>В утверждённой версии разрешено менять только поправки. После выгрузки и пересчёта они изменят суммы мотивации, включая директорские.</p>
+                 <label>Причина изменения<textarea name="manager_reason" class="form-control" maxlength="2000" required></textarea></label>
+                 <label><input type="checkbox" name="confirm_manager_change" value="yes" required> Подтверждаю: после выгрузки и пересчёта суммы выбранных периодов, в том числе прошлых, могут измениться</label>
+                 {% endif %}
                  <div class="actions" style="justify-content: flex-end; margin-top: 20px; margin-bottom: 0;">
-                    <button type="submit" class="btn btn-add" name="action_button" value="update_motive_coeff">
+                    <button type="submit" class="btn btn-add" name="action_button" value="{% if manager_approved_editable %}update_approved_manager{% else %}update_motive_coeff{% endif %}">
                         Сохранить руководителя
                     </button>
                 </div>
@@ -709,6 +715,9 @@
             </fieldset>
         </form>
     </div>
+{% if manager_correction_history %}<details><summary>Журнал изменений поправок</summary>
+    <ul>{% for log in manager_correction_history %}<li>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }} МСК{% endtimezone %} · {{ log.actor.get_username }} · {{ log.reason }}
+    <ul>{% for change in log.changes %}<li>{{ change.period }}: {{ change.before }} → {{ change.after }}</li>{% endfor %}</ul></li>{% endfor %}</ul></details>{% endif %}
 </details>
 
 <!-- ================= ТАБЛИЦА КОЭФФИЦИЕНТОВ ПОДРАЗДЕЛЕНИЯ ================= -->

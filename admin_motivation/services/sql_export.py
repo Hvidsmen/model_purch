@@ -66,7 +66,8 @@ def export_motivation(connector, manage_connection=True):
                 cursor.executemany('INSERT INTO DataWH.motivation.GoodsMotivation (Date_, GoodsKey, PGSales, Group_, Brand) VALUES (?, ?, ?, ?, ?)', good_rows)
         if manage_connection:
             from .pilot_formula import GLOBAL_SUBDIVISION
-            if SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists():
+            if (SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
+                    or SubdivisionManagerCoeff.objects.filter(version__in=versions).exists()):
                 from .calculation_jobs import prepare
                 prepare(cursor)
             connection.commit()

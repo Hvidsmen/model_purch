@@ -171,7 +171,8 @@ class SharedMotivationVersionTests(TestCase):
         connection, cursor = Mock(), Mock()
         return Mock(return_value=(connection, cursor)), connection, cursor
 
-    def test_sql_exports_full_timeline_with_exact_start_dates_and_matching_versions(self):
+    @patch('admin_motivation.services.calculation_jobs.prepare')
+    def test_sql_exports_full_timeline_with_exact_start_dates_and_matching_versions(self, prepare):
         approve_review(review_approval(self.first)['token'])
         latest = self.create()
         latest.subdivision_coefficients.filter(subdivision=self.sub).update(motivation_coeff=0.4)
@@ -179,6 +180,7 @@ class SharedMotivationVersionTests(TestCase):
         approve_review(review_approval(latest)['token'])
         connector, connection, cursor = self.connector()
         exported = export_motivation(connector)
+        prepare.assert_called_once_with(cursor)
         self.assertEqual([v.pk for v in exported], [self.first.pk, latest.pk])
         batches = cursor.executemany.call_args_list
         coefficients = [call.args[1] for call in batches if 'SubdivisionMotiveCoeff' in call.args[0]]
@@ -195,7 +197,8 @@ class SharedMotivationVersionTests(TestCase):
         self.assertEqual(cursor.execute.call_count, 4)
         self.assertTrue(all(call.args[1] == self.first.effective_from for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE')))
 
-    def test_directors_export_individually_with_all_segments_and_director_only_goods(self):
+    @patch('admin_motivation.services.calculation_jobs.prepare')
+    def test_directors_export_individually_with_all_segments_and_director_only_goods(self, prepare):
         from decimal import Decimal
         from .models import DirectorEmployee, SubdivisionDirectorCoeff
         employee = DirectorEmployee.objects.create(full_name="Иванов 'Иван'", employee_code="DIR-'one")

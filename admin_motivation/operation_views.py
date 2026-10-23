@@ -6,6 +6,8 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core import signing
 from django.shortcuts import render, redirect, get_object_or_404
 from django.urls import reverse
+from django.http import JsonResponse
+from django.views.decorators.cache import never_cache
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from base.access import can_access
@@ -16,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class JobForm(forms.ModelForm):
+    payout_threshold = forms.DecimalField(label='Порог выполнения плана для выплаты', min_value=0, max_value=1, max_digits=9, decimal_places=8, initial='0.8', help_text='Коэффициент: 0,8 = 80%. Это порог выплаты, а не квартальная доля.')
     fact_year = forms.IntegerField(label='Год факта', min_value=1, max_value=9999)
     plan_version = forms.ChoiceField(label='Загруженная версия плана продаж')
     quarter_share = forms.DecimalField(label='Квартальная доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=80)
@@ -24,7 +27,7 @@ class JobForm(forms.ModelForm):
                                  widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'))
     class Meta:
         model = MotivationCalculationSchedule
-        fields = ['name', 'fact_year', 'plan_version', 'quarter_share', 'year_share', 'mode', 'run_at', 'enabled']
+        fields = ['name', 'fact_year', 'plan_version', 'quarter_share', 'year_share', 'payout_threshold', 'mode', 'run_at', 'enabled']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -93,13 +96,22 @@ def calculations(request):
         job.edit_form = JobForm(instance=job, auto_id=f'job_{job.pk}_%s')
         if job.run_at:
             job.edit_form.initial['run_at'] = job.run_at.astimezone(ZoneInfo('Europe/Moscow')).replace(tzinfo=None)
-        job.current_status = 'Не синхронизировано'
-        if job.synced:
-            try:
-                job.current_status = calculation_jobs.status(job)
-            except Exception:
-                job.current_status = 'Статус SQL Server недоступен'
+        job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
     return render(request, 'admin_motivation/calculations.html', {'form': form, 'jobs': jobs})
+
+
+@never_cache
+@require_http_methods(['GET'])
+def calculation_monitor(request, job_id):
+    admin_required(request)
+    job = get_object_or_404(MotivationCalculationSchedule, pk=job_id)
+    try:
+        data = calculation_jobs.monitor(job)
+    except Exception:
+        logger.exception('SQL Agent monitoring failed for job %s', job.pk)
+        return JsonResponse({'error': 'SQL Server недоступен. Автообновление повторит запрос.'}, status=503)
+    data['checked_at'] = timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%H:%M:%S')
+    return JsonResponse(data)
 
 
 @require_http_methods(['GET', 'POST'])
