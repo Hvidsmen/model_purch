@@ -5,10 +5,12 @@ ADMIN = 'Администратор'
 DIRECTOR = 'Генеральный директор'
 LOGISTICIAN = 'Логист'
 POLITICIAN = 'Политик'
+SALES = 'Продажи'
+PERSONAL_ROLES = (POLITICIAN, SALES)
 DEPUTY_DIRECTOR = 'Зам. директора'
 BRANCH_DIRECTOR = 'Директор'
-REPORT_ROLES = (POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR)
-ROLES = (ADMIN, DIRECTOR, LOGISTICIAN, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR)
+REPORT_ROLES = (*PERSONAL_ROLES, DEPUTY_DIRECTOR, BRANCH_DIRECTOR)
+ROLES = (ADMIN, DIRECTOR, LOGISTICIAN, *PERSONAL_ROLES, DEPUTY_DIRECTOR, BRANCH_DIRECTOR)
 
 
 def ensure_roles(**kwargs):
@@ -25,7 +27,8 @@ def role_for(user):
         return ADMIN
     if not hasattr(user, '_portal_role'):
         names = list(user.groups.filter(name__in=ROLES).values_list('name', flat=True))
-        user._portal_role = names[0] if len(names) == 1 else POLITICIAN if not names and user.groups.filter(portal_scope__isnull=False).exists() else None
+        inherited = set(user.groups.filter(portal_scope__isnull=False).values_list('portal_scope__portal_role', flat=True))
+        user._portal_role = names[0] if len(names) == 1 else next(iter(inherited)) if not names and len(inherited) == 1 and inherited <= set(ROLES) else None
     return user._portal_role
 
 

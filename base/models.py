@@ -13,8 +13,9 @@ class MotivationReportAccess(models.Model):
 
 
 class PortalReportGroup(models.Model):
+    portal_role = models.CharField('Роль в портале', max_length=40, default='Политик')
     group = models.OneToOneField('auth.Group', on_delete=models.CASCADE, related_name='portal_scope')
-    employee_type = models.ForeignKey('admin_motivation.TypeCoeff', on_delete=models.PROTECT, verbose_name='Вид работника')
+    employee_type = models.ForeignKey('admin_motivation.TypeCoeff', on_delete=models.PROTECT, null=True, blank=True, verbose_name='Вид работника')
     subdivisions = models.ManyToManyField('admin_motivation.Subdivision', verbose_name='Подразделения', related_name='portal_report_groups')
 
     class Meta:

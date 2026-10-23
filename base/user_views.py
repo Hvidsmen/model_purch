@@ -49,7 +49,7 @@ class UserForm(PortalRoleFormMixin, forms.ModelForm):
                 validate_password(password, self.instance)
         if self.instance.is_superuser and data.get('portal_role') != ADMIN:
             self.add_error('portal_role', 'Суперпользователю необходимо оставить роль администратора.')
-        if self.instance.pk == self.actor.pk and (not data.get('is_active') or data.get('portal_role') != ADMIN):
+        if self.instance.pk == self.actor.pk and (not data.get('is_active') or getattr(self, '_effective_role', data.get('portal_role')) != ADMIN):
             self.add_error(None, 'Нельзя отключить собственную учётную запись или снять свою роль администратора.')
         return data
 
@@ -60,7 +60,7 @@ class UserForm(PortalRoleFormMixin, forms.ModelForm):
             user.set_unusable_password()
         elif self.cleaned_data.get('password1'):
             user.set_password(self.cleaned_data['password1'])
-        user.is_staff = self.cleaned_data.get('portal_role') == ADMIN
+        user.is_staff = self._effective_role == ADMIN
         user.save()
         user.groups.set(self.cleaned_data['groups'])
         if self.cleaned_data.get('portal_role'):
@@ -103,17 +103,19 @@ def users(request):
     if filters.is_valid():
         roles, groups = filters.cleaned_data['role'], filters.cleaned_data['group']
         if roles:
-            catalog = catalog.annotate(system_roles=Count('groups', filter=Q(groups__name__in=ROLES), distinct=True), report_groups=Count('groups', filter=Q(groups__portal_scope__isnull=False), distinct=True))
+            catalog = catalog.annotate(
+                system_roles=Count('groups', filter=Q(groups__name__in=ROLES), distinct=True),
+                inherited_roles=Count('groups__portal_scope__portal_role', distinct=True))
             condition = Q(pk__in=[])
             for role in roles:
                 if role == 'none':
-                    condition |= Q(is_active=False) | (Q(is_superuser=False) & ~(Q(system_roles=1) | Q(system_roles=0, report_groups__gt=0)))
-                elif role == ADMIN:
-                    condition |= Q(is_active=True) & (Q(is_superuser=True) | Q(system_roles=1, groups__name=ADMIN))
-                elif role == 'Политик':
-                    condition |= Q(is_active=True, is_superuser=False) & (Q(system_roles=1, groups__name=role) | Q(system_roles=0, report_groups__gt=0))
+                    condition |= Q(is_active=False) | (Q(is_superuser=False) & ~(Q(system_roles=1) | Q(system_roles=0, inherited_roles=1)))
                 else:
-                    condition |= Q(is_active=True, is_superuser=False, system_roles=1, groups__name=role)
+                    matching = Q(system_roles=1, groups__name=role) | Q(system_roles=0, inherited_roles=1, groups__portal_scope__portal_role=role)
+                    if role == ADMIN:
+                        condition |= Q(is_active=True) & (Q(is_superuser=True) | matching)
+                    else:
+                        condition |= Q(is_active=True, is_superuser=False) & matching
             catalog = catalog.filter(condition)
         if groups:
             condition = Q(groups__pk__in=[int(value) for value in groups if value != 'none'])

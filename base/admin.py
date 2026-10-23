@@ -6,7 +6,7 @@ from django.contrib.auth.forms import UserChangeForm, AdminUserCreationForm, Use
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.validators import UnicodeUsernameValidator
 import re
-from .access import ADMIN, ROLES, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, role_for
+from .access import ADMIN, ROLES, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, PERSONAL_ROLES, role_for
 from .models import MotivationReportAccess, PortalReportGroup
 from admin_motivation.models import Subdivision
 
@@ -54,7 +54,10 @@ class PortalRoleFormMixin:
             if access:
                 self.fields['report_subdivision'].initial = access.subdivision.merged_into_id or access.subdivision_id
                 self.fields['report_author'].initial = access.deal_author
-        self.fields['portal_role'].widget.attrs['data-report-groups'] = ','.join(str(value) for value in PortalReportGroup.objects.values_list('group_id', flat=True))
+        scopes = list(PortalReportGroup.objects.values_list('group_id', 'portal_role'))
+        self.fields['portal_role'].widget.attrs['data-report-groups'] = ','.join(str(pk) for pk, role in scopes)
+        import json
+        self.fields['portal_role'].widget.attrs['data-group-roles'] = json.dumps({str(pk): role for pk, role in scopes}, ensure_ascii=False)
         if 'groups' in self.fields:
 
             self.fields['groups'].queryset = Group.objects.exclude(name__in=ROLES)
@@ -65,15 +68,19 @@ class PortalRoleFormMixin:
             self.add_error('portal_role', 'Суперпользователь должен иметь роль «Администратор». Для другой роли снимите признак суперпользователя.')
         selected_groups = data.get('groups', []) if 'groups' in self.fields else self.instance.groups.all() if self.instance.pk else []
         report_groups = list(PortalReportGroup.objects.filter(group__in=selected_groups).prefetch_related('subdivisions__merged_into'))
-        if report_groups and data.get('portal_role') == POLITICIAN:
+        if report_groups and data.get('portal_role') == POLITICIAN and {group.portal_role for group in report_groups} == {POLITICIAN}:
             # Access follows membership; do not retain a standalone role after removal.
             data['portal_role'] = ''
-        effective_role = data.get('portal_role') or (POLITICIAN if report_groups else '')
+        inherited = {group.portal_role for group in report_groups}
+        if not data.get('portal_role') and len(inherited) > 1:
+            self.add_error('groups' if 'groups' in self.fields else None, 'У выбранных групп разные роли. Выберите группы с одной ролью или задайте роль пользователя явно.')
+        effective_role = data.get('portal_role') or (next(iter(inherited)) if len(inherited) == 1 else '')
+        self._effective_role = effective_role
         if effective_role in (DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
             if not report_groups or not any(group.subdivisions.exists() for group in report_groups):
                 self.add_error('groups' if 'groups' in self.fields else None, 'Выберите группу доступа с разрешёнными подразделениями для этой роли.')
             data['report_author'] = ''
-        if effective_role == POLITICIAN:
+        if effective_role in PERSONAL_ROLES:
             if report_groups:
                 branch_ids = {branch.merged_into_id or branch.pk for group in report_groups for branch in group.subdivisions.all()}
                 data['report_subdivision'] = self.fields['report_subdivision'].queryset.filter(pk__in=branch_ids).order_by('subdivision_key').first()
@@ -133,7 +140,7 @@ class PortalUserAdmin(UserAdmin):
         js = ('base/admin_report_access.js',)
 
     def save_model(self, request, obj, form, change):
-        obj.is_staff = form.cleaned_data.get('portal_role') == ADMIN
+        obj.is_staff = getattr(form, '_effective_role', form.cleaned_data.get('portal_role')) == ADMIN
         super().save_model(request, obj, form, change)
 
     def save_related(self, request, form, formsets, change):

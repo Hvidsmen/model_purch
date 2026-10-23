@@ -111,3 +111,86 @@ class ReportGroupTests(TestCase):
             'subdivisions': [self.branches[0].pk]})
         self.assertEqual(response.status_code, 200)
         self.assertIn('name', response.context['form'].errors)
+
+    def test_group_role_choices_match_user_role_choices_and_inherit_permissions(self):
+        from .access import ROLES, SALES, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, LOGISTICIAN, role_for, can_access
+        from .group_views import ReportGroupForm
+        self.assertEqual({value for value, label in ReportGroupForm().fields['portal_role'].choices if value}, set(ROLES))
+        self.user.groups.clear()
+        for index, role in enumerate(ROLES):
+            with self.subTest(role=role):
+                response = self.client.post(reverse('portal_user_groups'), {
+                    'name': f'Role team {index}', 'portal_role': role,
+                    'subdivisions': [self.branches[0].pk], 'members': [self.user.pk]})
+                self.assertEqual(response.status_code, 302)
+                current = User.objects.get(pk=self.user.pk)
+                self.assertEqual(role_for(current), role)
+                self.assertEqual(can_access(current, 'admin'), role == ADMIN)
+                self.assertEqual(can_access(current, 'purchases'), role in (ADMIN, LOGISTICIAN))
+                self.assertEqual(current.is_staff, role == ADMIN)
+                scope = politician_scope(current)
+                if role in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
+                    self.assertTrue(scope['all_authors'])
+                    self.assertEqual(scope['subdivision'], ['Moscow'])
+                    self.assertEqual(can_access(current, 'purchases'), False)
+                elif role == SALES:
+                    self.assertEqual(scope['type'], ['Продажи'])
+                    self.assertEqual(scope['author'], 'Личный Автор Сделки')
+                current.groups.clear()
+
+    def test_conflicting_inherited_roles_deny_access_and_role_filter_agrees(self):
+        from .access import BRANCH_DIRECTOR, role_for
+        first = self.group('Politicians team', self.policies, self.branches[:1])
+        second = self.group('Directors team', self.directors, self.branches[1:2])
+        PortalReportGroup.objects.filter(group=second).update(portal_role=BRANCH_DIRECTOR)
+        self.user.groups.remove(Group.objects.get(name=POLITICIAN))
+        self.assertIsNone(role_for(User.objects.get(pk=self.user.pk)))
+        response = self.client.get(reverse('portal_users'), {'role': 'none'})
+        self.assertIn(self.user.pk, [row.pk for row in response.context['catalog']])
+        self.user.groups.remove(first)
+        response = self.client.get(reverse('portal_users'), {'role': BRANCH_DIRECTOR})
+        self.assertIn(self.user.pk, [row.pk for row in response.context['catalog']])
+        self.assertEqual(role_for(User.objects.get(pk=self.user.pk)), BRANCH_DIRECTOR)
+
+    def test_inherited_director_user_form_needs_no_personal_author_or_manual_role(self):
+        from .access import BRANCH_DIRECTOR, role_for
+        from .user_views import UserForm
+        group = self.group('Branch directors', self.directors, self.branches[:2])
+        PortalReportGroup.objects.filter(group=group).update(portal_role=BRANCH_DIRECTOR)
+        form = UserForm({'username': self.user.username, 'is_active': 'on', 'groups': [group.pk], 'portal_role': ''},
+                        instance=self.user, actor=self.admin)
+        self.assertTrue(form.is_valid(), form.errors)
+        saved = form.save()
+        self.assertEqual(role_for(User.objects.get(pk=saved.pk)), BRANCH_DIRECTOR)
+        self.assertFalse(MotivationReportAccess.objects.filter(user=saved).exists())
+        self.assertEqual(politician_scope(User.objects.get(pk=saved.pk))['subdivision'], ['Moscow', 'Volga'])
+
+    def test_group_admin_downgrade_revokes_admin_permissions_and_staff(self):
+        from .access import LOGISTICIAN, role_for
+        data = {'name': 'Managed admins', 'portal_role': ADMIN, 'members': [self.user.pk]}
+        self.user.groups.clear()
+        self.assertEqual(self.client.post(reverse('portal_user_groups'), data).status_code, 302)
+        group = Group.objects.get(name='Managed admins')
+        self.assertTrue(User.objects.get(pk=self.user.pk).has_perm('auth.change_user'))
+        data.update(group=group.pk, portal_role=LOGISTICIAN)
+        self.assertEqual(self.client.post(reverse('portal_user_groups'), data).status_code, 302)
+        user = User.objects.get(pk=self.user.pk)
+        self.assertFalse(user.is_staff)
+        self.assertFalse(user.has_perm('auth.change_user'))
+        self.assertEqual(role_for(user), LOGISTICIAN)
+
+    def test_personal_group_membership_fills_missing_author_and_conflicts_need_explicit_role(self):
+        from .user_views import UserForm
+        from .access import BRANCH_DIRECTOR
+        member = User.objects.create_user('named-member', first_name='Дамир Наилович', last_name='Гафуров')
+        response = self.client.post(reverse('portal_user_groups'), {'name': 'Personal team', 'portal_role': POLITICIAN,
+            'subdivisions': [self.branches[0].pk], 'members': [member.pk]})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(MotivationReportAccess.objects.get(user=member).deal_author, 'Гафуров Дамир Наилович')
+        first = Group.objects.get(name='Personal team')
+        second = self.group('Branch team', self.directors, self.branches[1:2])
+        PortalReportGroup.objects.filter(group=second).update(portal_role=BRANCH_DIRECTOR)
+        form = UserForm({'username': member.username, 'is_active': 'on', 'groups': [first.pk, second.pk], 'portal_role': ''},
+                        instance=member, actor=self.admin)
+        self.assertFalse(form.is_valid())
+        self.assertIn('groups', form.errors)

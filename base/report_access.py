@@ -1,6 +1,6 @@
 """Server-side report restrictions; never derive identity from query parameters."""
 from django.core.exceptions import PermissionDenied
-from .access import role_for, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, REPORT_ROLES
+from .access import role_for, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, REPORT_ROLES, SALES
 from .models import MotivationReportAccess, PortalReportGroup
 
 PERSONAL_REPORTS = ('manager', 'manager-detail', 'deals')
@@ -30,7 +30,7 @@ def politician_scope(user):
         rules = []
         for group in groups:
             names = sorted({(branch.merged_into or branch).subdivision_key for branch in group.subdivisions.all()})
-            worker = group.employee_type.type_coeff_name.strip()
+            worker = group.employee_type.type_coeff_name.strip() if group.employee_type_id else ('Продажи' if role == SALES else 'Политики')
             if names and worker:
                 rules.append({'type': worker, 'subdivisions': names})
         if not rules:
@@ -38,7 +38,7 @@ def politician_scope(user):
         return {'subdivision': sorted({name for rule in rules for name in rule['subdivisions']}),
                 'type': sorted({rule['type'] for rule in rules}), 'author': access.deal_author.strip(), 'rules': rules}
     subdivision = access.subdivision.merged_into or access.subdivision
-    return {'subdivision': subdivision.subdivision_key, 'author': access.deal_author.strip(), 'type': 'Политики'}
+    return {'subdivision': subdivision.subdivision_key, 'author': access.deal_author.strip(), 'type': 'Продажи' if role == SALES else 'Политики'}
 
 
 def allowed_values(scope, worker=None):
