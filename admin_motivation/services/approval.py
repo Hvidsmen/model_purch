@@ -37,6 +37,8 @@ def review_approval(version, plan=None, baseline=None, subdivision=None, changes
         raise ValidationError('Нельзя утвердить пустой набор коэффициентов.')
     before_state = state_digest(version, plan)
     summary = {}
+    if version.discount_segments.exists():
+        summary['discount_segments'] = [[row.type_discount, *[None if getattr(row, f'o{i}') is None else str(getattr(row, f'o{i}')) for i in range(5)]] for row in version.discount_segments.order_by('type_discount')]
     if plan:
         summary['global'] = compare_plan(plan, version, baseline, changes=normalized if not subdivision else {}, deleted=deleted if not subdivision else [])
         if plan.lines.exclude(subdivision='').exists():

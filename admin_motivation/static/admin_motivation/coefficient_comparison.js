@@ -161,6 +161,23 @@
                 impact.append(line);
             }
             if (!plan.value) impact.textContent = 'План продаж не выбран: утверждение без оценки суммы мотивации.';
+            if (review.summary.discount_segments?.length) {
+                const heading = document.createElement('p');
+                heading.textContent = 'Также утверждаются сегменты скидок O0–O4:';
+                impact.append(heading);
+                const details = document.createElement('details');
+                const title = document.createElement('summary');
+                title.textContent = `Типов скидок: ${review.summary.discount_segments.length}`;
+                details.append(title);
+                const list = document.createElement('ul');
+                review.summary.discount_segments.forEach(row => {
+                    const item = document.createElement('li');
+                    item.textContent = `${row[0]}: ${row.slice(1).map(value => value === null ? 'NULL' : value).join(' / ')}`;
+                    list.append(item);
+                });
+                details.append(list);
+                impact.append(details);
+            }
             const needsConfirm = review.replaced.length > 0 || review.baseline_replaced;
             document.getElementById('approval-confirm-label').hidden = !needsConfirm;
             document.getElementById('approval-baseline-warning').hidden = !review.baseline_replaced;

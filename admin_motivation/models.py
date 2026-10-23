@@ -707,3 +707,60 @@ class SubdivisionMergeLog(models.Model):
     policy = models.CharField(max_length=10)
     details = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
+
+class DiscountSegment(models.Model):
+    """Discount percentage thresholds O0–O4 in a shared coefficient version."""
+    objects = GlobalCoeffQuerySet.as_manager()
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='discount_segments')
+    type_discount = models.CharField('Тип скидки', max_length=255)
+    o0 = models.DecimalField('O0', max_digits=9, decimal_places=4, null=True, blank=True)
+    o1 = models.DecimalField('O1', max_digits=9, decimal_places=4, null=True, blank=True)
+    o2 = models.DecimalField('O2', max_digits=9, decimal_places=4, null=True, blank=True)
+    o3 = models.DecimalField('O3', max_digits=9, decimal_places=4, null=True, blank=True)
+    o4 = models.DecimalField('O4', max_digits=9, decimal_places=4, null=True, blank=True)
+
+    class Meta:
+        ordering = ['type_discount', 'pk']
+        constraints = [models.UniqueConstraint(fields=['version', 'type_discount'], name='unique_discount_type_version')]
+        verbose_name = 'Сегменты скидки'
+        verbose_name_plural = 'Сегменты скидок'
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        from decimal import Decimal, InvalidOperation
+        self.type_discount = (self.type_discount or '').strip()
+        if not self.type_discount:
+            raise ValidationError({'type_discount': 'Укажите тип скидки.'})
+        if type(self).objects.filter(version_id=self.version_id, type_discount__iexact=self.type_discount).exclude(pk=self.pk).exists():
+            raise ValidationError({'type_discount': 'Такой тип скидки уже есть в версии.'})
+        previous = None
+        for field in ('o0', 'o1', 'o2', 'o3', 'o4'):
+            value = getattr(self, field)
+            if value is None:
+                continue
+            try:
+                value = Decimal(value)
+            except (InvalidOperation, TypeError, ValueError):
+                raise ValidationError({field: 'Укажите число от 0 до 100.'})
+            if not value.is_finite() or value < 0 or value > 100:
+                raise ValidationError({field: 'Укажите процент от 0 до 100.'})
+            if previous is not None and value < previous:
+                raise ValidationError({field: 'Пороги O0–O4 должны идти по возрастанию.'})
+            previous = value
+
+    check_editable = GlobalCoeff.check_editable
+
+    @transaction.atomic
+    def save(self, *args, **kwargs):
+        self.check_editable()
+        self.full_clean()
+        result = super().save(*args, **kwargs)
+        touch_version(self.version_id)
+        return result
+
+    @transaction.atomic
+    def delete(self, *args, **kwargs):
+        self.check_editable()
+        result = super().delete(*args, **kwargs)
+        touch_version(self.version_id)
+        return result

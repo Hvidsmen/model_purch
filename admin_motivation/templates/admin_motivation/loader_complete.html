@@ -2,6 +2,7 @@
 {% block content %}
 <div class="container-fluid content"><h1 class="h4">Коэффициенты выгружены</h1>
 <div class="alert alert-success" role="status">Выгружено версий: {{ exported_versions|length }}. Даты начала действия сохранены из версий коэффициентов.</div>
+<p>{% if exported_discount_segments %}Сегменты скидок O0–O4 также обновлены в SegmentMotivation по утверждённым версиям.{% else %}Сегменты скидок в портале ещё не настроены: существующая таблица SegmentMotivation в MS SQL сохранена без изменений.{% endif %}</p>
 <div class="table-wrapper"><table class="table"><thead><tr><th>Версия</th><th>Дата начала действия</th></tr></thead><tbody>{% for version in exported_versions %}<tr><td>{{ version.title|default:'Версия' }}</td><td>{{ version.effective_from|date:'d.m.Y' }}</td></tr>{% endfor %}</tbody></table></div>
 <a href="{% url 'loader_motive' %}" class="btn btn-outline-primary mt-3">Вернуться к выгрузке</a></div>
 {% endblock %}

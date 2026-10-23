@@ -218,6 +218,7 @@
             </a>
         </li>
 
+        {% if portal_is_admin %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_discount_segments' %}active{% endif %}" href="{% url 'motivation_discount_segments' %}{% if selected_version %}?version={{ selected_version.pk }}{% endif %}">Сегменты скидок</a></li>{% endif %}
         <li class="nav-item">
             <details class="subdivision-nav" id="subdivision-nav">
                 <summary class="nav-link {% if sub %}active{% endif %}">Подразделения{% if sub %} · {{ sub }}{% endif %}</summary>

@@ -3,7 +3,7 @@ from zoneinfo import ZoneInfo
 from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.utils import timezone
-from ..models import GlobalCoeff, GlobalCoeffVersion, SubdivisionCoeff, SubdivisionManagerCoeff, KindManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+from ..models import DiscountSegment, GlobalCoeff, GlobalCoeffVersion, SubdivisionCoeff, SubdivisionManagerCoeff, KindManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 
 
 def today():
@@ -54,6 +54,8 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
                     **{field: getattr(row, field) for field in scope_fields},
                     **{f'k{i}': getattr(row, f'k{i}') for i in range(5)})
                     for row in model.objects.filter(version=latest)])
+        if latest:
+            DiscountSegment.objects.bulk_create([DiscountSegment(version=version, type_discount=row.type_discount, **{f'o{i}': getattr(row, f'o{i}') for i in range(5)}) for row in latest.discount_segments.all()])
         return version
 
 
@@ -122,6 +124,7 @@ def delete_draft(version_id):
     # Bypass edit-only guards for older drafts, after locking and checking status.
     # All deletions roll back if a protected result/baseline still references it.
     try:
+        models.QuerySet.delete(version.discount_segments.all())
         models.QuerySet.delete(version.coefficients.all())
         models.QuerySet.delete(version.subdivision_coefficients.all())
         models.QuerySet.delete(version.manager_coefficients.all())

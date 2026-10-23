@@ -343,7 +343,7 @@ def loader_motive(request):
         except Exception as error:
             messages.error(request, f'Не удалось выгрузить настройки в DataWH: {error}')
         else:
-            return render(request, 'admin_motivation/loader_complete.html', {'subdivisions': subdivisions, 'exported_versions': versions})
+            return render(request, 'admin_motivation/loader_complete.html', {'subdivisions': subdivisions, 'exported_versions': versions, 'exported_discount_segments': any(version.discount_segments.exists() for version in versions)})
     return render(request, 'admin_motivation/loader.html', {'subdivisions': subdivisions, 'export_versions': GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk')})
 
 

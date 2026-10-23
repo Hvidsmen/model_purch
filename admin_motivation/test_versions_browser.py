@@ -11,6 +11,37 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_discount_segment_form_copy_history_and_nulls(self):
+        from playwright.sync_api import expect
+        from .models import DiscountSegment
+        from .services.approval import approve_review, review_approval
+        from .services.versions import create_version
+        self.page.goto(self.live_server_url + reverse('motivation_discount_segments'))
+        expect(self.page.get_by_role('heading', name='Сегменты скидок', exact=True)).to_be_visible()
+        self.page.fill('#id_segments-0-type_discount', 'MASS')
+        for index, value in enumerate(('', '10', '17', '19', '24')):
+            self.page.fill(f'#id_segments-0-o{index}', value)
+        self.page.get_by_role('button', name='Сохранить сегменты', exact=True).click()
+        expect(self.page.locator('.discount-notice')).to_contain_text('сохранены')
+        self.assertIsNone(self.db(lambda: DiscountSegment.objects.get(version=self.first).o0))
+        self.db(lambda: approve_review(review_approval(GlobalCoeffVersion.objects.get(pk=self.first.pk))['token']))
+        latest = self.db(lambda: create_version(date(2026, 1, 1), source_version=self.first.pk).pk)
+        self.page.goto(self.live_server_url + reverse('motivation_discount_segments') + f'?version={latest}')
+        expect(self.page.locator('#id_segments-0-o1')).to_have_value('10.0000')
+        self.page.fill('#id_segments-0-o4', '30')
+        self.page.fill('#id_segments-1-type_discount', 'NO_DISCOUNT')
+        self.page.get_by_role('button', name='Сохранить сегменты', exact=True).click()
+        expect(self.page.locator('.discount-notice')).to_contain_text('сохранены')
+        self.assertIsNone(self.db(lambda: DiscountSegment.objects.get(version_id=latest, type_discount='NO_DISCOUNT').o4))
+        self.page.set_viewport_size({'width':1440,'height':1000})
+        self.page.screenshot(path='/tmp/da-discount-segments.png',full_page=True)
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),390)
+        self.page.goto(self.live_server_url + reverse('motivation_discount_segments') + f'?version={self.first.pk}')
+        expect(self.page.locator('#id_segments-0-o4')).to_be_disabled()
+        expect(self.page.locator('#id_segments-0-o4')).to_have_value('24.0000')
+        self.assertEqual(self.errors, [])
+
     def test_admin_calculation_job_create_and_run(self):
         from unittest.mock import patch
         from playwright.sync_api import expect

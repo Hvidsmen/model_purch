@@ -1,7 +1,8 @@
-from . import operation_views, views, plan_views, comparison_views, director_views, report_views
+from . import discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path('discount-segments/', discount_views.discount_segments, name='motivation_discount_segments'),
     path('administration/calculations/', operation_views.calculations, name='motivation_calculations'),
     path('administration/subdivision-merge/', operation_views.merge_subdivisions, name='motivation_subdivision_merge'),
     path("directors/coefficients/import/", director_views.director_coeff_import, name="motivation_director_coeff_import"),

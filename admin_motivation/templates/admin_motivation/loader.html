@@ -5,6 +5,7 @@
 {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</div>{% endfor %}
 <p>Выгружаются все утверждённые версии. Дата начала действия каждой записи берётся из её версии — без переноса на начало квартала. Черновики и заменённые версии не выгружаются.</p>
 <p>Коэффициенты директоров подразделений выгружаются отдельно для каждого сотрудника: K0–K4, код и ФИО. При первой выгрузке добавляются поля сотрудника в таблицу коэффициентов MS SQL.</p>
+<p>Сегменты скидок O0–O4 выгружаются в SegmentMotivation с теми же датами версий. При первой настройке загрузите историю в разделе <a href="{% url 'motivation_discount_segments' %}">«Сегменты скидок»</a>. Пока ни одна утверждённая версия не содержит сегментов, существующая таблица MS SQL не изменяется.</p>
 <div class="alert alert-warning">Настройки в MS SQL начиная с первой утверждённой версии будут заменены действующей историей версий. Данные до этой даты сохраняются.</div>
 <div class="table-wrapper"><table class="table"><thead><tr><th>Версия</th><th>Дата начала действия в MS SQL</th></tr></thead><tbody>
 {% for version in export_versions %}<tr><td>{{ version.title|default:'Версия' }}</td><td>{{ version.effective_from|date:'d.m.Y' }}</td></tr>{% empty %}<tr><td colspan="2">Нет утверждённых версий. Сначала утвердите коэффициенты.</td></tr>{% endfor %}

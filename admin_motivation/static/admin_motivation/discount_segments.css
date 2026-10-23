@@ -1,0 +1,38 @@
+.discount-page{color:#334155;font-size:14px;line-height:1.5}
+.discount-heading{display:flex;gap:16px;align-items:center;justify-content:space-between;margin-bottom:16px}
+.discount-heading h1{font-size:25px;margin:3px 0 6px;font-weight:700}
+.discount-heading p{margin:0;color:#64748b}
+.discount-heading .discount-eyebrow{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#8063bd}
+.discount-card{background:white;border:1px solid #dfe3ef;border-radius:10px;padding:16px;margin-bottom:12px;min-width:0}
+.discount-version{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap}
+.discount-version label{display:block;font-size:13px;font-weight:600;margin-bottom:5px}
+.discount-version form>div{display:flex;gap:8px}
+.discount-version select{width:min(400px,100%);min-width:0;padding:7px 10px;font:inherit;border:1px solid #d5d9e7;border-radius:7px}
+.discount-version p{margin:3px 0 0;color:#64748b;font-size:13px}
+.discount-version a{color:#6550c4}
+.discount-page .discount-button{display:inline-flex;align-items:center;justify-content:center;min-height:36px;box-sizing:border-box;padding:7px 12px;border:1px solid #6550c4;border-radius:7px;background:#6550c4;color:white;font:inherit;font-size:13px;font-weight:600;text-decoration:none;cursor:pointer}
+.discount-page .discount-secondary{background:#fff;color:#6550c4;border-color:#d8cff1}
+.discount-button:hover{filter:brightness(.96)}
+.discount-table-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.discount-table-heading h2{font-size:18px;margin:0}
+.discount-table-heading span,.discount-help{font-size:13px;color:#778397}
+.discount-table-scroll{overflow:auto;max-width:100%}
+.discount-page table{width:100%;min-width:700px;table-layout:fixed;border-collapse:collapse;font-size:14px}
+.discount-page th{padding:9px 6px;background:#f3effb;color:#65508f;border-bottom:1px solid #e1d9ef}
+.discount-page th:first-child{width:26%}
+.discount-page td{padding:6px;border-bottom:1px solid #e7eaf1;vertical-align:top}
+.discount-page td input:not([type=checkbox]){width:100%;min-width:0;box-sizing:border-box;height:36px;padding:6px 8px;border:1px solid #d3daea;border-radius:6px;background:#fff;font:inherit;color:#334155}
+.discount-page td input[type=number]{text-align:right;font-variant-numeric:tabular-nums}
+.discount-delete{text-align:center}.discount-delete input{width:16px;height:16px;margin:10px;accent-color:#6550c4}
+.discount-page td input:disabled{background:#f8f9fc;color:#4b5563;opacity:1}
+.discount-footer{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-top:14px}
+.discount-footer span{font-size:12px;color:#778397}
+.discount-page fieldset{border:0;padding:0;margin:0;min-width:0}
+.discount-import summary{cursor:pointer;color:#6550c4;font-weight:600}
+.discount-import p{margin-top:12px;font-size:13px;overflow-wrap:anywhere}
+.discount-notice{padding:12px;border:1px solid #cfe5da;border-radius:7px;background:#f0faf4;color:#286245}
+.discount-error{background:#fff3f5;border-color:#ebc8d1;color:#a6304d}
+.discount-page .errorlist{font-size:12px;color:#a6304d;padding-left:16px;margin:4px 0}
+.discount-page :focus-visible{outline:2px solid #b39ae7;outline-offset:2px}
+.discount-empty{padding:24px!important;color:#778397;text-align:center}
+@media(max-width:600px){.discount-heading{align-items:start;flex-direction:column}.discount-card{padding:12px}.discount-version form{width:100%}.discount-version form>div{flex-wrap:wrap}.discount-version select{width:100%}}

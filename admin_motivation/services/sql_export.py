@@ -25,16 +25,23 @@ def export_motivation(connector, manage_connection=True):
     versions = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
     if not versions:
         raise ValidationError('Нет утверждённых версий для выгрузки. Сначала утвердите версию коэффициентов.')
+    from .discount_segments import export_enabled, INSERT_SQL, FIELDS
+    include_segments = export_enabled(versions)
     start_date = versions[0].effective_from
     connection = None
     try:
         connection, cursor = connector('vm-dwh', 'DataWH')
         cursor.execute(EMPLOYEE_COLUMNS_SQL)
         # Parameters never become SQL text. The replacement and the full timeline are atomic.
-        for table in ['SubdivisionManagerCoeff', 'SubdivisionMotiveCoeff', 'GoodsMotivation']:
+        tables = ['SubdivisionManagerCoeff', 'SubdivisionMotiveCoeff', 'GoodsMotivation']
+        if include_segments:
+            tables.append('SegmentMotivation')
+        for table in tables:
             cursor.execute(f'DELETE FROM DataWH.motivation.{table} WHERE Date_ >= ?', start_date)
         for version in versions:
             date_from = version.effective_from
+            if include_segments:
+                cursor.executemany(INSERT_SQL, [(date_from, row.type_discount, *[getattr(row, field) for field in FIELDS]) for row in version.discount_segments.order_by('type_discount')])
             managers = SubdivisionManagerCoeff.objects.filter(version=version).select_related('subdivision', 'kind')
             manager_rows = [(date_from, row.subdivision.subdivision_key, row.kind.name if row.kind else None, row.coeff) for row in managers]
             from .subdivision_aliases import coefficient_rows as merged_rows
