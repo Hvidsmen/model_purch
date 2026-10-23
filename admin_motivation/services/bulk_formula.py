@@ -4,8 +4,7 @@ from ..models import GlobalCoeff, SubdivisionCoeff, VariationCalculate, TypeCoef
 from .directors import lock_editable
 
 
-@transaction.atomic
-def apply_formula(version_id, revision, goods_ids, variation_id, kinds, subdivision_id=None, employee_id=None):
+def selection(version_id, revision, goods_ids, variation_id, kinds, subdivision_id=None, employee_id=None):
     version = lock_editable(int(version_id))
     if str(version.revision) != str(revision):
         raise ValidationError('Версия изменилась. Обновите страницу перед массовым применением.')
@@ -37,5 +36,21 @@ def apply_formula(version_id, revision, goods_ids, variation_id, kinds, subdivis
         if ids - set(selected.values_list('goods_id', flat=True)):
             raise ValidationError('Сначала сохраните директорские ставки для всех выбранных товаров. Формула не применена; нулевые ставки автоматически не создаются.')
         updates.append(selected)
+    return version, variation, ids, updates
+
+
+@transaction.atomic
+def preview_formula(*args, **kwargs):
+    version, variation, ids, updates = selection(*args, **kwargs)
+    from ..models import Goods
+    return {'version':str(version),'formula':str(variation),'goods_count':len(ids),
+            'goods':list(Goods.objects.filter(pk__in=ids).order_by('brand').values_list('brand',flat=True)[:100]),
+            'rows':sum(rows.count() for rows in updates),
+            'changes':sum(rows.exclude(variation_calculate=variation).count() for rows in updates)}
+
+
+@transaction.atomic
+def apply_formula(*args, **kwargs):
+    version, variation, ids, updates = selection(*args, **kwargs)
     count = sum(rows.update(variation_calculate=variation) for rows in updates)
     return len(ids), count

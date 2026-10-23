@@ -11,6 +11,8 @@ class SaveVerification:
         self.checks = []
         self.deletions = []
         self.changed = 0
+        self.goods = set()
+        self.groups = {}
         revision = data.get('revision')
         if revision is not None and str(version.revision) != revision:
             raise ValidationError('Версия изменилась в другой вкладке или другим пользователем. Изменения не сохранены. Обновите страницу и повторите правки.')
@@ -65,7 +67,15 @@ class SaveVerification:
 
     def add(self, query, field, expected):
         before = query.values_list(field, flat=True).first()
-        self.changed += not self.equal(before, expected)
+        different = not self.equal(before, expected)
+        self.changed += different
+        if different:
+            model = query.model.__name__
+            label = 'Директор' if 'Director' in model else 'Поправки' if 'Manager' in model else query.values_list('type_coeff__type_coeff_name',flat=True).first() or 'Ставки'
+            self.groups[label] = self.groups.get(label,0) + 1
+            if 'Manager' not in model:
+                good=query.values_list('goods_id',flat=True).first()
+                if good is not None: self.goods.add(good)
         self.checks.append((query, field, expected))
 
     def verify(self):
@@ -76,3 +86,8 @@ class SaveVerification:
         if any(query.exists() for query in self.deletions):
             raise ValidationError('Удаление коэффициентов не подтверждено. Изменения отменены.')
         return self.changed
+
+    def summary(self):
+        parts = [f'{label}: {count}' for label,count in sorted(self.groups.items())]
+        if self.goods: parts.append(f'товаров: {len(self.goods)}')
+        return '; '.join(parts)

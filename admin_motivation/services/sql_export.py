@@ -27,10 +27,15 @@ def export_motivation(connector, manage_connection=True):
         raise ValidationError('Нет утверждённых версий для выгрузки. Сначала утвердите версию коэффициентов.')
     from .discount_segments import export_enabled, INSERT_SQL, FIELDS
     include_segments = export_enabled(versions)
+    from .workflow import export_snapshot
+    snapshot = export_snapshot()
     start_date = versions[0].effective_from
     connection = None
     try:
         connection, cursor = connector('vm-dwh', 'DataWH')
+        cursor.execute("""DECLARE @portalLock int; EXEC @portalLock=sys.sp_getapplock
+ @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;
+ IF @portalLock < 0 THROW 50001,N'Дождитесь завершения расчёта перед выгрузкой',1;""")
         cursor.execute(EMPLOYEE_COLUMNS_SQL)
         # Parameters never become SQL text. The replacement and the full timeline are atomic.
         tables = ['SubdivisionManagerCoeff', 'SubdivisionMotiveCoeff', 'GoodsMotivation']
@@ -71,7 +76,19 @@ def export_motivation(connector, manage_connection=True):
                     or SubdivisionManagerCoeff.objects.filter(version__in=versions).exists()):
                 from .calculation_jobs import prepare
                 prepare(cursor)
+            # Changes during a remote export must not be labelled as a current export.
+            if export_snapshot()['fingerprint'] != snapshot['fingerprint']:
+                raise ValidationError('Настройки изменились во время выгрузки. Выгрузка отменена; повторите её.')
+            from .execution_tracking import record_export
+            record_export(cursor, snapshot)
             connection.commit()
+            from ..models import MotivationExportLog
+            MotivationExportLog.objects.create(fingerprint=snapshot['fingerprint'],snapshot=snapshot)
+        else:
+            if export_snapshot()['fingerprint'] != snapshot['fingerprint']:
+                raise ValidationError('Настройки изменились во время выгрузки. Повторите синхронизацию.')
+            from .execution_tracking import record_export
+            record_export(cursor,snapshot)
     except Exception:
         if connection is not None and manage_connection:
             connection.rollback()

@@ -562,6 +562,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
         channel = Chanel.objects.create(chanel_name='Merge browser')
         source, target = [Subdivision.objects.create(subdivision_key=name, subdivision_name=name, subdivision_global=name, chanel=channel) for name in ('ТЕРМОТРЕЙД', 'Д-Москва')]
         extra = Subdivision.objects.create(subdivision_key='Д-Волга', subdivision_name='Д-Волга', subdivision_global='Д-Волга', chanel=channel)
+        GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001, 1, 1))
         version = GlobalCoeffVersion.objects.create(title='Merge test', effective_from=date(2026, 1, 1))
         merge_url = reverse('motivation_subdivision_merge')
         with sync_playwright() as driver:

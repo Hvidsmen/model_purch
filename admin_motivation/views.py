@@ -36,6 +36,7 @@ from base.access import can_access
 
 
 from .services.version_context import version_context
+from .services.editor_feedback import restore_context, recover
 
 
 def gloabal_coeff(request, version_form=None):
@@ -43,7 +44,7 @@ def gloabal_coeff(request, version_form=None):
     selected = context['selected_version']
     from .services.coefficient_groups import global_matrix
     return render(request, 'admin_motivation/gloabal_coeff.html', {
-        **context, 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.filter(is_archived=False),
+        **context, **restore_context(request), 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.filter(is_archived=False),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
@@ -222,11 +223,13 @@ def gloabal_coeff_action(request):
     except (ValidationError, ValueError, TypeError) as error:
         text = ' '.join(error.messages) if isinstance(error, ValidationError) else 'Некорректное число или формат файла.'
         messages.error(request, text)
+        if action in {'save_coeff','add_product'} and version.is_editable:
+            return recover(request, gloabal_coeff, version)
     except RuntimeError as error:
         messages.error(request, str(error))
     else:
         if action == 'save_coeff':
-            messages.success(request, f'Сохранение проверено. Изменено полей: {saved_count}. Версия: {version}. Выгрузка в MS SQL выполняется отдельно.' if saved_count else 'Проверено: значения уже сохранены, новых изменений нет.')
+            messages.success(request, f'Сохранение проверено. Изменено полей: {saved_count}. {verification.summary()}. Версия: {version}. Выгрузка в MS SQL выполняется отдельно.' if saved_count else 'Проверено: значения уже сохранены, новых изменений нет.')
         else:
             messages.success(request, 'Изменения сохранены в выбранной версии.')
     return redirect(reverse('global_coeff_admin_motivation') + f'?version={version.pk}')
@@ -254,7 +257,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
         employee_form = employee_form_override
     employee_bound = bool(employee and employee.subdivisions.filter(pk=sub.pk).exists())
     return render(request, 'admin_motivation/coef_one_sub.html', {
-        **context, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
+        **context, **restore_context(request), 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
         'director_editable': bool(context['version_editable'] and employee_bound),
         'manager_approved_editable': bool(selected and selected.status == 'approved' and can_access(request.user, 'admin')),
         'manager_correction_history': ManagerCorrectionLog.objects.filter(version=selected, subdivision=sub).select_related('actor').order_by('-pk')[:30],
@@ -353,9 +356,11 @@ def sub_act(request, subdivision):
                 raise ValidationError('Неизвестное действие.')
     except (ValidationError, ValueError, TypeError) as error:
         messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Некорректное число или формат файла.')
+        if action in {'save_coeff','update_motive_coeff'} and version.is_editable:
+            return recover(request, coef_one_sub, version, sub.pk)
     else:
         if action in {'save_coeff', 'update_motive_coeff'}:
-            messages.success(request, f'Сохранение проверено. Изменено полей: {saved_count}. Подразделение: {sub}. Версия: {version}. Выгрузка в MS SQL выполняется отдельно.' if saved_count else 'Проверено: значения уже сохранены, новых изменений нет.')
+            messages.success(request, f'Сохранение проверено. Изменено полей: {saved_count}. {verification.summary()}. Подразделение: {sub}. Версия: {version}. Выгрузка в MS SQL выполняется отдельно.' if saved_count else 'Проверено: значения уже сохранены, новых изменений нет.')
         else:
             messages.success(request, 'Настройки подразделения сохранены в выбранной версии.')
     chosen = employee.pk if employee else request.POST.get('employee', '')

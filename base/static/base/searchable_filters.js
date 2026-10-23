@@ -16,6 +16,19 @@
         const list = document.createElement('div'); list.className = 'searchable-filter-options';
         popup.append(search, list); root.append(trigger, popup);
         select.after(root); select.hidden = true;
+        function fitPopup() {
+            if (popup.hidden) return;
+            const rect=trigger.getBoundingClientRect();
+            const below=window.innerHeight-rect.bottom-12, above=rect.top-12;
+            const upwards=below<180 && above>below;
+            const space=Math.max(80,upwards?above:below);
+            list.style.maxHeight=`${Math.max(40,Math.min(240,space-65))}px`;
+            popup.style.top=upwards?'auto':'calc(100% + 4px)';
+            popup.style.bottom=upwards?'calc(100% + 4px)':'auto';
+            popup.style.left=`${Math.min(0,window.innerWidth-12-(rect.left+popup.offsetWidth))}px`;
+        }
+        window.addEventListener('resize',fitPopup);
+        window.addEventListener('scroll',fitPopup,true);
         function close() { popup.hidden = true; trigger.setAttribute('aria-expanded', 'false'); }
         function render() {
             list.replaceChildren();
@@ -37,7 +50,7 @@
         trigger.addEventListener('click', () => {
             const open = popup.hidden;
             document.querySelectorAll('.searchable-filter-menu').forEach(menu => { menu.hidden = true; menu.previousElementSibling?.setAttribute('aria-expanded', 'false'); });
-            if (open) { popup.hidden = false; trigger.setAttribute('aria-expanded', 'true'); search.value = ''; render(); search.focus(); }
+            if (open) { popup.hidden = false; trigger.setAttribute('aria-expanded', 'true'); search.value = ''; render(); search.focus(); fitPopup(); requestAnimationFrame(fitPopup); }
         });
         search.addEventListener('input', render);
         root.addEventListener('keydown', event => {

@@ -67,8 +67,10 @@ def admin_required(request):
 def calculations(request):
     admin_required(request)
     form = JobForm()
+    edited_job_id = None
     if request.method == 'POST':
         job = get_object_or_404(MotivationCalculationSchedule, pk=request.POST['job']) if request.POST.get('job') else None
+        edited_job_id = job.pk if job else None
         try:
             if request.POST.get('action') == 'run' and job:
                 calculation_jobs.start_job(job)
@@ -76,7 +78,7 @@ def calculations(request):
                 job.save(update_fields=['synced', 'error'])
                 messages.success(request, 'Задание отправлено в SQL Server Agent. Завершение проверяется по статусу SQL Server, а не по времени ожидания.')
                 return redirect('motivation_calculations')
-            form = JobForm(request.POST, instance=job)
+            form = JobForm(request.POST, instance=job, auto_id=f'job_{job.pk}_%s' if job else 'id_%s')
             if form.is_valid():
                 job = form.save(commit=False)
                 calculation_jobs.sync_job(job)
@@ -93,11 +95,12 @@ def calculations(request):
             messages.error(request, text)
     jobs = list(MotivationCalculationSchedule.objects.order_by('pk'))
     for job in jobs:
-        job.edit_form = JobForm(instance=job, auto_id=f'job_{job.pk}_%s')
+        job.edit_form = form if edited_job_id == job.pk and form.is_bound else JobForm(instance=job, auto_id=f'job_{job.pk}_%s')
+        job.edit_open = bool(edited_job_id == job.pk)
         if job.run_at:
             job.edit_form.initial['run_at'] = job.run_at.astimezone(ZoneInfo('Europe/Moscow')).replace(tzinfo=None)
         job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
-    return render(request, 'admin_motivation/calculations.html', {'form': form, 'jobs': jobs})
+    return render(request, 'admin_motivation/calculations.html', {'form': JobForm() if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
 
 
 @never_cache
@@ -110,6 +113,22 @@ def calculation_monitor(request, job_id):
     except Exception:
         logger.exception('SQL Agent monitoring failed for job %s', job.pk)
         return JsonResponse({'error': 'SQL Server недоступен. Автообновление повторит запрос.'}, status=503)
+    from .services.execution_tracking import observe
+    from .services.workflow import context as workflow_context
+    from urllib.parse import urlencode
+    execution = observe(job)
+    state=workflow_context()
+    data['workflow']={key:state[key] for key in ('export_current','calculated_current','export_label','calculation_label')}
+    if data.get('status') in {'Выполняется','Ожидает запуска','Ошибка'}:
+        data['workflow'].update(calculated_current=False,calculation_label=data['status'])
+    if execution and execution.state == 'completed' and data.get('status') == 'Завершено':
+        params = execution.parameters
+        data['report_url'] = reverse('motivation_report',args=['manager-detail']) + '?' + urlencode({'year':params['fact_year'],'execution':execution.pk,'run':'1'})
+        data['execution'] = {'completed':execution.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S') if execution.completed_at else '',
+            'year':params['fact_year'],'plan':params['plan_version'],
+            'stale': not state['calculated_current']}
+    else:
+        data['report_url'] = None
     data['checked_at'] = timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%H:%M:%S')
     return JsonResponse(data)
 
@@ -183,21 +202,37 @@ def reopen_coefficient_version(request):
 @require_http_methods(['POST'])
 def bulk_coefficient_formula(request):
     admin_required(request)
-    from .services.bulk_formula import apply_formula
-    from .models import VariationCalculate
-    subdivision = request.POST.get('subdivision')
-    route = reverse('coeff_subdivisions_admin_motivation', args=[subdivision]) if subdivision and subdivision.isdigit() else reverse('global_coeff_admin_motivation')
+    from .services.bulk_formula import apply_formula, preview_formula
+    from django.core import signing
+    from hashlib import sha256
+    import json
+    data=request.POST
+    review_data={key:sorted(data.getlist(key)) for key in ('version','revision','goods','variation','kinds','subdivision','employee')}
+    digest=sha256(json.dumps(review_data,sort_keys=True).encode()).hexdigest()
+    args=(data.get('version'),data.get('revision'),data.getlist('goods'),data.get('variation'),data.getlist('kinds'))
+    kwargs={'subdivision_id':data.get('subdivision') or None,'employee_id':data.get('employee') or None}
+    subdivision=data.get('subdivision')
+    route=reverse('coeff_subdivisions_admin_motivation',args=[subdivision]) if subdivision and subdivision.isdigit() else reverse('global_coeff_admin_motivation')
     try:
-        count, cells = apply_formula(request.POST.get('version'), request.POST.get('revision'), request.POST.getlist('goods'), request.POST.get('variation'), request.POST.getlist('kinds'), subdivision, request.POST.get('employee'))
-        messages.success(request, f'Формула применена к товарам: {count}, записей коэффициентов: {cells}. Проценты коэффициентов сохранены.')
-    except (ValidationError, VariationCalculate.DoesNotExist, ValueError, TypeError) as error:
-        messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Проверьте выбранную формулу и товары.')
-    version = request.POST.get('version', '')
-    suffix = f'?version={version}' if version.isdigit() else ''
-    employee = request.POST.get('employee', '')
-    if subdivision and employee.isdigit():
-        suffix += ('&' if suffix else '?') + f'employee={employee}'
-    return redirect(route + suffix)
+        if data.get('preview')=='1':
+            info=preview_formula(*args,**kwargs)
+            info['token']=signing.dumps({'digest':digest,'actor':request.user.pk},salt='bulk-formula-review')
+            return JsonResponse(info)
+        if data.get('review_required')=='yes':
+            signed=signing.loads(data.get('review_token',''),salt='bulk-formula-review',max_age=900)
+            if signed != {'digest':digest,'actor':request.user.pk}:
+                raise ValidationError('Выбор изменился после проверки. Проверьте операцию повторно.')
+        goods, count=apply_formula(*args,**kwargs)
+        messages.success(request,f'Формула применена к товарам: {goods}, записей коэффициентов: {count}. Проценты коэффициентов сохранены.')
+    except (ValidationError,ValueError,TypeError,signing.BadSignature) as error:
+        text=' '.join(error.messages) if isinstance(error,ValidationError) else 'Проверьте версию, формулу и товары. Повторите предварительную проверку.'
+        if data.get('preview')=='1': return JsonResponse({'error':text},status=400)
+        messages.error(request,text)
+    version=data.get('version','')
+    suffix=f'?version={version}' if version.isdigit() else ''
+    employee=data.get('employee','')
+    if subdivision and employee.isdigit(): suffix+=('&' if suffix else '?')+f'employee={employee}'
+    return redirect(route+suffix)
 
 
 @require_http_methods(['GET'])

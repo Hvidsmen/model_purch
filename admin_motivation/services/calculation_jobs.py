@@ -42,7 +42,8 @@ def calculation_command(job):
     statement = (f"EXEC motivation.PortalCalcBySub @FactYear={job.fact_year}, "
                  f"@PlanVersion=N'{escaped_plan}', "
                  f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f}, @PayoutThreshold={threshold:.8f};")
-    return LOCKED_COMMAND.replace('EXEC motivation.PortalCalcBySub;', statement)
+    from .execution_tracking import tracked_statement
+    return LOCKED_COMMAND.replace('EXEC motivation.PortalCalcBySub;', tracked_statement(job, statement))
 
 
 def validate_sql_parameters(cursor, job):
@@ -118,6 +119,8 @@ def sync_job(job, connector=None):
           @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;
           IF @r < 0 THROW 50001,N'Дождитесь завершения расчёта мотивации',1;""")
         prepare(cursor)
+        from .execution_tracking import DDL
+        cursor.execute(DDL)
         validate_sql_parameters(cursor, job)
         name = job_name(job)
         cursor.execute('SELECT job_id FROM msdb.dbo.sysjobs WHERE name=?', name)
@@ -249,8 +252,12 @@ def sync_merge_configuration(connector=None):
           @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;
           IF @r < 0 THROW 50001,N'Дождитесь завершения расчёта мотивации',1;""")
         prepare(cursor)
+        from .workflow import export_snapshot
+        snapshot=export_snapshot()
         export_motivation(lambda server, database: (connection, cursor), manage_connection=False)
         connection.commit()
+        from ..models import MotivationExportLog
+        MotivationExportLog.objects.create(fingerprint=snapshot['fingerprint'],snapshot=snapshot)
     except Exception:
         if connection is not None:
             connection.rollback()

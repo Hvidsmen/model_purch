@@ -1,5 +1,5 @@
 <div class="editor-toolbar" id="editor-toolbar" data-form="{% if sub %}subCoeffForm{% else %}mainCoeffForm{% endif %}">
-    <div class="editor-context"><strong>{% if sub %}{{ sub }}{% else %}Глобальные коэффициенты{% endif %}</strong><span>{{ selected_version.get_status_display }} · с {{ selected_version.effective_from|date:'d.m.Y' }}</span></div>
+    <div class="editor-context"><strong>{% if sub %}{{ sub }}{% else %}Глобальные коэффициенты{% endif %}</strong><span>{{ selected_version.title|default:'Версия' }} · {{ selected_version.get_status_display }} · с {{ selected_version.effective_from|date:'d.m.Y' }}{% if employee %} · Директор: {{ employee.full_name }}{% endif %}</span></div>
     <div class="editor-budget"><span>Предлагаемая мотивация</span><strong><span data-summary-amount="current.total">—</span> USD</strong><small id="editor-comparison-state">Выберите план ниже</small></div>
     <div class="editor-deltas"><span data-variant="approved">Δ к утверждённому <strong data-summary-delta="approved.total">—</strong></span><span data-variant="baseline" hidden>Δ к базовому <strong data-summary-delta="baseline.total">—</strong></span></div>
     <div class="editor-state"><strong id="editor-dirty-count" role="status" aria-live="polite">Изменено: 0</strong><small id="editor-save-state">Нет несохранённых правок</small></div>

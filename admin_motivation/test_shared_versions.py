@@ -196,8 +196,8 @@ class SharedMotivationVersionTests(TestCase):
         connection.commit.assert_called_once()
         connection.rollback.assert_not_called()
         connection.close.assert_called_once()
-        self.assertEqual(cursor.execute.call_count, 4)
-        self.assertTrue(all(call.args[1] == self.first.effective_from for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE')))
+        self.assertEqual(len([call for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE FROM DataWH')]), 3)
+        self.assertTrue(all(call.args[1] == self.first.effective_from for call in cursor.execute.call_args_list if call.args[0].startswith('DELETE FROM DataWH')))
 
     @patch('admin_motivation.services.calculation_jobs.prepare')
     def test_directors_export_individually_with_all_segments_and_director_only_goods(self, prepare):
@@ -235,8 +235,8 @@ class SharedMotivationVersionTests(TestCase):
         self.assertNotIn(employee.full_name, statement)
         goods = [row for call in cursor.executemany.call_args_list if 'GoodsMotivation' in call.args[0] for row in call.args[1]]
         self.assertIn(only_director.goods_key, [row[1] for row in goods])
-        self.assertIn('EmployeeCode', cursor.execute.call_args_list[0].args[0])
-        self.assertIn('EmployeeName', cursor.execute.call_args_list[0].args[0])
+        self.assertIn('EmployeeCode', next(call.args[0] for call in cursor.execute.call_args_list if 'COL_LENGTH' in call.args[0]))
+        self.assertIn('EmployeeName', next(call.args[0] for call in cursor.execute.call_args_list if 'COL_LENGTH' in call.args[0]))
         connection.commit.assert_called_once()
         connection.rollback.assert_not_called()
 

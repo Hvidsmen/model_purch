@@ -4,6 +4,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 from unittest import skipUnless
+from unittest.mock import patch
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.urls import reverse
 from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCoeff, VariationCalculate, Subdivision, SubdivisionCoeff, SubdivisionManagerCoeff, Chanel, KindManagerCoeff
@@ -61,6 +62,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('#editor-dirty-count')).to_have_text('Изменено: 0')
         self.page.select_option('#bulk-variation-form select[name=variation]', str(formula))
         self.page.get_by_role('button',name='Применить формулу',exact=True).click()
+        self.page.get_by_role('button',name='Подтвердить формулу',exact=True).click()
         expect(self.page.locator('#version-panel')).to_contain_text('Формула применена')
         self.assertEqual(self.db(lambda: GlobalCoeff.objects.get(pk=row).variation_calculate_id),formula)
         self.assertNotEqual(self.db(lambda: GlobalCoeff.objects.get(pk=self.coeff.pk).variation_calculate_id),formula)
@@ -114,8 +116,9 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.page.locator('#bulk-variation-form input[value="Директора"]').check()
         self.page.locator('#bulk-variation-form select[name=variation]').select_option(str(formula))
         self.page.locator(f'.bulk-good[value="{self.good.pk}"]').check()
+        self.page.get_by_role('button',name='Применить формулу',exact=True).click()
         with self.page.expect_navigation():
-            self.page.get_by_role('button',name='Применить формулу',exact=True).click()
+            self.page.get_by_role('button',name='Подтвердить формулу',exact=True).click()
         self.assertEqual(self.db(lambda: GlobalDirectorCoeff.objects.get(pk=row).variation_calculate_id),formula)
         self.assertEqual(str(self.db(lambda: GlobalDirectorCoeff.objects.get(pk=row).k0)),'0.010000')
         expect(self.page.get_by_text('Директор: Подразделение(Глобально)',exact=True)).to_be_visible()
@@ -124,6 +127,54 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),391)
         self.assertLessEqual(self.page.locator('#version-history .version-tool-content').bounding_box()['x'] + self.page.locator('#version-history .version-tool-content').bounding_box()['width'],391)
         self.page.screenshot(path='/tmp/portal-compact-version-tools.png',full_page=True)
+
+    def test_workflow_grouping_and_product_side_panel_preserve_edits(self):
+        from playwright.sync_api import expect
+        formula=self.db(lambda: VariationCalculate.objects.get_or_create(variation_name='Подразделение(Глобально)')[0].pk)
+        self.page.set_viewport_size({'width':1920,'height':1080})
+        self.page.goto(self.live_server_url+reverse('global_coeff_admin_motivation'))
+        expect(self.page.locator('.workflow-steps')).to_contain_text('Утверждение')
+        group=self.page.locator('.coefficient-group-heading button')
+        group.click();expect(self.page.locator('.coefficient-row')).not_to_be_visible()
+        group.click();expect(self.page.locator('.coefficient-row')).to_be_visible()
+        self.page.locator('.brand-settings > summary').click()
+        panel=self.page.locator('.motivation-side-panel')
+        expect(panel).to_be_visible()
+        panel.locator('select').select_option(str(formula))
+        expect(panel.locator('.formula-explanation')).to_contain_text('личный объём')
+        self.page.screenshot(path='/tmp/motivation-ux-desktop.png',full_page=True)
+        panel.get_by_role('button',name='Закрыть настройки').click()
+        expect(self.page.locator('#mainCoeffForm .select-var-calc')).to_have_value(str(formula))
+        expect(self.page.locator('#editor-dirty-count')).not_to_have_text('Изменено: 0')
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.page.locator('.brand-settings > summary').click()
+        expect(panel).to_be_visible()
+        self.assertLessEqual(panel.bounding_box()['width'],390)
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),391)
+        self.page.screenshot(path='/tmp/motivation-ux-mobile.png',full_page=True)
+        self.page.keyboard.press('Escape')
+        expect(panel).not_to_be_visible()
+        self.assertEqual(self.errors,[])
+
+    def test_completed_job_links_to_report_with_recorded_context(self):
+        from playwright.sync_api import expect
+        from django.utils import timezone
+        from uuid import uuid4
+        from .models import MotivationCalculationSchedule, MotivationExecution
+        def setup_run():
+            job=MotivationCalculationSchedule.objects.create(name='Report link',fact_year=2026,plan_version='Recorded plan',synced=True)
+            run=MotivationExecution.objects.create(run_id=uuid4(),job_key=job.key,state='completed',started_at=timezone.now(),completed_at=timezone.now(),parameters={'fact_year':2026,'plan_version':'Recorded plan'},export_snapshot={'versions':[{'title':'Recorded coefficients','from':'2026-01-01'}]})
+            return run
+        run=self.db(setup_run)
+        with patch('admin_motivation.operation_views.calculation_jobs.monitor',return_value={'status':'Завершено','history':[]}), patch('admin_motivation.services.execution_tracking.observe',return_value=run):
+            self.page.goto(self.live_server_url+reverse('motivation_calculations'))
+            link=self.page.locator('[data-job-report]');expect(link).to_be_visible()
+            expect(link).to_have_attribute('href',__import__('re').compile('year=2026'))
+            with patch('admin_motivation.report_views.choices',return_value=[]),patch('admin_motivation.report_views.load_report',return_value={'currency':'USD','nodes':[],'periods':[]}):
+                with self.page.expect_navigation():link.click()
+            expect(self.page.locator('.ux-report-receipt')).to_contain_text('Recorded plan')
+            expect(self.page.locator('.ux-report-receipt')).to_contain_text('Recorded coefficients')
+        self.assertEqual(self.errors,[])
 
     def test_segments_subdivision_search_and_navigation(self):
         from playwright.sync_api import expect
@@ -187,7 +238,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             card.get_by_role('button', name='Сохранить параметры и расписание', exact=True).click()
             expect(self.page.locator('.calculation-job')).to_contain_text('Год факта: 2025')
             self.page.get_by_role('button', name='Запустить сейчас', exact=True).click()
-            expect(self.page.get_by_text('Выполняется', exact=True)).to_be_visible()
+            expect(self.page.locator('[data-job-status]')).to_have_text('Выполняется')
             self.assertEqual(sync.call_count, 2)
             start.assert_called_once()
             self.assertEqual(self.errors, [])

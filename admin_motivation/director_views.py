@@ -97,14 +97,15 @@ def director_directory(request):
     branch_id = request.GET.get('branch', '')
     branches = list(Subdivision.objects.all())
     selected_branch = next((branch for branch in branches if str(branch.pk) == branch_id), None)
-    employees = DirectorEmployee.objects.filter(is_archived=False).order_by('full_name').prefetch_related('subdivisions')
+    show_archived = request.GET.get('archived') == '1'
+    employees = DirectorEmployee.objects.filter(is_archived=show_archived).order_by('full_name').prefetch_related('subdivisions')
     if selected_branch:
-        employees = employees.filter(subdivisions=selected_branch).distinct()
+        employees = employees.filter(Q(subdivisions=selected_branch) | Q(subdivisiondirectorcoeff__subdivision=selected_branch)).distinct() if show_archived else employees.filter(subdivisions=selected_branch).distinct()
     # SQLite does not implement case-insensitive matching for Cyrillic.
     employees = [item for item in employees if name_query.casefold() in item.full_name.casefold()]
     return render(request, 'admin_motivation/director_directory.html', {
         'employee_form': form,
-        'all_employees': employees,
+        'all_employees': employees, 'show_archived': show_archived,
         'subdivisions': branches,
         'name_query': name_query,
         'selected_branch': selected_branch,

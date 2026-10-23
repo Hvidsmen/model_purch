@@ -790,3 +790,20 @@ class ManagerCorrectionLog(models.Model):
     reason = models.TextField()
     changes = models.JSONField()
     previous_revision = models.PositiveBigIntegerField()
+
+
+class MotivationExportLog(models.Model):
+    fingerprint = models.CharField(max_length=64)
+    snapshot = models.JSONField(default=dict)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class MotivationExecution(models.Model):
+    run_id = models.UUIDField(unique=True)
+    job_key = models.UUIDField()
+    state = models.CharField(max_length=20)
+    started_at = models.DateTimeField()
+    completed_at = models.DateTimeField(null=True)
+    parameters = models.JSONField(default=dict)
+    export_snapshot = models.JSONField(default=dict)
+    observed_at = models.DateTimeField(auto_now=True)

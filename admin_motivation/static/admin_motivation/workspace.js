@@ -51,14 +51,16 @@
         });
         const filter = () => {
             const query = fold(search.value.trim());
-            rows.forEach(row => {
-                row.hidden = !fold([row.dataset.pg, row.dataset.group, row.dataset.brand, row.dataset.key].join(' ')).includes(query)
-                    || selectors.some(([key, select]) => select.value && select.value !== row.dataset[key])
-                    || (onlyChanged.checked && !row.querySelector('.editor-changed'));
+            const matchesFilter = row => fold([row.dataset.pg,row.dataset.group,row.dataset.brand,row.dataset.key].join(' ')).includes(query)
+                && !selectors.some(([key,select])=>select.value && select.value!==row.dataset[key])
+                && (!onlyChanged.checked || row.querySelector('.editor-changed'));
+            rows.forEach(row => { row.hidden = !matchesFilter(row) || row.dataset.groupCollapsed === 'yes'; });
+            document.querySelectorAll('.coefficient-group-heading').forEach(header => {
+                header.hidden=!rows.filter(row=>row.dataset.uxGroup===header.dataset.groupKey).some(matchesFilter);
             });
             const count = rows.filter(row => !row.hidden).length;
             document.getElementById('coefficient-visible-count').textContent = `Показано: ${count} из ${rows.length}`;
-            document.getElementById('coefficient-filter-empty').hidden = count > 0;
+            document.getElementById('coefficient-filter-empty').hidden = rows.some(matchesFilter);
         };
         const reset = () => { search.value = ''; onlyChanged.checked = false; selectors.forEach(([, select]) => select.value = ''); filter(); };
         search.addEventListener('input', filter);
@@ -68,6 +70,7 @@
         const refresh = () => {
             fields.forEach(field => field.classList.toggle('editor-changed', different(field)));
             const count = changed().length;
+            document.querySelectorAll('[data-workflow-dirty]').forEach(node => { node.hidden = !count; node.textContent = `Не сохранено: ${count}`; });
             document.getElementById('editor-dirty-count').textContent = `Изменено: ${count}`;
             document.getElementById('editor-save-state').textContent = count ? 'Правки ещё не сохранены' : 'Нет несохранённых правок';
             toolbar.querySelector('.editor-state').classList.toggle('has-changes', count > 0);
@@ -140,6 +143,28 @@
         });
         document.addEventListener('motivation:approved', () => leaving = true);
         refresh();
+        const attempt = document.getElementById('coefficient-attempt');
+        if (attempt) {
+            const restored = JSON.parse(attempt.textContent);
+            for (const field of fields) {
+                if (!Object.hasOwn(restored.fields, field.name)) continue;
+                if (field.type === 'checkbox') field.checked = true;
+                else field.value = restored.fields[field.name];
+                if (restored.errors[field.name]) {
+                    field.classList.add('invalid'); field.setAttribute('aria-invalid','true');
+                    field.title = restored.errors[field.name];
+                    const message=document.createElement('small');message.className='ux-form-error';message.textContent=restored.errors[field.name];
+                    message.id=`restored-error-${fields.indexOf(field)}`;field.after(message);field.setAttribute('aria-describedby',message.id);
+                    field.addEventListener('input',()=>message.remove(),{once:true});
+                    field.addEventListener('input', () => field.removeAttribute('aria-invalid'), {once:true});
+                }
+                field.dispatchEvent(new Event('input',{bubbles:true}));
+            }
+            if (restored.action === 'add_product') document.getElementById('add-product-details').open=true;
+            if (restored.action === 'update_motive_coeff') document.getElementById('manager-details').open=true;
+            refresh();
+            fail('Правки восстановлены после ошибки. Сверьте их с текущей версией и сохраните повторно.');
+        }
     };
     if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, {once: true});
     else initialize();

@@ -104,8 +104,18 @@ def report_page(request, kind):
             selected = selected if isinstance(selected, list) else [selected]
             selected_parameters.append({'label': caption, 'value': ', '.join(str(item) for item in selected if item not in (None, '')) or 'Все'})
         selected_parameters.append({'label': 'Валюта мотивации', 'value': data['currency']})
+    from .models import MotivationExecution
+    from .services.workflow import export_snapshot
+    latest_execution=MotivationExecution.objects.order_by('-started_at').first()
+    requested_execution=query.get('execution')
+    receipt=None
+    if latest_execution:
+        receipt={'run':latest_execution,'versions':latest_execution.export_snapshot.get('versions',[]),
+                 'stale': latest_execution.export_snapshot.get('fingerprint') != export_snapshot()['fingerprint'],
+                 'older_link':bool(requested_execution and str(latest_execution.pk)!=requested_execution),
+                 'year_mismatch':bool(query.getlist('year') and str(latest_execution.parameters.get('fact_year')) not in query.getlist('year'))}
     return render(request, 'admin_motivation/reports/report.html', {
-        'kind': kind, 'definition': CATALOG[kind], 'filters': filters, 'query': query,
+        'execution_receipt':receipt, 'kind': kind, 'definition': CATALOG[kind], 'filters': filters, 'query': query,
         'selected_parameters': selected_parameters, 'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
         'subdivisions': Subdivision.objects.none() if access_scope else Subdivision.objects.all(),
         'scope': query.get('scope','subdivisions'),
