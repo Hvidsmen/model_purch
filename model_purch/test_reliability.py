@@ -38,6 +38,44 @@ class LocalDatabaseTests(SimpleTestCase):
                 with self.assertRaisesRegex(RuntimeError, 'Исходная ошибка копирования'):
                     backup_sqlite(source_path, root / 'backups')
 
+    def test_backup_reports_copy_and_check_and_verifies_data(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / 'live.sqlite3'
+            with sqlite3.connect(source) as database:
+                database.execute('CREATE TABLE example (value TEXT)')
+                database.execute('INSERT INTO example VALUES (?)', ('x' * 3000000,))
+                database.commit()
+            output = []
+            destination = backup_sqlite(source, root / 'backups', notify=output.append)
+            self.assertTrue(any('100.0%' in line for line in output))
+            self.assertTrue(any('Starting integrity check' in line for line in output))
+            self.assertIn('Backup verified', output[-1])
+            with sqlite3.connect(destination) as restored:
+                self.assertEqual(restored.execute('SELECT length(value) FROM example').fetchone()[0], 3000000)
+
+    def test_backup_reports_busy_status_and_throttles_progress(self):
+        with TemporaryDirectory() as directory:
+            root = Path(directory)
+            source_path = root / 'source.sqlite3'
+            source_path.touch()
+            source, target = Mock(), Mock()
+            target.execute.return_value.fetchone.return_value = ('ok',)
+            def copy(target, pages, progress):
+                progress(5, 100, 100)  # SQLITE_BUSY
+                progress(0, 50, 100)  # SQLITE_OK
+                progress(101, 0, 100)  # SQLITE_DONE
+            source.backup.side_effect = copy
+            output = []
+            with patch('model_purch.services.backups.sqlite3.connect', side_effect=[source, target]), patch('model_purch.services.backups.monotonic', return_value=100):
+                backup_sqlite(source_path, root / 'backups', notify=output.append)
+            self.assertTrue(any('waiting for SQLite lock' in line for line in output))
+            self.assertFalse(any('50.0%' in line for line in output))
+            self.assertTrue(any('100.0%' in line for line in output))
+            target.set_progress_handler.assert_any_call(None, 0)
+            source.close.assert_called_once()
+            target.close.assert_called_once()
+
     def test_environment_persistent_config_and_default_resolve_same_path(self):
         with TemporaryDirectory() as directory, patch.dict(os.environ, {}, clear=True):
             root = Path(directory)

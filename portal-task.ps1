@@ -66,9 +66,12 @@ if ($Action -eq 'install') {
 }
 $task = Get-PortalTask
 if ($Action -eq 'status') {
-    $task | Select-Object TaskName, State
-    Get-ScheduledTaskInfo -InputObject $task | Select-Object LastRunTime, LastTaskResult, NextRunTime
+    $task | Format-List TaskName, State | Out-Host
+    Get-ScheduledTaskInfo -InputObject $task | Format-List LastRunTime, LastTaskResult, NextRunTime | Out-Host
     Write-Host "Log: $localDirectory\portal-task.log"
+    if (Test-Path -LiteralPath "$localDirectory\portal-task.log") {
+        Get-Content -LiteralPath "$localDirectory\portal-task.log" -Encoding UTF8 -Tail 12 | Out-Host
+    }
     exit 0
 }
 if ($Update) {

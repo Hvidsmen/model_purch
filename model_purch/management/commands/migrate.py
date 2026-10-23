@@ -22,7 +22,10 @@ class Command(DjangoMigrate):
                 self.stdout.write(f'Есть изменения схемы. Создание и проверка резервной копии SQLite ({size_mb:.1f} МБ)…')
                 self.stdout.flush()
                 try:
-                    path = backup_sqlite(name, settings.BASE_DIR / '.local' / 'backups')
+                    def report(message):
+                        self.stdout.write(message)
+                        self.stdout.flush()
+                    path = backup_sqlite(name, settings.BASE_DIR / '.local' / 'backups', notify=report)
                 except Exception as error:
                     raise CommandError(f'Миграции остановлены: резервная копия не создана: {error}') from error
                 self.stdout.write(f'Резервная копия перед миграциями: {path}')
