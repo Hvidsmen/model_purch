@@ -202,6 +202,19 @@ def dashboard_blocks(rows, group=False, period_rows=()):
     return result
 
 
+def department_execution(rows, values, blocks):
+    """Use the same full-subdivision data as the dashboard's execution header."""
+    for value_offset, block_offset, suffix in ((0, 0, 'Q'), (4, 8, 'Y')):
+        plan_key, fact_key = 'СуммаПланUSD_S_' + suffix, 'СуммаОтгрузокUSD_S_' + suffix
+        plan = total(rows, plan_key) if any(row.get(plan_key) is not None for row in rows) else None
+        fact = total(rows, fact_key) if any(row.get(fact_key) is not None for row in rows) else None
+        percentage = ratio(fact, plan) if fact is not None and plan is not None else None
+        remaining = max(plan - fact, 0) or None if plan is not None and fact is not None else None
+        values[value_offset + 1], values[value_offset + 2] = remaining, percentage
+        for index, value in ((1, remaining), (2, plan), (3, fact), (4, percentage), (5, plan), (6, fact)):
+            blocks[block_offset + index]['value'] = value
+
+
 def manager_report(rows, period_rows=()):
     sections = []
     grouped = defaultdict(list)
@@ -209,9 +222,19 @@ def manager_report(rows, period_rows=()):
     for label, subset in sorted(grouped.items()):
         groups = defaultdict(list)
         for row in subset: groups[row.get('ГруппаПлановПродаж') or '—'].append(row)
-        sections.append({'label': label, 'open': label.strip().casefold() != 'подразделение',
+        sections.append({'label': label, 'open': label.strip().casefold() not in {'подразделение', 'подразделение(глобально)'},
             'values': manager_metrics(subset, True), 'blocks': dashboard_blocks(subset, True, [row for row in period_rows if row.get('VariationCalculate') == label]), 'children': [{'label': name, 'values': manager_metrics(items, True), 'blocks': dashboard_blocks(items, True, [row for row in period_rows if row.get('VariationCalculate') == label and (row.get('ГруппаПлановПродаж') or '—') == name])} for name, items in sorted(groups.items())]})
-    return {'totals': manager_metrics(rows), 'total_blocks': dashboard_blocks(rows, period_rows=period_rows), 'sections': sections,
+    from .pilot_formula import GLOBAL_SUBDIVISION
+    for section in sections:
+        if section['label'] == GLOBAL_SUBDIVISION:
+            department_execution(rows, section['values'], section['blocks'])
+            for child in section['children']:
+                department_execution(rows, child['values'], child['blocks'])
+    totals, total_blocks = manager_metrics(rows), dashboard_blocks(rows, period_rows=period_rows)
+    payout_modes = {row.get('VariationCalculate') for row in rows if any(row.get(key) is not None for key in ('СуммаМотивацииUSDQ', 'СуммаМотивацииUSDQ_Y', 'СуммаМотивацииUSDY_Y'))}
+    if payout_modes == {GLOBAL_SUBDIVISION}:
+        department_execution(rows, totals, total_blocks)
+    return {'totals': totals, 'total_blocks': total_blocks, 'sections': sections,
         'division_ratios': [ratio(total(rows, 'СуммаОтгрузокUSD_S_Q'), total(rows, 'СуммаПланUSD_S_Q')),
                             ratio(total(rows, 'СуммаОтгрузокUSD_S_Y'), total(rows, 'СуммаПланUSD_S_Y'))]}
 

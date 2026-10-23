@@ -130,3 +130,46 @@ def merge_subdivisions(request):
         'branches': branches, 'pair_source': pair_source, 'pair_target': pair_target, 'versions': GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk'),
         'selected_version': str(selected), 'values': data, 'selected_sources': source_ids, 'priority_source': priority_source, 'preview': info if preview_token else None, 'preview_token': preview_token, 'errors': errors,
         'logs': SubdivisionMergeLog.objects.select_related('source', 'target', 'version').order_by('-pk')[:20]})
+
+
+@require_http_methods(['POST'])
+def reopen_coefficient_version(request):
+    admin_required(request)
+    from .services.version_reopen import reopen_version
+    try:
+        if request.POST.get('confirm') != 'yes':
+            raise ValidationError('Подтвердите возврат версии в черновик.')
+        version = reopen_version(request.user, request.POST.get('version'), request.POST.get('revision'), request.POST.get('reason', ''))
+        messages.success(request, 'Версия возвращена в черновик. Прежние значения сохранены в журнале возвратов. Уже выполненные расчёты и MS SQL автоматически не изменены: после исправлений утвердите версию, повторите выгрузку и расчёт.')
+        return redirect(reverse('global_coeff_admin_motivation') + f'?version={version.pk}')
+    except (ValidationError, ValueError, TypeError) as error:
+        messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Проверьте выбранную версию.')
+        return redirect(reverse('global_coeff_admin_motivation'))
+
+
+@require_http_methods(['POST'])
+def bulk_coefficient_formula(request):
+    admin_required(request)
+    from .services.bulk_formula import apply_formula
+    from .models import VariationCalculate
+    subdivision = request.POST.get('subdivision')
+    route = reverse('coeff_subdivisions_admin_motivation', args=[subdivision]) if subdivision and subdivision.isdigit() else reverse('global_coeff_admin_motivation')
+    try:
+        count, cells = apply_formula(request.POST.get('version'), request.POST.get('revision'), request.POST.getlist('goods'), request.POST.get('variation'), request.POST.getlist('kinds'), subdivision)
+        messages.success(request, f'Формула применена к товарам: {count}, ячеек коэффициентов: {cells}. Проценты коэффициентов сохранены.')
+    except (ValidationError, VariationCalculate.DoesNotExist, ValueError, TypeError) as error:
+        messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Проверьте выбранную формулу и товары.')
+    version = request.POST.get('version', '')
+    return redirect(route + (f'?version={version}' if version.isdigit() else ''))
+
+
+@require_http_methods(['GET'])
+def version_reopen_snapshot(request, log_id):
+    admin_required(request)
+    import json
+    from django.http import HttpResponse
+    from .models import VersionReopenLog
+    log = get_object_or_404(VersionReopenLog, pk=log_id)
+    response = HttpResponse(json.dumps(log.snapshot, ensure_ascii=False, indent=2), content_type='application/json; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="version-{log.version_id}-before-reopen-{log.pk}.json"'
+    return response

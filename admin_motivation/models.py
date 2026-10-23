@@ -764,3 +764,11 @@ class DiscountSegment(models.Model):
         result = super().delete(*args, **kwargs)
         touch_version(self.version_id)
         return result
+
+class VersionReopenLog(models.Model):
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='reopen_history')
+    actor = models.ForeignKey('auth.User', on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    reason = models.TextField()
+    snapshot = models.JSONField()
+    restored_version_ids = models.JSONField(default=list)

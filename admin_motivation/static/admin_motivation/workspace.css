@@ -233,3 +233,12 @@ body{background:#f4f6fa!important;color:#334155}
 .content-wrapper .coefficient-filters #coefficient-visible-count{position:absolute;top:16px;right:14px;grid-column:auto}
 .content-wrapper #add-product-details:not([open]){padding:7px 14px;margin-top:8px}
 @media(max-width:600px){.content-wrapper .content:has(#coefficient-table) h1{padding-right:0}.content-wrapper .coefficient-filters #coefficient-visible-count{position:static;grid-column:1 / -1;justify-self:start}}
+.bulk-formula{margin:6px 0 10px;padding:10px 12px;border:1px solid #dcd2f1;border-radius:7px;background:#faf8fe;font-size:14px}
+.bulk-formula>summary{cursor:pointer;color:#6550c4;font-weight:600}
+.bulk-formula p{font-size:13px;color:#67748c;margin:10px 0}
+.bulk-formula-controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.bulk-formula-controls label{display:flex;gap:6px;align-items:center;font-size:14px;margin:0}
+.bulk-formula-controls select{max-width:100%;padding:6px;border:1px solid #d7cbea;border-radius:6px;background:white;font-size:14px}
+.bulk-good{width:15px;height:15px;accent-color:#6550c4;vertical-align:middle;cursor:pointer}
+
+.director-delete{margin-top:8px;font-size:13px}.director-delete>summary{color:#b2445a;cursor:pointer}.director-delete form{padding:10px;border:1px solid #efccd4;border-radius:6px;margin-top:5px}.director-delete label{display:block;margin-bottom:8px}

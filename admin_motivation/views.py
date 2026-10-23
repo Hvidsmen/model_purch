@@ -1,3 +1,4 @@
+from .services.pilot_formula import default_variation
 from django.core.files.storage import FileSystemStorage
 from django.shortcuts import render
 
@@ -154,7 +155,7 @@ def gloabal_coeff_action(request):
                 Brand.create_from_dwh()
                 Subdivision.get_or_create()
             elif action == 'fill_coeff':
-                variation = VariationCalculate.objects.order_by('pk').first()
+                variation = default_variation()
                 if not variation:
                     raise ValidationError('Сначала добавьте уровень мотивации.')
                 for good in Goods.objects.all():
@@ -203,7 +204,9 @@ def gloabal_coeff_action(request):
                     key = f'global_coeff={coeff.pk}'
                     if key in request.POST:
                         coeff.motivation_coeff = coefficient_number(request.POST[key])
-                        coeff.variation_calculate = get_object_or_404(VariationCalculate, pk=request.POST[f'select_var_calc={coeff.goods_id}'])
+                        selected_formula = request.POST[f'select_var_calc={coeff.goods_id}']
+                        if request.POST.get(f'original_var_calc={coeff.goods_id}') != selected_formula:
+                            coeff.variation_calculate = get_object_or_404(VariationCalculate, pk=selected_formula)
                         coeff.manager_coeff = 1
                         coeff.save()
                 version.coefficients.filter(goods_id__in=deleted).delete()
@@ -279,7 +282,7 @@ def sub_act(request, subdivision):
                     if key in request.POST:
                         coeff.motivation_coeff = coefficient_number(request.POST[key])
                         select = f'select_var_calc={coeff.goods_id}'
-                        if select in request.POST:
+                        if select in request.POST and request.POST.get(f'original_var_calc={coeff.goods_id}') != request.POST[select]:
                             coeff.variation_calculate = get_object_or_404(VariationCalculate, pk=request.POST[select])
                         coeff.manager_coeff = 1
                         coeff.save()
@@ -375,7 +378,7 @@ def download_coefficient_template(request, subdivision=None):
 def import_current_coefficients(upload, version, subdivision=None, employee=None):
     df = pd.read_excel(upload, skiprows=1)
     count = SegmentCoeff.objects.count()
-    variation = VariationCalculate.objects.order_by('pk').first()
+    variation = default_variation()
     if not variation or not count or len(df.columns) not in (4 + 2 * count, 9 + 2 * count, 10 + 2 * count):
         raise ValidationError('Файл не соответствует шаблону или не настроены уровни мотивации.')
     for _, row in df.iterrows():

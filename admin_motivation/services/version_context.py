@@ -28,13 +28,14 @@ def version_context(request, version_form=None):
         next_version = next((v for v in approved if v.effective_from > version.effective_from), None)
         version.effective_until = next_version.effective_from - timedelta(days=1) if next_version and version.status == 'approved' else None
         version.coefficient_count = counts.get(version.pk, 0)
+    last_approved = approved[-1] if approved else None
     minimum = latest.effective_from + timedelta(days=1) if latest else None
     form = version_form or GlobalCoeffVersionForm(initial={'source_version': latest.pk if latest else None,
         'effective_from': max(today(), minimum) if minimum else '2001-01-01'})
     if minimum:
         form.fields['effective_from'].widget.attrs['min'] = '2001-01-01'
-    return {'versions': versions, 'selected_version': selected, 'latest_version': latest,
-            'effective_version': effective_version(), 'version_form': form,
+    return {'versions': versions, 'selected_version': selected, 'latest_version': latest, 'reopen_logs': selected.reopen_history.select_related('actor').order_by('-pk')[:20] if selected else [],
+            'effective_version': effective_version(), 'last_approved_version': last_approved, 'version_form': form,
             'version_editable': bool(selected and selected.is_editable),
             'comparison_plans': SalesPlanScenario.objects.filter(is_deleted=False),
             'comparison_plan': request.session.get('motivation_comparison_plan'),

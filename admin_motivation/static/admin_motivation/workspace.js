@@ -21,7 +21,7 @@
         const main = document.getElementById(toolbar.dataset.form);
         const forms = [main, document.getElementById('addProductForm'), document.querySelector('#manager-details form')].filter(Boolean);
         const fields = forms.flatMap(form => [...form.querySelectorAll('input:not([type=hidden]):not([type=file]), select')]
-            .filter(input => !input.matches(':disabled') && input.name !== 'selected_subdivisions'));
+            .filter(input => !input.matches(':disabled, .bulk-good') && input.name !== 'selected_subdivisions'));
         const original = new Map();
         const normalize = field => {
             if (field.type === 'checkbox') return field.checked;
@@ -97,6 +97,7 @@
             error.hidden = true;
             const action = event.submitter?.value;
             if (form.id === 'director-employee-picker') { leaving = true; queueMicrotask(() => { if (event.defaultPrevented) leaving = false; }); return; }
+            if (form.id === 'bulk-variation-form' && changed().length) { event.preventDefault(); fail('Сначала сохраните или отмените правки коэффициентов, затем примените формулу.'); return; }
             let warning;
             if (action === 'copy_to_director') warning = 'Заменить коэффициенты выбранного получателя сохранёнными значениями текущего директора? Остальные сотрудники и группы сохранятся.';
             if (action === 'copy_from_global') { const group = form.querySelector('[name=copy_groups]')?.selectedOptions?.[0]?.textContent || 'Политики и продажи'; warning = `Заменить коэффициенты группы «${group}» глобальными значениями выбранной версии? Остальные группы сохраняются. Несохранённые правки будут потеряны.`; }

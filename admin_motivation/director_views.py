@@ -54,6 +54,24 @@ def coefficient_group_copy(request):
 @require_http_methods(['GET', 'POST'])
 def director_directory(request):
     from .services.director_import import template, import_directors
+    if request.method == 'POST' and request.POST.get('action') == 'delete':
+        from .operation_views import admin_required
+        from django.db.models.deletion import ProtectedError
+        admin_required(request)
+        employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('employee'))
+        if request.POST.get('confirm') != 'yes':
+            messages.error(request, 'Подтвердите удаление директора.')
+        else:
+            try:
+                with transaction.atomic():
+                    employee = DirectorEmployee.objects.select_for_update().get(pk=employee.pk)
+                    employee.delete()
+                messages.success(request, 'Директор удалён из справочника.')
+            except DirectorEmployee.DoesNotExist:
+                messages.info(request, 'Директор уже удалён.')
+            except ProtectedError:
+                messages.error(request, 'Директор используется в коэффициентах. Удаление запрещено для сохранения истории. При необходимости измените привязку к филиалам.')
+        return redirect('motivation_director_directory')
     if request.method == 'GET' and request.GET.get('template'):
         response = HttpResponse(template(), content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
         response['Content-Disposition'] = 'attachment; filename="directors.xlsx"'

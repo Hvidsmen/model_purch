@@ -42,6 +42,46 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('#id_segments-0-o4')).to_have_value('24.0000')
         self.assertEqual(self.errors, [])
 
+    def test_bulk_formula_reopen_and_unused_director_delete(self):
+        from playwright.sync_api import expect
+        from .models import DirectorEmployee, VersionReopenLog
+        from .services.pilot_formula import GLOBAL_SUBDIVISION
+        from .services.approval import review_approval, approve_review
+        def setup_second():
+            original = GlobalCoeff.objects.get(pk=self.coeff.pk)
+            good = Goods.objects.create(goods_key='OtherKey', planning_group_sales='Other', group='Other ERP', brand='Other brand')
+            row = GlobalCoeff.objects.create(version=self.first, goods=good, type_coeff=original.type_coeff, segment=original.segment, variation_calculate=original.variation_calculate, motivation_coeff=.2, manager_coeff=1)
+            return good.pk, row.pk, VariationCalculate.objects.get(variation_name=GLOBAL_SUBDIVISION).pk
+        good, row, formula = self.db(setup_second)
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        self.page.locator('.bulk-formula>summary').click()
+        self.page.locator('#coefficient-search').fill('OtherKey')
+        self.page.locator('[data-bulk-visible]').click()
+        expect(self.page.locator('[data-bulk-count]')).to_have_text('Выбрано: 1')
+        expect(self.page.locator('#editor-dirty-count')).to_have_text('Изменено: 0')
+        self.page.select_option('#bulk-variation-form select[name=variation]', str(formula))
+        self.page.get_by_role('button',name='Применить формулу',exact=True).click()
+        expect(self.page.locator('#version-panel')).to_contain_text('Формула применена')
+        self.assertEqual(self.db(lambda: GlobalCoeff.objects.get(pk=row).variation_calculate_id),formula)
+        self.assertNotEqual(self.db(lambda: GlobalCoeff.objects.get(pk=self.coeff.pk).variation_calculate_id),formula)
+        self.db(lambda: approve_review(review_approval(GlobalCoeffVersion.objects.get(pk=self.first.pk))['token']))
+        self.page.reload()
+        self.page.locator('#version-reopen>summary').click()
+        self.page.fill('#version-reopen input[name=reason]','Browser correction')
+        self.page.locator('#version-reopen input[name=confirm]').check()
+        self.page.get_by_role('button',name='Вернуть в черновик',exact=True).click()
+        expect(self.page.locator('#version-panel')).to_contain_text('Версия возвращена')
+        self.assertTrue(self.db(lambda: VersionReopenLog.objects.filter(version=self.first).exists()))
+        director = self.db(lambda: DirectorEmployee.objects.create(full_name='Delete browser director').pk)
+        self.page.goto(self.live_server_url + reverse('motivation_director_directory'))
+        record = self.page.locator('tbody tr').filter(has_text='Delete browser director')
+        record.locator('.director-delete>summary').click()
+        record.locator('input[name=confirm]').check()
+        record.get_by_role('button',name='Подтвердить удаление',exact=True).click()
+        expect(self.page.get_by_role('status')).to_contain_text('Директор удалён')
+        self.assertFalse(self.db(lambda: DirectorEmployee.objects.filter(pk=director).exists()))
+        self.assertEqual(self.errors, [])
+
     def test_admin_calculation_job_create_and_run(self):
         from unittest.mock import patch
         from playwright.sync_api import expect
