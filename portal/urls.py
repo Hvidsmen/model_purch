@@ -38,6 +38,7 @@ urlpatterns = ([
                    path("ref_editor/", include("RefEditor.urls")),
                    path("", include("base.urls")),
                    path("admin_motivation", include("admin_motivation.urls")),
+                   path("dashboards/", include("dashboards.urls")),
                    path("model_purch/", include("model_purch.urls")),
 
 

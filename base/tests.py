@@ -12,7 +12,7 @@ class HomePageTests(TestCase):
         self.assertContains(response, f'href="{reverse("index")}"')
         self.assertContains(response, f'href="{reverse("re_ref_store_group")}"')
 
-    def test_shared_header_has_only_two_projects_and_legacy_links_are_on_home(self):
+    def test_shared_header_has_three_projects_and_legacy_links_are_on_home(self):
         from html.parser import HTMLParser
         class Projects(HTMLParser):
             def __init__(self):
@@ -27,7 +27,7 @@ class HomePageTests(TestCase):
             response = self.client.get(reverse(name))
             self.assertEqual(response.status_code, 200)
             parser = Projects(); parser.feed(response.content.decode())
-            self.assertEqual(parser.links, [reverse('scenario_list'), reverse('global_coeff_admin_motivation')])
+            self.assertEqual(parser.links, [reverse('scenario_list'), reverse('global_coeff_admin_motivation'), reverse('dashboards_index')])
             self.assertContains(response, 'id="portal-main"')
             self.assertContains(response, 'id="portal-sidebar"')
 

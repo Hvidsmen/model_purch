@@ -42,6 +42,7 @@ INSTALLED_APPS = [
     'model_purch',
     'RefEditor',
     'base',
+    'dashboards',
     'crispy_forms',
     'crispy_bootstrap5',
     'django.contrib.admin',

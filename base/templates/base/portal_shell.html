@@ -17,6 +17,7 @@
     <nav class="portal-projects" aria-label="Проекты портала">
         {% if portal_can_purchases %}<a href="{% url 'scenario_list' %}" {% if '/model_purch/' in request.path %}aria-current="page"{% endif %}>Модель закупок</a>{% endif %}
         {% if portal_can_motivation %}<a href="{% if portal_motivation_landing_reports %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}" {% if '/admin_motivation' in request.path %}aria-current="page"{% endif %}>Мотивация</a>{% endif %}
+        {% if portal_can_dashboards %}<a href="{% url 'dashboards_index' %}" {% if '/dashboards/' in request.path %}aria-current="page"{% endif %}>Дашборды</a>{% endif %}
     </nav>
     {% if request.user.is_authenticated %}<span class="portal-user">{{ request.user.get_full_name|default:request.user.username }}<small>{{ portal_role_label }}</small></span><form class="portal-logout" method="post" action="{% url 'portal_logout' %}">{% csrf_token %}<button type="submit">Выйти</button></form>{% endif %}
 </header>

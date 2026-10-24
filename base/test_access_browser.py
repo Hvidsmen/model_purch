@@ -132,8 +132,8 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                         page.fill('#id_password', 'browser-test-password')
                         page.get_by_role('button', name='Войти', exact=True).click()
                         page.wait_for_url(self.live_server_url + '/')
-                        self.assertEqual(page.locator('.portal-projects a').count(), 2 if role == ADMIN else 1)
-                        self.assertEqual(page.locator('.portal-project-card').count(), 2 if role == ADMIN else 1)
+                        self.assertEqual(page.locator('.portal-projects a').count(), 3 if role == ADMIN else 1)
+                        self.assertEqual(page.locator('.portal-project-card').count(), 3 if role == ADMIN else 1)
                         if role != ADMIN:
                             denied = '/model_purch/scenarios/' if role == DIRECTOR else '/admin_motivationglobal_coeff'
                             self.assertEqual(page.goto(self.live_server_url + denied).status, 403)
@@ -201,7 +201,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('.portal-project-card')).to_have_count(1)
                 expect(page.locator('.portal-project-card')).to_contain_text('Мотивация')
                 page.get_by_role('button', name='Вернуться к администратору', exact=True).click()
-                expect(page.locator('.portal-project-card')).to_have_count(2)
+                expect(page.locator('.portal-project-card')).to_have_count(3)
                 expect(page.locator('.portal-user')).to_contain_text(admin.username)
             finally:
                 browser.close()

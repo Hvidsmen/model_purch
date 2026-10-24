@@ -31,6 +31,8 @@ class PortalAccessMiddleware:
         project = None
         if module.startswith('model_purch.'):
             project = 'purchases'
+        elif module.startswith('dashboards.'):
+            project = 'dashboards'
         elif module.startswith('admin_motivation.'):
             project = 'motivation'
         elif module.startswith(('PlanningSystem.', 'RefEditor.')) or (match and match.app_name == 'admin'):

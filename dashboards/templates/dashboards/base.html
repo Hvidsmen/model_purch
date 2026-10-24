@@ -1,0 +1,6 @@
+{% extends 'base/portal_shell.html' %}{% load static %}
+{% block title %}Дашборды · DA портал{% endblock %}
+{% block project_name %}Дашборды{% endblock %}
+{% block module_css %}<link rel="stylesheet" href="{% static 'dashboards/dashboards.css' %}?v=20261024">{% endblock %}
+{% block module_navigation %}<nav class="portal-section-nav"><a href="{% url 'dashboards_index' %}">Все дашборды</a><a href="{% url 'dealer_dashboard' %}" {% if request.resolver_match.url_name == 'dealer_dashboard' %}aria-current="page"{% endif %}>Динамика дилерской базы</a></nav>{% endblock %}
+{% block portal_content %}{% block dashboard_content %}{% endblock %}{% endblock %}
