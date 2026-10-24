@@ -31,8 +31,8 @@ def affected_versions(version):
 
 
 def review_approval(version, plan=None, baseline=None, subdivision=None, changes=None, deleted=None):
-    if version.status != 'draft':
-        raise ValidationError('Утвердить можно только черновик.')
+    if version.status not in ('draft', 'finance_review', 'director_review'):
+        raise ValidationError('Утвердить можно только черновик или набор на проверке.')
     normalized, deleted = proposed_changes(version, subdivision, changes, deleted)
     if not (version.coefficients.exists() or version.subdivision_coefficients.exists() or GlobalDirectorCoeff.objects.filter(version=version).exists() or SubdivisionDirectorCoeff.objects.filter(version=version).exists()):
         raise ValidationError('Нельзя утвердить пустой набор коэффициентов.')
@@ -58,7 +58,7 @@ def review_approval(version, plan=None, baseline=None, subdivision=None, changes
 
 
 @transaction.atomic
-def approve_review(token, confirm_overwrite=False):
+def approve_review(token, confirm_overwrite=False, *, actor=None, override_reason='', workflow_review=None):
     from ..models import Subdivision
     try:
         payload = signing.loads(token, salt=SALT, max_age=600)
@@ -74,7 +74,27 @@ def approve_review(token, confirm_overwrite=False):
     plan = SalesPlanScenario.objects.select_for_update().get(pk=payload['plan']) if payload['plan'] else None
     if plan and plan.is_deleted:
         raise ValidationError('Сценарий плана удалён. Повторите подготовку утверждения с другим сценарием.')
-    if version.status != 'draft' or state_digest(version, plan) != payload['state']:
+    if actor is not None:
+        from base.access import role_for, ADMIN, DIRECTOR
+        role = role_for(actor, 'motivation')
+        if version.status == 'draft' and not version.is_editable:
+            raise ValidationError('Утверждать можно только последний редактируемый черновик.')
+        if role == ADMIN:
+            if not override_reason.strip():
+                raise ValidationError('Укажите причину утверждения без прохождения проверок.')
+        elif role != DIRECTOR or version.status != 'director_review' or workflow_review is None:
+            from django.core.exceptions import PermissionDenied
+            raise PermissionDenied
+        if version.status in ('finance_review', 'director_review') and workflow_review is None:
+            raise ValidationError('Набор находится на проверке. Примите решение на странице «На проверке».')
+        if workflow_review is not None:
+            from .review_workflow import validate_frozen
+            if workflow_review.version_id != version.pk:
+                raise ValidationError('Проверка относится к другой версии.')
+            validate_frozen(workflow_review)
+    elif version.status != 'draft':
+        raise ValidationError('Набор на проверке утверждается через маршрут согласования.')
+    if version.status not in ('draft', 'finance_review', 'director_review') or state_digest(version, plan) != payload['state']:
         raise ValidationError('Версии, коэффициенты или план изменились после просмотра. Повторите сравнение.')
     affected = list(affected_versions(version))
     if (affected or payload.get('baseline') and GlobalCoeffVersion.objects.get(pk=payload['baseline']).effective_from >= version.effective_from) and not confirm_overwrite:
@@ -91,6 +111,9 @@ def approve_review(token, confirm_overwrite=False):
     if affected:
         models.QuerySet.update(GlobalCoeffVersion.objects.filter(pk__in=[v.pk for v in affected]), status='superseded', replaced_by=version)
     models.QuerySet.update(GlobalCoeffVersion.objects.filter(pk=version.pk), status='approved', approved_at=timezone.now(), revision=models.F('revision') + 1)
+    if actor is not None:
+        from .review_workflow import label
+        payload['summary']['decision'] = {'actor': label(actor), 'actor_id': actor.pk, 'role': role, 'reason': override_reason.strip(), 'review_id': workflow_review.pk if workflow_review else None, 'route': 'administrator_override' if role == ADMIN else 'finance_director'}
     MotivationApproval.objects.create(version=version, plan=plan, baseline_id=payload['baseline'],
                                      replaced_ids=[v.pk for v in affected], summary=payload['summary'])
     version.refresh_from_db()

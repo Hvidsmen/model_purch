@@ -25,6 +25,8 @@ def effective_coefficients(on_date=None):
 def create_version(effective_from, title='', source_version=None, allow_overwrite=False):
     with transaction.atomic():
         latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
+        if latest and latest.status in ('finance_review', 'director_review'):
+            raise ValidationError('Набор находится на проверке. Сначала завершите проверку или верните его в черновик.')
         if latest and source_version != latest.pk:
             raise ValidationError('Появилась новая версия. Обновите страницу перед созданием следующей.')
         version = GlobalCoeffVersion(effective_from=effective_from, title=title)
@@ -62,6 +64,8 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
 @transaction.atomic
 def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, employees_by_subdivision=None, user=None):
     from base.access import can_access
+    if version.status in ('finance_review', 'director_review'):
+        raise ValidationError('Набор на проверке закрыт для изменений.')
     historical = not version.is_editable
     if historical and not (user and can_access(user, 'motivation_admin')):
         raise ValidationError('Историческая версия доступна только для просмотра.')
@@ -132,7 +136,7 @@ def delete_draft(version_id):
         models.QuerySet.delete(SubdivisionDirectorCoeff.objects.filter(version=version))
         models.QuerySet.delete(GlobalCoeffVersion.objects.filter(pk=version.pk))
     except ProtectedError:
-        raise ValidationError('Версия используется в результатах расчёта, утверждения или истории копирования. Удаление запрещено.')
+        raise ValidationError('Версия используется в результатах расчёта, проверках, утверждениях или истории копирования. Удаление запрещено.')
     return latest_version()
 
 

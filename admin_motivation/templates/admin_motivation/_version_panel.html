@@ -35,12 +35,13 @@
 @media(max-width:800px){#version-panel .version-tools{width:100%;padding-top:0;justify-content:flex-start}#version-panel .version-controls>form{width:100%}#version-panel .version-picker{flex:1;min-width:0}#version-panel select{width:100%}#version-panel .version-tool-content{padding:12px}}
 </style>
 <div class="container-fluid content" id="version-panel">
-    <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование черновика{% elif selected_version.status == 'approved' %}Только просмотр{% else %}Историческая версия · Только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Действует сейчас{% else %} · Утверждена на сегодня: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
+    <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование черновика{% elif selected_version.status == 'approved' %}Только просмотр{% elif selected_version.status == 'finance_review' or selected_version.status == 'director_review' %}Проверка · Только просмотр{% else %}Историческая версия · Только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Действует сейчас{% else %} · Утверждена на сегодня: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
     {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</div>{% endfor %}
     <div class="d-flex align-items-center gap-3 flex-wrap mb-3" id="version-approval-actions">
         <strong>Статус: {{ selected_version.get_status_display }}</strong>
         {% if selected_version.status == 'draft' %}
-        {% if director_page %}<a class="btn btn-primary" href="{% url 'global_coeff_admin_motivation' %}?version={{ selected_version.pk }}">Утверждение общего набора…</a>{% else %}<button type="button" class="btn btn-primary" id="approval-review">Утвердить версию…</button>{% endif %}
+        {% if version_editable %}<a class="btn btn-primary" href="{% url 'motivation_reviews' %}?version={{ selected_version.pk }}">Отправить на проверку</a>{% endif %}
+        {% if portal_can_administer_motivation and version_editable %}{% if director_page %}<a class="btn btn-outline-primary" href="{% url 'global_coeff_admin_motivation' %}?version={{ selected_version.pk }}">Утверждение общего набора…</a>{% else %}<button type="button" class="btn btn-outline-primary" id="approval-review">Утвердить без проверок…</button>{% endif %}{% endif %}
         {% if selected_version.effective_from|date:'Y-m-d' != '2001-01-01' %}
         <form method="post" action="{% url 'gb_act' %}" onsubmit="return confirm('Удалить этот черновик вместе с глобальными коэффициентами, коэффициентами подразделений, руководителей и директоров? Восстановить его будет нельзя.');" class="m-0">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}
             {% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="confirm_delete" value="yes">
@@ -49,6 +50,8 @@
         {% if portal_motivation_readonly %}</fieldset>{% endif %}</form>
         {% endif %}
         <span class="text-muted small">Утверждается весь набор: глобальные коэффициенты, подразделения, руководители и директора.</span>
+        {% elif selected_version.status == 'finance_review' or selected_version.status == 'director_review' %}
+        <a class="btn btn-primary" href="{% url 'motivation_reviews' %}?version={{ selected_version.pk }}">Открыть проверку</a><span class="text-muted small">Набор закрыт для редактирования до решения проверяющих.</span>
         {% elif selected_version.status == 'approved' %}
         <span class="text-muted small">Версия уже утверждена. Для изменения коэффициентов создайте новую версию.</span>
         {% else %}
@@ -63,7 +66,7 @@
         </select></div><button class="btn btn-primary">Открыть</button>
     </form>
 <div class="version-tools" aria-label="Действия с версиями">
-    <details id="create-version-details" class="secondary-block version-tool" {% if version_form.is_bound %}open{% endif %}>
+    {% if portal_can_edit_motivation and version_creation_available %}<details id="create-version-details" class="secondary-block version-tool" {% if version_form.is_bound %}open{% endif %}>
     <summary>Создать версию</summary><div class="version-tool-content">
     <form method="post" action="{% url 'gb_act' %}" id="createVersionForm" title="Новая версия копирует глобальные коэффициенты и настройки всех подразделений">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}
         {% csrf_token %}{{ version_form.source_version }}{% if sub %}<input type="hidden" name="return_subdivision" value="{{ sub.pk }}">{% endif %}{% if employee and not director_page %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% if director_page %}<input type="hidden" name="return_directors" value="{% if local %}local{% else %}global{% endif %}">{% if employee %}<input type="hidden" name="return_employee" value="{{ employee.pk }}">{% endif %}{% endif %}
@@ -75,7 +78,7 @@
             <button class="btn btn-primary" name="action_button" value="create_version">Создать новую версию</button>
         </div>{{ version_form.source_version.errors }}{{ version_form.non_field_errors }}
     {% if portal_motivation_readonly %}</fieldset>{% endif %}</form></div>
-    </details>
+    </details>{% endif %}
     {% if version_editable and not director_page %}
     <details id="copy-version-details" class="secondary-block version-tool"><summary>Копировать коэффициенты из версии</summary><div class="version-tool-content">
     <form method="post" action="{% url 'gb_act' %}" onsubmit="return confirm('Заменить сохранённые коэффициенты этой страницы значениями выбранной версии? Несохранённые изменения будут потеряны. Дата версии не меняется.');">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}
@@ -93,6 +96,7 @@
 </div>
     </div>
 
+    {% if approval_history %}<details class="secondary-block"><summary>История утверждений</summary><div class="table-wrapper"><table class="table"><thead><tr><th>Дата, МСК</th><th>Кто утвердил</th><th>Маршрут / причина</th></tr></thead><tbody>{% for approval in approval_history %}<tr><td>{% timezone 'Europe/Moscow' %}{{ approval.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ approval.summary.decision.actor|default:'Прежнее утверждение' }}<br>{{ approval.summary.decision.role }}</td><td>{% if approval.summary.decision.route == 'administrator_override' %}Администратор · без прохождения проверок{% elif approval.summary.decision.route == 'finance_director' %}Финансист → Генеральный директор{% endif %}{% if approval.summary.decision.reason %}<br>{{ approval.summary.decision.reason }}{% endif %}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
     {% if portal_can_administer_motivation and selected_version.pk == last_approved_version.pk %}
     <details class="secondary-block" id="version-reopen"><summary>Вернуть последнюю утверждённую версию в черновик</summary>
     <p class="small text-muted">Доступно, если более нового черновика нет. Прежние коэффициенты сохранятся в журнале. Выполненные расчёты и настройки MS SQL не отзываются автоматически. Версии, заменённые этим утверждением, снова станут утверждёнными.</p>

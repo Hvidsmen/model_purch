@@ -201,7 +201,8 @@ def reopen_coefficient_version(request):
 
 @require_http_methods(['POST'])
 def bulk_coefficient_formula(request):
-    admin_required(request)
+    from base.access import motivation_editor_required
+    motivation_editor_required(request)
     from .services.bulk_formula import apply_formula, preview_formula
     from django.core import signing
     from hashlib import sha256

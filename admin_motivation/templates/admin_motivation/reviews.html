@@ -1,0 +1,16 @@
+{% extends 'admin_motivation/base.html' %}{% load tz %}
+{% block portal_content %}<div class="content-wrapper">{% include 'admin_motivation/_review_style.html' %}
+<main class="review-workspace">
+<header class="review-head"><div><span class="review-muted">Мотивация / Согласование модели</span><h1>На проверке</h1><p class="review-muted">Весь набор коэффициентов проходит проверку финансиста и утверждение генерального директора.</p></div></header>
+<div class="review-flow"><span>1 · Черновик</span><span>→ 2 · Финансист</span><span>→ 3 · Генеральный директор</span><span>→ 4 · Утверждено</span></div>
+{% for message in messages %}<p class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</p>{% endfor %}
+{% if can_submit %}<section class="review-card"><h2>Отправить набор на проверку</h2>
+{% if editable %}<form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ editable.pk }}"><input type="hidden" name="revision" value="{{ editable.revision }}">
+<div class="review-grid"><div><span class="review-muted">Черновик</span><p><strong>{{ editable }}</strong></p></div><label>Загруженный план продаж<select name="plan" required><option value="">Выберите план</option>{% for plan in plans %}<option value="{{ plan.pk }}" {% if plan.pk|stringformat:'s' == selected_plan %}selected{% endif %}>{{ plan.title }}</option>{% endfor %}</select></label></div>
+<label>Комментарий для проверяющих<textarea name="comment" placeholder="Что изменилось и на что обратить внимание">{{ submission_comment }}</textarea></label>
+<p class="review-note">Отправляются только сохранённые значения. После отправки редактирование закрывается. При возврате набор снова станет черновиком и потребует повторной проверки финансистом.</p>
+<button class="btn btn-primary" type="submit">Отправить финансисту</button> <a href="{% url 'global_coeff_admin_motivation' %}?version={{ editable.pk }}">К черновику →</a></form>
+{% else %}<p class="review-muted">Редактируемого черновика нет. Завершите текущую проверку или подготовьте новую версию.</p>{% endif %}</section>{% endif %}
+<section class="review-card"><h2>Отправленные наборы и история</h2><div class="review-scroll"><table class="review-table"><thead><tr><th>Версия / план</th><th>Последнее решение</th><th>Отправил</th><th>Дата отправки, МСК</th><th></th></tr></thead><tbody>{% for item in review_page %}<tr><td><strong>{{ item.version }}</strong><br><span class="review-muted">{{ item.plan.title }}</span></td><td><span class="review-badge">{{ item.last_event.get_action_display }}</span><br><span class="review-muted">{{ item.version.get_status_display }}</span></td><td>{{ item.actor_label }}</td><td>{% timezone 'Europe/Moscow' %}{{ item.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td><a href="{% url 'motivation_review' item.pk %}">Открыть →</a></td></tr>{% empty %}<tr><td colspan="5">Наборы на проверку ещё не отправляли.</td></tr>{% endfor %}</tbody></table></div>
+{% if review_page.has_previous %}<a href="?page={{ review_page.previous_page_number }}">← Назад</a>{% endif %} <span class="review-muted">Страница {{ review_page.number }} из {{ review_page.paginator.num_pages }}</span> {% if review_page.has_next %}<a href="?page={{ review_page.next_page_number }}">Далее →</a>{% endif %}</section>
+</main></div>{% endblock %}

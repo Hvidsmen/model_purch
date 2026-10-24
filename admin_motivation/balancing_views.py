@@ -31,8 +31,8 @@ def dataset(data):
 
 @require_http_methods(['GET', 'POST'])
 def balancing(request):
-    if not can_access(request.user, 'motivation_admin'):
-        return JsonResponse({'error': 'Балансировка доступна администратору Мотивации.'}, status=403) if request.method == 'POST' else HttpResponseForbidden('Доступно администратору Мотивации.')
+    if not can_access(request.user, 'motivation_editor'):
+        return JsonResponse({'error': 'Балансировка доступна администратору и моделятору Мотивации.'}, status=403) if request.method == 'POST' else HttpResponseForbidden('Доступно администратору Мотивации.')
     if request.method == 'GET':
         latest = GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk').first()
         editable = latest if latest and latest.is_editable else None

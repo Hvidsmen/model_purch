@@ -141,6 +141,8 @@ class VersionQuerySet(models.QuerySet):
 class GlobalCoeffVersion(models.Model):
     class Status(models.TextChoices):
         DRAFT = 'draft', 'Черновик'
+        FINANCE_REVIEW = 'finance_review', 'На проверке у финансиста'
+        DIRECTOR_REVIEW = 'director_review', 'На утверждении у генерального директора'
         APPROVED = 'approved', 'Утверждена'
         SUPERSEDED = 'superseded', 'Заменена'
 
@@ -822,3 +824,50 @@ class CoefficientBalanceLog(models.Model):
     parameters = models.JSONField(default=dict)
     result = models.JSONField(default=dict)
     fingerprint = models.CharField(max_length=64)
+
+
+class MotivationReview(models.Model):
+    """A submission is immutable; decisions are append-only events."""
+    objects = ApprovalQuerySet.as_manager()
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='reviews')
+    plan = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT)
+    baseline = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, null=True, blank=True, related_name='baseline_reviews')
+    submitted_by = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+    actor_label = models.CharField(max_length=255)
+    created_at = models.DateTimeField(auto_now_add=True)
+    fingerprint = models.CharField(max_length=64)
+    snapshot = models.JSONField()
+    changes = models.JSONField(default=list)
+    summary = models.JSONField(default=dict)
+    comment = models.TextField(blank=True)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            from django.core.exceptions import ValidationError
+            raise ValidationError('Отправленный набор сохраняется в истории без изменений.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('История проверок не удаляется.')
+
+
+class MotivationReviewEvent(models.Model):
+    objects = ApprovalQuerySet.as_manager()
+    review = models.ForeignKey(MotivationReview, on_delete=models.PROTECT, related_name='events')
+    actor = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+    actor_label = models.CharField(max_length=255)
+    actor_role = models.CharField(max_length=64)
+    action = models.CharField(max_length=20, choices=[('submitted', 'Отправлено финансисту'), ('agreed', 'Согласовано финансистом'), ('returned', 'Возвращено на доработку'), ('approved', 'Утверждено'), ('override', 'Утверждено администратором без проверок')])
+    comment = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            from django.core.exceptions import ValidationError
+            raise ValidationError('История решений не изменяется.')
+        return super().save(*args, **kwargs)
+
+    def delete(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        raise ValidationError('История решений не удаляется.')

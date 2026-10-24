@@ -9,12 +9,13 @@ SALES = 'Продажи'
 MOTIVATION_VIEWER = 'Смотрящий'
 FINANCIER = 'Финансист'
 ANALYST = 'Аналитик'
+MODELER = 'Моделятор'
 MOTIVATION_READONLY_ROLES = (MOTIVATION_VIEWER, FINANCIER)
 PERSONAL_ROLES = (POLITICIAN, SALES)
 DEPUTY_DIRECTOR = 'Зам. директора'
 BRANCH_DIRECTOR = 'Директор'
 REPORT_ROLES = (*PERSONAL_ROLES, DEPUTY_DIRECTOR, BRANCH_DIRECTOR)
-ROLES = (ADMIN, DIRECTOR, LOGISTICIAN, *PERSONAL_ROLES, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, MOTIVATION_VIEWER, FINANCIER, ANALYST)
+ROLES = (ADMIN, DIRECTOR, LOGISTICIAN, *PERSONAL_ROLES, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, MOTIVATION_VIEWER, FINANCIER, ANALYST, MODELER)
 
 
 def ensure_roles(**kwargs):
@@ -37,7 +38,7 @@ def legacy_role_for(user):
 
 
 PROJECT_ROLES = {
-    'motivation': (ADMIN, DIRECTOR, *REPORT_ROLES, *MOTIVATION_READONLY_ROLES),
+    'motivation': (ADMIN, MODELER, DIRECTOR, *REPORT_ROLES, *MOTIVATION_READONLY_ROLES),
     'purchases': (ADMIN, LOGISTICIAN),
     'dashboards': (ADMIN, ANALYST),
 }
@@ -68,6 +69,8 @@ def role_for(user, project=None):
 def can_access(user, project):
     if project == 'admin':
         return role_for(user) == ADMIN
+    if project == 'motivation_editor':
+        return role_for(user, 'motivation') in (ADMIN, MODELER)
     if project.endswith('_admin'):
         return role_for(user, project[:-6]) == ADMIN
     return role_for(user, project) is not None
@@ -86,8 +89,8 @@ def portal_access(request):
             'portal_can_dashboards': can_access(request.user, 'dashboards'),
             'portal_can_purchases': can_access(request.user, 'purchases'),
             'portal_can_motivation': can_access(request.user, 'motivation'),
-            'portal_financier': motivation_role == FINANCIER, 'portal_motivation_landing_reports': motivation_role in (*REPORT_ROLES, FINANCIER),
-            'portal_motivation_readonly': motivation_role in MOTIVATION_READONLY_ROLES, 'portal_can_view_motivation_settings': motivation_role in (ADMIN,*MOTIVATION_READONLY_ROLES), 'portal_reports_only': motivation_role in REPORT_ROLES, 'portal_can_plan_summary': motivation_role in (ADMIN, DIRECTOR, *MOTIVATION_READONLY_ROLES), 'portal_role_label': (role_for(request.user, active_project) or 'Нет доступа') if active_project else ADMIN if can_access(request.user, 'admin') else project_role_summary(request.user)}
+            'portal_can_edit_motivation': can_access(request.user, 'motivation_editor'), 'portal_can_review_motivation': motivation_role in (ADMIN, MODELER, DIRECTOR, FINANCIER), 'portal_motivation_modeler': motivation_role == MODELER, 'portal_financier': motivation_role == FINANCIER, 'portal_motivation_landing_reports': motivation_role in (*REPORT_ROLES, FINANCIER),
+            'portal_motivation_readonly': motivation_role in (*MOTIVATION_READONLY_ROLES, DIRECTOR), 'portal_can_view_motivation_settings': motivation_role in (ADMIN, MODELER, DIRECTOR, *MOTIVATION_READONLY_ROLES), 'portal_reports_only': motivation_role in REPORT_ROLES, 'portal_can_plan_summary': motivation_role in (ADMIN, MODELER, DIRECTOR, *MOTIVATION_READONLY_ROLES), 'portal_role_label': (role_for(request.user, active_project) or 'Нет доступа') if active_project else ADMIN if can_access(request.user, 'admin') else project_role_summary(request.user)}
 
 
 def motivation_viewer_read_request(request):
@@ -112,6 +115,8 @@ def motivation_viewer_read_request(request):
 def financier_read_request(request):
     """Finance can only read approved branch settings, discount segments and reports."""
     match = request.resolver_match
+    if match and match.url_name in {'motivation_reviews', 'motivation_review'}:
+        return True
     allowed = {
         'index_admin_motivation', 'coeff_subdivisions_admin_motivation',
         'motivation_directors_local', 'motivation_discount_segments',
@@ -126,3 +131,9 @@ def motivation_scopes(groups):
     scopes = PortalReportGroup.objects.filter(group__in=groups)
     eligible = [scope.pk for scope in scopes if assignments.get(scope.group_id, scope.portal_role) in PROJECT_ROLES['motivation']]
     return PortalReportGroup.objects.filter(pk__in=eligible)
+
+
+def motivation_editor_required(request):
+    from django.core.exceptions import PermissionDenied
+    if not can_access(request.user, 'motivation_editor') and not (request.method in ('GET', 'HEAD', 'OPTIONS') and can_access(request.user, 'motivation')):
+        raise PermissionDenied

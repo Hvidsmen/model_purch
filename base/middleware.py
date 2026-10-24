@@ -2,7 +2,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER, motivation_viewer_read_request, FINANCIER, financier_read_request
+from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER, motivation_viewer_read_request, FINANCIER, financier_read_request, DIRECTOR, MODELER
 
 
 class PortalAccessMiddleware:
@@ -48,6 +48,21 @@ class PortalAccessMiddleware:
             if json_request:
                 return JsonResponse({'error': 'Ваша роль не разрешает доступ к этому разделу.'}, status=403)
             return render(request, 'base/forbidden.html', status=403)
+        if project == 'motivation':
+            role = role_for(request.user, 'motivation')
+            name = match.url_name if match else None
+            decisions = name in {'motivation_reviews', 'motivation_review'}
+            if role == MODELER:
+                allowed = {'index_admin_motivation', 'global_coeff_admin_motivation', 'gb_act', 'sub_act',
+                    'coeff_subdivisions_admin_motivation', 'motivation_discount_segments', 'motivation_coefficient_balancing',
+                    'motivation_bulk_formula', 'motivation_copy_group', 'motivation_director_coeff_import',
+                    'motivation_global_template', 'motivation_subdivision_template', 'motivation_director_directory',
+                    'motivation_directors_global', 'motivation_directors_local', 'motivation_coefficient_comparison',
+                    'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report'}
+                if not decisions and name not in allowed:
+                    return render(request, 'base/forbidden.html', status=403)
+            if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and not motivation_viewer_read_request(request):
+                return JsonResponse({'error': 'Изменение модели недоступно. Решения принимаются на странице «На проверке».'}, status=403)
         if project == 'motivation' and role_for(request.user, 'motivation') == FINANCIER and not financier_read_request(request):
             if json_request:
                 return JsonResponse({'error': 'Финансист: доступны только утверждённые настройки подразделений, сегменты скидок и отчёты.'}, status=403)

@@ -158,7 +158,7 @@ class DiscountSegmentTests(TestCase):
         user.groups.add(Group.objects.get(name=DIRECTOR))
         self.client.force_login(user)
         url = reverse('motivation_discount_segments')
-        self.assertEqual(self.client.get(url).status_code, 403)
+        self.assertEqual(self.client.get(url).status_code, 200)  # Reviewer can inspect, never edit.
         self.assertEqual(self.client.post(url, {'action': 'import'}).status_code, 403)
 
     def test_segment_export_respects_shared_transaction_owner(self):

@@ -115,7 +115,7 @@ class SharedMotivationVersionTests(TestCase):
         self.client.force_login(user)
         for action in ['save_coeff', 'update_motive_coeff', 'copy_from_global', 'file_load']:
             response = self.post(self.first, action, **{f'sub_coeff={self.local_coeff.pk}': '0.9', f'kind_coeff={self.manager_kind.pk}': '0.9'})
-            self.assertEqual(response.status_code, 302)
+            self.assertEqual(response.status_code, 403)
         for rows in [self.first.subdivision_coefficients.all(), self.first.manager_coefficients.all()]:
             with self.assertRaises(ValidationError):
                 rows.delete()

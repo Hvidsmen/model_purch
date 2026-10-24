@@ -1,7 +1,7 @@
 from django.contrib.auth.models import Group, Permission, User
 from django.test import TestCase, Client
 from django.urls import reverse, URLPattern
-from .access import ADMIN, DIRECTOR, LOGISTICIAN, ROLES, ensure_roles
+from .access import ADMIN, DIRECTOR, LOGISTICIAN, MODELER, ROLES, ensure_roles
 from .admin import PortalUserChangeForm, PortalUserAdmin
 from django.contrib import admin
 import re
@@ -31,9 +31,9 @@ class PortalAccessTests(TestCase):
             self.assertEqual(response.status_code, 200)
             self.assertEqual(b'portal-project-card' in response.content, True)
             self.assertEqual('Сценарии, товары' in response.content.decode(), role in (ADMIN, LOGISTICIAN))
-            self.assertEqual('Коэффициенты, версии' in response.content.decode(), role in (ADMIN, DIRECTOR))
+            self.assertEqual('Коэффициенты, версии' in response.content.decode(), role in (ADMIN, DIRECTOR, MODELER))
             self.assertEqual('Другие разделы' in response.content.decode(), role == ADMIN)
-            for name, allowed in [('scenario_list', role in (ADMIN, LOGISTICIAN)), ('global_coeff_admin_motivation', role in (ADMIN, DIRECTOR))]:
+            for name, allowed in [('scenario_list', role in (ADMIN, LOGISTICIAN)), ('global_coeff_admin_motivation', role in (ADMIN, DIRECTOR, MODELER))]:
                 self.assertEqual(self.client.get(reverse(name)).status_code, 200 if allowed else 403)
             self.assertEqual(self.client.get('/admin/').status_code, 200 if role == ADMIN else 403)
 

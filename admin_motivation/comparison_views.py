@@ -17,7 +17,11 @@ def comparison_action(request):
             raise ValidationError('Некорректные параметры сравнения.')
         action = data.get('action', 'compare')
         if action == 'approve':
-            version = approve_review(data.get('token', ''), data.get('confirm_overwrite') is True)
+            from base.access import can_access
+            from django.core.exceptions import PermissionDenied
+            if not can_access(request.user, 'motivation_admin'):
+                raise PermissionDenied
+            version = approve_review(data.get('token', ''), data.get('confirm_overwrite') is True, actor=request.user, override_reason=str(data.get('reason') or ''))
             return JsonResponse({'approved': version.pk, 'message': 'Весь набор коэффициентов утверждён. Заменённые версии сохранены в истории.'})
         version = get_object_or_404(GlobalCoeffVersion, pk=int(data['version']))
         plan = get_object_or_404(SalesPlanScenario, pk=int(data['plan']), is_deleted=False) if data.get('plan') else None
@@ -40,6 +44,10 @@ def comparison_action(request):
             if request.session.get(key) != value:
                 request.session[key] = value
         if action == 'review':
+            from base.access import can_access
+            from django.core.exceptions import PermissionDenied
+            if not can_access(request.user, 'motivation_admin'):
+                raise PermissionDenied
             return JsonResponse(review_approval(version, plan, baseline, sub, changes, deleted))
         if action != 'compare' or plan is None:
             raise ValidationError('Выберите загруженный план продаж для сравнения.')

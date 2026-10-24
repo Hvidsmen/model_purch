@@ -1,5 +1,5 @@
 from datetime import timedelta
-from base.access import role_for, MOTIVATION_VIEWER, FINANCIER
+from base.access import role_for, FINANCIER, can_access
 from django.db.models import Count
 from ..models import GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 from django.http import Http404
@@ -38,8 +38,10 @@ def version_context(request, version_form=None):
     if minimum:
         form.fields['effective_from'].widget.attrs['min'] = '2001-01-01'
     return {'versions': versions, 'selected_version': selected, 'latest_version': latest, 'reopen_logs': selected.reopen_history.select_related('actor').order_by('-pk')[:20] if selected else [],
+            'approval_history': selected.approvals.order_by('-pk')[:20] if selected else [],
             'effective_version': effective_version(), 'last_approved_version': last_approved, 'version_form': form,
-            'version_editable': bool(selected and selected.is_editable and role_for(request.user, 'motivation') != MOTIVATION_VIEWER),
+            'version_creation_available': not latest or latest.status not in ('finance_review', 'director_review'),
+            'version_editable': bool(selected and selected.is_editable and can_access(request.user, 'motivation_editor')),
             'comparison_plans': SalesPlanScenario.objects.filter(is_deleted=False),
             'comparison_plan': request.session.get('motivation_comparison_plan'),
             'comparison_baselines': [v for v in versions if not v.is_editable],
@@ -47,7 +49,7 @@ def version_context(request, version_form=None):
 
 
 def financier_version_context(request):
-    versions = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('-effective_from', '-pk'))
+    versions = list(GlobalCoeffVersion.objects.filter(status__in=['approved', 'finance_review', 'director_review']).order_by('-effective_from', '-pk'))
     version_id = request.GET.get('version')
     if version_id:
         if not version_id.isdigit():
@@ -59,7 +61,9 @@ def financier_version_context(request):
     else:
         selected = next((version for version in versions if version.pk == request.session.get('motivation_version')), None)
         selected = selected or effective_version() or (versions[0] if versions else None)
-    for index, version in enumerate(versions):
-        version.effective_until = versions[index - 1].effective_from - timedelta(days=1) if index else None
+    approved = [version for version in versions if version.status == 'approved']
+    for version in versions:
+        following = next((item for item in reversed(approved) if item.effective_from > version.effective_from), None)
+        version.effective_until = following.effective_from - timedelta(days=1) if following and version.status == 'approved' else None
     return {'versions': versions, 'selected_version': selected, 'version_editable': False,
             'latest_version': versions[0] if versions else None, 'effective_version': effective_version()}

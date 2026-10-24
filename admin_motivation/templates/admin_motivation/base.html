@@ -210,6 +210,7 @@
 {% endblock %}
 {% block module_navigation %}
 <ul class="portal-section-nav">
+{% if portal_can_review_motivation %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_reviews' or request.resolver_match.url_name == 'motivation_review' %}active{% endif %}" href="{% url 'motivation_reviews' %}">На проверке</a></li>{% endif %}
 {% if not portal_reports_only %}
     {% if not portal_financier %}<li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>{% endif %}
     {% if portal_can_view_motivation_settings %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_discount_segments' %}active{% endif %}" href="{% url 'motivation_discount_segments' %}{% if selected_version %}?version={{ selected_version.pk }}{% endif %}">Сегменты скидок</a></li>{% endif %}
@@ -232,7 +233,7 @@
     </li>
 {% endif %}
     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
-{% if not portal_reports_only and not portal_motivation_readonly %}
+{% if portal_can_administer_motivation %}
     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}" href="{% url 'loader_motive' %}">Выгрузка в DWH</a></li>
 {% endif %}
 </ul>
@@ -247,7 +248,7 @@
 {% endblock %}
 {% block portal_content %}
 <div class="content-wrapper{% if portal_motivation_readonly %} motivation-viewer{% endif %}">
-    {% if portal_motivation_readonly %}<p class="viewer-notice" role="status">{{ portal_role_label }} · Мотивация · Только просмотр. Изменение настроек, утверждение, выгрузка в MS SQL и запуск расчётов недоступны.</p>{% endif %}
+    {% if portal_motivation_readonly %}<p class="viewer-notice" role="status">{{ portal_role_label }} · Мотивация · Только просмотр. Изменение коэффициентов недоступно.{% if portal_can_review_motivation %} Согласование и утверждение — в разделе «На проверке».{% endif %}</p>{% endif %}
     {% if not portal_reports_only and not portal_financier %}{% motivation_workflow as workflow %}{% include "admin_motivation/_workflow.html" %}{% endif %}
     {% if coefficient_attempt %}{{ coefficient_attempt|json_script:'coefficient-attempt' }}{% endif %}
     {% block content %}

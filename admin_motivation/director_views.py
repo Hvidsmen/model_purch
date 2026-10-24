@@ -56,7 +56,7 @@ def coefficient_group_copy(request):
 def director_directory(request):
     from .services.director_import import template, import_directors
     if request.method == 'POST' and request.POST.get('action') == 'delete':
-        from .operation_views import admin_required
+        from base.access import motivation_editor_required as admin_required
         admin_required(request)
         employee = get_object_or_404(DirectorEmployee, pk=request.POST.get('employee'))
         if request.POST.get('confirm') != 'yes':
@@ -246,7 +246,7 @@ def director_coeff_import(request):
         raise Http404('Выберите версию коэффициентов.')
     version = get_object_or_404(GlobalCoeffVersion, pk=version_id)
     if request.method == 'GET' and request.GET.get('template'):
-        from .operation_views import admin_required
+        from base.access import motivation_editor_required as admin_required
         from .services.director_coeff_import import director_coefficient_template
         admin_required(request)
         if not version.is_editable:

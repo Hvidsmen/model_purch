@@ -197,9 +197,11 @@
     document.getElementById('approval-cancel').addEventListener('click', () => dialog.close());
     commit.addEventListener('click', async () => {
         if (!review || commit.disabled) return;
+        const reason = document.getElementById('approval-reason').value.trim();
+        if (!reason) { document.getElementById('approval-error').textContent = 'Укажите причину утверждения без прохождения проверок.'; return; }
         commit.disabled = true;
         try {
-            await post({action: 'approve', token: review.token, confirm_overwrite: document.getElementById('approval-confirm').checked});
+            await post({action: 'approve', token: review.token, reason, confirm_overwrite: document.getElementById('approval-confirm').checked});
             document.dispatchEvent(new CustomEvent('motivation:approved'));
             location.reload();
         } catch (problem) {

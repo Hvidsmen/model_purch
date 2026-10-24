@@ -7,7 +7,7 @@ from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from .models import DiscountSegment
-from .operation_views import admin_required
+from base.access import motivation_editor_required as admin_required
 from .services.directors import lock_editable
 from .services.version_context import version_context
 

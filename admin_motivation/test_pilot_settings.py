@@ -189,7 +189,7 @@ class PilotSettingsTests(TestCase):
         self.global_coeff.motivation_coeff=.2;self.global_coeff.save()
         reopened.refresh_from_db()
         reviewed=review_approval(reopened)
-        response=self.client.post(reverse('motivation_coefficient_comparison'),data={'action':'approve','token':reviewed['token'],'confirm_overwrite':True},content_type='application/json')
+        response=self.client.post(reverse('motivation_coefficient_comparison'),data={'action':'approve','token':reviewed['token'],'confirm_overwrite':True,'reason':'Проверка повторного утверждения администратором'},content_type='application/json')
         self.assertEqual(response.status_code,200,response.content)
         reopened.refresh_from_db();self.assertEqual(reopened.status,'approved')
         self.assertEqual(MotivationApproval.objects.filter(version=approved).count(),2)
