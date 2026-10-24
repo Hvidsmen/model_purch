@@ -38,11 +38,16 @@ def balancing(request):
         editable = latest if latest and latest.is_editable else None
         if request.GET.get('version') and (not editable or request.GET['version'] != str(editable.pk)):
             return HttpResponseForbidden('Балансировка доступна только в последнем редактируемом черновике.')
+        plans = list(SalesPlanScenario.objects.filter(is_deleted=False).order_by(F('loaded_at').desc(nulls_last=True), '-pk'))
+        initial = {key: request.GET.get(key, '') for key in ('version', 'subdivision', 'plan')}
+        if initial['plan'] not in {str(plan.pk) for plan in plans}:
+            latest_plan = next((plan for plan in plans if plan.loaded_at is not None), None)
+            initial['plan'] = str(latest_plan.pk) if latest_plan else ''
         return render(request, 'admin_motivation/balancing.html', {
             'versions': [editable] if editable else [],
-            'plans': SalesPlanScenario.objects.filter(is_deleted=False),
+            'plans': plans,
             'subdivisions': Subdivision.objects.all(),
-            'initial': {key: request.GET.get(key, '') for key in ('version', 'subdivision', 'plan')},
+            'initial': initial,
             'history': CoefficientBalanceLog.objects.select_related('version', 'plan', 'user').order_by('-pk')[:15],
         })
     try:

@@ -308,3 +308,22 @@ class BalancingTests(TestCase):
         self.assertTrue(GlobalCoeffVersion.objects.filter(pk=draft.pk).exists())
         self.assertEqual(CoefficientBalanceLog.objects.get().version_id,draft.pk)
         self.assertTrue(draft.coefficients.exists())
+
+    def test_default_plan_uses_latest_upload_not_creation_and_keeps_explicit_choice(self):
+        from datetime import timedelta
+        from django.utils import timezone
+        from .models import SalesPlanScenario
+        now=timezone.now()
+        SalesPlanScenario.objects.filter(pk=self.plan.pk).update(loaded_at=now-timedelta(days=2))
+        latest=SalesPlanScenario.objects.create(title='Latest upload',source_version='latest',loaded_at=now-timedelta(days=1))
+        SalesPlanScenario.objects.create(title='Newer record but old upload',source_version='old',loaded_at=now-timedelta(days=3))
+        SalesPlanScenario.objects.create(title='Not uploaded',source_version='empty')
+        deleted=SalesPlanScenario.objects.create(title='Deleted upload',source_version='deleted',loaded_at=now,is_deleted=True)
+        page=self.client.get(self.url)
+        self.assertEqual(page.context['initial']['plan'],str(latest.pk))
+        self.assertEqual(page.context['plans'][0].pk,latest.pk)
+        self.assertNotIn(deleted.pk,{plan.pk for plan in page.context['plans']})
+        self.assertContains(page,f'value="{latest.pk}" selected')
+        self.assertEqual(self.client.get(self.url,{'plan':self.plan.pk}).context['initial']['plan'],str(self.plan.pk))
+        SalesPlanScenario.objects.update(loaded_at=None)
+        self.assertEqual(self.client.get(self.url).context['initial']['plan'],'')
