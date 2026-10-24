@@ -14,18 +14,28 @@
 #version-panel #version-history { margin: 0; font-size: 13px; }
 #version-panel .alert { margin-bottom: 8px; padding: 8px 12px; }
 @media(max-width: 600px) { #version-panel { padding: 12px; } #version-panel select { width: 100%; } #version-panel .version-picker { min-width: 0; flex: 1; } #version-panel .version-controls form { width: 100%; } }
-#version-panel .version-tools{position:relative;margin-left:auto;display:flex;gap:8px 18px;align-items:center;justify-content:flex-end;flex-wrap:wrap;padding-top:20px}
+#version-panel .version-tools{margin-left:auto;display:flex;gap:8px;align-items:center;justify-content:flex-end;flex-wrap:wrap;padding-top:21px}
+#version-panel .version-tools>button{margin-top:0}
+#version-panel #createVersionForm button{align-self:flex-end}
+#version-panel #id_title{width:240px}
 #version-panel .version-tools .secondary-block{margin:0;padding:0}
-#version-panel .version-tool>summary{cursor:pointer;font-size:13px;color:#51428c;white-space:nowrap}
-#version-panel .version-tool[open]>summary{color:#5b3dcc;font-weight:600}
-#version-panel .version-tool-content{position:absolute;right:0;top:calc(100% + 8px);z-index:30;width:min(920px,calc(100vw - 380px));max-height:460px;overflow:auto;padding:16px;background:#fff;border:1px solid #ddd5f4;border-radius:9px;box-shadow:0 12px 32px #30204f20}
-#version-panel #createVersionForm{margin:0;padding:0;border:0;background:transparent}
-#version-panel .version-tool-content p{margin:10px 0 0}
-@media(max-width:850px){#version-panel .version-tool-content{width:calc(100vw - 64px)}}
-@media(max-width:600px){#version-panel .version-tools{width:100%;padding-top:4px;justify-content:flex-start;gap:12px}#version-panel .version-tool>summary{white-space:normal}#version-panel .version-controls .version-tools .secondary-block{width:auto}#version-panel .version-tool-content{right:auto;left:0;max-height:60vh}}
+#version-panel .version-tool>summary{cursor:pointer;font-size:13px;color:#51428c}
+#version-panel .version-tool-content{position:static;width:100%;max-height:none;padding:16px;background:#f8f9fd;border:1px solid #e1e4f0;border-radius:9px;box-shadow:none;margin-top:12px;overflow:visible}
+#version-panel .version-panels{width:100%;min-width:0}
+#version-panel .version-panels .version-tool{margin:0;padding:0}
+#version-panel.version-tools-ready .version-panels .version-tool>summary{display:none}
+#version-panel .version-tool-content form{display:flex;align-items:flex-end;flex-wrap:wrap;gap:12px;margin:0}
+#version-panel .version-tool-content button{margin-top:0;min-height:32px}
+#version-panel #createVersionForm{margin:0;padding:0;border:0;background:transparent;display:block}
+#version-panel .version-tool-content p{flex-basis:100%;margin:10px 0 0;font-size:12px;color:#64748b}
+#version-panel input[type="checkbox"]{height:auto;width:auto;padding:0;vertical-align:middle}
+#version-panel .version-tools button[aria-expanded="true"]{background:#eeeaff;border-color:#a99be9;color:#4931a4}
+#version-panel .version-tool-content.table-wrapper{overflow-x:auto}
+#version-panel .version-tool-content table{margin-bottom:0}
+@media(max-width:800px){#version-panel .version-tools{width:100%;padding-top:0;justify-content:flex-start}#version-panel .version-controls>form{width:100%}#version-panel .version-picker{flex:1;min-width:0}#version-panel select{width:100%}#version-panel .version-tool-content{padding:12px}}
 </style>
 <div class="container-fluid content" id="version-panel">
-    <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование{% else %}Историческая версия: только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Утверждена и действует сейчас{% else %} · Утверждена на сегодня: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
+    <div class="version-heading"><h1>Версии коэффициентов</h1><span class="version-status">{% if version_editable %}Редактирование черновика{% elif selected_version.status == 'approved' %}Только просмотр{% else %}Историческая версия · Только просмотр{% endif %}{% if selected_version.pk == effective_version.pk %} · Действует сейчас{% else %} · Утверждена на сегодня: {{ effective_version|default:'Нет действующей версии' }}{% endif %}</span></div>
     {% for message in messages %}<div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %}" role="alert">{{ message }}</div>{% endfor %}
     <div class="d-flex align-items-center gap-3 flex-wrap mb-3" id="version-approval-actions">
         <strong>Статус: {{ selected_version.get_status_display }}</strong>
@@ -93,4 +103,4 @@
 
 {% if portal_can_administer_motivation and reopen_logs %}<details class="secondary-block"><summary>Журнал возвратов в черновик</summary>{% for log in reopen_logs %}<p>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }}{% endtimezone %} · {{ log.actor }} · {{ log.reason }} · <a href="{% url 'motivation_version_reopen_snapshot' log.pk %}">Скачать прежние значения</a></p>{% endfor %}</details>{% endif %}
 
-<script src="{% static 'admin_motivation/version_tools.js' %}?v=20261024" defer></script>
+<script src="{% static 'admin_motivation/version_tools.js' %}?v=inline-20261024" defer></script>
