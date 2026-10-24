@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% load static tz %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/balancing.css' %}?v=draft-only-20261024">
+<link rel="stylesheet" href="{% static 'admin_motivation/balancing.css' %}?v=product-filters-20261025">
 <main id="coefficient-balancing" data-endpoint="{% url 'motivation_coefficient_balancing' %}">
 <header class="balance-heading"><div><h1>Балансировка премии</h1><p>Измените выбранные коэффициенты, сохранив плановую премию. Компенсация затронет только отмеченные ячейки.</p></div><a href="{% url 'global_coeff_admin_motivation' %}">К коэффициентам →</a></header>
 <form id="balance-setup" class="balance-card">{% csrf_token %}{% if versions %}
@@ -20,10 +20,13 @@
 <section id="balance-workspace" hidden>
 <div class="balance-card"><div class="balance-controls">
 <label>Поиск товара, марки или директора<input type="search" id="balance-search" placeholder="Начните вводить"></label>
+<label>Группа планов продаж<select id="balance-pg"><option value="">Все группы</option></select></label>
+<label>Группа ERP<select id="balance-group"><option value="">Все группы</option></select></label>
+<label>Марка / бренд<select id="balance-brand"><option value="">Все марки</option></select></label>
 <label>Тип коэффициента<select id="balance-kind"><option value="">Все типы</option><option>Политики</option><option>Продажи</option><option>Директор</option></select></label>
 <label>Подразделение в таблице<select id="balance-branch"><option value="">Все подразделения</option></select></label>
 <label>Показать<select id="balance-show"><option value="all">Все ячейки</option><option value="selected">Выбранные для изменения</option><option value="changed">Изменённые после расчёта</option></select></label>
-</div><div class="balance-actions"><button type="button" id="balance-select" class="btn btn-outline-primary">Компенсировать видимыми</button><button type="button" id="balance-clear" class="btn btn-outline-primary">Снять компенсацию</button><span id="balance-count"></span></div>
+</div><div class="balance-actions"><button type="button" id="balance-select" class="btn btn-outline-primary">Компенсировать видимыми</button><button type="button" id="balance-clear" class="btn btn-outline-primary">Снять компенсацию</button><span id="balance-count"></span><button type="button" id="balance-reset-filters" class="btn btn-outline-secondary">Сбросить фильтры</button></div>
 <label class="balance-budget-toggle"><input type="checkbox" id="balance-show-budget"> Показывать план и премию в ячейках</label>
 <p class="balance-note">«Ручное» — задайте новый процент. «Авто» — разрешите автоматическую компенсацию. «Не менять» — сохраните исходное значение. Массовый выбор действует на все строки с текущими фильтрами, включая другие страницы.</p>
 <div class="balance-table-scroll"><table class="table" id="balance-cells"><thead></thead><tbody></tbody></table></div>
@@ -33,5 +36,5 @@
 </section>
 <details class="balance-card"><summary>История балансировок</summary><div class="balance-table-scroll"><table class="table"><thead><tr><th>Когда</th><th>Версия / план</th><th>Кто</th><th>Было → стало, USD</th><th>Изменено ячеек</th></tr></thead><tbody>{% for log in history %}<tr><td>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }} МСК{% endtimezone %}</td><td>{% if log.version %}{{ log.version }}{% else %}{{ log.parameters.version_snapshot.title|default:'Удалённый черновик' }} · удалён{% endif %} / {{ log.plan }}</td><td>{{ log.user.get_full_name|default:log.user.username }}</td><td>{{ log.result.before }} → {{ log.result.after }}</td><td><details><summary>Ячеек: {{ log.result.changes|length }}</summary><ul>{% for key, change in log.result.changes.items %}<li>{{ change.label }}: {{ change.before_percent }}% → {{ change.after_percent }}% · {% if change.source == 'manual' %}вручную{% else %}компенсация{% endif %}</li>{% endfor %}</ul></details></td></tr>{% empty %}<tr><td colspan="5">Сохранённых балансировок пока нет.</td></tr>{% endfor %}</tbody></table></div></details>
 </main>
-<script src="{% static 'admin_motivation/balancing.js' %}?v=draft-only-20261024" defer></script>
+<script src="{% static 'admin_motivation/balancing.js' %}?v=product-filters-20261025" defer></script>
 {% endblock %}

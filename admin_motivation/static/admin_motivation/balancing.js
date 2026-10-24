@@ -92,6 +92,31 @@
   }
   const choice = (cell) =>
     selections.get(cell.id) || { role: "fixed", value: percent(cell.value) };
+  function productOptions(reset = false) {
+    for (const [id, field, label] of [
+      ["pg", "planning_group", "Все группы"],
+      ["group", "group", "Все группы"],
+      ["brand", "brand", "Все марки"],
+    ]) {
+      const select = el(id),
+        previous = reset ? "" : select.value;
+      const source = cells.filter(
+        (cell) =>
+          (id === "pg" ||
+            !el("pg").value ||
+            cell.planning_group === el("pg").value) &&
+          (id !== "brand" ||
+            !el("group").value ||
+            cell.group === el("group").value),
+      );
+      const values = [
+        ...new Set(source.map((cell) => cell[field]).filter(Boolean)),
+      ].sort((a, b) => a.localeCompare(b, "ru"));
+      select.replaceChildren(new Option(label, ""));
+      values.forEach((value) => select.add(new Option(value, value)));
+      select.value = values.includes(previous) ? previous : "";
+    }
+  }
   function filtered() {
     const query = el("search").value.toLocaleLowerCase().trim(),
       kind = el("kind").value,
@@ -99,6 +124,9 @@
       show = el("show").value;
     return cells.filter(
       (cell) =>
+        (!el("pg").value || cell.planning_group === el("pg").value) &&
+        (!el("group").value || cell.group === el("group").value) &&
+        (!el("brand").value || cell.brand === el("brand").value) &&
         (!kind || cell.kind === kind) &&
         (!branch || cell.subdivision === branch) &&
         (!query ||
@@ -335,6 +363,7 @@
       selections.clear();
       preview = null;
       page = 0;
+      productOptions(true);
       el("branch").replaceChildren(new Option("Все подразделения", ""));
       [...new Set(cells.map((cell) => cell.subdivision).filter(Boolean))]
         .sort()
@@ -359,6 +388,20 @@
       render();
     }),
   );
+  for (const id of ["pg", "group", "brand"])
+    el(id).addEventListener("change", () => {
+      productOptions();
+      page = 0;
+      render();
+    });
+  el("reset-filters").addEventListener("click", () => {
+    for (const id of ["search", "kind", "branch", "pg", "group", "brand"])
+      el(id).value = "";
+    el("show").value = "all";
+    productOptions(true);
+    page = 0;
+    render();
+  });
   el("prev").onclick = () => {
     page--;
     render();

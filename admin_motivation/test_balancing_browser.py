@@ -118,3 +118,45 @@ class BalancingBrowserTests(StaticLiveServerTestCase):
             page.wait_for_load_state('networkidle')
             self.assertEqual(errors,[])
             browser.close()
+
+    def test_product_filters_cascade_and_limit_bulk_compensation(self):
+        from playwright.sync_api import sync_playwright, expect
+        from base.testing import authorize_test_case
+        from .test_sales_plans import SalesPlanTests
+        from .models import Goods
+        GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001,1,1))
+        fixture=SalesPlanTests();fixture.setUp();fixture.load();authorize_test_case(self)
+        other=Goods.objects.create(goods_key='Other product',planning_group_sales='Other PG',group='Other ERP',brand='Other Brand')
+        for row in list(GlobalCoeff.objects.filter(version=fixture.version)):
+            row.pk=None;row.goods=other;row.save()
+        manual=GlobalCoeff.objects.get(version=fixture.version,goods=fixture.good,type_coeff__type_coeff_name='Политики',segment__segment_name='K0')
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page(viewport={'width':1440,'height':1050})
+            page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
+            errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+            page.goto(self.live_server_url+reverse('motivation_coefficient_balancing'))
+            page.locator('[name="plan"]').select_option(str(fixture.scenario.pk))
+            page.get_by_role('button',name='Загрузить исходные значения',exact=True).click()
+            expect(page.locator('#balance-cells tbody tr')).to_have_count(2)
+            page.get_by_label(f'Участие c:{manual.pk}',exact=True).select_option('manual')
+            page.get_by_label(f'Новый процент c:{manual.pk}',exact=True).fill('20')
+            page.locator('#balance-pg').select_option('Other PG')
+            expect(page.locator('#balance-group option')).to_have_count(2)
+            expect(page.locator('#balance-brand option')).to_have_count(2)
+            page.locator('#balance-group').select_option('Other ERP')
+            page.locator('#balance-brand').select_option('Other Brand')
+            expect(page.locator('#balance-cells tbody tr')).to_have_count(1)
+            expect(page.locator('#balance-cells tbody')).to_contain_text('Other Brand')
+            page.locator('#balance-select').click()
+            expect(page.locator('#balance-count')).to_have_text('Ручных: 1 · Для компенсации: 10')
+            page.screenshot(path='/tmp/balance-product-filters.png',full_page=True)
+            page.locator('#balance-reset-filters').click()
+            expect(page.locator('#balance-cells tbody tr')).to_have_count(2)
+            expect(page.get_by_label(f'Новый процент c:{manual.pk}',exact=True)).to_have_value('20')
+            expect(page.locator('#balance-count')).to_have_text('Ручных: 1 · Для компенсации: 10')
+            page.locator('#balance-search').fill('Other Brand')
+            expect(page.locator('#balance-cells tbody tr')).to_have_count(1)
+            page.wait_for_load_state('networkidle')
+            self.assertEqual(errors,[])
+            browser.close()
