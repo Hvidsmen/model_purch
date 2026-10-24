@@ -12,7 +12,7 @@ from ..models import (GlobalCoeff, SubdivisionCoeff, GlobalDirectorCoeff,
                       SubdivisionDirectorCoeff, GlobalCoeffVersion)
 from .comparison import coefficient_input
 from .sales_plans import KINDS, SEGMENTS, number
-from .subdivision_aliases import mapping, canonical, coefficient_rows
+from .subdivision_aliases import mapping, canonical, coefficient_rows, expand
 
 ZERO = Decimal(0)
 CENT = Decimal('.005')
@@ -35,7 +35,7 @@ class Budget:
         qs = model.objects.filter(version_id__in=versions).order_by('pk').select_related('goods', 'type_coeff', 'segment')
         if local:
             qs = qs.select_related('subdivision')
-        for row in qs:
+        for row in qs.iterator(chunk_size=2000):
             kind = row.type_coeff.type_coeff_name
             segment = row.segment.segment_name.upper().replace('K', 'O', 1)
             if kind not in KINDS or segment not in SEGMENTS:
@@ -47,7 +47,7 @@ class Budget:
         directors = director_model.objects.filter(version_id__in=versions).order_by('pk').select_related('goods')
         if local:
             directors = directors.select_related('subdivision', 'employee')
-        for row in directors:
+        for row in directors.iterator(chunk_size=2000):
             sub = row.subdivision.subdivision_key if local else ''
             staff = row.employee_id if local else 0
             for i in range(5):
@@ -78,16 +78,26 @@ class Budget:
         if not local:
             for sub, staff in SubdivisionDirectorCoeff.objects.filter(version=version).values_list('subdivision__subdivision_key', 'employee_id').distinct():
                 global_staff[canonical(sub, names)].add(staff)
-        inputs = []
-        lines = plan.lines.filter(plan_date__gte=version.effective_from).order_by('pk')
-        for line in lines.values('pk', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts'):
-            sub = canonical(line['subdivision'], names)
-            if not sub or (target is not None and sub != target):
-                continue
-            inputs.append(line)
+        input_hash = hashlib.sha256()
+        input_count = 0
+        plan_groups = {}
+        lines = plan.lines.filter(plan_date__gte=version.effective_from).exclude(subdivision='').order_by('pk')
+        if target is not None:
+            lines = lines.filter(subdivision__in=expand(target, names))
+        fields = ('pk', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts')
+        for raw_line in lines.values_list(*fields).iterator(chunk_size=2000):
+            pk, day, original_sub, pg, group, brand, amounts = raw_line
+            sub = canonical(original_sub, names)
+            input_hash.update(json.dumps(raw_line, sort_keys=True, default=str, separators=(',', ':')).encode())
+            input_hash.update(b'\n')
+            input_count += 1
+            # The selected version is constant over the affected date range.
+            # Resolve each branch/classification once rather than once per month.
+            usd = plan_groups.setdefault((sub, pg, group, brand), [ZERO] * 5)
+            for index, segment in enumerate(SEGMENTS):
+                usd[index] += number(amounts.get(segment))
+        for (sub, pg, group, brand), usd in plan_groups.items():
             lookup_sub = sub if local else ''
-            pg, group, brand = line['planning_group_sales'], line['group'], line['brand']
-            usd = [number(line['segment_amounts'].get(seg)) for seg in SEGMENTS]
             kinds = [(kind, 0, 1) for kind in KINDS]
             kinds += [('Директор', staff, 1) for staff in sorted(staff_by_sub[sub])] if local else [('Директор', 0, len(global_staff[sub]))]
             for kind, staff, multiplier in kinds:
@@ -103,14 +113,14 @@ class Budget:
                     if not candidates:
                         raise ValidationError(f'Нет коэффициентов: {sub}, {pg}, {kind}. Заполните матрицу коэффициентов.')
                     self.terms.append((sub, kind, tuple(candidates), amount * multiplier))
-        if not inputs:
+        if not input_count:
             raise ValidationError('В плане нет строк подразделений с даты выбранной версии. Выберите другой план или дату версии.')
         # Compact duplicate plan terms so iterations do not scan the entire plan.
         grouped = defaultdict(Decimal)
         for sub, kind, candidates, amount in self.terms:
             grouped[(sub, kind, candidates)] += amount
         self.terms = [(*key, value) for key, value in grouped.items() if value]
-        self.fingerprint = digest({'cells': self.cells, 'lines': inputs, 'terms': self.terms,
+        self.fingerprint = digest({'cells': self.cells, 'lines': input_hash.hexdigest(), 'terms': self.terms,
                                    'version': [version.pk, version.revision, version.status, version.effective_from],
                                    'plan': [plan.pk, plan.loaded_at], 'aliases': names})
 
@@ -181,33 +191,70 @@ class Budget:
             adjustable = [key for key in selected if before[key]]
             if not adjustable:
                 raise ValidationError(f'{label}: нет выбранных ненулевых коэффициентов, влияющих на премию, для компенсации.')
+            adjustable = set(adjustable)
             upper = min(Decimal(1) / abs(before[key]) for key in adjustable)
+            # Only terms depending on a selected compensator vary during search.
+            # Keep minimum fallbacks dynamic; all other contributions are constant.
+            constant = ZERO
+            moving = defaultdict(Decimal)
+            for _, _, candidates, amount in terms:
+                changing = tuple(key for key in candidates if key in adjustable)
+                if not changing:
+                    constant += min(values[key] for key in candidates) * amount
+                    continue
+                fixed = [values[key] for key in candidates if key not in adjustable]
+                moving[(changing, min(fixed) if fixed else None)] += amount
+            moving = [(keys, fixed, amount) for (keys, fixed), amount in moving.items() if amount]
+            variable_target = target - constant
+
             def candidate(factor):
-                proposed = dict(values)
-                proposed.update({key: stored(key, before[key] * factor) for key in adjustable})
-                return proposed
+                return {key: stored(key, before[key] * factor) for key in adjustable}
+
+            def error(proposed):
+                result = ZERO
+                for keys, fixed, amount in moving:
+                    value = min(proposed[key] for key in keys)
+                    if fixed is not None:
+                        value = min(value, fixed)
+                    result += value * amount
+                return result - variable_target
+
+            # With exact coefficients (or a minimum consisting entirely of
+            # compensators), the budget is linear in the common multiplier.
+            direct = None
+            if all(fixed is None for _, fixed, _ in moving):
+                slope = sum((min(before[key] for key in keys) * amount for keys, _, amount in moving), ZERO)
+                if slope:
+                    factor = variable_target / slope
+                    if ZERO <= factor <= upper:
+                        direct = candidate(factor)
+                        if abs(error(direct)) < CENT:
+                            values.update(direct)
+                            continue
             low, high = ZERO, upper
             left, right = candidate(low), candidate(high)
-            fleft, fright = total(left) - target, total(right) - target
+            fleft, fright = error(left), error(right)
             if fleft * fright > 0:
                 raise ValidationError(f'{label}: выбранными коэффициентами нельзя сохранить бюджет в диапазоне −100%…100%. Расширьте выбор или уменьшите ручное изменение.')
-            best = min((left, right), key=lambda item: abs(total(item) - target))
+            best, best_error = (left, abs(fleft)) if abs(fleft) <= abs(fright) else (right, abs(fright))
+            if direct is not None and abs(error(direct)) < best_error:
+                best, best_error = direct, abs(error(direct))
             for _ in range(90):
                 mid = (low + high) / 2
                 proposed = candidate(mid)
-                delta = total(proposed) - target
-                if abs(delta) < abs(total(best) - target):
-                    best = proposed
+                delta = error(proposed)
+                if abs(delta) < best_error:
+                    best, best_error = proposed, abs(delta)
                 if delta == 0:
-                    best = proposed
+                    best, best_error = proposed, ZERO
                     break
                 if delta * fleft > 0:
                     low, fleft = mid, delta
                 else:
                     high = mid
-            if abs(total(best) - target) >= CENT:
+            if best_error >= CENT:
                 raise ValidationError(f'{label}: точность хранения коэффициентов не позволяет сохранить премию до цента. Выберите больше коэффициентов для компенсации.')
-            values = best
+            values.update(best)
         for label, terms in constraints.items():
             delta = sum(((min(values[key] for key in candidates) - min(before[key] for key in candidates)) * amount
                          for _, _, candidates, amount in terms), ZERO)

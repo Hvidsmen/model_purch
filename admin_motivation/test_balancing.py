@@ -223,3 +223,44 @@ class BalancingTests(TestCase):
         self.client.force_login(user)
         self.assertEqual(self.client.get(self.url).status_code,200)
         self.assertEqual(self.post('load').status_code,200)
+
+    def test_large_budget_uses_direct_weighted_solution_for_sparse_edits(self):
+        from unittest.mock import patch
+        from .services.balancing import stored
+        budget=Budget(self.version,self.plan)
+        manual,auto,untouched=self.key(),self.key(segment='K1'),self.key(segment='K2')
+        budget.terms=[term for branch in range(3000) for term in [
+            (str(branch),'Политики',(manual,),Decimal(100)),
+            (str(branch),'Политики',(auto,),Decimal(200)),
+            (str(branch),'Политики',(untouched,),Decimal(1000))]]
+        with patch('admin_motivation.services.balancing.stored',wraps=stored) as rounding:
+            result=budget.balance({manual:'20%'},[auto],'type')
+        self.assertEqual(Decimal(result['changes'][auto]['after']),Decimal('.05'))
+        self.assertEqual(Decimal(result['delta']),0)
+        self.assertLessEqual(rounding.call_count,3)
+
+    def test_sparse_search_keeps_fixed_minimum_fallback_dynamic(self):
+        budget=Budget(self.version,self.plan)
+        manual,auto,fixed=self.key(),self.key(segment='K1'),self.key(segment='K2')
+        budget.cells[fixed]['value']='.15'
+        budget.terms=[('A','Политики',(manual,),Decimal(100)),
+                      ('A','Политики',(auto,fixed),Decimal(200))]
+        result=budget.balance({manual:'20%'},[auto],'type')
+        self.assertEqual(Decimal(result['changes'][auto]['after']),Decimal('.05'))
+        self.assertEqual(Decimal(result['delta']),0)
+        self.assertEqual(set(result['changes']),{manual,auto})
+
+    def test_monthly_preaggregation_preserves_budget_and_source_fingerprint(self):
+        first=Budget(self.version,self.plan)
+        for line in list(self.plan.lines.exclude(subdivision='')):
+            line.pk=None;line.plan_date=date(2026,11,1);line.save()
+        second=Budget(self.version,self.plan)
+        self.assertNotEqual(first.fingerprint,second.fingerprint)
+        self.assertEqual(len(first.terms),len(second.terms))
+        result=second.balance({self.key():'20%'},[self.key(segment='K1')],'type')
+        self.assertEqual(Decimal(result['before']),Decimal(450))
+        self.assertEqual(Decimal(result['after']),Decimal(450))
+        self.assertEqual(Decimal(result['changes'][self.key(segment='K1')]['after']),Decimal('.05'))
+        signature=second.fingerprint
+        self.plan.lines.filter(plan_date=date(2026,11,1)).update(plan_date=date(2026,12,1))
+        self.assertNotEqual(signature,Budget(self.version,self.plan).fingerprint)
