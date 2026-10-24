@@ -1,3 +1,4 @@
+from .project_catalog import selector, group_roles
 from . import project_access_forms as project_forms
 from django import forms
 from django.contrib.auth.models import Group, User
@@ -116,6 +117,8 @@ class ReportGroupForm(forms.Form):
 def groups(request):
     if not can_access(request.user, 'admin'):
         raise PermissionDenied
+    project_context = selector(request, 'portal_user_groups')
+    project = project_context['selected_project']
     group = None
     identifier = request.POST.get('group') if request.method == 'POST' else request.GET.get('edit')
     if identifier:
@@ -126,15 +129,19 @@ def groups(request):
     if request.method == 'POST' and form.is_valid():
         saved = form.save()
         messages.success(request, f'Группа «{saved.name}» сохранена. Доступ участников обновлён.')
-        return redirect('portal_user_groups')
-    catalog = list(Group.objects.exclude(name__in=ROLES).select_related('portal_scope__employee_type').prefetch_related('user_set', 'portal_scope__subdivisions__merged_into').order_by('name'))
+        from django.urls import reverse
+        return redirect(reverse('portal_user_groups') + project_context['project_query'])
+    catalog = list(Group.objects.exclude(name__in=ROLES).select_related('portal_scope__employee_type').prefetch_related('project_access', 'user_set', 'portal_scope__subdivisions__merged_into').order_by('name'))
+    catalog = [row for row in catalog if not project or project in group_roles(row)]
     for row in catalog:
         scope = getattr(row, 'portal_scope', None)
         from .access import PROJECT_ROLES, PROJECT_LABELS
-        overrides = dict(row.project_access.values_list('project', 'role'))
+        overrides = {grant.project: grant.role for grant in row.project_access.all()}
         legacy = scope.portal_role if scope else ''
         row.project_access_configured = scope is not None or bool(overrides)
         row.project_access_label = ' · '.join(PROJECT_LABELS[project] + ': ' + role for project, allowed in PROJECT_ROLES.items() if (role := overrides.get(project, legacy if legacy in allowed else ''))) or 'Нет доступа'
+        if project:
+            row.project_access_label = PROJECT_LABELS[project] + ': ' + group_roles(row)[project]
         row.reporting_branches = sorted({(branch.merged_into or branch).subdivision_key for branch in scope.subdivisions.all()}) if scope else []
     configured = sum(row.project_access_configured for row in catalog)
-    return render(request, 'base/user_groups.html', {'form': form, 'editing': group, 'catalog': catalog, 'configured': configured})
+    return render(request, 'base/user_groups.html', {**project_context, 'form': form, 'editing': group, 'catalog': catalog, 'configured': configured})

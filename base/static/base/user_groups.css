@@ -2,3 +2,6 @@
 .access-panel,.access-group-card h3{min-width:0}.access-multi-options label span,.access-multi [data-choice-caption]{min-width:0;overflow-wrap:anywhere}.access-branch-tags>span{max-width:100%;overflow-wrap:anywhere;box-sizing:border-box}
 
 .access-groups-heading>div>p:last-child{margin-bottom:0;font-size:13px;line-height:1.5}
+
+.access-project-tabs {display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 18px}
+.access-project-tabs .access-button {text-decoration:none}

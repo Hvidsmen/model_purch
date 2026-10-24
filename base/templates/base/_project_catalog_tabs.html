@@ -1,0 +1,1 @@
+<nav class="access-project-tabs" aria-label="Фильтр по проекту">{% for tab in project_tabs %}<a class="access-button{% if not tab.active %} access-secondary{% endif %}" href="{{ tab.url }}" {% if tab.active %}aria-current="page"{% endif %}>{{ tab.label }}</a>{% endfor %}</nav>

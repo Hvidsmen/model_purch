@@ -1,3 +1,4 @@
+from .project_catalog import selector, assigned_roles, group_roles
 from . import project_access_forms as project_forms
 from django import forms
 from django.contrib import messages
@@ -9,7 +10,7 @@ from django.db.models import Q, Count
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
-from .access import ADMIN, ROLES, role_for, can_access, project_role_summary
+from .access import ADMIN, ROLES, role_for, can_access, PROJECT_LABELS
 from .admin import PortalRoleFormMixin
 from .models import MotivationReportAccess
 from .directory_search import search_accounts, DirectoryPending
@@ -82,15 +83,21 @@ class UserFilters(forms.Form):
     role = forms.MultipleChoiceField(label='Роли', required=False, choices=[(r, r) for r in ROLES] + [('none', 'Без доступа')], widget=forms.CheckboxSelectMultiple)
     group = forms.MultipleChoiceField(label='Группы', required=False, widget=forms.CheckboxSelectMultiple)
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, project='', **kwargs):
         super().__init__(*args, **kwargs)
-        self.fields['group'].choices = [(str(pk), name) for pk, name in Group.objects.exclude(name__in=ROLES).order_by('name').values_list('pk', 'name')] + [('none', 'Без группы')]
+        if project:
+            from .access import PROJECT_ROLES
+            self.fields['role'].choices = [(role, role) for role in PROJECT_ROLES[project]]
+        self.catalog_groups = [group for group in Group.objects.exclude(name__in=ROLES).select_related('portal_scope').prefetch_related('project_access').order_by('name') if not project or project in group_roles(group)]
+        self.fields['group'].choices = [(str(group.pk), group.name) for group in self.catalog_groups] + [('none', 'Без группы')]
 
 
 @require_http_methods(['GET', 'POST'])
 def users(request):
     if not can_access(request.user, 'admin'):
         raise PermissionDenied
+    project_context = selector(request, 'portal_users')
+    project = project_context['selected_project']
     identifier = request.POST.get('user') if request.method == 'POST' else request.GET.get('edit')
     if identifier and not identifier.isdigit():
         raise Http404
@@ -99,27 +106,33 @@ def users(request):
     if request.method == 'POST' and form.is_valid():
         saved = form.save()
         messages.success(request, f'Пользователь «{saved.username}» сохранён.')
-        return redirect('portal_users')
+        from django.urls import reverse
+        return redirect(reverse('portal_users') + project_context['project_query'])
     query = request.GET.get('q', '').strip()[:150]
-    catalog = User.objects.prefetch_related('groups__project_access', 'project_access').order_by('username')
+    catalog = User.objects.prefetch_related('groups__project_access', 'groups__portal_scope', 'project_access').order_by('username')
     if query:
         catalog = catalog.filter(Q(username__icontains=query) | Q(first_name__icontains=query) | Q(last_name__icontains=query) | Q(email__icontains=query))
-    filters = UserFilters(request.GET)
+    filters = UserFilters(request.GET, project=project)
     if filters.is_valid():
         roles, groups = filters.cleaned_data['role'], filters.cleaned_data['group']
         if groups:
             condition = Q(groups__pk__in=[int(value) for value in groups if value != 'none'])
             if 'none' in groups:
-                catalog = catalog.annotate(access_groups=Count('groups', filter=~Q(groups__name__in=ROLES), distinct=True))
+                catalog = catalog.annotate(access_groups=Count('groups', filter=Q(groups__pk__in=[group.pk for group in filters.catalog_groups]), distinct=True))
                 condition |= Q(access_groups=0)
             catalog = catalog.filter(condition)
     else:
         catalog = catalog.none()
     role_filters = set(filters.cleaned_data.get('role', [])) if filters.is_valid() else set()
     rows = []
-    from .access import PROJECT_ROLES
     for row in catalog.distinct():
-        effective = {role_for(row, project) for project in PROJECT_ROLES} - {None, ''}
+        assignments = assigned_roles(row)
+        row.catalog_assignments = assignments
+        if project and project not in assignments:
+            continue
+        effective = {assignments[project]} if project else set(assignments.values())
+        if not project and not row.is_active:
+            effective = set()
         if role_filters and not (effective & role_filters or ('none' in role_filters and not effective)):
             continue
         rows.append(row)
@@ -127,21 +140,23 @@ def users(request):
             break
     catalog = rows
     for row in catalog:
-        row.portal_role_label = project_role_summary(row)
+        row.portal_role_label = ' · '.join(PROJECT_LABELS[key] + ': ' + role for key, role in row.catalog_assignments.items() if not project or key == project) or 'Без доступа'
+        row.catalog_groups = [group for group in row.groups.all() if group.name not in ROLES and (not project or project in group_roles(group))]
     sections = {}
     selected = set(filters.cleaned_data.get('group', [])) if filters.is_valid() else set()
     for row in catalog:
-        memberships = [group for group in row.groups.all() if group.name not in ROLES]
+        memberships = row.catalog_groups
         if selected:
             memberships = [group for group in memberships if str(group.pk) in selected]
         destinations = [(f'group-{group.pk}', group.name) for group in memberships]
         if not destinations:
-            destinations = [('role-' + (role_for(row) or 'none'), role_for(row) or 'Без группы')]
+            label = row.catalog_assignments.get(project) if project else role_for(row)
+            destinations = [('role-' + (label or 'none'), label or 'Без группы')]
         for key, name in destinations:
             section = sections.setdefault(key, {'key': key, 'name': name, 'users': []})
             section['users'].append(row)
     sections = sorted(sections.values(), key=lambda section: (section['name'] == 'Без группы', section['name'].casefold()))
-    return render(request, 'base/users.html', {'form': form, 'editing': editing, 'catalog': catalog, 'sections': sections, 'query': query, 'filters': filters, 'filter_query': request.GET.urlencode()})
+    return render(request, 'base/users.html', {**project_context, 'form': form, 'editing': editing, 'catalog': catalog, 'sections': sections, 'query': query, 'filters': filters, 'filter_query': request.GET.urlencode()})
 
 
 @require_GET
