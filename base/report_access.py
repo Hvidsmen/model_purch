@@ -11,6 +11,13 @@ def report_kinds(user):
 
 
 def politician_scope(user):
+    scope = _politician_scope(user)
+    if scope and role_for(user) in (POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
+        scope['pilot_periods'] = True
+    return scope
+
+
+def _politician_scope(user):
     role = role_for(user)
     if role not in REPORT_ROLES:
         return None
@@ -93,6 +100,9 @@ def scoped_values(kind, values, scope):
             result[parameter] = selected if multiple else selected[0]
         elif name == 'author':
             result[parameter] = values.get(parameter) if scope.get('all_authors') else [scope['author']] if multiple else scope['author']
+    from admin_motivation.services.report_periods import pilot_enabled, allowed_period, PILOT_QUARTER
+    if pilot_enabled(kind, scope) and kind == 'manager' and not allowed_period(result.get('qm')):
+        result['qm'] = PILOT_QUARTER
     return result
 
 
@@ -106,7 +116,7 @@ def scoped_query(query, scope, kind='manager-detail'):
         values[parameter] = selected if multiple else selected[0] if selected else None
     values = scoped_values(kind, values, scope)
     for name, parameter, label, dataset, multiple in FILTERS[kind]:
-        if name in ('type', 'subdivision', 'author'):
+        if name in ('type', 'subdivision', 'author') or (name == 'quarter' and scope.get('pilot_periods')):
             value = values[parameter]
             if value is None or value == []:
                 query.pop(name, None)

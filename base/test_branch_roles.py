@@ -47,6 +47,7 @@ class BranchRoleTests(TestCase):
         for role, user in self.users.items():
             scope = politician_scope(user)
             self.assertTrue(scope['all_authors'])
+            self.assertTrue(scope['pilot_periods'])
             self.assertEqual(scope['subdivision'], ['Allowed-A', 'Allowed-B'])
             self.assertNotIn('author', scope)
             values = scoped_values('manager-detail', {'TypeCoeff_': 'Директора', 'Subdivision': ['Denied-C'], 'DealAuthor': ['Любой сотрудник']}, scope)

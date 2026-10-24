@@ -45,7 +45,7 @@ def metrics(rows, currency='USD', overall=False, coefficients=True):
             paid, bonus, paid + bonus]
 
 
-def period_motivation_summary(rows, currency='USD'):
+def period_motivation_summary(rows, currency='USD', pilot=False):
     def period_key(row):
         year = str(row['Год']) if row.get('Год') is not None else 'Без года'
         name = str(row.get('КварталМотивации') or 'Без периода').strip()
@@ -63,6 +63,8 @@ def period_motivation_summary(rows, currency='USD'):
     for year in years:
         segments = [1, 2, 3, 4, 'year'] + sorted(
             {segment for scope_year, segment in buckets if scope_year == year and segment not in (1, 2, 3, 4, 'year')})
+        if pilot:
+            segments = [4, 'year']
         for segment in segments:
             key = (year, segment)
             label = f'{segment} кв.' if isinstance(segment, int) else 'Год' if segment == 'year' else segment
@@ -98,7 +100,12 @@ def period_motivation_summary(rows, currency='USD'):
             'totals': summary(rows), 'currency': currency}
 
 
-def manager_detail_report(rows, currency='USD', performance_rows=None):
+def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=False):
+    if pilot:
+        from .report_periods import pilot_rows
+        rows = pilot_rows(rows)
+        if performance_rows is not None:
+            performance_rows = pilot_rows(performance_rows)
     years = sorted({str(row['Год']) for row in rows if row.get('Год') is not None})
     year_scopes = {str(row.get('Год')) for row in rows}
     def period(row):
@@ -142,4 +149,4 @@ def manager_detail_report(rows, currency='USD', performance_rows=None):
             execution.append(block)
     return {'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
             'headers': [{'label': label, 'detail': index < 13, 'title': f'Средневзвешенный K{index}: Σ(K{index} × O{index}) / Σ(O{index})' if index < 5 else label} for index, label in enumerate(HEADERS)],
-            'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency)}
+            'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency, pilot=pilot)}

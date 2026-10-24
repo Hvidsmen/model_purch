@@ -18,6 +18,10 @@ def choices(kind, values, scope):
         base_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE [Подразделение] IN (@Subdivision) '
                        'AND [ТипКоэф] IN (@' + type_parameter + ')')
         author_parameter = 'DealAuthor'
+    from .report_periods import pilot_enabled, PILOT_SQL, allowed_period
+    pilot = pilot_enabled(kind, scope)
+    if pilot:
+        base_source += ' AND ' + PILOT_SQL
     source = base_source
     if kind != 'subdivisions':
         source += ' AND [АвторСделки] IN (@' + author_parameter + ')'
@@ -36,6 +40,8 @@ def choices(kind, values, scope):
                 column = columns[name]
                 sql, args = bind_sql('SELECT DISTINCT [' + column + '] AS value FROM ' + (base_source if name == 'author' and scope.get('all_authors') else source), values)
                 options = sorted({str(row['value']) for row in fetch(cursor, sql, args, limit=10000) if row.get('value') is not None})
+            if pilot and name == 'quarter':
+                options = [value for value in options if allowed_period(value)]
             result.append({'name': name, 'label': caption, 'multiple': multiple, 'locked': False,
                 'locked_value': None, 'options': [{'value': value, 'selected': value in selected} for value in options]})
         return result

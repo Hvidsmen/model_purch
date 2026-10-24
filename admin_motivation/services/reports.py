@@ -166,7 +166,7 @@ def manager_metrics(rows, group=False):
             possible_y, max(y_plan-y_fact, 0) or None, ratio(y_fact, y_plan), available_y, bonus, available_y+bonus]
 
 
-def dashboard_blocks(rows, group=False, period_rows=()):
+def dashboard_blocks(rows, group=False, period_rows=(), periods="12345"):
     metrics = manager_metrics(rows, group)
     result = []
     for scope, offset in [('quarter', 0), ('year', 4)]:
@@ -192,7 +192,7 @@ def dashboard_blocks(rows, group=False, period_rows=()):
                 ('possible', 'СуммаМотивацииUSDQ_Y', 'СуммаМотивацииUSDY_Y'),
                 ('available', 'СуммаМотивацииUSDУчетПроцентаQ_Y', 'СуммаМотивацииUSDУчетПроцентаY_Y'),
             ]:
-                for period in range(1, 6):
+                for period in map(int, periods):
                     subset = [row for row in rows if (
                         str(row.get('КварталМотивации') or '').strip().casefold() == 'год' if period == 5
                         else re.match(r'^' + str(period) + r'\s*Квартал', str(row.get('КварталМотивации') or ''), flags=re.I))]
@@ -215,7 +215,13 @@ def department_execution(rows, values, blocks):
             blocks[block_offset + index]['value'] = value
 
 
-def manager_report(rows, period_rows=()):
+def manager_report(rows, period_rows=(), pilot=False):
+    from .report_periods import pilot_rows
+    if pilot:
+        rows = pilot_rows(rows)
+    periods = '45' if pilot else '12345'
+    def blocks(items, group=False, period_rows=()):
+        return dashboard_blocks(items, group, period_rows, periods)
     sections = []
     grouped = defaultdict(list)
     for row in rows: grouped[row.get('VariationCalculate') or 'Без группы'].append(row)
@@ -223,18 +229,18 @@ def manager_report(rows, period_rows=()):
         groups = defaultdict(list)
         for row in subset: groups[row.get('ГруппаПлановПродаж') or '—'].append(row)
         sections.append({'label': label, 'open': label.strip().casefold() not in {'подразделение', 'подразделение(глобально)'},
-            'values': manager_metrics(subset, True), 'blocks': dashboard_blocks(subset, True, [row for row in period_rows if row.get('VariationCalculate') == label]), 'children': [{'label': name, 'values': manager_metrics(items, True), 'blocks': dashboard_blocks(items, True, [row for row in period_rows if row.get('VariationCalculate') == label and (row.get('ГруппаПлановПродаж') or '—') == name])} for name, items in sorted(groups.items())]})
+            'values': manager_metrics(subset, True), 'blocks': blocks(subset, True, [row for row in period_rows if row.get('VariationCalculate') == label]), 'children': [{'label': name, 'values': manager_metrics(items, True), 'blocks': blocks(items, True, [row for row in period_rows if row.get('VariationCalculate') == label and (row.get('ГруппаПлановПродаж') or '—') == name])} for name, items in sorted(groups.items())]})
     from .pilot_formula import GLOBAL_SUBDIVISION
     for section in sections:
         if section['label'] == GLOBAL_SUBDIVISION:
             department_execution(rows, section['values'], section['blocks'])
             for child in section['children']:
                 department_execution(rows, child['values'], child['blocks'])
-    totals, total_blocks = manager_metrics(rows), dashboard_blocks(rows, period_rows=period_rows)
+    totals, total_blocks = manager_metrics(rows), blocks(rows, period_rows=period_rows)
     payout_modes = {row.get('VariationCalculate') for row in rows if any(row.get(key) is not None for key in ('СуммаМотивацииUSDQ', 'СуммаМотивацииUSDQ_Y', 'СуммаМотивацииUSDY_Y'))}
     if payout_modes == {GLOBAL_SUBDIVISION}:
         department_execution(rows, totals, total_blocks)
-    return {'totals': totals, 'total_blocks': total_blocks, 'sections': sections,
+    return {'year_periods': periods, 'totals': totals, 'total_blocks': total_blocks, 'sections': sections,
         'division_ratios': [ratio(total(rows, 'СуммаОтгрузокUSD_S_Q'), total(rows, 'СуммаПланUSD_S_Q')),
                             ratio(total(rows, 'СуммаОтгрузокUSD_S_Y'), total(rows, 'СуммаПланUSD_S_Y'))]}
 
@@ -328,6 +334,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
         from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
         access_scope = worker_scope(access_scope, kind, values)
+    from .report_periods import pilot_enabled, PILOT_SQL
+    pilot = pilot_enabled(kind, access_scope)
     if kind == 'manager-detail' and not values.get('TypeCoeff_'):
         raise ValidationError('Выберите вид работника.')
     if kind == 'manager' and any(not values.get(key) for key in (('TypeCoeff_', 'Subdivision', 'qm') if access_scope and access_scope.get('all_authors') else ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm'))):
@@ -343,6 +351,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
             source_sql = manager_currency_sql(source_sql, values.get('Currency', 'USD'))
         if access_scope and kind == 'manager':
             source_sql = 'SELECT * FROM (' + source_sql + ') AS personal_source WHERE [АвторСделки] IN (@DealAuthor)'
+        if pilot:
+            source_sql = 'SELECT * FROM (' + source_sql + ') AS pilot_source WHERE ' + PILOT_SQL
         sql, args = bind_sql(source_sql, values)
         if kind == 'deals':
             source = '(' + sql + ') AS report_source'
@@ -364,10 +374,10 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
                 'SUM([СуммаПланUSD]) AS [СуммаПланUSD],SUM([СуммаОтгрузокUSD]) AS [СуммаОтгрузокUSD] '
                 'FROM DataWH.motivation.ReportMotivationByDealAuthor '
                 'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ AND [Год] IN (@Years) '
-                + ('AND [АвторСделки] IN (@DealAuthor) ' if access_scope else '') +
+                + ('AND [АвторСделки] IN (@DealAuthor) ' if access_scope else '') + ('AND ' + PILOT_SQL + ' ' if pilot else '') +
                 'GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
             performance = fetch(cursor, performance_sql, performance_args)
-            return manager_detail_report(rows, values.get('Currency', 'USD'), performance)
+            return manager_detail_report(rows, values.get('Currency', 'USD'), performance, pilot=pilot)
         if kind == 'subdivisions':
             dimensions = ['Подразделение', 'АвторСделки', 'Год', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
             columns = ','.join('['+key+']' for key in dimensions)
@@ -386,13 +396,13 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
             'FROM DataWH.motivation.ReportMotivationByDealAuthor '
             'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ '
             'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales) '
-            'GROUP BY [VariationCalculate],[ГруппаПлановПродаж]', values)
+            + ('AND ' + PILOT_SQL + ' ' if pilot else '') + 'GROUP BY [VariationCalculate],[ГруппаПлановПродаж]', values)
         period_rows = fetch(cursor, period_sql, period_args)
-        report = manager_report(rows, period_rows)
+        report = manager_report(rows, period_rows, pilot=pilot)
         # Read years from the source table: the legacy presentation view may omit Год.
         year_sql, year_args = bind_sql('SELECT DISTINCT [Год] FROM DataWH.motivation.ReportMotivationByDealAuthor '
             'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ '
-            'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales)', values)
+            'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales)' + (' AND ' + PILOT_SQL if pilot else ''), values)
         report['currency'] = values.get('Currency', 'USD')
         report['years'] = sorted({str(row['Год']) for row in fetch(cursor, year_sql, year_args) if row.get('Год') is not None})
         return report

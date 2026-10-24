@@ -1,6 +1,6 @@
 {% load report_format %}
 <div class="report-subtitle">{{ query.type }} · {{ query.subdivision }} · {{ query.author }} · Валюта мотивации: {% if query.currency == 'RUB' %}RUB{% else %}USD{% endif %}</div>
-<div class="report-scroll"><div class="manager-table" id="manager-dashboard" style="--dashboard-quarter:4;--dashboard-year:6">
+<div class="report-scroll"><div class="manager-table" id="manager-dashboard" data-year-period-count="{{ data.year_periods|default:'12345'|length }}" style="--dashboard-quarter:4;--dashboard-year:6">
 <div class="manager-periods"><span></span><strong>{{ query.quarter }}</strong><strong>Год</strong></div>
 <div class="manager-grid report-column-header"><span>Учёт % выполнения / Группа планов продаж</span>{% include 'admin_motivation/reports/_dashboard_header.html' with scope='quarter' %}{% include 'admin_motivation/reports/_dashboard_header.html' with scope='year' %}</div>
 <div class="manager-grid division-percent"><span>% выполнения подразделения</span>{% include 'admin_motivation/reports/_dashboard_execution.html' with scope='quarter' value=data.division_ratios.0 %}{% include 'admin_motivation/reports/_dashboard_execution.html' with scope='year' value=data.division_ratios.1 %}</div>

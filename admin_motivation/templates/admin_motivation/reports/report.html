@@ -5,6 +5,7 @@
 <section class="content native-report">
 <a href="{% url 'motivation_reports' %}">← Все отчёты</a>
 <h1 class="report-title">{{ definition.title }}{% if data.years %} · {{ data.years|join:", " }}{% endif %}{% if kind == 'manager' or kind == 'manager-detail' %} · {% if query.currency == 'RUB' %}RUB{% else %}USD{% endif %}{% endif %}</h1>
+{% if pilot_periods %}<p class="report-filter-hint" role="status">Пилот: доступны только IV квартал и год. В отчёте «Факт закрытых сделок» доступен весь период.</p>{% endif %}
 <aside class="ux-report-receipt" aria-label="Происхождение расчёта">
 {% if execution_receipt %}<strong>Последний подтверждённый запуск</strong><p>{% timezone 'Europe/Moscow' %}{{ execution_receipt.run.started_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК · Год: {{ execution_receipt.run.parameters.fact_year }} · План: {{ execution_receipt.run.parameters.plan_version }} · {% if execution_receipt.run.state == 'completed' %}Завершён{% elif execution_receipt.run.state == 'running' %}Выполняется — данные могут обновляться{% else %}Ошибка — результат может быть неполным{% endif %}</p>
 <p>План указан по фактическому запуску. Фильтры отчёта не меняют параметры расчёта.</p><p>Версии коэффициентов: {% for version in execution_receipt.versions %}{{ version.title|default:'Версия' }} с {{ version.from }}{% if not forloop.last %}; {% endif %}{% empty %}выгрузка не подтверждена{% endfor %}.</p>
@@ -27,6 +28,6 @@
 {% if kind == 'manager-detail' %}{% include 'admin_motivation/reports/manager_detail.html' %}{% elif kind == 'manager' %}{% include 'admin_motivation/reports/manager.html' %}{% elif kind == 'deals' %}{% include 'admin_motivation/reports/deals.html' %}{% else %}{% include 'admin_motivation/reports/subdivisions.html' %}{% endif %}
 {% elif not errors %}<p class="report-empty">Выберите параметры и нажмите «Сформировать отчёт».</p>{% endif %}
 </section>
-<script src="{% static 'admin_motivation/reports.js' %}?v=group-report-scope-20261021" defer></script>
+<script src="{% static 'admin_motivation/reports.js' %}?v=pilot-periods-20261024" defer></script>
 {% if kind == 'manager-detail' or kind == 'subdivisions' %}<script src="{% static 'admin_motivation/manager_multiselect.js' %}?v=group-report-scope-20261021" defer></script>{% endif %}{% if kind == 'manager-detail' %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=group-report-scope-20261021" defer></script>{% endif %}
 {% endblock %}

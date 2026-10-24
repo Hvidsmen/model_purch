@@ -121,6 +121,7 @@ def report_page(request, kind):
                  'older_link':bool(requested_execution and str(latest_execution.pk)!=requested_execution),
                  'year_mismatch':bool(query.getlist('year') and str(latest_execution.parameters.get('fact_year')) not in query.getlist('year'))}
     return render(request, 'admin_motivation/reports/report.html', {
+        'pilot_periods': bool(access_scope and access_scope.get('pilot_periods') and kind in ('manager', 'manager-detail')),
         'execution_receipt':receipt, 'kind': kind, 'definition': CATALOG[kind], 'filters': filters, 'query': query,
         'selected_parameters': selected_parameters, 'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
         'subdivisions': Subdivision.objects.none() if access_scope else Subdivision.objects.all(),

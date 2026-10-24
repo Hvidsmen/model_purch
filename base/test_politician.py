@@ -19,9 +19,21 @@ class PoliticianAccessTests(TestCase):
         self.user.groups.add(Group.objects.get(name=POLITICIAN))
         channel = Chanel.objects.create(chanel_name='Test channel')
         self.branch = Subdivision.objects.create(subdivision_key='Own', subdivision_name='Own', subdivision_global='Own', chanel=channel)
-        self.scope = {'subdivision': 'Own', 'author': 'Иванов Иван Иванович', 'type': 'Политики'}
+        self.scope = {'subdivision': 'Own', 'author': 'Иванов Иван Иванович', 'type': 'Политики', 'pilot_periods': True}
         MotivationReportAccess.objects.create(user=self.user, subdivision=self.branch, deal_author=self.scope['author'])
         self.client.force_login(self.user)
+
+    def test_pilot_is_trusted_role_setting_and_does_not_apply_to_sales(self):
+        from .access import SALES, MOTIVATION_VIEWER
+        from .report_access import politician_scope
+        self.assertTrue(politician_scope(self.user)['pilot_periods'])
+        self.user.groups.clear()
+        self.user.groups.add(Group.objects.get(name=SALES))
+        self.assertNotIn('pilot_periods', politician_scope(User.objects.get(pk=self.user.pk)))
+        for role in (ADMIN, MOTIVATION_VIEWER):
+            self.user.groups.clear()
+            self.user.groups.add(Group.objects.get(name=role))
+            self.assertIsNone(politician_scope(User.objects.get(pk=self.user.pk)))
 
     def test_only_three_reports_and_no_coefficient_or_plan_navigation(self):
         response = self.client.get(reverse('motivation_reports'))

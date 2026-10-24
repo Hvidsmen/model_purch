@@ -1370,6 +1370,28 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('#director-employee-choice')).to_have_value(str(first))
         self.assertEqual(self.errors, [])
 
+    def test_pilot_dashboard_expansion_keeps_headers_and_rows_aligned(self):
+        from playwright.sync_api import expect
+        from .services.reports import manager_report
+        from .services.report_periods import PILOT_QUARTER
+        from .test_reports import NativeMotivationReportTests
+        rows = [dict(NativeMotivationReportTests.manager_rows()[0], КварталМотивации=p)
+                for p in ('1 Квартал', PILOT_QUARTER, 'Год')]
+        report = manager_report(rows, pilot=True)
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=report):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager']) + '?run=1&quarter=4+Квартал')
+            dashboard = self.page.locator('#manager-dashboard')
+            expect(dashboard).to_have_attribute('data-year-period-count', '2')
+            for reveal in ('year-possible', 'year-available', 'year-period', 'year-motivation'):
+                dashboard.locator('.report-column-header [data-dashboard-reveal="' + reveal + '"]').click()
+            self.assertEqual(dashboard.evaluate('(el) => el.style.getPropertyValue("--dashboard-year")'), '14')
+            counts = dashboard.locator('.report-column-header, .report-total-row, .division-percent').evaluate_all(
+                '(rows) => rows.map(row => Array.from(row.children).filter(cell => !cell.hidden).length)')
+            self.assertEqual(len(set(counts)), 1)
+            expect(dashboard.locator('.report-column-header [data-dashboard-column="year-possible"]:visible')).to_have_count(2)
+            self.page.screenshot(path='/tmp/pilot-dashboard.png', full_page=True)
+        self.assertEqual(self.errors, [])
+
     def test_native_reports_render_manager_and_lazy_subdivision_tree(self):
         from unittest.mock import patch
         from playwright.sync_api import expect
