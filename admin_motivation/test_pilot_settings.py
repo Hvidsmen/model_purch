@@ -179,3 +179,27 @@ class PilotSettingsTests(TestCase):
         self.assertFalse(form.is_valid())
         self.assertEqual(self.client.get(url, {'edit_employee': director.pk}).status_code, 404)
         self.assertTrue(DirectorEmployee.objects.filter(pk=director.pk).exists())
+
+    def test_reopened_version_can_be_approved_again_without_losing_history(self):
+        from .models import MotivationApproval
+        approved=approve_review(review_approval(self.first)['token'])
+        first_approval=MotivationApproval.objects.get(version=approved)
+        reopened=reopen_version(self.user,approved.pk,approved.revision,'Change coefficients')
+        self.global_coeff.refresh_from_db()
+        self.global_coeff.motivation_coeff=.2;self.global_coeff.save()
+        reopened.refresh_from_db()
+        reviewed=review_approval(reopened)
+        response=self.client.post(reverse('motivation_coefficient_comparison'),data={'action':'approve','token':reviewed['token'],'confirm_overwrite':True},content_type='application/json')
+        self.assertEqual(response.status_code,200,response.content)
+        reopened.refresh_from_db();self.assertEqual(reopened.status,'approved')
+        self.assertEqual(MotivationApproval.objects.filter(version=approved).count(),2)
+        first_approval.refresh_from_db()
+        self.assertEqual(MotivationApproval.objects.filter(version=approved).order_by('pk').first().pk,first_approval.pk)
+        self.assertEqual(VersionReopenLog.objects.get(version=approved).snapshot['admin_motivation.GlobalCoeff'][0]['motivation_coeff'],.1)
+
+    def test_sqlite_busy_approval_returns_retry_message(self):
+        from django.db import OperationalError
+        with patch('admin_motivation.comparison_views.approve_review',side_effect=OperationalError('database is locked')):
+            response=self.client.post(reverse('motivation_coefficient_comparison'),data={'action':'approve','token':'test'},content_type='application/json')
+        self.assertEqual(response.status_code,409)
+        self.assertIn('База сейчас занята',response.json()['error'])

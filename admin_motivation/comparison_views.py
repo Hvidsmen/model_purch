@@ -1,5 +1,6 @@
 import json
 from django.core.exceptions import ValidationError
+from django.db import OperationalError, connection
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
@@ -43,6 +44,10 @@ def comparison_action(request):
         if action != 'compare' or plan is None:
             raise ValidationError('Выберите загруженный план продаж для сравнения.')
         return JsonResponse(compare_plan(plan, version, baseline, sub, changes, deleted, director_changes=director_changes, employee=employee))
+    except OperationalError as error:
+        if connection.vendor == 'sqlite' and any(word in str(error).lower() for word in ('locked', 'busy')):
+            return JsonResponse({'error': 'База сейчас занята другой операцией. Дождитесь её завершения и повторите проверку утверждения.'}, status=409)
+        raise
     except ValidationError as error:
         return JsonResponse({'error': ' '.join(error.messages)}, status=400)
     except (ValueError, TypeError, KeyError, json.JSONDecodeError):

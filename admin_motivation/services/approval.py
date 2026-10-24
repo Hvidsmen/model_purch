@@ -3,7 +3,7 @@ import hashlib
 import json
 from django.core import signing
 from django.core.exceptions import ValidationError
-from django.db import models, transaction
+from django.db import models, transaction, connection
 from django.utils import timezone
 from ..models import GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff, SalesPlanScenario, MotivationApproval, Goods, Subdivision, TypeCoeff, SegmentCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 from .comparison import compare_plan, proposed_changes
@@ -63,6 +63,10 @@ def approve_review(token, confirm_overwrite=False):
         payload = signing.loads(token, salt=SALT, max_age=600)
     except signing.BadSignature:
         raise ValidationError('Подтверждение устарело или повреждено. Повторите просмотр утверждения.')
+    # SQLite ignores row locks. Acquire its writer lock before the state read,
+    # so two confirmations cannot both observe the same draft snapshot.
+    if connection.vendor == 'sqlite':
+        GlobalCoeffVersion.objects.filter(pk=payload['version']).update(revision=models.F('revision'))
     # Lock the same version rows that draft creation and coefficient mutations lock.
     list(GlobalCoeffVersion.objects.select_for_update().order_by('pk'))
     version = GlobalCoeffVersion.objects.get(pk=payload['version'])

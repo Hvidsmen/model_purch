@@ -135,7 +135,7 @@ class GlobalCoefficientVersionTests(TestCase):
             sql.assert_not_called()
         self.assertContains(response, '01.01.2001')
         self.assertContains(response, 'Не утверждена')
-        self.assertContains(response, 'Историческая версия: только просмотр')
+        self.assertContains(response, 'Историческая версия · Только просмотр')
         self.assertFalse(response.context['version_editable'])
         self.assertEqual(GlobalCoeff.objects.count(), 2)
         self.assertEqual(self.client.get(reverse('global_coeff_admin_motivation')).context['selected_version'], self.first)

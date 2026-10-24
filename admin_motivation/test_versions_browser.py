@@ -1512,3 +1512,21 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(str(self.db(lambda:SubdivisionDirectorCoeff.objects.get(employee_id=second).k0)),'0.010000')
         self.assertEqual(self.db(lambda:SubdivisionCoeff.objects.get(subdivision_id=branch).motivation_coeff),.02)
         self.assertEqual(self.errors,[])
+
+    def test_reapprove_after_reopen_preserves_prior_approval(self):
+        from playwright.sync_api import expect
+        from .services.approval import approve_review,review_approval
+        from .models import MotivationApproval
+        first_log=self.db(lambda:approve_review(review_approval(GlobalCoeffVersion.objects.get(pk=self.first.pk))['token']).approval.pk)
+        self.page.goto(self.live_server_url+reverse('global_coeff_admin_motivation'))
+        self.page.locator('.version-tools button[aria-controls="version-reopen"]').click()
+        self.page.locator('#version-reopen [name=reason]').fill('Browser reapproval')
+        self.page.locator('#version-reopen [name=confirm]').check()
+        with self.page.expect_navigation():self.page.locator('#version-reopen button[type=submit]').click()
+        self.page.locator('#approval-review').click()
+        expect(self.page.locator('#approval-commit')).to_be_enabled()
+        with self.page.expect_navigation():self.page.locator('#approval-commit').click()
+        expect(self.page.locator('#version-approval-actions')).to_contain_text('Утверждена')
+        self.assertEqual(self.db(lambda:MotivationApproval.objects.filter(version_id=self.first.pk).count()),2)
+        self.assertTrue(self.db(lambda:MotivationApproval.objects.filter(pk=first_log).exists()))
+        self.assertEqual(self.errors,[])

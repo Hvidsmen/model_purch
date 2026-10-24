@@ -163,6 +163,11 @@ class GlobalCoeffVersion(models.Model):
         return f'{self.title or "Версия"} с {self.effective_from:%d.%m.%Y}'
 
     @property
+    def approval(self):
+        """Latest immutable approval; reopened versions may be approved repeatedly."""
+        return self.approvals.order_by('-pk').first()
+
+    @property
     def is_editable(self):
         latest = type(self).objects.exclude(status=self.Status.SUPERSEDED).order_by('-pk').first()
         return self.status == self.Status.DRAFT and latest is not None and latest.pk == self.pk
@@ -587,7 +592,7 @@ class ApprovalQuerySet(models.QuerySet):
 
 class MotivationApproval(models.Model):
     objects = ApprovalQuerySet.as_manager()
-    version = models.OneToOneField(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='approval')
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, related_name='approvals')
     created_at = models.DateTimeField(auto_now_add=True)
     plan = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT, null=True, blank=True)
     baseline = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, null=True, blank=True, related_name='baseline_approvals')
