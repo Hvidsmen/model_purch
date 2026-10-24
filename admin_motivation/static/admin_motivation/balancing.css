@@ -1,0 +1,106 @@
+#coefficient-balancing {
+  max-width: 1600px;
+  margin: auto;
+  color: #263752;
+}
+#coefficient-balancing [hidden] {
+  display: none !important;
+}
+.balance-heading,
+.balance-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: space-between;
+}
+.balance-card {
+  background: white;
+  border: 1px solid #dbe2f0;
+  border-radius: 12px;
+  padding: 16px;
+  margin: 14px 0;
+}
+.balance-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 12px;
+  align-items: end;
+}
+.balance-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.balance-controls select,
+.balance-controls input,
+#balance-cells select,
+#balance-cells input {
+  min-height: 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 5px;
+  padding: 6px;
+  background: white;
+  max-width: 100%;
+  color: inherit;
+}
+.balance-actions {
+  justify-content: flex-start;
+  margin-top: 12px;
+}
+.balance-table-scroll {
+  overflow: auto;
+  max-height: 65vh;
+  margin-top: 12px;
+}
+#coefficient-balancing th {
+  position: sticky;
+  top: 0;
+  background: #f6f8fc;
+  z-index: 1;
+}
+#coefficient-balancing td,
+#coefficient-balancing th {
+  padding: 9px;
+  vertical-align: middle;
+  font-variant-numeric: tabular-nums;
+}
+#balance-cells input {
+  width: 110px;
+}
+#balance-cells td {
+  min-width: 95px;
+}
+#balance-cells td:first-child {
+  min-width: 235px;
+}
+#balance-cells small {
+  display: block;
+  color: #64748b;
+}
+.balance-note {
+  font-size: 13px;
+  color: #64748b;
+  margin: 12px 0;
+}
+#coefficient-balancing summary {
+  cursor: pointer;
+}
+#balance-cells tr[data-participation="manual"] {
+  background: #f3f0ff;
+}
+#balance-cells tr[data-participation="auto"] {
+  background: #eef8ff;
+}
+
+#coefficient-balancing h1 {
+  font-size: 28px;
+}
+#coefficient-balancing h2 {
+  font-size: 21px;
+}
+#coefficient-balancing select:disabled,
+#coefficient-balancing input:disabled {
+  background: #f5f6fa;
+  color: #64748b;
+}

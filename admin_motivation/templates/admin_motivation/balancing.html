@@ -1,0 +1,36 @@
+{% extends 'admin_motivation/base.html' %}{% load static tz %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'admin_motivation/balancing.css' %}">
+<main id="coefficient-balancing" data-endpoint="{% url 'motivation_coefficient_balancing' %}">
+<header class="balance-heading"><div><h1>Балансировка премии</h1><p>Измените выбранные коэффициенты, сохранив плановую премию. Компенсация затронет только отмеченные ячейки.</p></div><a href="{% url 'global_coeff_admin_motivation' %}">К коэффициентам →</a></header>
+<form id="balance-setup" class="balance-card">{% csrf_token %}
+<div class="balance-controls">
+<label>Версия коэффициентов<select name="version" required>{% for version in versions %}<option value="{{ version.pk }}" {% if initial.version == version.pk|stringformat:'s' %}selected{% endif %}>{{ version }} · {{ version.get_status_display }}</option>{% endfor %}</select></label>
+<label>Загруженный план продаж<select name="plan" required><option value="">Выберите план</option>{% for plan in plans %}<option value="{{ plan.pk }}" {% if initial.plan == plan.pk|stringformat:'s' %}selected{% endif %}>{{ plan.title }}</option>{% endfor %}</select></label>
+<label>Коэффициенты<select name="scope"><option value="global">Глобальные</option><option value="local" {% if initial.subdivision %}selected{% endif %}>По подразделениям</option></select></label>
+<label>Подразделение<select name="subdivision"><option value="">Выберите подразделение</option>{% for sub in subdivisions %}<option value="{{ sub.pk }}" {% if initial.subdivision == sub.pk|stringformat:'s' %}selected{% endif %}>{{ sub }}</option>{% endfor %}</select></label>
+<label>Сохранить плановую премию<select name="mode"><option value="type">По каждому типу коэффициента</option><option value="subdivision">В сумме подразделения</option><option value="company">В сумме компании</option></select></label>
+<button class="btn btn-primary" type="submit">Загрузить исходные значения</button>
+</div>
+<p class="balance-note" id="balance-scope-note"></p>
+<details><summary>Правила балансировки</summary><p>База — строки загруженного плана с даты начала выбранной версии. В глобальном режиме используются глобальные ставки; в режиме подразделений — локальные. Режим «Компания» для локальных коэффициентов открывает все подразделения. Глобальные ставки директоров учитываются отдельно для каждого директора, представленного в коэффициентах подразделений.</p><p>Ручные значения фиксируются. Выбранные для компенсации ненулевые коэффициенты умножаются на общий множитель в пределах сохраняемого бюджета: вклад в компенсацию пропорционален их исходной плановой премии. Остальные значения сохраняются. Нулевые коэффициенты пропорционально не увеличиваются. При недостаточном выборе, выходе за границы −100%…100% или невозможности сохранить сумму до цента расчёт выдаёт объяснение.</p><p>Минимальные коэффициенты при отсутствии точного совпадения пересчитываются заново. Коэффициенты руководителя, формулы выполнения и порог выплаты не редактируются этой формой. Здесь балансируется плановая премия по суммам сегментов плана, как в сравнении планов; фактическая выплата зависит от выполнения плана и поправок. Последнюю утверждённую версию можно сохранить в новый черновик с той же датой начала действия. Исторические версии доступны для анализа.</p></details>
+</form>
+<p id="balance-status" role="status" aria-live="polite">Выберите план и загрузите исходные значения.</p>
+<div id="balance-error" class="alert alert-danger" role="alert" hidden></div>
+<section id="balance-workspace" hidden>
+<div class="balance-card"><div class="balance-controls">
+<label>Поиск товара, марки или директора<input type="search" id="balance-search" placeholder="Начните вводить"></label>
+<label>Тип коэффициента<select id="balance-kind"><option value="">Все типы</option><option>Политики</option><option>Продажи</option><option>Директор</option></select></label>
+<label>Подразделение в таблице<select id="balance-branch"><option value="">Все подразделения</option></select></label>
+<label>Показать<select id="balance-show"><option value="all">Все ячейки</option><option value="selected">Выбранные для изменения</option><option value="changed">Изменённые после расчёта</option></select></label>
+</div><div class="balance-actions"><button type="button" id="balance-select" class="btn btn-outline-primary">Компенсировать видимыми</button><button type="button" id="balance-clear" class="btn btn-outline-primary">Снять компенсацию</button><span id="balance-count"></span></div>
+<p class="balance-note">«Ручное» — задайте новый процент. «Компенсация» — разрешите автоматический пересчёт. «Не менять» — сохраните исходное значение. Массовый выбор действует на все строки с текущими фильтрами, включая другие страницы.</p>
+<div class="balance-table-scroll"><table class="table" id="balance-cells"><thead><tr><th>Товар / подразделение</th><th>Тип / ступень</th><th>План, USD</th><th>Премия до, USD</th><th>Было, %</th><th>Участие</th><th>Новое, %</th><th>После расчёта, %</th></tr></thead><tbody></tbody></table></div>
+<div class="balance-actions"><button type="button" id="balance-prev" class="btn btn-outline-primary">← Назад</button><span id="balance-page"></span><button type="button" id="balance-next" class="btn btn-outline-primary">Далее →</button></div>
+</div>
+<div class="balance-card"><h2>Проверка плановой премии</h2><p id="balance-total"></p><div class="balance-table-scroll"><table class="table"><thead><tr><th>Подразделение</th><th>Тип</th><th>Было, USD</th><th>Стало, USD</th><th>Разница, USD</th></tr></thead><tbody id="balance-summary"></tbody></table></div><div class="balance-actions"><button type="button" class="btn btn-primary" id="balance-preview">Рассчитать балансировку</button><button type="button" class="btn btn-outline-primary" id="balance-save" disabled>Сохранить в черновик</button></div><p id="balance-save-note" class="balance-note">Предварительный расчёт не изменяет коэффициенты. После сохранения требуется утверждение версии, выгрузка и расчёт.</p></div>
+</section>
+<details class="balance-card"><summary>История балансировок</summary><div class="balance-table-scroll"><table class="table"><thead><tr><th>Когда</th><th>Версия / план</th><th>Кто</th><th>Было → стало, USD</th><th>Изменено ячеек</th></tr></thead><tbody>{% for log in history %}<tr><td>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }} МСК{% endtimezone %}</td><td>{{ log.version }} / {{ log.plan }}</td><td>{{ log.user.get_full_name|default:log.user.username }}</td><td>{{ log.result.before }} → {{ log.result.after }}</td><td><details><summary>Ячеек: {{ log.result.changes|length }}</summary><ul>{% for key, change in log.result.changes.items %}<li>{{ change.label }}: {{ change.before_percent }}% → {{ change.after_percent }}% · {% if change.source == 'manual' %}вручную{% else %}компенсация{% endif %}</li>{% endfor %}</ul></details></td></tr>{% empty %}<tr><td colspan="5">Сохранённых балансировок пока нет.</td></tr>{% endfor %}</tbody></table></div></details>
+</main>
+<script src="{% static 'admin_motivation/balancing.js' %}" defer></script>
+{% endblock %}

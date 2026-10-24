@@ -807,3 +807,13 @@ class MotivationExecution(models.Model):
     parameters = models.JSONField(default=dict)
     export_snapshot = models.JSONField(default=dict)
     observed_at = models.DateTimeField(auto_now=True)
+
+
+class CoefficientBalanceLog(models.Model):
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
+    plan = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT)
+    user = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
+    created_at = models.DateTimeField(auto_now_add=True)
+    parameters = models.JSONField(default=dict)
+    result = models.JSONField(default=dict)
+    fingerprint = models.CharField(max_length=64)

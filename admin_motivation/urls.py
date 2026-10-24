@@ -1,7 +1,8 @@
-from . import discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
+from . import balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path('coefficients/balancing/', balancing_views.balancing, name='motivation_coefficient_balancing'),
     path('versions/reopen/<int:log_id>/snapshot/', operation_views.version_reopen_snapshot, name='motivation_version_reopen_snapshot'),
     path('coefficients/bulk-formula/', operation_views.bulk_coefficient_formula, name='motivation_bulk_formula'),
     path('versions/reopen/', operation_views.reopen_coefficient_version, name='motivation_version_reopen'),
