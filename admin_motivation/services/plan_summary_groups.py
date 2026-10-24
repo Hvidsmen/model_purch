@@ -1,6 +1,7 @@
 """Persistent exact plan inputs grouped at coefficient version boundaries."""
 import hashlib
 import json
+from .subdivision_scope import included
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from django.db import transaction, connection, OperationalError
@@ -20,7 +21,9 @@ def summary_versions():
 
 def signature(versions):
     from .subdivision_aliases import rules
+    from .subdivision_scope import POLICY
     boundaries = [(v.pk, v.effective_from.isoformat()) for v in versions]
+    boundaries.append(POLICY)
     if rules():
         boundaries.append(rules())
     return hashlib.sha256(json.dumps(boundaries).encode()).hexdigest()
@@ -57,6 +60,8 @@ def _rebuild(scenario, versions, wanted, force, number):
         from .subdivision_aliases import mapping, canonical
         names = mapping()
         for day, sub, pg, group, brand, plan, ddp, segments in lines.iterator(chunk_size=2000):
+            if not included(sub, names):
+                continue
             sub = canonical(sub, names)
             if day not in dates:
                 dates[day] = next((v.pk for v in reversed(versions) if v.effective_from <= day), None)

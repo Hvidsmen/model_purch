@@ -1,4 +1,5 @@
 """Read-only DWH import and atomic, dated motivation calculation."""
+from .subdivision_scope import included
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -91,6 +92,8 @@ def load_plan(scenario_id, connector=None, progress=None):
             on_date = plan_date(values['date_'], row_number)
             sub, pg, group, brand = [classification(values[column], column, row_number)
                                     for column in ['subdivision', 'planninggroupsaleserp', 'grouperp', 'марка(бренд)']]
+            if not included(sub):
+                continue
             try:
                 amounts = {segment: str(number(values[f'usd_{segment.lower()}'])) for segment in SEGMENTS}
                 amount = number(values['amountusd'])
@@ -165,7 +168,16 @@ def aggregate_lines(lines, global_plan=False):
 @transaction.atomic
 def calculate_plan(scenario_id, progress=None):
     scenario = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id, is_deleted=False)
-    total_lines = scenario.lines.count()
+    from .plan_scope import global_lines_without_excluded
+    from .subdivision_scope import excluded_plan_names
+    excluded = excluded_plan_names(scenario)
+    projected = global_lines_without_excluded(scenario) if excluded else None
+    if projected is not None:
+        scenario.lines.filter(subdivision='').delete()
+        for line in projected:
+            line.pk = None
+        SalesPlanLine.objects.bulk_create(projected, batch_size=1000)
+    total_lines = scenario.lines.exclude(subdivision__in=excluded).count()
     if not total_lines:
         raise ValidationError('Сначала загрузите план продаж.')
     report(progress, 'Подготовка коэффициентов', 5, 0, total_lines)
@@ -207,7 +219,7 @@ def calculate_plan(scenario_id, progress=None):
     pending, processed = [], 0
     from itertools import chain
     # Local lines populate global director snapshots; global amounts count each director.
-    lines = chain(scenario.lines.exclude(subdivision='').order_by('pk').iterator(chunk_size=1000),
+    lines = chain(scenario.lines.exclude(subdivision='').exclude(subdivision__in=excluded).order_by('pk').iterator(chunk_size=1000),
                   scenario.lines.filter(subdivision='').order_by('pk').iterator(chunk_size=1000))
     from .subdivision_aliases import mapping, canonical
     branch_names = mapping()

@@ -16,7 +16,8 @@ def state_digest(version, plan):
     plan = SalesPlanScenario.objects.get(pk=plan.pk) if plan else None
     if plan and plan.is_deleted:
         raise ValidationError('Сценарий плана удалён. Выберите другой сценарий.')
-    payload = {'versions': versions, 'version': version.pk, 'plan': plan.pk if plan else None,
+    from .subdivision_scope import POLICY
+    payload = {'subdivision_policy': POLICY, 'versions': versions, 'version': version.pk, 'plan': plan.pk if plan else None,
                'loaded_at': plan.loaded_at if plan else None, 'source_version': plan.source_version if plan else None,
                'references': {model._meta.label: list(model.objects.order_by('pk').values_list(*fields)) for model, fields in [
                    (Goods, ('pk', 'planning_group_sales', 'group', 'brand')),

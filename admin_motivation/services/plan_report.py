@@ -8,15 +8,25 @@ AMOUNTS = ['plan', 'ddp', 'policies', 'sales', 'directors', 'total']
 
 
 def period_report(scenario, scope, params):
+    from .subdivision_scope import excluded_plan_names, included
+    from .plan_scope import global_lines_without_excluded
+    excluded = excluded_plan_names(scenario) if scope == 'global' else set()
     base = scenario.lines.exclude(subdivision='') if scope == 'subdivisions' else scenario.lines.filter(subdivision='')
+    virtual = global_lines_without_excluded(scenario) if scope == 'global' and excluded else None
     filters = {field: params.get(field, '').strip() for field in DIMENSIONS}
     if scope == 'global':
         filters['subdivision'] = ''
     # Aggregate once: derive filter choices and apply dimensional filters to period rows.
     all_rows = list(base.values(*DIMENSIONS).annotate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), policies=Sum('policies_usd'),
         sales=Sum('sales_usd'), directors=Sum('directors_usd'), directors_count=Count('directors_usd'), total=Sum('total_usd'), row_count=Count('pk'), ddp_count=Count('amount_ddp_usd'), calculated_count=Count('total_usd')).order_by(*DIMENSIONS))
+    if virtual is not None:
+        all_rows = snapshot_rows(virtual)
     from .subdivision_aliases import mapping, canonical, expand
     names = mapping()
+    if scope == 'subdivisions':
+        excluded = {row['subdivision'] for row in all_rows if not included(row['subdivision'], names)}
+        all_rows = [row for row in all_rows if row['subdivision'] not in excluded]
+        base = base.exclude(subdivision__in=excluded)
     for row in all_rows:
         row['subdivision'] = canonical(row['subdivision'], names)
     choices = {field: sorted({row[field] for row in all_rows}) for field in DIMENSIONS}
@@ -27,10 +37,13 @@ def period_report(scenario, scope, params):
         if row['directors_count'] != row['row_count']:
             row['directors'] = None
         row['markup'] = motivation_markup(row['plan'], row['ddp'], row['total']) if row['calculated_count'] == row['row_count'] else None
-    lines = base
+    lines = virtual if virtual is not None else base
     for field, value in filters.items():
         if value:
-            lines = lines.filter(subdivision__in=expand(value, names)) if field == 'subdivision' else lines.filter(**{field: value})
+            if virtual is not None:
+                lines = [line for line in lines if getattr(line, field) == value]
+            else:
+                lines = lines.filter(subdivision__in=expand(value, names)) if field == 'subdivision' else lines.filter(**{field: value})
     root = {'children': {}, **empty_totals()}
     for row in rows:
         current = root
@@ -71,3 +84,20 @@ def add_totals(node, row):
             node[key] = (node[key] or 0) + row[key]
     for key in ['row_count', 'calculated_count', 'ddp_count', 'directors_count']:
         node[key] += row[key]
+
+
+def snapshot_rows(lines):
+    fields = dict(zip(AMOUNTS, ['amount_usd','amount_ddp_usd','policies_usd','sales_usd','directors_usd','total_usd']))
+    grouped = {}
+    for line in lines:
+        key = tuple(getattr(line, field) for field in DIMENSIONS)
+        row = grouped.setdefault(key, {**dict(zip(DIMENSIONS,key)), **empty_totals()})
+        for label, field in fields.items():
+            value = getattr(line, field)
+            if value is not None:
+                row[label] = (row[label] or 0) + value
+        row['row_count'] += 1
+        row['ddp_count'] += line.amount_ddp_usd is not None
+        row['directors_count'] += line.directors_usd is not None
+        row['calculated_count'] += line.total_usd is not None
+    return [grouped[key] for key in sorted(grouped)]

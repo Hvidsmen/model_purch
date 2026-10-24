@@ -25,8 +25,9 @@ def expand(values, names):
 
 def coefficient_rows(rows, sub_index, key_indexes):
     config = rules()
+    from .subdivision_scope import included
     if not config:
-        yield from rows
+        yield from (row for row in rows if included(row[sub_index]))
         return
     names = {source: target for source, target, policy in config}
     preferred_sources = {source for source, target, policy in config if policy == 'source'}
@@ -36,6 +37,8 @@ def coefficient_rows(rows, sub_index, key_indexes):
     for raw in rows:
         row = list(raw)
         original = row[sub_index]
+        if not included(original, names):
+            continue
         row[sub_index] = canonical(original, names)
         key = tuple(row[index] for index in key_indexes)
         if key in chosen:

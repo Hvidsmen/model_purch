@@ -5,6 +5,7 @@ weight before an edit. Every candidate is revalued after storage rounding.
 """
 import hashlib
 import json
+from .subdivision_scope import included
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
 from django.core.exceptions import ValidationError
@@ -77,7 +78,8 @@ class Budget:
         global_staff = defaultdict(set)
         if not local:
             for sub, staff in SubdivisionDirectorCoeff.objects.filter(version=version).values_list('subdivision__subdivision_key', 'employee_id').distinct():
-                global_staff[canonical(sub, names)].add(staff)
+                if included(sub, names):
+                    global_staff[canonical(sub, names)].add(staff)
         input_hash = hashlib.sha256()
         input_count = 0
         plan_groups = {}
@@ -87,6 +89,8 @@ class Budget:
         fields = ('pk', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts')
         for raw_line in lines.values_list(*fields).iterator(chunk_size=2000):
             pk, day, original_sub, pg, group, brand, amounts = raw_line
+            if not included(original_sub, names):
+                continue
             sub = canonical(original_sub, names)
             input_hash.update(json.dumps(raw_line, sort_keys=True, default=str, separators=(',', ':')).encode())
             input_hash.update(b'\n')

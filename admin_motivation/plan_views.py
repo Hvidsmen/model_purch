@@ -4,6 +4,7 @@ import logging
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
+from django.db.models import F, QuerySet
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from .forms import SalesPlanScenarioForm
@@ -17,6 +18,12 @@ logger = logging.getLogger(__name__)
 
 def sales_plans(request, scenario_id=None):
     scenario = get_object_or_404(SalesPlanScenario, pk=scenario_id, is_deleted=False) if scenario_id else None
+    if scenario is None and request.method == 'GET':
+        scenario = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).order_by(F('loaded_at').desc(), '-pk').first()
+        if scenario:
+            target = reverse('motivation_sales_plan', args=[scenario.pk])
+            query = request.GET.urlencode()
+            return redirect(target + ('?' + query if query else ''))
     form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'create' else None)
     edit_form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'edit' else None,
         initial={'title': scenario.title, 'source_version': scenario.source_version} if scenario else None)
@@ -78,9 +85,9 @@ def sales_plans(request, scenario_id=None):
                 writer.writerow([*labels, row['plan'], row['policies'], row['sales'], row['directors'], row['total'], row['ddp'], row['markup']])
             return response
         # Optional audit export retains original dated coefficient snapshots.
-        lines = lines.select_related('coefficient_version')
+        lines = lines.select_related('coefficient_version') if isinstance(lines, QuerySet) else lines
         writer.writerow(['Дата', 'Подразделение', 'Группа планов', 'Группа', 'Марка', 'План USD', *[f'USD_O{i}' for i in range(5)], 'Версия коэффициентов', 'Политики USD', 'Продажи USD', 'Итого USD', *[f'{kind} {field} O{i}' for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['k', 'Мотивация', 'Источник', 'Версия источника', 'Подразделение источника', 'Группа планов источника']], 'Директора USD', 'Директора: сохранённые коэффициенты и сотрудники'])
-        for line in lines.iterator():
+        for line in (lines.iterator() if isinstance(lines, QuerySet) else lines):
             details = [line.calculation.get(kind, {}).get(f'O{i}', {}).get(field, '') for kind in ['Политики', 'Продажи'] for i in range(5) for field in ['coefficient', 'motivation', 'source', 'source_version', 'source_subdivision', 'source_planning_group']]
             values = [line.plan_date, line.subdivision or 'Глобальный план', line.planning_group_sales, line.group, line.brand, line.amount_usd, *[line.segment_amounts.get(f'O{i}', '') for i in range(5)], str(line.coefficient_version or ''), line.policies_usd, line.sales_usd, line.total_usd, *details]
             # Escape external labels only; negative numeric results remain numeric.

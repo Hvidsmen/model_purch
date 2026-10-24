@@ -1,4 +1,5 @@
 """Three read-only budget variants over the same loaded sales plan."""
+from .subdivision_scope import included
 from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from ..models import GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff
@@ -131,13 +132,28 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
     lines = plan.lines.exclude(subdivision='') if use_subdivision else plan.lines.filter(subdivision='')
     if subdivision:
         lines = lines.filter(subdivision__in=expand(subdivision.subdivision_key, names))
+    from .subdivision_scope import excluded_plan_names
+    excluded = excluded_plan_names(plan)
+    if use_subdivision and excluded:
+        lines = lines.exclude(subdivision__in=excluded)
+    virtual = None
+    if not use_subdivision and excluded:
+        from .plan_scope import global_lines_without_excluded
+        virtual = global_lines_without_excluded(plan)
     costs = lines.aggregate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), rows=Count('pk'), ddp_rows=Count('amount_ddp_usd'))
+    if virtual is not None:
+        costs = {'plan': sum((line.amount_usd for line in virtual), Decimal(0)),
+                 'ddp': sum((line.amount_ddp_usd for line in virtual if line.amount_ddp_usd is not None), Decimal(0)),
+                 'rows': len(virtual), 'ddp_rows': sum(line.amount_ddp_usd is not None for line in virtual)}
     if costs['rows'] != costs['ddp_rows']:
         costs['ddp'] = None
     found = False
     affected_lines = 0
-    for on_date, sub, pg, group, brand, amounts in lines.order_by('pk').values_list(
-            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts').iterator(chunk_size=2000):
+    source = ((line.plan_date, line.subdivision, line.planning_group_sales, line.group, line.brand, line.segment_amounts) for line in virtual) if virtual is not None else lines.order_by('pk').values_list(
+            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts').iterator(chunk_size=2000)
+    for on_date, sub, pg, group, brand, amounts in source:
+        if not included(sub, names):
+            continue
         sub = canonical(sub, names)
         found = True
         if on_date >= current.effective_from:

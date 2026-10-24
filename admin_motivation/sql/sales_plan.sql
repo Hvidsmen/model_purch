@@ -18,7 +18,7 @@ DECLARE @params_scenario nvarchar(255) = ?;
  WHERE s.ClosedDealDate >= DATEFROMPARTS(YEAR(GETDATE())-4, 1, 1)
  AND s.ClosedDealDate < DATEFROMPARTS(YEAR(GETDATE()), 1, 1)
  AND sub.Chanel NOT IN (N'ДПП')
- AND sub.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг',N'Прочее')
+ AND sub.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг',N'Прочее',N'Вентиляция')
 ), fact_per AS (
  SELECT SubdivisionName, PlanningGroupSalesErp, GroupERP, Brand,
  CASE WHEN SUM(USD)=0 THEN 1 ELSE SUM(IIF(Segment='O0',USD,0))/SUM(USD) END O0,
@@ -37,7 +37,7 @@ DECLARE @params_scenario nvarchar(255) = ?;
  INNER JOIN DataWH.planning.Goods g ON ps.GoodsKey = g.PlanningKey
  WHERE ps.Version_ = @params_scenario
  AND s.Chanel NOT IN (N'ДПП')
- AND s.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг',N'Прочее')
+ AND s.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг',N'Прочее',N'Вентиляция')
  GROUP BY s.SubdivisionName, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date),
  CASE WHEN g.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN g.GroupERP ELSE '*' END,
  CASE WHEN g.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN g.BrandName ELSE '*' END

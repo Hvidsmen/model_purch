@@ -74,6 +74,9 @@ class CalculationJobsTests(TestCase):
         self.assertIn('CREATE PROCEDURE motivation.PortalCalcBySub', sql)
         self.assertIn('DataWH.motivation.PortalCalculationSubdivisions', sql)
         self.assertNotIn('ALTER PROCEDURE [motivation].[sp_CalcBySub]', sql)
+        view_sql = next(call.args[0] for call in self.cursor.execute.call_args_list if call.args[0].startswith('ALTER VIEW motivation.PortalCalculationSubdivisions'))
+        self.assertIn("N'Вентиляция'",view_sql)
+        self.assertIn('COALESCE(m.TargetName,s.SubdivisionName)',view_sql)
         self.cursor.executemany.assert_called_once()
 
     @patch.object(jobs, 'rules', return_value=[('Old', 'New', 'target')])

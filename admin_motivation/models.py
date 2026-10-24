@@ -21,7 +21,7 @@ class Chanel(models.Model):
 
 class ActiveSubdivisionManager(models.Manager):
     def get_queryset(self):
-        return super().get_queryset().filter(merged_into__isnull=True)
+        return super().get_queryset().filter(merged_into__isnull=True).exclude(subdivision_key__in=['Вентиляция', 'вентиляция', 'ВЕНТИЛЯЦИЯ'])
 
 
 class Subdivision(models.Model):
@@ -53,7 +53,7 @@ class Subdivision(models.Model):
                         DataWH.dbo.Subdivisions
                     WHERE
                         Chanel = 'Дилерский'
-                        AND SubdivisionName NOT IN( 'Прочее','БУФЕР','Буфер дилерский канал','Дилерский канал')
+                        AND SubdivisionName NOT IN( 'Прочее','БУФЕР','Буфер дилерский канал','Дилерский канал','Вентиляция')
                     """, con=engine)
         for i, row in df.iterrows():
             subdivision_key, subdivision_name, subdivision_global, chanel = row

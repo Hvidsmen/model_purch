@@ -18,6 +18,8 @@ def choices(kind, values, scope):
         base_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE [Подразделение] IN (@Subdivision) '
                        'AND [ТипКоэф] IN (@' + type_parameter + ')')
         author_parameter = 'DealAuthor'
+    from .subdivision_scope import sql_predicate
+    base_source += ' AND ' + sql_predicate('[Подразделение]')
     from .report_periods import pilot_enabled, PILOT_SQL, allowed_period
     pilot = pilot_enabled(kind, scope)
     if pilot:

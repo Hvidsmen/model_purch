@@ -57,6 +57,12 @@ def parameters(kind, query, trusted_identity=False):
             raise ValidationError('Укажите даты начала и окончания периода.')
         if end < start: raise ValidationError('Дата окончания раньше даты начала.')
         values.update(StartDate=start, EndDate=end)
+    from .subdivision_scope import included
+    for key in ('Subdivision', 'Division'):
+        selected = values.get(key) or []
+        selected = selected if isinstance(selected, list) else [selected]
+        if any(not included(value) for value in selected):
+            raise ValidationError('Подразделение «Вентиляция» исключено из мотивации.')
     return values
 
 
@@ -90,6 +96,7 @@ def fetch(cursor, sql, args=(), limit=50000):
 
 
 def choices(kind, values, refresh=False, access_scope=None):
+    from .subdivision_scope import included
     if access_scope:
         from base.report_access import scoped_values
         from .personal_reports import choices as personal_choices
@@ -131,7 +138,7 @@ def choices(kind, values, refresh=False, access_scope=None):
             selected = values.get(parameter)
             selected = selected if isinstance(selected, list) else ([selected] if selected is not None else [])
             result.append({'name': name, 'label': caption, 'multiple': multiple,
-                           'options': [{'value': item, 'selected': item in selected} for item in sorted(set(options) | set(selected))]})
+                           'options': [{'value': item, 'selected': item in selected} for item in sorted(set(options) | set(selected)) if parameter not in ('Subdivision', 'Division') or included(item)]})
         return result
     finally:
         if connection is not None: connection.close()
@@ -347,6 +354,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
         connection, cursor = connect_database('vm-dwh', 'DataWH')
         connection.timeout = 60
         source_sql = (SQL_ROOT / f'{kind}.sql').read_text(encoding='utf-8')
+        from .subdivision_scope import sql_predicate
+        source_sql = 'SELECT * FROM (' + source_sql.strip().rstrip(';') + ') AS included_source WHERE ' + sql_predicate('[Подразделение]')
         if kind == 'manager':
             source_sql = manager_currency_sql(source_sql, values.get('Currency', 'USD'))
         if access_scope and kind == 'manager':
@@ -373,7 +382,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
                 'SUM([СуммаОтгрузокUSDКвартал]) AS [СуммаОтгрузокUSDКвартал],'
                 'SUM([СуммаПланUSD]) AS [СуммаПланUSD],SUM([СуммаОтгрузокUSD]) AS [СуммаОтгрузокUSD] '
                 'FROM DataWH.motivation.ReportMotivationByDealAuthor '
-                'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ AND [Год] IN (@Years) '
+                'WHERE ' + sql_predicate('[Подразделение]') + ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ AND [Год] IN (@Years) '
                 + ('AND [АвторСделки] IN (@DealAuthor) ' if access_scope else '') + ('AND ' + PILOT_SQL + ' ' if pilot else '') +
                 'GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
             performance = fetch(cursor, performance_sql, performance_args)
@@ -394,14 +403,14 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
             "SUM(CASE WHEN [КварталМотивации]='Год' THEN [СуммаПланUSDКвартал] END) AS YPeriodPlan,"
             "SUM(CASE WHEN [КварталМотивации]='Год' THEN [СуммаОтгрузокUSDКвартал] END) AS YPeriodFact "
             'FROM DataWH.motivation.ReportMotivationByDealAuthor '
-            'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ '
+            'WHERE ' + sql_predicate('[Подразделение]') + ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ '
             'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales) '
             + ('AND ' + PILOT_SQL + ' ' if pilot else '') + 'GROUP BY [VariationCalculate],[ГруппаПлановПродаж]', values)
         period_rows = fetch(cursor, period_sql, period_args)
         report = manager_report(rows, period_rows, pilot=pilot)
         # Read years from the source table: the legacy presentation view may omit Год.
         year_sql, year_args = bind_sql('SELECT DISTINCT [Год] FROM DataWH.motivation.ReportMotivationByDealAuthor '
-            'WHERE [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ '
+            'WHERE ' + sql_predicate('[Подразделение]') + ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ '
             'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales)' + (' AND ' + PILOT_SQL if pilot else ''), values)
         report['currency'] = values.get('Currency', 'USD')
         report['years'] = sorted({str(row['Год']) for row in fetch(cursor, year_sql, year_args) if row.get('Год') is not None})
