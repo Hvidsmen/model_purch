@@ -152,10 +152,12 @@ class Budget:
             providers = [key for key in candidates if values[key] == minimum]
             for key in providers:
                 exposure[key] += amount / len(providers)
+        totals = self.totals(values)
         return {'cells': [dict(cell, plan_amount=str(exposure[key]), premium=str(exposure[key] * values[key]))
                           for key, cell in self.cells.items() if key in self.allowed], 'fingerprint': self.fingerprint,
                 'fallbacks': self.fallbacks, 'editable': self.version.is_editable, 'can_copy': self.can_copy,
-                'totals': summary(self.totals(values), self.totals(values))}
+                'totals': summary(totals, totals),
+                'display_totals': summary(totals, totals, company=not self.local)}
 
     def balance(self, manual, compensate, mode):
         if mode not in MODES or (mode == 'subdivision' and not self.local):
@@ -268,7 +270,8 @@ class Budget:
                    for key, value in values.items() if value != before[key]}
         if not changes:
             raise ValidationError('Нет изменений для сохранения.')
-        return {'changes': changes, 'totals': summary(old, new), 'mode': mode,
+        return {'changes': changes, 'totals': summary(old, new),
+                'display_totals': summary(old, new, company=not self.local), 'mode': mode,
                 'before': str(sum(old.values(), ZERO)), 'after': str(sum(new.values(), ZERO)),
                 'delta': str(sum(new.values(), ZERO) - sum(old.values(), ZERO))}
 
@@ -280,7 +283,14 @@ def stored(key, value):
     return Decimal(str(float(value.quantize(Decimal('.000000000001'), rounding=ROUND_HALF_UP))))
 
 
-def summary(before, after):
+def summary(before, after, company=False):
+    if company:
+        def aggregate(values):
+            result = defaultdict(Decimal)
+            for (subdivision, kind), value in values.items():
+                result[('Компания', kind)] += value
+            return dict(result)
+        before, after = aggregate(before), aggregate(after)
     return [{'subdivision': sub, 'kind': kind, 'before': str(before.get((sub, kind), ZERO)),
              'after': str(after.get((sub, kind), ZERO)),
              'delta': str(after.get((sub, kind), ZERO) - before.get((sub, kind), ZERO))}

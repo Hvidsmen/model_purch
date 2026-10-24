@@ -31,6 +31,11 @@
     if (!local && form.elements.mode.value === "subdivision")
       form.elements.mode.value = "type";
     form.elements.subdivision.disabled = !local || company;
+    form.elements.subdivision.closest("label").hidden = !local || company;
+    el("branch").closest("label").hidden = !local;
+    el("branch").disabled = !local;
+    if (!local) el("branch").value = "";
+    el("summary-scope").textContent = local ? "Подразделение" : "Область";
     el("scope-note").textContent = !local
       ? "Балансируются глобальные ставки по плану компании."
       : company
@@ -171,7 +176,7 @@
     for (const title of [
       "Группа планов продаж",
       "Группа ERP",
-      "Марка / подразделение",
+      loaded?.scope === "local" ? "Марка / подразделение" : "Марка / бренд",
     ]) {
       const th = document.createElement("th");
       th.textContent = title;
@@ -338,7 +343,7 @@
       el("workspace").hidden = false;
       el("preview").disabled = false;
       el("save").disabled = true;
-      summary(data.totals);
+      summary(data.display_totals || data.totals);
       el("total").textContent =
         "Исходные значения загружены. Выберите ручные изменения и ячейки для компенсации.";
       render();
@@ -393,7 +398,7 @@
         manual,
         compensate,
       });
-      summary(preview.totals);
+      summary(preview.display_totals || preview.totals);
       el("total").textContent =
         `Было: ${money(preview.before)} USD → Стало: ${money(preview.after)} USD · Разница: ${money(preview.delta)} USD · Изменено ячеек: ${Object.keys(preview.changes).length}`;
       el("save").disabled = !(editable || canCopy);

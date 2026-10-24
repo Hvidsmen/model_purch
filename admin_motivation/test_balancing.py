@@ -264,3 +264,17 @@ class BalancingTests(TestCase):
         signature=second.fingerprint
         self.plan.lines.filter(plan_date=date(2026,11,1)).update(plan_date=date(2026,12,1))
         self.assertNotEqual(signature,Budget(self.version,self.plan).fingerprint)
+
+    def test_global_display_summary_is_company_total_and_local_keeps_branches(self):
+        response=self.post('load');self.assertEqual(response.status_code,200,response.content)
+        data=response.json()
+        self.assertEqual({row['subdivision'] for row in data['display_totals']},{'Компания'})
+        self.assertEqual({row['subdivision'] for row in data['totals']},{'A','B'})
+        self.assertEqual(sum(Decimal(row['before']) for row in data['display_totals']),sum(Decimal(row['before']) for row in data['totals']))
+        reviewed=self.preview();self.assertEqual(reviewed.status_code,200,reviewed.content)
+        data=reviewed.json()
+        self.assertEqual({row['subdivision'] for row in data['display_totals']},{'Компания'})
+        self.assertEqual(sum(Decimal(row['after']) for row in data['display_totals']),Decimal(data['after']))
+        self.params.update(scope='local',mode='company')
+        local=self.post('load').json()
+        self.assertEqual({row['subdivision'] for row in local['display_totals']},{'A','B'})
