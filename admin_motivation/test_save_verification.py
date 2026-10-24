@@ -80,3 +80,34 @@ class VerifiedSaveTests(TestCase):
         self.manager.refresh_from_db();self.assertEqual(self.manager.coeff,.9)
         response=self.client.post(url,{'version':self.first.pk,'action_button':'update_motive_coeff','kind_coeff=99999':'80%'},follow=True)
         self.assertContains(response,'Период поправочного коэффициента не найден')
+
+    def test_database_lock_rolls_back_and_restores_entered_values(self):
+        from django.db import OperationalError
+        original_save = type(self.global_coeff).save
+        def locked_after_write(instance, *args, **kwargs):
+            original_save(instance, *args, **kwargs)
+            raise OperationalError('database is locked')
+        with patch.object(type(self.global_coeff), 'save', locked_after_write):
+            response = self.client.post(reverse('gb_act'), self.payload())
+        self.assertContains(response, 'База временно занята другой операцией')
+        self.assertContains(response, 'Введённые значения восстановлены')
+        self.assertEqual(response.context['coefficient_attempt']['fields'][f'global_coeff={self.global_coeff.pk}'], '20%')
+        self.global_coeff.refresh_from_db()
+        self.assertEqual(self.global_coeff.motivation_coeff, .1)
+
+    def test_unrelated_database_error_is_not_hidden(self):
+        from django.db import OperationalError
+        with patch.object(type(self.global_coeff), 'save', side_effect=OperationalError('no such table')):
+            with self.assertRaises(OperationalError):
+                self.client.post(reverse('gb_act'), self.payload())
+
+    def test_subdivision_lock_restores_entered_values(self):
+        from django.db import OperationalError
+        with patch.object(type(self.local_coeff), 'save', side_effect=OperationalError('database is locked')):
+            response = self.client.post(reverse('sub_act', args=[self.sub.pk]), {
+                'version': self.first.pk, 'action_button': 'save_coeff',
+                f'sub_coeff={self.local_coeff.pk}': '25%'})
+        self.assertContains(response, 'База временно занята другой операцией')
+        self.assertEqual(response.context['coefficient_attempt']['fields'][f'sub_coeff={self.local_coeff.pk}'], '25%')
+        self.local_coeff.refresh_from_db()
+        self.assertEqual(self.local_coeff.motivation_coeff, .15)

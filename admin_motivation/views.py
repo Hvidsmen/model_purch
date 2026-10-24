@@ -27,7 +27,7 @@ import math
 import pandas as pd
 from django.contrib import messages
 from django.core.exceptions import ValidationError
-from django.db import transaction
+from django.db import transaction, OperationalError, connection
 from django.db.models import Q
 from django.shortcuts import get_object_or_404, redirect
 from django.urls import reverse
@@ -223,6 +223,12 @@ def gloabal_coeff_action(request):
                 # Keep Goods and previous versions' coefficients intact.
             else:
                 raise ValidationError('Неизвестное действие.')
+    except OperationalError as error:
+        if connection.vendor != 'sqlite' or not any(text in str(error).lower() for text in ('database is locked', 'database table is locked')):
+            raise
+        messages.error(request, 'База временно занята другой операцией. Изменения этой операции не сохранены. Повторите сохранение через несколько секунд.')
+        if action in {'save_coeff', 'add_product'} and version.is_editable:
+            return recover(request, gloabal_coeff, version)
     except (ValidationError, ValueError, TypeError) as error:
         text = ' '.join(error.messages) if isinstance(error, ValidationError) else 'Некорректное число или формат файла.'
         messages.error(request, text)
@@ -359,6 +365,12 @@ def sub_act(request, subdivision):
                 import_current_coefficients(request.FILES['myfile'], version, sub, employee)
             else:
                 raise ValidationError('Неизвестное действие.')
+    except OperationalError as error:
+        if connection.vendor != 'sqlite' or not any(text in str(error).lower() for text in ('database is locked', 'database table is locked')):
+            raise
+        messages.error(request, 'База временно занята другой операцией. Изменения этой операции не сохранены. Повторите сохранение через несколько секунд.')
+        if action in {'save_coeff', 'update_motive_coeff'} and version.is_editable:
+            return recover(request, coef_one_sub, version, sub.pk)
     except (ValidationError, ValueError, TypeError) as error:
         messages.error(request, ' '.join(error.messages) if isinstance(error, ValidationError) else 'Некорректное число или формат файла.')
         if action in {'save_coeff','update_motive_coeff'} and version.is_editable:

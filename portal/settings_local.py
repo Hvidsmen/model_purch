@@ -6,7 +6,9 @@ DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': database_path(BASE_DIR),
-        'OPTIONS': {'timeout': 30},
+        # Acquire the writer lock before reading inside atomic() to avoid
+        # SQLite's immediate read-to-write upgrade failures under contention.
+        'OPTIONS': {'timeout': 30, 'transaction_mode': 'IMMEDIATE'},
     }
 }
 MS_SQL_CONN_STR = os.environ.get('MS_SQL_CONN_STR') or None
