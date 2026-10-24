@@ -2,6 +2,8 @@
 {% block dashboard_content %}
 <main class="dash-page" id="dealer-dashboard" data-source="{% url 'dealer_dashboard_data' %}" data-export="{% url 'dealer_dashboard_export' %}">
 <header class="dash-heading"><div><p class="dash-eyebrow">Дашборды / Дилерские продажи</p><h1>Динамика дилерской базы</h1><p class="dash-lead">Как меняются дилеры, их группы и вклад в продажи.</p></div><a class="dash-button secondary" id="dashboard-export" href="{% url 'dealer_dashboard_export' %}" aria-disabled="true">Скачать CSV</a></header>
+<details class="dash-filter-panel" open>
+<summary>Фильтры и параметры отчёта</summary>
 <form class="dash-filters" id="dashboard-filters">
 <label>Сегментация<select name="method"><option value="threshold">Размер S / M / L / XL</option><option value="abc">ABC · 80 / 15 / 5%</option></select></label>
 <label>Масштаб групп<select name="scope"><option value="company">Компания</option><option value="branch">Внутри филиала</option></select></label>
@@ -14,6 +16,7 @@
 <details class="dash-thresholds"><summary>Настроить размеры S / M / L / XL</summary><div class="dash-inline"><label>S — до, шт.<input name="s_max" type="number" value="10" min="1" max="1000000000" step="1" required></label><label>M — до, шт.<input name="m_max" type="number" value="50" min="2" max="1000000000" step="1" required></label><label>L — до, шт.<input name="l_max" type="number" value="250" min="3" max="1000000000" step="1" required></label></div><p>XL — всё выше границы L. Настройки применяются ко всем страницам и CSV, сохраняются в ссылке. ABC от этих границ не зависит.</p></details><div class="dash-filter-actions"><button class="dash-button" type="submit">Применить</button><button class="dash-button secondary" type="button" id="dashboard-reset">Сбросить</button></div>
 <p class="dash-filter-help">Пустой список — все значения. Откройте список и отметьте нужные значения; доступны «Выбрать всё» и «Снять всё». Все фильтры применяются ко всем страницам.</p>
 </form>
+</details>
 <p id="dashboard-status" class="dash-status" role="status" aria-live="polite">Загружаем данные…</p>
 <p class="dash-section-note">Продажи читаются из последнего подготовленного снимка. <a href="{% url 'dashboard_refresh' %}">Обновление данных и история запусков →</a></p><div class="dash-error" id="dashboard-error" role="alert" hidden><span></span><button type="button" class="dash-button secondary" id="dashboard-retry">Повторить</button></div>
 <details class="dash-rules"><summary>Как читать отчёт и как считаются группы</summary><div id="dashboard-rules"></div><p>Текущий LTM — 12 завершённых месяцев; даты каждого периода указаны в обзоре. LTM может пересекаться с прошлым календарным годом. Возвраты входят со знаком минус; активность определяется чистыми штуками. Первый наблюдаемый год не доказывает отсутствие продаж до 2021 года.</p><p>Выручка без IT = SUM(s.Price − COALESCE(s.AmountUSDIt_ITW, 0)). IT хранится суммой строки. Данные хранятся постоянным снимком и обновляются отдельным заданием; время успешной загрузки указано над вкладками. Предзаказы и отдельные документы не выделяются: соответствующих признаков нет в предоставленном источнике.</p></details>

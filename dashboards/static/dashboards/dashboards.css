@@ -581,3 +581,20 @@
   font: inherit;
   box-sizing: border-box;
 }
+
+.dash-filter-panel {
+  margin-bottom: 12px;
+  border: 1px solid var(--dash-border, #d8dff0);
+  border-radius: 10px;
+  background: #fff;
+}
+.dash-filter-panel > summary {
+  cursor: pointer;
+  padding: 12px 14px;
+  font-weight: 600;
+}
+.dash-filter-panel > .dash-filters {
+  border: 0;
+  margin-bottom: 0;
+  padding-top: 0;
+}
