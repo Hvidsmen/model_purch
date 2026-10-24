@@ -136,12 +136,19 @@ class BalancingTests(TestCase):
             self.assertEqual(self.cell().motivation_coeff,.1)
             self.assertFalse(CoefficientBalanceLog.objects.exists())
 
-    def test_approved_version_analysis_allowed_save_denied(self):
+    def test_approved_version_blocks_load_preview_and_even_old_copy_requests(self):
         from django.db import models
+        reviewed=self.preview();self.assertEqual(reviewed.status_code,200,reviewed.content)
+        count=GlobalCoeffVersion.objects.count()
         models.QuerySet.update(GlobalCoeffVersion.objects.filter(pk=self.version.pk),status='approved')
-        response=self.preview();self.assertEqual(response.status_code,200,response.content)
-        self.assertFalse(response.json()['editable'])
-        self.assertEqual(self.post('save',token=response.json()['token']).status_code,400)
+        self.assertEqual(self.post('load').status_code,400)
+        self.assertEqual(self.post('preview',fingerprint='old',manual={self.key():'20%'},compensate=[self.key(segment='K1')]).status_code,400)
+        self.assertEqual(self.post('save',token=reviewed.json()['token'],create_draft=True).status_code,400)
+        self.assertEqual(self.client.get(self.url,{'version':self.version.pk}).status_code,403)
+        page=self.client.get(self.url)
+        self.assertContains(page,'Нет редактируемого черновика')
+        self.assertEqual(page.context['versions'],[])
+        self.assertEqual(GlobalCoeffVersion.objects.count(),count)
         self.assertFalse(CoefficientBalanceLog.objects.exists())
 
     def test_admin_only_and_tampered_review(self):
@@ -158,20 +165,15 @@ class BalancingTests(TestCase):
         with self.assertRaisesMessage(ValidationError,'нет строк'):
             Budget(self.version,self.plan)
 
-    def test_last_approved_is_copied_atomically_before_saving(self):
-        from django.db import models
-        models.QuerySet.update(GlobalCoeffVersion.objects.filter(pk=self.version.pk),status='approved')
-        reviewed=self.preview();self.assertEqual(reviewed.status_code,200,reviewed.content)
-        self.assertTrue(reviewed.json()['can_copy'])
-        saved=self.post('save',token=reviewed.json()['token'],create_draft=True)
-        self.assertEqual(saved.status_code,200,saved.content)
-        new=GlobalCoeffVersion.objects.get(pk=saved.json()['version'])
-        self.assertNotEqual(new.pk,self.version.pk)
-        self.assertEqual(new.status,'draft')
-        self.version.refresh_from_db();self.assertEqual(self.version.status,'approved')
-        self.assertEqual(self.cell().motivation_coeff,.1)
-        self.assertEqual(new.coefficients.get(type_coeff__type_coeff_name='Политики',segment__segment_name='K0').motivation_coeff,.2)
-        self.assertEqual(CoefficientBalanceLog.objects.get().version,new)
+    def test_only_latest_editable_draft_is_selectable(self):
+        from .services.versions import create_version
+        latest=create_version(date(2026,1,1),'Latest draft',source_version=self.version.pk)
+        page=self.client.get(self.url)
+        self.assertEqual([row.pk for row in page.context['versions']],[latest.pk])
+        self.assertEqual(self.client.get(self.url,{'version':self.version.pk}).status_code,403)
+        self.assertEqual(self.post('load').status_code,400)
+        self.params['version']=latest.pk
+        self.assertEqual(self.post('load').status_code,200)
 
     def test_local_director_cells_survive_storage_and_audit(self):
         staff=DirectorEmployee.objects.create(full_name='Local director')
@@ -278,3 +280,31 @@ class BalancingTests(TestCase):
         self.params.update(scope='local',mode='company')
         local=self.post('load').json()
         self.assertEqual({row['subdivision'] for row in local['display_totals']},{'A','B'})
+
+    def test_delete_balanced_unused_draft_preserves_audit_snapshot(self):
+        from .services.versions import create_version, delete_draft
+        draft=create_version(date(2026,1,1),'Temporary balanced draft',source_version=self.version.pk)
+        self.version=draft;self.params['version']=draft.pk
+        reviewed=self.preview();self.assertEqual(reviewed.status_code,200,reviewed.content)
+        saved=self.post('save',token=reviewed.json()['token']);self.assertEqual(saved.status_code,200,saved.content)
+        log=CoefficientBalanceLog.objects.get()
+        snapshot=log.parameters['version_snapshot'];result=log.result
+        delete_draft(draft.pk)
+        self.assertFalse(GlobalCoeffVersion.objects.filter(pk=draft.pk).exists())
+        log.refresh_from_db()
+        self.assertIsNone(log.version_id)
+        self.assertEqual(log.parameters['version_snapshot'],snapshot)
+        self.assertEqual(log.result,result)
+        self.assertContains(self.client.get(self.url),'Temporary balanced draft')
+
+    def test_used_draft_stays_protected_and_failed_delete_keeps_balance_history(self):
+        from .services.versions import create_version, delete_draft
+        draft=create_version(date(2026,1,1),'Used balanced draft',source_version=self.version.pk)
+        self.version=draft;self.params['version']=draft.pk
+        reviewed=self.preview();self.assertEqual(reviewed.status_code,200,reviewed.content)
+        self.assertEqual(self.post('save',token=reviewed.json()['token']).status_code,200)
+        self.plan.lines.filter(subdivision='A').update(coefficient_version=draft)
+        with self.assertRaises(ValidationError):delete_draft(draft.pk)
+        self.assertTrue(GlobalCoeffVersion.objects.filter(pk=draft.pk).exists())
+        self.assertEqual(CoefficientBalanceLog.objects.get().version_id,draft.pk)
+        self.assertTrue(draft.coefficients.exists())

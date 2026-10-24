@@ -137,12 +137,6 @@ class Budget:
             result[(sub, kind)] += min(values[key] for key in candidates) * amount
         return dict(result)
 
-    @property
-    def can_copy(self):
-        from ..models import GlobalCoeffVersion
-        latest = GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk').first()
-        return self.version.status == 'approved' and latest is not None and latest.pk == self.version.pk
-
     def payload(self):
         values = {key: Decimal(cell['value']) for key, cell in self.cells.items()}
         # Contribution for minimum fallbacks is attributed equally among tied providers for display only.
@@ -155,7 +149,7 @@ class Budget:
         totals = self.totals(values)
         return {'cells': [dict(cell, plan_amount=str(exposure[key]), premium=str(exposure[key] * values[key]))
                           for key, cell in self.cells.items() if key in self.allowed], 'fingerprint': self.fingerprint,
-                'fallbacks': self.fallbacks, 'editable': self.version.is_editable, 'can_copy': self.can_copy,
+                'fallbacks': self.fallbacks, 'editable': self.version.is_editable,
                 'totals': summary(totals, totals),
                 'display_totals': summary(totals, totals, company=not self.local)}
 

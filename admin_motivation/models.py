@@ -815,7 +815,7 @@ class MotivationExecution(models.Model):
 
 
 class CoefficientBalanceLog(models.Model):
-    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
+    version = models.ForeignKey(GlobalCoeffVersion, null=True, blank=True, on_delete=models.SET_NULL)
     plan = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT)
     user = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)

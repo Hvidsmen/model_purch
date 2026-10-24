@@ -2,13 +2,13 @@
   const root = document.getElementById("coefficient-balancing");
   if (!root) return;
   const form = document.getElementById("balance-setup");
+  if (!form?.elements.scope) return;
   const el = (id) => document.getElementById(`balance-${id}`);
   let cells = [],
     selections = new Map(),
     fingerprint = "",
     preview = null,
     editable = false,
-    canCopy = false,
     page = 0,
     loaded = null,
     busy = false;
@@ -331,7 +331,6 @@
       cells = data.cells;
       fingerprint = data.fingerprint;
       editable = data.editable;
-      canCopy = data.can_copy;
       loaded = params;
       selections.clear();
       preview = null;
@@ -348,7 +347,7 @@
         "Исходные значения загружены. Выберите ручные изменения и ячейки для компенсации.";
       render();
       status(
-        `Загружено ячеек: ${cells.length}. Использований минимального коэффициента: ${data.fallbacks}.${editable ? "" : " Версия доступна только для анализа. Для сохранения создайте черновик."}`,
+        `Загружено ячеек: ${cells.length}. Использований минимального коэффициента: ${data.fallbacks}.`,
       );
     } catch {
       status("Не удалось загрузить исходные значения.");
@@ -401,15 +400,9 @@
       summary(preview.display_totals || preview.totals);
       el("total").textContent =
         `Было: ${money(preview.before)} USD → Стало: ${money(preview.after)} USD · Разница: ${money(preview.delta)} USD · Изменено ячеек: ${Object.keys(preview.changes).length}`;
-      el("save").disabled = !(editable || canCopy);
-      el("save").textContent = canCopy
-        ? "Сохранить в новый черновик"
-        : "Сохранить в черновик";
-      el("save-note").textContent = editable
-        ? "Бюджет сохранён. Можно записать результат в черновик."
-        : canCopy
-          ? "Будет создан новый черновик с той же датой начала действия. Утверждённая версия сохранится."
-          : "Результат рассчитан для анализа. Для сохранения создайте черновик версии и повторите балансировку.";
+      el("save").disabled = !editable;
+      el("save-note").textContent =
+        "Бюджет сохранён. Можно записать результат в черновик.";
       render();
       status("Балансировка рассчитана. Проверьте изменения перед сохранением.");
     } catch {
@@ -422,19 +415,10 @@
       const data = await request({
         action: "save",
         token: preview.token,
-        create_draft: canCopy,
       });
       el("save").disabled = true;
       preview = null;
       loaded = null;
-      if (
-        ![...form.elements.version.options].some(
-          (option) => option.value === String(data.version),
-        )
-      )
-        form.elements.version.add(
-          new Option("Новый черновик · Балансировка", data.version),
-        );
       form.elements.version.value = String(data.version);
       el("preview").disabled = true;
       status(data.message);

@@ -1530,3 +1530,20 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.db(lambda:MotivationApproval.objects.filter(version_id=self.first.pk).count()),2)
         self.assertTrue(self.db(lambda:MotivationApproval.objects.filter(pk=first_log).exists()))
         self.assertEqual(self.errors,[])
+
+    def test_director_import_template_button_downloads_xlsx(self):
+        from playwright.sync_api import expect
+        from openpyxl import load_workbook
+        self.page.goto(self.live_server_url+reverse('motivation_director_coeff_import')+f'?version={self.first.pk}')
+        button=self.page.get_by_role('link',name='Скачать шаблон Excel',exact=True)
+        expect(button).to_be_visible()
+        with self.page.expect_download() as event:button.click()
+        download=event.value
+        self.assertEqual(download.suggested_filename,f'director-coefficients-v{self.first.pk}.xlsx')
+        download.save_as('/tmp/director-import-template-browser.xlsx')
+        book=load_workbook('/tmp/director-import-template-browser.xlsx')
+        self.assertIn('Коэффициенты',book.sheetnames)
+        self.assertIn('Инструкция',book.sheetnames)
+        self.assertEqual(book['Коэффициенты']['E5'].value,'K0')
+        book.close()
+        self.assertEqual(self.errors,[])

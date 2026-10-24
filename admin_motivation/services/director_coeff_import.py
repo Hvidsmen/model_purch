@@ -159,3 +159,109 @@ def import_director_coefficients(upload, version_id):
         SubdivisionDirectorCoeff.objects.bulk_update(updated, KEYS, batch_size=100)
         return {'directors': len(imported_employees), 'created': len(created), 'updated': len(updated),
                 'unchanged': len(prepared) - len(created) - len(updated)}
+
+
+def director_coefficient_template(version):
+    """Blank workbook accepted by read_director_blocks, with real lookup lists."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.worksheet.datavalidation import DataValidation
+    from openpyxl.workbook.defined_name import DefinedName
+    from openpyxl.utils import get_column_letter
+
+    goods = Goods.objects.order_by('planning_group_sales', 'group', 'brand', 'pk')
+    if goods.count() > 4995:
+        raise ValidationError('В справочнике больше 4995 товарных строк. Для загрузки разделите матрицу на файлы.')
+    book = Workbook()
+    sheet = book.active
+    sheet.title = 'Коэффициенты'
+    sheet.freeze_panes = 'E6'
+
+    def text(cell, value):
+        cell.value = str(value or '')
+        cell.data_type = 's'
+        cell.alignment = Alignment(vertical='center', wrap_text=True)
+
+    for row, instruction in enumerate([
+        '1. Выберите ФИО в жёлтых ячейках справа — один директор на строку.',
+        '2. Заполните все K0–K4 для нужных товаров. Пример: 0,2% = 0,002.',
+        'Пустой блок строки не меняет ставки. Подробности — на листе «Инструкция».',
+    ], 1):
+        sheet.merge_cells(start_row=row, start_column=1, end_row=row, end_column=4)
+        text(sheet.cell(row, 1), instruction)
+        sheet.row_dimensions[row].height = 34
+        sheet.merge_cells(start_row=row, start_column=5, end_row=row, end_column=9)
+        sheet.cell(row, 5).fill = PatternFill('solid', fgColor='FFF4CC')
+    for column, caption in enumerate(['№', 'Группа планов продаж', 'Группа ERP', 'Марка / бренд'], 1):
+        text(sheet.cell(4, column), caption)
+        sheet.cell(4, column).font = Font(bold=True, color='FFFFFF')
+        sheet.cell(4, column).fill = PatternFill('solid', fgColor='51428C')
+    sheet.merge_cells('E4:I4')
+    text(sheet['E4'], 'Коэффициенты директоров')
+    sheet['E4'].font = Font(bold=True, color='FFFFFF')
+    for index in range(5):
+        sheet.cell(4, 5 + index).fill = PatternFill('solid', fgColor='51428C')
+        cell = sheet.cell(5, 5 + index, f'K{index}')
+        cell.font = Font(bold=True, color='51428C')
+        cell.fill = PatternFill('solid', fgColor='F0ECFF')
+    sheet.row_dimensions[4].height = 30
+    for number, (pg, group, brand) in enumerate(goods.values_list('planning_group_sales', 'group', 'brand'), 1):
+        row = number + 5
+        sheet.cell(row, 1, number)
+        for column, value in enumerate((pg, group, brand), 2):
+            text(sheet.cell(row, column), value)
+        for column in range(5, 10):
+            sheet.cell(row, column).number_format = '0.0000%'
+            sheet.cell(row, column).fill = PatternFill('solid', fgColor='F7F5FF')
+        sheet.row_dimensions[row].height = 26
+    for column, width in [(1, 6), (2, 28), (3, 38), (4, 26)]:
+        sheet.column_dimensions[get_column_letter(column)].width = width
+    for column in range(5, 10):
+        sheet.column_dimensions[get_column_letter(column)].width = 13
+    coefficients = DataValidation(type='decimal', operator='between', formula1='-1', formula2='1', allow_blank=True)
+    coefficients.showErrorMessage = True
+    coefficients.errorTitle = 'Недопустимая ставка'
+    coefficients.error = 'Введите ставку от −100% до 100%, например 0,2%.'
+    sheet.add_data_validation(coefficients)
+    coefficients.add(f'E6:I{max(6, sheet.max_row)}')
+
+    directory = book.create_sheet('Директора')
+    directory.append(['ФИО для выбора', 'Привязанные подразделения'])
+    employees = DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions').order_by('full_name', 'pk')
+    for row, employee in enumerate(employees, 2):
+        text(directory.cell(row, 1), employee.full_name)
+        text(directory.cell(row, 2), ', '.join(str(branch) for branch in employee.subdivisions.all()))
+    directory.column_dimensions['A'].width = 48
+    directory.column_dimensions['B'].width = 90
+    directory.freeze_panes = 'A2'
+    if directory.max_row >= 2:
+        book.defined_names.add(DefinedName('DirectorNames', attr_text=f"'Директора'!$A$2:$A${directory.max_row}"))
+        names = DataValidation(type='list', formula1='=DirectorNames', allow_blank=True)
+        names.showErrorMessage = True
+        names.errorTitle = 'Выберите ФИО из справочника'
+        names.error = 'Сначала добавьте директора и его подразделения в справочник портала.'
+        sheet.add_data_validation(names)
+        names.add('E1:E3')
+
+    guide = book.create_sheet('Инструкция')
+    instructions = [
+        ('Версия на портале', str(version)),
+        ('ФИО', 'Выберите директора в E1, E2 или E3. Несколько имён означают одинаковые ставки для всех этих директоров и всех их привязанных подразделений.'),
+        ('Товары', 'Товарные группы и марки заполнены из справочника портала. Не меняйте их написание. Заполняйте только нужные строки.'),
+        ('Ставки', 'Заполните все пять K0–K4 или оставьте все пять ячеек строки пустыми. 0,2% равно 0,002; число 0,2 означает 20%. Ноль означает обнуление ставки.'),
+        ('Разные ставки', 'Для другого набора ставок скопируйте весь блок E:I в J:N. Выберите других директоров над новым блоком. Один директор не должен повторяться в разных блоках.'),
+        ('Ограничения', 'Не более 200 столбцов и 5000 строк. Названия листа «Коэффициенты» и заголовков K0–K4 сохраняйте. Формулы замените значениями.'),
+        ('Проверка', 'Перед загрузкой проверьте лист «Директора»: импорт использует действующие привязки портала, а не изменения этого справочного листа.'),
+        ('Сохранение', 'Загрузка доступна в последний редактируемый черновик. Изменяются только заполненные ставки директоров. Политики, продажи и глобальные ставки сохраняются.'),
+    ]
+    for row, (topic, instruction) in enumerate(instructions, 1):
+        text(guide.cell(row, 1), topic)
+        guide.cell(row, 1).font = Font(bold=True, color='51428C')
+        text(guide.cell(row, 2), instruction)
+        guide.row_dimensions[row].height = 48
+    guide.column_dimensions['A'].width = 25
+    guide.column_dimensions['B'].width = 110
+    stream = BytesIO()
+    book.save(stream)
+    book.close()
+    return stream.getvalue()

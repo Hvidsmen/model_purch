@@ -17,6 +17,8 @@ SALT = 'motivation-coefficient-balancing-v1'
 
 def dataset(data):
     version = get_object_or_404(GlobalCoeffVersion, pk=int(data['version']))
+    if not version.is_editable:
+        raise ValidationError('Балансировка доступна только в последнем редактируемом черновике.')
     plan = get_object_or_404(SalesPlanScenario, pk=int(data['plan']), is_deleted=False)
     local = data.get('scope') == 'local'
     if data.get('scope') not in {'local', 'global'}:
@@ -32,8 +34,12 @@ def balancing(request):
     if not can_access(request.user, 'motivation_admin'):
         return JsonResponse({'error': 'Балансировка доступна администратору Мотивации.'}, status=403) if request.method == 'POST' else HttpResponseForbidden('Доступно администратору Мотивации.')
     if request.method == 'GET':
+        latest = GlobalCoeffVersion.objects.exclude(status='superseded').order_by('-pk').first()
+        editable = latest if latest and latest.is_editable else None
+        if request.GET.get('version') and (not editable or request.GET['version'] != str(editable.pk)):
+            return HttpResponseForbidden('Балансировка доступна только в последнем редактируемом черновике.')
         return render(request, 'admin_motivation/balancing.html', {
-            'versions': GlobalCoeffVersion.objects.order_by('-pk'),
+            'versions': [editable] if editable else [],
             'plans': SalesPlanScenario.objects.filter(is_deleted=False),
             'subdivisions': Subdivision.objects.all(),
             'initial': {key: request.GET.get(key, '') for key in ('version', 'subdivision', 'plan')},
@@ -57,7 +63,6 @@ def balancing(request):
         parameters = {key: data.get(key) for key in ('version', 'plan', 'scope', 'subdivision', 'mode', 'manual', 'compensate', 'fingerprint')}
         result['token'] = signing.dumps({'user': request.user.pk, 'parameters': parameters}, salt=SALT, compress=True)
         result['editable'] = budget.version.is_editable
-        result['can_copy'] = budget.can_copy
         return JsonResponse(result)
     except OperationalError as error:
         if connection.vendor == 'sqlite' and any(word in str(error).lower() for word in ('locked', 'busy')):
@@ -86,16 +91,6 @@ def _save(request, data):
     budget = dataset(params)
     if budget.fingerprint != params['fingerprint']:
         raise ValidationError('План или коэффициенты изменились после расчёта. Загрузите исходные значения заново.')
-    source_version = None
-    if not budget.version.is_editable:
-        if data.get('create_draft') is not True or not budget.can_copy:
-            raise ValidationError('Сохранить можно в последний черновик или новую копию последней утверждённой версии.')
-        from .services.versions import create_version
-        source_version = budget.version.pk
-        version = create_version(budget.version.effective_from, (budget.version.title + ' · Балансировка')[:255],
-                                 source_version=source_version, allow_overwrite=True)
-        params = remap_parameters(params, budget.version, version, budget.local)
-        budget = dataset(params)
     result = budget.balance(params['manual'], params['compensate'], params['mode'])
     model = SubdivisionCoeff if budget.local else GlobalCoeff
     director_model = SubdivisionDirectorCoeff if budget.local else GlobalDirectorCoeff
@@ -125,21 +120,6 @@ def _save(request, data):
     if actual != expected:
         raise ValidationError('Сохранённые коэффициенты не прошли проверку премии. Изменения отменены.')
     log = CoefficientBalanceLog.objects.create(version=budget.version, plan=budget.plan, user=request.user,
-        parameters={**{key: value for key, value in params.items() if key != 'fingerprint'}, 'source_version': source_version}, result=result, fingerprint=budget.fingerprint)
+        parameters={**{key: value for key, value in params.items() if key != 'fingerprint'},
+                    'version_snapshot': {'id': budget.version.pk, 'title': str(budget.version), 'effective_from': budget.version.effective_from.isoformat()}}, result=result, fingerprint=budget.fingerprint)
     return JsonResponse({'message': 'Балансировка сохранена в черновик. Плановая премия проверена. Для применения утвердите версию и выполните выгрузку и расчёт.', 'log': log.pk, 'version': budget.version.pk})
-
-
-def remap_parameters(parameters, source, destination, local):
-    """Copied rows have new IDs: translate using their complete natural identities."""
-    models = [(SubdivisionCoeff if local else GlobalCoeff, ['goods_id', 'type_coeff_id', 'segment_id'] + (['subdivision_id'] if local else [])),
-              (SubdivisionDirectorCoeff if local else GlobalDirectorCoeff, ['goods_id'] + (['subdivision_id', 'employee_id'] if local else []))]
-    translations = {}
-    for model, fields in models:
-        destination_ids = {tuple(row[1:]): row[0] for row in model.objects.filter(version=destination).values_list('pk', *fields)}
-        prefix = 'c' if model in (GlobalCoeff, SubdivisionCoeff) else 'd'
-        for row in model.objects.filter(version=source).values_list('pk', *fields):
-            for suffix in ([''] if prefix == 'c' else [f':{i}' for i in range(5)]):
-                translations[f'{prefix}:{row[0]}{suffix}'] = f'{prefix}:{destination_ids[tuple(row[1:])]}{suffix}'
-    return {**parameters, 'version': destination.pk,
-            'manual': {translations[key]: value for key, value in parameters['manual'].items()},
-            'compensate': [translations[key] for key in parameters['compensate']]}

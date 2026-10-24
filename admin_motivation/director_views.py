@@ -245,6 +245,19 @@ def director_coeff_import(request):
         from django.http import Http404
         raise Http404('Выберите версию коэффициентов.')
     version = get_object_or_404(GlobalCoeffVersion, pk=version_id)
+    if request.method == 'GET' and request.GET.get('template'):
+        from .operation_views import admin_required
+        from .services.director_coeff_import import director_coefficient_template
+        admin_required(request)
+        if not version.is_editable:
+            return HttpResponse('Шаблон загрузки доступен только для последнего черновика.', status=400)
+        try:
+            content = director_coefficient_template(version)
+        except ValidationError as error:
+            return HttpResponse(' '.join(error.messages), status=400)
+        response = HttpResponse(content, content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="director-coefficients-v{version.pk}.xlsx"'
+        return response
     errors = []
     if request.method == 'POST':
         try:

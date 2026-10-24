@@ -132,3 +132,43 @@ class DirectorCoeffImportTests(TestCase):
         for upload in (None, SimpleUploadedFile('bad.xlsx', b'bad'), SimpleUploadedFile('bad.csv', b'bad')):
             with self.assertRaises(ValidationError):
                 read_director_blocks(upload)
+
+    def test_downloaded_template_round_trips_with_director_lookup_and_blank_rates(self):
+        from openpyxl import load_workbook
+        response=self.client.get(self.url,{'version':self.version.pk,'template':'1'})
+        self.assertEqual(response.status_code,200)
+        self.assertIn('.xlsx',response['Content-Disposition'])
+        book=load_workbook(BytesIO(response.content))
+        self.assertEqual(book.sheetnames,['Коэффициенты','Директора','Инструкция'])
+        sheet=book['Коэффициенты']
+        self.assertEqual([sheet.cell(5,column).value for column in range(5,10)],['K0','K1','K2','K3','K4'])
+        self.assertIsNone(sheet['E1'].value)
+        self.assertTrue(all(sheet.cell(6,column).value is None for column in range(5,10)))
+        self.assertEqual({row[0] for row in book['Директора'].iter_rows(min_row=2,values_only=True)},{self.first.full_name,self.second.full_name})
+        self.assertIn('DirectorNames',book.defined_names)
+        self.assertContains(self.client.get(self.url,{'version':self.version.pk}),'Скачать шаблон Excel')
+        with self.assertRaises(ValidationError):
+            read_director_blocks(SimpleUploadedFile('blank.xlsx',response.content))
+        sheet['E1']=self.first.full_name
+        for column,value in enumerate([.001,.002,.003,.004,.005],5):sheet.cell(6,column,value)
+        stream=BytesIO();book.save(stream);book.close()
+        result=import_director_coefficients(SimpleUploadedFile('filled-template.xlsx',stream.getvalue()),self.version.pk)
+        self.assertEqual(result['directors'],1)
+        self.assertEqual(result['created'],2)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.filter(employee=self.first).count(),2)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.filter(employee=self.second).count(),0)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.get(employee=self.first,subdivision=self.a).k4,Decimal('.005'))
+        self.assertFalse(GlobalDirectorCoeff.objects.exists())
+
+    def test_template_is_draft_only_and_source_labels_are_literal_excel_text(self):
+        from openpyxl import load_workbook
+        from django.db import models
+        self.good.brand='=1+1';self.good.save()
+        response=self.client.get(self.url,{'version':self.version.pk,'template':'1'})
+        book=load_workbook(BytesIO(response.content),data_only=False)
+        self.assertEqual(book['Коэффициенты']['D6'].value,'=1+1')
+        self.assertEqual(book['Коэффициенты']['D6'].data_type,'s')
+        book.close()
+        models.QuerySet.update(GlobalCoeffVersion.objects.filter(pk=self.version.pk),status='approved')
+        self.assertEqual(self.client.get(self.url,{'version':self.version.pk,'template':'1'}).status_code,400)
+        self.assertNotContains(self.client.get(self.url,{'version':self.version.pk}),'Скачать шаблон Excel')
