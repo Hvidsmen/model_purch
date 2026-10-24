@@ -59,7 +59,7 @@ class JobForm(forms.ModelForm):
 
 
 def admin_required(request):
-    if not can_access(request.user, 'admin') and not (role_for(request.user) in (MOTIVATION_VIEWER, FINANCIER) and request.method in ('GET','HEAD','OPTIONS')):
+    if not can_access(request.user, 'motivation_admin') and not (role_for(request.user, 'motivation') in (MOTIVATION_VIEWER, FINANCIER) and request.method in ('GET','HEAD','OPTIONS')):
         raise PermissionDenied
 
 
@@ -116,7 +116,7 @@ def calculation_monitor(request, job_id):
     from .services.execution_tracking import observe
     from .services.workflow import context as workflow_context
     from urllib.parse import urlencode
-    execution = observe(job,persist=False) if role_for(request.user)==MOTIVATION_VIEWER else observe(job)
+    execution = observe(job,persist=False) if role_for(request.user, 'motivation')==MOTIVATION_VIEWER else observe(job)
     state=workflow_context()
     data['workflow']={key:state[key] for key in ('export_current','calculated_current','export_label','calculation_label')}
     if data.get('status') in {'Выполняется','Ожидает запуска','Ошибка'}:

@@ -437,3 +437,147 @@
   outline-offset: -2px;
   background: #f2eeff;
 }
+
+.dash-multi-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--dash-muted);
+  min-width: 0;
+}
+.dash-multi {
+  position: relative;
+  color: var(--dash-text);
+}
+.dash-multi summary {
+  display: block;
+  padding: 9px 30px 9px 10px;
+  background: white;
+  border: 1px solid #d2daea;
+  border-radius: 6px;
+  cursor: pointer;
+  min-height: 36px;
+  box-sizing: border-box;
+  font-size: 13px;
+}
+.dash-multi summary::after {
+  content: "▾";
+  position: absolute;
+  right: 12px;
+  top: 8px;
+}
+.dash-multi-panel {
+  position: absolute;
+  z-index: 70;
+  left: 0;
+  top: calc(100% + 5px);
+  width: max(100%, 260px);
+  max-width: calc(100vw - 45px);
+  box-sizing: border-box;
+  padding: 12px;
+  background: white;
+  border: 1px solid #d2daea;
+  border-radius: 8px;
+  box-shadow: 0 8px 30px #24364b25;
+}
+.dash-multi-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 0;
+}
+.dash-multi-actions button {
+  border: 0;
+  background: none;
+  color: var(--dash-purple);
+  font-size: 12px;
+  cursor: pointer;
+  padding: 3px 0;
+}
+.dash-multi-options {
+  max-height: 230px;
+  overflow: auto;
+}
+.dash-multi-options label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 4px;
+  color: var(--dash-text);
+  cursor: pointer;
+}
+.dash-multi-options input {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+}
+.dash-multi-native {
+  display: none !important;
+}
+.dash-thresholds {
+  grid-column: 1/-1;
+  border-top: 1px solid var(--dash-border);
+  padding-top: 10px;
+  font-size: 12px;
+  color: var(--dash-muted);
+}
+.dash-thresholds summary {
+  cursor: pointer;
+  color: var(--dash-purple);
+}
+.dash-thresholds .dash-inline {
+  margin-top: 12px;
+}
+.dash-page input[type="number"] {
+  padding: 9px;
+  border: 1px solid #d2daea;
+  border-radius: 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+#dashboard-status {
+  padding: 16px;
+  font-size: 14px;
+  border: 1px solid #ddd5f5;
+  border-radius: 9px;
+  background: #f7f4ff;
+  line-height: 1.7;
+}
+#dealer-dashboard[aria-busy="true"] #dashboard-status::before {
+  content: "";
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-right: 10px;
+  border: 2px solid #d4cdec;
+  border-top-color: var(--dash-purple);
+  border-radius: 50%;
+  vertical-align: middle;
+  animation: dash-spin 0.9s linear infinite;
+}
+#dealer-dashboard[aria-busy="true"] .dash-filters {
+  opacity: 0.65;
+}
+@keyframes dash-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  #dealer-dashboard[aria-busy="true"] #dashboard-status::before {
+    animation: none;
+  }
+}
+
+.dash-page input[type="time"] {
+  width: 100%;
+  min-height: 36px;
+  padding: 8px;
+  border: 1px solid #d2daea;
+  border-radius: 6px;
+  color: var(--dash-text);
+  font: inherit;
+  box-sizing: border-box;
+}

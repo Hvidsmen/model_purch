@@ -10,7 +10,7 @@ from .versions import latest_version, effective_version, today
 
 
 def version_context(request, version_form=None):
-    if role_for(request.user) == FINANCIER:
+    if role_for(request.user, 'motivation') == FINANCIER:
         return financier_version_context(request)
     latest = latest_version()
     version_id = request.GET.get('version')
@@ -39,7 +39,7 @@ def version_context(request, version_form=None):
         form.fields['effective_from'].widget.attrs['min'] = '2001-01-01'
     return {'versions': versions, 'selected_version': selected, 'latest_version': latest, 'reopen_logs': selected.reopen_history.select_related('actor').order_by('-pk')[:20] if selected else [],
             'effective_version': effective_version(), 'last_approved_version': last_approved, 'version_form': form,
-            'version_editable': bool(selected and selected.is_editable and role_for(request.user) != MOTIVATION_VIEWER),
+            'version_editable': bool(selected and selected.is_editable and role_for(request.user, 'motivation') != MOTIVATION_VIEWER),
             'comparison_plans': SalesPlanScenario.objects.filter(is_deleted=False),
             'comparison_plan': request.session.get('motivation_comparison_plan'),
             'comparison_baselines': [v for v in versions if not v.is_editable],

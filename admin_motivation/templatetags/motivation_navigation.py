@@ -19,7 +19,7 @@ def motivation_workflow(context):
     selected=context.get('selected_version')
     result['selected']=selected if isinstance(selected,GlobalCoeffVersion) else GlobalCoeffVersion.objects.filter(pk=request.session.get('motivation_version')).first() if request else None
     from base.access import role_for, MOTIVATION_VIEWER
-    if request and role_for(request.user)==MOTIVATION_VIEWER:
+    if request and role_for(request.user, 'motivation')==MOTIVATION_VIEWER:
         from django.urls import reverse
         result['next_label']='Открыть отчёты'
         result['next_url']=reverse('motivation_reports')

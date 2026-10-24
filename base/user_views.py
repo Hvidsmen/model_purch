@@ -1,3 +1,4 @@
+from . import project_access_forms as project_forms
 from django import forms
 from django.contrib import messages
 from django.contrib.auth.models import User, Group
@@ -8,7 +9,7 @@ from django.db.models import Q, Count
 from django.http import JsonResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.http import require_GET, require_http_methods
-from .access import ADMIN, ROLES, role_for, can_access
+from .access import ADMIN, ROLES, role_for, can_access, project_role_summary
 from .admin import PortalRoleFormMixin
 from .models import MotivationReportAccess
 from .directory_search import search_accounts, DirectoryPending
@@ -16,6 +17,9 @@ from .directory_search import search_accounts, DirectoryPending
 
 class UserForm(PortalRoleFormMixin, forms.ModelForm):
     username = PortalRoleFormMixin.username
+    motivation_role = project_forms.project_field('motivation')
+    purchases_role = project_forms.project_field('purchases')
+    dashboards_role = project_forms.project_field('dashboards')
     portal_role = PortalRoleFormMixin.portal_role
     report_subdivision = PortalRoleFormMixin.report_subdivision
     report_author = PortalRoleFormMixin.report_author
@@ -65,6 +69,7 @@ class UserForm(PortalRoleFormMixin, forms.ModelForm):
         user.groups.set(self.cleaned_data['groups'])
         if self.cleaned_data.get('portal_role'):
             user.groups.add(Group.objects.get_or_create(name=self.cleaned_data['portal_role'])[0])
+        project_forms.save_assignments(self, user)
         branch, author = self.cleaned_data.get('report_subdivision'), self.cleaned_data.get('report_author', '').strip()
         if branch and author:
             MotivationReportAccess.objects.update_or_create(user=user, defaults={'subdivision': branch, 'deal_author': author})
@@ -96,27 +101,12 @@ def users(request):
         messages.success(request, f'Пользователь «{saved.username}» сохранён.')
         return redirect('portal_users')
     query = request.GET.get('q', '').strip()[:150]
-    catalog = User.objects.prefetch_related('groups').order_by('username')
+    catalog = User.objects.prefetch_related('groups__project_access', 'project_access').order_by('username')
     if query:
         catalog = catalog.filter(Q(username__icontains=query) | Q(first_name__icontains=query) | Q(last_name__icontains=query) | Q(email__icontains=query))
     filters = UserFilters(request.GET)
     if filters.is_valid():
         roles, groups = filters.cleaned_data['role'], filters.cleaned_data['group']
-        if roles:
-            catalog = catalog.annotate(
-                system_roles=Count('groups', filter=Q(groups__name__in=ROLES), distinct=True),
-                inherited_roles=Count('groups__portal_scope__portal_role', distinct=True))
-            condition = Q(pk__in=[])
-            for role in roles:
-                if role == 'none':
-                    condition |= Q(is_active=False) | (Q(is_superuser=False) & ~(Q(system_roles=1) | Q(system_roles=0, inherited_roles=1)))
-                else:
-                    matching = Q(system_roles=1, groups__name=role) | Q(system_roles=0, inherited_roles=1, groups__portal_scope__portal_role=role)
-                    if role == ADMIN:
-                        condition |= Q(is_active=True) & (Q(is_superuser=True) | matching)
-                    else:
-                        condition |= Q(is_active=True, is_superuser=False) & matching
-            catalog = catalog.filter(condition)
         if groups:
             condition = Q(groups__pk__in=[int(value) for value in groups if value != 'none'])
             if 'none' in groups:
@@ -125,9 +115,19 @@ def users(request):
             catalog = catalog.filter(condition)
     else:
         catalog = catalog.none()
-    catalog = list(catalog.distinct()[:200])
+    role_filters = set(filters.cleaned_data.get('role', [])) if filters.is_valid() else set()
+    rows = []
+    from .access import PROJECT_ROLES
+    for row in catalog.distinct():
+        effective = {role_for(row, project) for project in PROJECT_ROLES} - {None, ''}
+        if role_filters and not (effective & role_filters or ('none' in role_filters and not effective)):
+            continue
+        rows.append(row)
+        if len(rows) == 200:
+            break
+    catalog = rows
     for row in catalog:
-        row.portal_role_label = role_for(row) or 'Без доступа'
+        row.portal_role_label = project_role_summary(row)
     sections = {}
     selected = set(filters.cleaned_data.get('group', [])) if filters.is_valid() else set()
     for row in catalog:

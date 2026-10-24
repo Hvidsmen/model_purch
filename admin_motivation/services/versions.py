@@ -63,7 +63,7 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
 def apply_to_subdivisions(version, subdivisions, groups=None, employee=None, employees_by_subdivision=None, user=None):
     from base.access import can_access
     historical = not version.is_editable
-    if historical and not (user and can_access(user, 'admin')):
+    if historical and not (user and can_access(user, 'motivation_admin')):
         raise ValidationError('Историческая версия доступна только для просмотра.')
     from .coefficient_groups import selected_groups
     from ..models import TypeCoeff

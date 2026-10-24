@@ -7,7 +7,7 @@ from ..models import GlobalCoeffVersion, SubdivisionManagerCoeff, KindManagerCoe
 
 @transaction.atomic
 def update(actor, version_id, subdivision, revision, reason, changes):
-    if not can_access(actor, 'admin'):
+    if not can_access(actor, 'motivation_admin'):
         raise PermissionDenied
     version = GlobalCoeffVersion.objects.select_for_update().get(pk=version_id)
     if version.status != 'approved':

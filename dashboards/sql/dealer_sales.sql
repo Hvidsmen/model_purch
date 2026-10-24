@@ -4,7 +4,6 @@ SELECT DATEFROMPARTS(YEAR(s.DateInvoice), MONTH(s.DateInvoice), 1) AS [month],
        MAX(c.CustomerKeyName) AS dealer_name,
        g.Region AS region, g.City AS city,
        p.BrandName AS brand, p.Group_1 AS equipment,
-       p.[Range] AS product_range, p.PlanningGroupOZPErp AS planning_group,
        sub.SubdivisionName AS branch,
        SUM(s.Quantity * mce.FlagAccountingQtyBA) AS quantity,
        SUM(s.Price - COALESCE(s.AmountUSDIt_ITW, 0)) AS amount
@@ -19,5 +18,4 @@ WHERE s.DateInvoice >= ? AND s.DateInvoice < ?
   AND p.BrandName IN ('KENTATSU','MIDEA','AXIOMA','DAICHI','AURUM','PRIMERA','CHIGO')
   AND p.Group_1 IN ('Split','Split Cloud','Multi','LCAC')
 GROUP BY DATEFROMPARTS(YEAR(s.DateInvoice), MONTH(s.DateInvoice), 1),
-         c.CustomerKey, g.Region, g.City, p.BrandName, p.Group_1, p.[Range],
-         p.PlanningGroupOZPErp, sub.SubdivisionName
+         c.CustomerKey, g.Region, g.City, p.BrandName, p.Group_1, sub.SubdivisionName

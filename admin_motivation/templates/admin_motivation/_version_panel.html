@@ -83,7 +83,7 @@
 </div>
     </div>
 
-    {% if portal_is_admin and selected_version.pk == last_approved_version.pk %}
+    {% if portal_can_administer_motivation and selected_version.pk == last_approved_version.pk %}
     <details class="secondary-block" id="version-reopen"><summary>Вернуть последнюю утверждённую версию в черновик</summary>
     <p class="small text-muted">Доступно, если более нового черновика нет. Прежние коэффициенты сохранятся в журнале. Выполненные расчёты и настройки MS SQL не отзываются автоматически. Версии, заменённые этим утверждением, снова станут утверждёнными.</p>
     <form method="post" action="{% url 'motivation_version_reopen' %}">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="revision" value="{{ selected_version.revision }}"><label>Причина<input name="reason" required placeholder="Что требуется исправить"></label><label><input type="checkbox" name="confirm" value="yes" required> Подтверждаю возврат</label><button class="btn btn-outline-primary" type="submit">Вернуть в черновик</button>{% if portal_motivation_readonly %}</fieldset>{% endif %}</form></details>
@@ -91,6 +91,6 @@
 
 </div>
 
-{% if portal_is_admin and reopen_logs %}<details class="secondary-block"><summary>Журнал возвратов в черновик</summary>{% for log in reopen_logs %}<p>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }}{% endtimezone %} · {{ log.actor }} · {{ log.reason }} · <a href="{% url 'motivation_version_reopen_snapshot' log.pk %}">Скачать прежние значения</a></p>{% endfor %}</details>{% endif %}
+{% if portal_can_administer_motivation and reopen_logs %}<details class="secondary-block"><summary>Журнал возвратов в черновик</summary>{% for log in reopen_logs %}<p>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }}{% endtimezone %} · {{ log.actor }} · {{ log.reason }} · <a href="{% url 'motivation_version_reopen_snapshot' log.pk %}">Скачать прежние значения</a></p>{% endfor %}</details>{% endif %}
 
 <script src="{% static 'admin_motivation/version_tools.js' %}?v=20261024" defer></script>

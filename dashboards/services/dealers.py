@@ -20,10 +20,11 @@ def periods(as_of, mode='ltm'):
     return result
 
 
-def segment(values, method, measure):
+def segment(values, method, measure, thresholds=(10, 50, 250)):
     active = {key: item for key, item in values.items() if item['quantity'] > 0}
     if method == 'threshold':
-        return {key: 'S' if item['quantity'] <= 10 else 'M' if item['quantity'] <= 50 else 'L' if item['quantity'] <= 250 else 'XL'
+        s_max, m_max, l_max = thresholds
+        return {key: 'S' if item['quantity'] <= s_max else 'M' if item['quantity'] <= m_max else 'L' if item['quantity'] <= l_max else 'XL'
                 for key, item in active.items()}
     weights = {key: max(item[measure], Decimal(0)) for key, item in active.items()}
     total = sum(weights.values())
@@ -39,6 +40,7 @@ def segment(values, method, measure):
 
 def analyze(rows, options, as_of):
     method, scope, measure = options['method'], options['scope'], options['measure']
+    thresholds = tuple(options.get(key, default) for key, default in [('s_max', 10), ('m_max', 50), ('l_max', 250)])
     groups = ABC_GROUPS if method == 'abc' else THRESHOLD_GROUPS
     rank = {name: index for index, name in enumerate(groups)}
     timeline = periods(as_of, options['period_mode'])
@@ -58,6 +60,7 @@ def analyze(rows, options, as_of):
     totals = {period['year']: defaultdict(lambda: {'quantity': Decimal(0), 'amount': Decimal(0)}) for period in timeline}
     branch_totals = {period['year']: defaultdict(lambda: {'quantity': Decimal(0), 'amount': Decimal(0)}) for period in timeline}
     labels, label_dates, first_seen = {}, {}, {}
+    month_periods = {}
     for row in rows:
         dealer, branch = row['dealer_code'], row['branch']
         key = (branch, dealer) if scope == 'branch' else ('', dealer)
@@ -66,17 +69,18 @@ def analyze(rows, options, as_of):
             label_dates[key] = row['month']
         if row['quantity'] > 0 and row['month'] >= date(2021, 1, 1):
             first_seen[key] = min(first_seen.get(key, row['month']), row['month'])
-        for period in timeline:
-            if period['start'] <= row['month'] < period['end']:
-                for collection, item_key in ((totals[period['year']], key), (branch_totals[period['year']], (branch, dealer))):
-                    item = collection[item_key]
-                    item['quantity'] += row['quantity']; item['amount'] += row['amount']
+        if row['month'] not in month_periods:
+            month_periods[row['month']] = [period for period in timeline if period['start'] <= row['month'] < period['end']]
+        for period in month_periods[row['month']]:
+            for collection, item_key in ((totals[period['year']], key), (branch_totals[period['year']], (branch, dealer))):
+                item = collection[item_key]
+                item['quantity'] += row['quantity']; item['amount'] += row['amount']
     membership = {}
     for year, values in totals.items():
         buckets = defaultdict(dict)
         for key, value in values.items():
             buckets[key[0]][key] = value
-        membership[year] = {key: group for bucket in buckets.values() for key, group in segment(bucket, method, measure).items()}
+        membership[year] = {key: group for bucket in buckets.values() for key, group in segment(bucket, method, measure, thresholds).items()}
     visible = {}
     for period in timeline:
         year = period['year']
@@ -178,21 +182,29 @@ def analyze(rows, options, as_of):
         arrivals.append({'year': year, 'size': len(members), 'alive': len(members & active_sets[end_year]),
                          'top': sum(group(end_year, key) == groups[-1] for key in members)})
     branches = []
-    for branch in sorted({b for b, key in branch_totals[end_year]} | {b for b, key in branch_totals[start_year]}):
+    branch_values = {year: defaultdict(dict) for year in (start_year, end_year)}
+    for year, buckets in branch_values.items():
+        for (branch, dealer), value in branch_totals[year].items():
+            buckets[branch][dealer] = value
+    for branch in sorted(set(branch_values[end_year]) | set(branch_values[start_year])):
         if selected_branches and branch not in selected_branches:
             continue
         result = {'branch': branch, 'groups': [], 'total': Decimal(0), 'top5_share': None}
-        positive = sorted([v[measure] for (b, key), v in branch_totals[end_year].items() if b == branch and v['quantity'] > 0 and v[measure] > 0], reverse=True)
+        positive = sorted([v[measure] for v in branch_values[end_year][branch].values() if v['quantity'] > 0 and v[measure] > 0], reverse=True)
         result['top5_share'] = sum(positive[:5]) / sum(positive) if sum(positive) else None
         for name in groups:
             values = []
             for year in (start_year, end_year):
-                amount = sum((v[measure] for (b, dealer), v in branch_totals[year].items()
-                              if b == branch and membership[year].get((b, dealer) if scope == 'branch' else ('', dealer)) == name), Decimal(0))
-                base = sum((max(v[measure], Decimal(0)) for (b, dealer), v in branch_totals[year].items() if b == branch and v['quantity'] > 0), Decimal(0))
+                items = branch_values[year][branch]
+                def identity(dealer):
+                    return (branch, dealer) if scope == 'branch' else ('', dealer)
+                amount = sum((max(v[measure], Decimal(0)) for dealer, v in items.items()
+                              if v['quantity'] > 0 and membership[year].get(identity(dealer)) == name), Decimal(0))
+                base = sum((max(v[measure], Decimal(0)) for dealer, v in items.items()
+                            if v['quantity'] > 0 and identity(dealer) in membership[year]), Decimal(0))
                 values.append(amount / base if base else Decimal(0))
             result['groups'].append({'group': name, 'share': values[1], 'delta': values[1] - values[0]})
-        result['total'] = sum((v[measure] for (b, dealer), v in branch_totals[end_year].items() if b == branch), Decimal(0))
+        result['total'] = sum((v[measure] for v in branch_values[end_year][branch].values()), Decimal(0))
         branches.append(result)
     dealer_code = options.get('dealer', '')
     search = options.get('search', '').strip().casefold()
@@ -222,7 +234,7 @@ def analyze(rows, options, as_of):
         dealer['locations'] = sorted({', '.join(filter(None, (row['region'], row['city']))) for row in rows if row['dealer_code'] == dealer_code})
     bridge_start = sum((visible[start_year].get(key, {}).get(measure, Decimal(0)) for key in keys), Decimal(0))
     bridge_end = sum((visible[end_year].get(key, {}).get(measure, Decimal(0)) for key in keys), Decimal(0))
-    return {'cohort': cohort if cohort in groups else '', 'empty': not any(active_sets.values()), 'periods': timeline, 'groups': list(groups), 'overview': overview,
+    return {'thresholds': thresholds, 'cohort': cohort if cohort in groups else '', 'empty': not any(active_sets.values()), 'periods': timeline, 'groups': list(groups), 'overview': overview,
             'start': start_year, 'end': end_year, 'measure': measure, 'method': method, 'scope': scope,
             'flows': [{'source': a, 'target': b, **value} for (a, b), value in sorted(transitions.items())],
             'bridge': {'start': bridge_start, 'end': bridge_end, 'items': [{'label': name, **value, 'groups': dict(value['groups'])} for name, value in bridge.items()],
@@ -233,7 +245,7 @@ def analyze(rows, options, as_of):
             'branches': branches, 'dealer': dealer, 'dealer_options': (dealer_options[:100] + [item for item in dealer_options[100:] if item['code'] == dealer_code]), 'dealer_matches': len(dealer_options),
             'filters': filter_choices,
             'rules': {'active': 'Активный дилер: чистое количество за период больше нуля в выбранном масштабе и в отображаемых филиалах. Возвраты сохраняют свой знак.',
-                      'threshold': 'S: 0–10 шт.; M: свыше 10–50; L: свыше 50–250; XL: свыше 250. Пороги всегда в штуках.',
+                      'threshold': f'S: 0–{thresholds[0]} шт.; M: свыше {thresholds[0]}–{thresholds[1]}; L: свыше {thresholds[1]}–{thresholds[2]}; XL: свыше {thresholds[2]}. Пороги всегда в штуках.',
                       'abc': 'A: первые 80%, B: следующие 15%, C: последние 5% положительной выбранной меры. Пересекающий границу дилер остаётся в предыдущей группе.',
                       'history': 'Новые в 2021 году — начальная наблюдаемая база; более ранняя история неизвестна.',
                       'scope': 'При масштабе «Компания» группы считаются по всей компании, фильтр филиала меняет только отображаемые продажи. В масштабе «Филиал» один дилер может учитываться в нескольких филиалах.'}}

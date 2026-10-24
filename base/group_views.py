@@ -1,3 +1,4 @@
+from . import project_access_forms as project_forms
 from django import forms
 from django.contrib.auth.models import Group, User
 from django.core.exceptions import PermissionDenied
@@ -18,13 +19,17 @@ class GroupMembersField(forms.ModelMultipleChoiceField):
 
 class ReportGroupForm(forms.Form):
     name = forms.CharField(label='Название группы', max_length=150, widget=forms.TextInput(attrs={'placeholder': 'Например: Политики · Москва и регионы'}))
-    portal_role = forms.ChoiceField(label='Роль в портале', choices=[('', 'Выберите роль')] + [(role, role) for role in ROLES])
+    motivation_role = project_forms.project_field('motivation')
+    purchases_role = project_forms.project_field('purchases')
+    dashboards_role = project_forms.project_field('dashboards')
+    portal_role = forms.ChoiceField(label='Роль в портале', required=False, choices=[('', 'Выберите роль')] + [(role, role) for role in ROLES])
     employee_type = forms.ModelChoiceField(label='Вид работника', queryset=TypeCoeff.objects.exclude(type_coeff_name='').order_by('type_coeff_name'), empty_label='Выберите вид работника', required=False, widget=forms.HiddenInput)
     subdivisions = forms.ModelMultipleChoiceField(label='Подразделения', queryset=Subdivision.objects.order_by('subdivision_key'), required=False, widget=forms.CheckboxSelectMultiple)
     members = GroupMembersField(label='Пользователи', queryset=User.objects.order_by('username'), required=False, widget=forms.CheckboxSelectMultiple)
 
-    def __init__(self, *args, group=None, **kwargs):
+    def __init__(self, *args, group=None, actor=None, **kwargs):
         self.group = group
+        self.actor = actor
         self.legacy_kind = bool(args and args[0] is not None and 'portal_role' not in args[0] and args[0].get('employee_type'))
         # Accept old clients submitting the report kind; new forms submit the role.
         if args and args[0] is not None and 'portal_role' not in args[0] and args[0].get('employee_type'):
@@ -32,6 +37,7 @@ class ReportGroupForm(forms.Form):
             data['portal_role'] = POLITICIAN
             args = (data, *args[1:])
         super().__init__(*args, **kwargs)
+        project_forms.initialize(self, group, group=True)
         if group:
             self.initial['name'] = group.name
             self.initial['members'] = group.user_set.values_list('pk', flat=True)
@@ -53,9 +59,17 @@ class ReportGroupForm(forms.Form):
 
     def clean(self):
         data = super().clean()
-        role = data.get('portal_role')
+        selected = data.get('motivation_role') if 'motivation_role' in self.data else project_forms.INHERIT
+        role = data.get('portal_role') if selected == project_forms.INHERIT else selected
         if role in REPORT_ROLES and not data.get('subdivisions'):
             self.add_error('subdivisions', 'Выберите хотя бы одно подразделение для отчётов.')
+        actor = self.actor
+        if self.group and actor and not actor.is_superuser and self.group.user_set.filter(pk=actor.pk).exists():
+            is_admin_group = PortalReportGroup.objects.filter(group=self.group, portal_role=ADMIN).exists()
+            other_admin = actor.groups.filter(name=ADMIN).exists() or PortalReportGroup.objects.filter(group__user=actor, portal_role=ADMIN).exclude(group=self.group).exists()
+            keeps_admin = data.get('portal_role') == ADMIN and actor.pk in {user.pk for user in data.get('members', [])}
+            if is_admin_group and not other_admin and not keeps_admin:
+                self.add_error(None, 'Нельзя снять собственный доступ общего администратора через изменение группы. Используйте другую учётную запись администратора.')
         return data
 
     @transaction.atomic
@@ -69,10 +83,15 @@ class ReportGroupForm(forms.Form):
         worker = self.cleaned_data.get('employee_type') if self.legacy_kind else None
         if not self.legacy_kind and previous and previous.portal_role == role:
             worker = previous.employee_type
-        worker_name = 'Продажи' if role == SALES else 'Политики' if role in (POLITICIAN, DEPUTY_DIRECTOR) else None
+        selected = self.cleaned_data.get('motivation_role') if 'motivation_role' in self.data else project_forms.INHERIT
+        motivation_role = role if selected == project_forms.INHERIT else selected
+        worker_name = 'Продажи' if motivation_role == SALES else 'Политики' if motivation_role in (POLITICIAN, DEPUTY_DIRECTOR) else None
+        if 'motivation_role' in self.data and selected != project_forms.INHERIT:
+            worker = None
         if worker is None and worker_name:
             worker = TypeCoeff.objects.filter(type_coeff_name=worker_name).order_by('pk').first()
         scope, _ = PortalReportGroup.objects.update_or_create(group=group, defaults={'employee_type': worker, 'portal_role': role})
+        project_forms.save_assignments(self, group, group=True)
         if role == ADMIN:
             from django.contrib.auth.models import Permission
             group.permissions.set(Permission.objects.all())
@@ -103,7 +122,7 @@ def groups(request):
         if not identifier.isdigit():
             raise Http404
         group = get_object_or_404(Group.objects.exclude(name__in=ROLES), pk=int(identifier))
-    form = ReportGroupForm(request.POST if request.method == 'POST' else None, group=group)
+    form = ReportGroupForm(request.POST if request.method == 'POST' else None, group=group, actor=request.user)
     if request.method == 'POST' and form.is_valid():
         saved = form.save()
         messages.success(request, f'Группа «{saved.name}» сохранена. Доступ участников обновлён.')
@@ -111,6 +130,11 @@ def groups(request):
     catalog = list(Group.objects.exclude(name__in=ROLES).select_related('portal_scope__employee_type').prefetch_related('user_set', 'portal_scope__subdivisions__merged_into').order_by('name'))
     for row in catalog:
         scope = getattr(row, 'portal_scope', None)
+        from .access import PROJECT_ROLES, PROJECT_LABELS
+        overrides = dict(row.project_access.values_list('project', 'role'))
+        legacy = scope.portal_role if scope else ''
+        row.project_access_configured = scope is not None or bool(overrides)
+        row.project_access_label = ' · '.join(PROJECT_LABELS[project] + ': ' + role for project, allowed in PROJECT_ROLES.items() if (role := overrides.get(project, legacy if legacy in allowed else ''))) or 'Нет доступа'
         row.reporting_branches = sorted({(branch.merged_into or branch).subdivision_key for branch in scope.subdivisions.all()}) if scope else []
-    configured = sum(getattr(row, 'portal_scope', None) is not None for row in catalog)
+    configured = sum(row.project_access_configured for row in catalog)
     return render(request, 'base/user_groups.html', {'form': form, 'editing': group, 'catalog': catalog, 'configured': configured})

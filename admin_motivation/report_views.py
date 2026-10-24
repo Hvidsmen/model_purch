@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 
 
 def report_index(request):
-    catalog = {key: CATALOG[key] for key in report_kinds(request.user)} if role_for(request.user) in REPORT_ROLES else CATALOG
-    return render(request, 'admin_motivation/reports/index.html', {'reports': catalog, 'subdivisions': Subdivision.objects.none() if role_for(request.user) in REPORT_ROLES else Subdivision.objects.all()})
+    catalog = {key: CATALOG[key] for key in report_kinds(request.user)} if role_for(request.user, 'motivation') in REPORT_ROLES else CATALOG
+    return render(request, 'admin_motivation/reports/index.html', {'reports': catalog, 'subdivisions': Subdivision.objects.none() if role_for(request.user, 'motivation') in REPORT_ROLES else Subdivision.objects.all()})
 
 
 def report_page(request, kind):
     if kind not in CATALOG: raise Http404('Отчёт не найден.')
     access_scope = getattr(request, 'personal_report_scope', None) or politician_scope(request.user)
-    if role_for(request.user) in REPORT_ROLES and (not access_scope or kind not in report_kinds(request.user)):
+    if role_for(request.user, 'motivation') in REPORT_ROLES and (not access_scope or kind not in report_kinds(request.user)):
         raise PermissionDenied
     query = scoped_query(request.GET, access_scope, kind) if access_scope else request.GET.copy()
     if kind == 'deals':
@@ -107,7 +107,7 @@ def report_page(request, kind):
     from .models import MotivationExecution
     from .services.workflow import export_snapshot
     latest_execution=MotivationExecution.objects.order_by('-started_at').first()
-    if role_for(request.user) in (MOTIVATION_VIEWER, FINANCIER) and str(query.get('job','')).isdigit():
+    if role_for(request.user, 'motivation') in (MOTIVATION_VIEWER, FINANCIER) and str(query.get('job','')).isdigit():
         from .models import MotivationCalculationSchedule
         from .services.execution_tracking import observe
         job=MotivationCalculationSchedule.objects.filter(pk=query['job']).first()
@@ -134,7 +134,7 @@ def plan_summary(request):
     from .services.plan_summary import summary_report, summary_filters
     started = perf_counter()
     access_scope = getattr(request, 'personal_report_scope', None) or politician_scope(request.user)
-    if role_for(request.user) in REPORT_ROLES:
+    if role_for(request.user, 'motivation') in REPORT_ROLES:
         raise PermissionDenied
     query = request.GET.copy()
     options = {}

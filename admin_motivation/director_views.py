@@ -27,7 +27,7 @@ def coefficient_group_copy(request):
     sub = get_object_or_404(Subdivision, pk=data['subdivision']) if data.get('subdivision') else None
     employee = get_object_or_404(DirectorEmployee, pk=data['employee']) if data.get('employee') else None
     from base.access import role_for, MOTIVATION_VIEWER
-    if not can_access(request.user, 'admin') and not version.is_editable and not (role_for(request.user)==MOTIVATION_VIEWER and request.method in ('GET','HEAD','OPTIONS')):
+    if not can_access(request.user, 'motivation_admin') and not version.is_editable and not (role_for(request.user, 'motivation')==MOTIVATION_VIEWER and request.method in ('GET','HEAD','OPTIONS')):
         raise PermissionDenied
     if request.method == 'POST':
         try:

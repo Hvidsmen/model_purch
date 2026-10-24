@@ -10,7 +10,7 @@ from ..models import (GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff, Subdivi
 
 @transaction.atomic
 def reopen_version(actor, version_id, revision, reason):
-    if not can_access(actor, 'admin'):
+    if not can_access(actor, 'motivation_admin'):
         raise PermissionDenied
     if not reason.strip():
         raise ValidationError('Укажите причину возврата версии в черновик.')

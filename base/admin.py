@@ -6,8 +6,9 @@ from django.contrib.auth.forms import UserChangeForm, AdminUserCreationForm, Use
 from django.contrib.auth.models import User, Group
 from django.contrib.auth.validators import UnicodeUsernameValidator
 import re
-from .access import ADMIN, ROLES, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, PERSONAL_ROLES, role_for
+from .access import ADMIN, ROLES, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, PERSONAL_ROLES, role_for, motivation_scopes
 from .models import MotivationReportAccess, PortalReportGroup
+from . import project_access_forms as project_forms
 from admin_motivation.models import Subdivision
 
 
@@ -49,12 +50,16 @@ class PortalRoleFormMixin:
         super().__init__(*args, **kwargs)
         if self.instance.pk:
             self.fields['portal_role'].initial = ADMIN if self.instance.is_superuser else self.instance.groups.filter(name__in=ROLES).values_list('name', flat=True).first()
+        project_forms.initialize(self, self.instance)
         if self.instance.pk:
             access = MotivationReportAccess.objects.select_related('subdivision').filter(user=self.instance).first()
             if access:
                 self.fields['report_subdivision'].initial = access.subdivision.merged_into_id or access.subdivision_id
                 self.fields['report_author'].initial = access.deal_author
         scopes = list(PortalReportGroup.objects.values_list('group_id', 'portal_role'))
+        from .models import GroupProjectAccess
+        project_group_roles = dict(GroupProjectAccess.objects.filter(project='motivation').values_list('group_id', 'role'))
+        scopes = [(pk, project_group_roles.get(pk, role)) for pk, role in scopes if project_group_roles.get(pk, role)]
         self.fields['portal_role'].widget.attrs['data-report-groups'] = ','.join(str(pk) for pk, role in scopes)
         import json
         self.fields['portal_role'].widget.attrs['data-group-roles'] = json.dumps({str(pk): role for pk, role in scopes}, ensure_ascii=False)
@@ -67,15 +72,17 @@ class PortalRoleFormMixin:
         if data.get('is_superuser') and data.get('portal_role') != ADMIN:
             self.add_error('portal_role', 'Суперпользователь должен иметь роль «Администратор». Для другой роли снимите признак суперпользователя.')
         selected_groups = data.get('groups', []) if 'groups' in self.fields else self.instance.groups.all() if self.instance.pk else []
-        report_groups = list(PortalReportGroup.objects.filter(group__in=selected_groups).prefetch_related('subdivisions__merged_into'))
+        report_groups = list(motivation_scopes(selected_groups).prefetch_related('subdivisions__merged_into'))
         if report_groups and data.get('portal_role') == POLITICIAN and {group.portal_role for group in report_groups} == {POLITICIAN}:
             # Access follows membership; do not retain a standalone role after removal.
             data['portal_role'] = ''
-        inherited = {group.portal_role for group in report_groups}
-        if not data.get('portal_role') and len(inherited) > 1:
+        inherited = set(PortalReportGroup.objects.filter(group__in=selected_groups).exclude(portal_role='').values_list('portal_role', flat=True))
+        if not data.get('portal_role') and len(inherited) > 1 and not any(project + '_role' in self.data for project in project_forms.PROJECT_ROLES):
             self.add_error('groups' if 'groups' in self.fields else None, 'У выбранных групп разные роли. Выберите группы с одной ролью или задайте роль пользователя явно.')
         effective_role = data.get('portal_role') or (next(iter(inherited)) if len(inherited) == 1 else '')
         self._effective_role = effective_role
+        effective_role = project_forms.motivation_role(self, data, effective_role, selected_groups)
+        self._motivation_role = effective_role
         if effective_role in (DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
             if not report_groups or not any(group.subdivisions.exists() for group in report_groups):
                 self.add_error('groups' if 'groups' in self.fields else None, 'Выберите группу доступа с разрешёнными подразделениями для этой роли.')
@@ -101,6 +108,10 @@ class PortalRoleFormMixin:
 
 
 class PortalUserChangeForm(PortalRoleFormMixin, UserChangeForm):
+    motivation_role = project_forms.project_field('motivation')
+    purchases_role = project_forms.project_field('purchases')
+    dashboards_role = project_forms.project_field('dashboards')
+
     username = PortalRoleFormMixin.username
     portal_role = PortalRoleFormMixin.portal_role
     report_subdivision = PortalRoleFormMixin.report_subdivision
@@ -108,6 +119,10 @@ class PortalUserChangeForm(PortalRoleFormMixin, UserChangeForm):
 
 
 class PortalUserCreationForm(PortalRoleFormMixin, AdminUserCreationForm):
+    motivation_role = project_forms.project_field('motivation')
+    purchases_role = project_forms.project_field('purchases')
+    dashboards_role = project_forms.project_field('dashboards')
+
     username = PortalRoleFormMixin.username
     portal_role = PortalRoleFormMixin.portal_role
     report_subdivision = PortalRoleFormMixin.report_subdivision
@@ -131,10 +146,11 @@ class PortalUserAdmin(UserAdmin):
 
     @admin.display(description='Роль в портале')
     def portal_role_label(self, obj):
-        return role_for(obj) or 'Без доступа'
+        from .access import project_role_summary
+        return ADMIN if role_for(obj) == ADMIN else project_role_summary(obj)
 
-    fieldsets = UserAdmin.fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'report_subdivision', 'report_author')}),)
-    add_fieldsets = UserAdmin.add_fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'report_subdivision', 'report_author')}),)
+    fieldsets = UserAdmin.fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'motivation_role', 'purchases_role', 'dashboards_role', 'report_subdivision', 'report_author')}),)
+    add_fieldsets = UserAdmin.add_fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'motivation_role', 'purchases_role', 'dashboards_role', 'report_subdivision', 'report_author')}),)
 
     class Media:
         js = ('base/admin_report_access.js',)
@@ -150,6 +166,7 @@ class PortalUserAdmin(UserAdmin):
         role = form.cleaned_data.get('portal_role')
         if role:
             user.groups.add(Group.objects.get_or_create(name=role)[0])
+        project_forms.save_assignments(form, user)
         subdivision, author = form.cleaned_data.get('report_subdivision'), form.cleaned_data.get('report_author', '').strip()
         if subdivision and author:
             MotivationReportAccess.objects.update_or_create(user=user, defaults={'subdivision': subdivision, 'deal_author': author})

@@ -10,7 +10,7 @@ from .models import *
 
 def index(request):
     from base.access import role_for, FINANCIER
-    if role_for(request.user) == FINANCIER:
+    if role_for(request.user, 'motivation') == FINANCIER:
         return redirect('motivation_reports')
     return render(request, "admin_motivation/index.html", )
 
@@ -152,7 +152,7 @@ def gloabal_coeff_action(request):
     try:
         with transaction.atomic():
             latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
-            if (version.status != 'draft' or version.pk != latest.pk) and not (action == 'apply_sub' and can_access(request.user, 'admin')):
+            if (version.status != 'draft' or version.pk != latest.pk) and not (action == 'apply_sub' and can_access(request.user, 'motivation_admin')):
                 raise ValidationError('Историческая версия доступна только для просмотра. Для изменений создайте новую версию.')
             if action == 'sync_references':
                 PlanningGroupSales.create_from_dwh()
@@ -264,7 +264,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     return render(request, 'admin_motivation/coef_one_sub.html', {
         **context, **restore_context(request), 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
         'director_editable': bool(context['version_editable'] and employee_bound),
-        'manager_approved_editable': bool(selected and selected.status == 'approved' and can_access(request.user, 'admin')),
+        'manager_approved_editable': bool(selected and selected.status == 'approved' and can_access(request.user, 'motivation_admin')),
         'manager_correction_history': ManagerCorrectionLog.objects.filter(version=selected, subdivision=sub).select_related('actor').order_by('-pk')[:30],
         'employee_form': employee_form, 'all_employees': DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions'),
         'copy_employee_options': sub.directors.exclude(pk=employee.pk) if employee else sub.directors.all(),
@@ -296,7 +296,7 @@ def sub_act(request, subdivision):
     try:
         with transaction.atomic():
             latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
-            if (version.status != 'draft' or version.pk != latest.pk) and not (action == 'copy_from_global' and can_access(request.user, 'admin')):
+            if (version.status != 'draft' or version.pk != latest.pk) and not (action == 'copy_from_global' and can_access(request.user, 'motivation_admin')):
                 raise ValidationError('Историческая версия доступна только для просмотра.')
             if action == 'update_motive_coeff':
                 from .services.save_verification import SaveVerification

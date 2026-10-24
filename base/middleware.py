@@ -15,7 +15,18 @@ class PortalAccessMiddleware:
     def process_view(self, request, view_func, view_args, view_kwargs):
         module = view_func.__module__
         match = request.resolver_match
-        if role_for(request.user) in REPORT_ROLES:
+        project = None
+        if module.startswith('model_purch.'):
+            project = 'purchases'
+        elif module.startswith('dashboards.'):
+            project = 'dashboards'
+        elif module.startswith('admin_motivation.'):
+            project = 'motivation'
+        elif module.startswith(('PlanningSystem.', 'RefEditor.')) or (match and match.app_name == 'admin'):
+            project = 'admin'
+        elif not (match and match.url_name == 'index_base'):
+            return None
+        if project == 'motivation' and role_for(request.user, 'motivation') in REPORT_ROLES:
             from django.conf import settings
             from .report_access import politician_scope, report_kinds
             name = match.url_name if match else None
@@ -28,17 +39,6 @@ class PortalAccessMiddleware:
                 if '/api/' in request.path or 'application/json' in request.headers.get('Accept', ''):
                     return JsonResponse({'error': 'Доступны только отчёты в рамках назначенных подразделений и прав.'}, status=403)
                 return render(request, 'base/forbidden.html', status=403)
-        project = None
-        if module.startswith('model_purch.'):
-            project = 'purchases'
-        elif module.startswith('dashboards.'):
-            project = 'dashboards'
-        elif module.startswith('admin_motivation.'):
-            project = 'motivation'
-        elif module.startswith(('PlanningSystem.', 'RefEditor.')) or (match and match.app_name == 'admin'):
-            project = 'admin'
-        elif not (match and match.url_name == 'index_base'):
-            return None
         json_request = '/api/' in request.path or 'application/json' in request.headers.get('Accept', '') or request.content_type == 'application/json' or (match and match.url_name == 'motivation_coefficient_comparison')
         if not request.user.is_authenticated or not request.user.is_active:
             if json_request:
@@ -48,11 +48,11 @@ class PortalAccessMiddleware:
             if json_request:
                 return JsonResponse({'error': 'Ваша роль не разрешает доступ к этому разделу.'}, status=403)
             return render(request, 'base/forbidden.html', status=403)
-        if project == 'motivation' and role_for(request.user) == FINANCIER and not financier_read_request(request):
+        if project == 'motivation' and role_for(request.user, 'motivation') == FINANCIER and not financier_read_request(request):
             if json_request:
                 return JsonResponse({'error': 'Финансист: доступны только утверждённые настройки подразделений, сегменты скидок и отчёты.'}, status=403)
             return render(request, 'base/forbidden.html', status=403)
-        if project == 'motivation' and role_for(request.user) == MOTIVATION_VIEWER and not motivation_viewer_read_request(request):
+        if project == 'motivation' and role_for(request.user, 'motivation') == MOTIVATION_VIEWER and not motivation_viewer_read_request(request):
             if json_request:
                 return JsonResponse({'error':'Роль «Смотрящий»: разрешён только просмотр мотивации.'},status=403)
             return render(request,'base/forbidden.html',{'readonly_reason':'Роль «Смотрящий»: изменение данных мотивации запрещено.'},status=403)

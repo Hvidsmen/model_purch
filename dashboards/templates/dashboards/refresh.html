@@ -1,0 +1,13 @@
+{% extends 'dashboards/base.html' %}{% load static %}
+{% block dashboard_content %}
+<section class="dash-page" id="snapshot-job" data-status="{% url 'dashboard_refresh_status' %}">
+<header class="dash-heading"><div><p class="dash-eyebrow">Дашборды / Задание</p><h1>Обновление дилерских данных</h1><p class="dash-lead">Один снимок для всех пользователей. Просмотр отчёта не выполняет запросы к DataWH.</p></div><a href="{% url 'dealer_dashboard' %}" class="dash-button secondary">Открыть дашборд →</a></header>
+{% for message in messages %}<p role="status" class="dash-status">{{ message }}</p>{% endfor %}
+<article class="dash-card"><h2>Состояние обновления</h2><p id="snapshot-state" role="status" aria-live="polite">Проверяем статус…</p><p id="snapshot-progress"></p><p id="snapshot-last"></p><p id="snapshot-error" class="dash-error" hidden></p>
+{% if portal_can_administer_dashboards %}<form method="post" id="snapshot-run">{% csrf_token %}<input type="hidden" name="action" value="run"><button class="dash-button" type="submit">Обновить сейчас</button></form>{% else %}<p class="dash-section-note">Запуск и расписание доступны администратору проекта «Дашборды».</p>{% endif %}</article>
+<article class="dash-card"><h2>Ежедневное расписание · Москва</h2>
+{% if portal_can_administer_dashboards %}<form method="post" class="dash-inline">{% csrf_token %}<input type="hidden" name="action" value="schedule"><label>После завершения обновления Sales<input type="time" name="time" value="{{ schedule.time }}"></label><label><input type="checkbox" name="enabled" {% if schedule.enabled %}checked{% endif %}> Ежедневный запуск включён</label><button class="dash-button secondary" type="submit">Сохранить расписание</button></form>{% else %}<p>{% if schedule.enabled %}Ежедневно в {{ schedule.time }} МСК{% else %}Ежедневный запуск пока выключен{% endif %}</p>{% endif %}
+<p class="dash-section-note">{% if not schedule.time %}Время запуска пока не согласовано — расписание изначально выключено.{% endif %} Выбирайте время после завершения обновления источника. Задание выполняется, пока работает служба портала; после пропущенного времени запуск будет выполнен при возобновлении службы. Одновременные обновления заблокированы. При ошибке прежний снимок остаётся доступен.</p></article>
+<article class="dash-card"><h2>История запусков · последние 30</h2><div class="dash-table-scroll"><table class="dash-table"><thead><tr><th>Начало, МСК</th><th>Завершение, МСК</th><th>Статус</th><th>Строк</th></tr></thead><tbody id="snapshot-history"></tbody></table></div></article>
+</section><script src="{% static 'dashboards/refresh.js' %}?v=20261024" defer></script>
+{% endblock %}

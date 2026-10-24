@@ -14,17 +14,17 @@ MAX_ROWS = 500_000
 _source_lock = Lock()
 
 
-def load_sales(as_of):
+def fetch_sales(as_of, *, force=False, progress=None):
     sql = SQL_PATH.read_text(encoding='utf-8')
     end = as_of.replace(day=1)  # Never mix an incomplete month with complete years.
     key = 'dealer-sales:v1:' + hashlib.sha256((sql + str(end)).encode()).hexdigest()
     cached = cache.get(key)
-    if cached is not None:
+    if cached is not None and not force:
         return cached
     # Prevent concurrent initial page requests from duplicating an expensive scan.
     with _source_lock:
         cached = cache.get(key)
-        if cached is not None:
+        if cached is not None and not force:
             return cached
         connection = None
         try:
@@ -51,11 +51,19 @@ def load_sales(as_of):
                     if not row['quantity'].is_finite() or not row['amount'].is_finite():
                         raise ValidationError('Источник содержит некорректные числовые значения.')
                     rows.append(row)
+                if progress:
+                    progress(len(rows))
                 if len(rows) > MAX_ROWS:
                     raise ValidationError('Источник превысил 500 000 месячных строк. Требуется материализованная витрина; неполные данные не показаны.')
             result = {'rows': rows, 'loaded_at': timezone.now().isoformat(), 'end_exclusive': end.isoformat()}
-            cache.set(key, result, 15 * 60)
+            if not force:
+                cache.set(key, result, 15 * 60)
             return result
         finally:
             if connection is not None:
                 connection.close()
+
+
+def load_sales(as_of):
+    from .snapshots import read_snapshot
+    return read_snapshot()

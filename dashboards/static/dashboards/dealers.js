@@ -63,6 +63,109 @@
       )
     )
       form.elements[field].value = initial.get(field);
+  for (const key of ["s_max", "m_max", "l_max"]) {
+    if (initial.has(key)) form.elements[key].value = initial.get(key);
+  }
+  const multis = [];
+  for (const select of form.querySelectorAll("select[multiple]")) {
+    select.classList.add("dash-multi-native");
+    const details = node("details", undefined, "dash-multi");
+    details.dataset.filter = select.name;
+    const summary = node("summary", "Загрузка…");
+    summary.setAttribute("aria-label", select.getAttribute("aria-label"));
+    const panel = node("div", undefined, "dash-multi-panel");
+    const search = node("input");
+    search.type = "search";
+    search.placeholder = "Поиск…";
+    search.setAttribute("aria-label", "Поиск в списке");
+    const actions = node("div", undefined, "dash-multi-actions");
+    const all = node("button", "Выбрать всё"),
+      none = node("button", "Снять всё");
+    all.type = none.type = "button";
+    const choices = node("div", undefined, "dash-multi-options");
+    actions.append(all, none);
+    panel.append(search, actions, choices);
+    details.append(summary, panel);
+    select.after(details);
+    const caption = () => {
+      const items = [...select.options].filter((option) => !option.disabled),
+        chosen = items.filter((option) => option.selected);
+      summary.textContent = !items.length
+        ? "Нет данных"
+        : !chosen.length
+          ? "Все · без фильтра"
+          : chosen.length === 1
+            ? chosen[0].text
+            : chosen.length === items.length
+              ? "Выбраны все · " + chosen.length
+              : "Выбрано: " + chosen.length;
+    };
+    const sync = () => {
+      choices.replaceChildren();
+      search.value = "";
+      for (const option of select.options) {
+        if (option.disabled) continue;
+        const label = node("label"),
+          check = node("input");
+        check.type = "checkbox";
+        check.checked = option.selected;
+        check.addEventListener("change", () => {
+          option.selected = check.checked;
+          caption();
+        });
+        label.append(check, node("span", option.text));
+        choices.append(label);
+      }
+      caption();
+    };
+    all.addEventListener("click", () => {
+      for (const option of select.options)
+        if (!option.disabled) option.selected = true;
+      sync();
+    });
+    none.addEventListener("click", () => {
+      for (const option of select.options) option.selected = false;
+      sync();
+    });
+    search.addEventListener("input", () => {
+      for (const label of choices.children)
+        label.hidden = !label.textContent
+          .toLocaleLowerCase("ru-RU")
+          .includes(search.value.toLocaleLowerCase("ru-RU"));
+    });
+    summary.addEventListener("click", (event) => {
+      if (select.disabled) event.preventDefault();
+    });
+    details.addEventListener("toggle", () => {
+      if (details.open) {
+        multis.forEach((other) => {
+          if (other !== details) other.open = false;
+        });
+        panel.style.left = "0";
+        panel.style.right = "auto";
+        if (panel.getBoundingClientRect().right > innerWidth - 12) {
+          panel.style.left = "auto";
+          panel.style.right = "0";
+        }
+        search.focus();
+      }
+    });
+    details.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        details.open = false;
+        summary.focus();
+      }
+      if (event.key === "Enter" && event.target === search)
+        event.preventDefault();
+    });
+    document.addEventListener("click", (event) => {
+      if (!details.contains(event.target)) details.open = false;
+    });
+    select.addEventListener("dash:options", sync);
+    multis.push(details);
+    sync();
+  }
+  let elapsedTimer = null;
   function selected(name) {
     return [...form.elements[name].selectedOptions]
       .map((o) => o.value)
@@ -99,6 +202,7 @@
       option.selected = current.includes(value);
       select.add(option);
     });
+    select.dispatchEvent(new Event("dash:options"));
   }
   function table(id, headers, rows) {
     const wrap = clear(id),
@@ -402,7 +506,7 @@
   function dealerPlot(data) {
     const wrap = clear("dealer-volume-chart"),
       values = data.dealer.periods.map((p) => Number(p.quantity)),
-      max = Math.max(300, ...values),
+      max = Math.max(Number(data.thresholds[2]) * 1.15, ...values),
       min = Math.min(0, ...values),
       scale = 220 / (max - min),
       y = (v) => 250 - (v - min) * scale,
@@ -414,7 +518,7 @@
         "aria-label": "Штуки по годам и границы групп размера",
       });
     svg.style.width = "100%";
-    [10, 50, 250].forEach((value) => {
+    data.thresholds.forEach((value) => {
       svg.append(
         svgNode("line", {
           x1: 60,
@@ -468,6 +572,13 @@
       );
     });
     wrap.append(svg);
+    wrap.append(
+      node(
+        "p",
+        "Пунктир — настраиваемые границы размеров S/M/L в штуках; для ABC они показаны справочно.",
+        "dash-section-note",
+      ),
+    );
   }
   function render(data, query) {
     const current = {};
@@ -769,7 +880,7 @@
       .getElementById("dashboard-export")
       .setAttribute("aria-disabled", "false");
     result.hidden = false;
-    status.textContent = `Обновлено ${new Date(data.loaded_at).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК · ${fmt(data.row_count)} месячных строк · ${data.scope === "branch" ? "дилер учитывается отдельно в каждом филиале" : "единый код дилера по компании"}${data.empty ? " · Активных дилеров по фильтрам нет" : ""}`;
+    status.textContent = `${data.snapshot_warning ? "⚠ " + data.snapshot_warning + " · " : ""}Обновлено ${new Date(data.loaded_at).toLocaleString("ru-RU", { timeZone: "Europe/Moscow" })} МСК · ${fmt(data.row_count)} месячных строк · ${data.scope === "branch" ? "дилер учитывается отдельно в каждом филиале" : "единый код дилера по компании"}${data.empty ? " · Активных дилеров по фильтрам нет" : ""}`;
   }
   async function load(extra) {
     controller?.abort();
@@ -781,8 +892,18 @@
     else if (report?.search) query.set("search", report.search);
     error.hidden = true;
     result.hidden = true;
-    status.textContent =
-      "Загружаем данные и пересчитываем группы… Первый запрос может занять до двух минут.";
+    clearInterval(elapsedTimer);
+    const started = performance.now();
+    const loading = () => {
+      status.textContent =
+        "Читаем подготовленный снимок и рассчитываем группы. Прошло: " +
+        Math.floor((performance.now() - started) / 1000) +
+        " сек. Фильтры временно заблокированы; готовые результаты появятся автоматически.";
+    };
+    loading();
+    elapsedTimer = setInterval(loading, 1000);
+    for (const control of form.elements) control.disabled = true;
+    multis.forEach((details) => (details.open = false));
     root.setAttribute("aria-busy", "true");
     document
       .getElementById("dashboard-export")
@@ -813,7 +934,11 @@
         reason.message || "Ошибка подключения. Повторите запрос.";
       error.hidden = false;
     } finally {
-      if (seq === requestNumber) root.setAttribute("aria-busy", "false");
+      if (seq === requestNumber) {
+        clearInterval(elapsedTimer);
+        for (const control of form.elements) control.disabled = false;
+        root.setAttribute("aria-busy", "false");
+      }
     }
   }
   form.addEventListener("submit", (event) => {

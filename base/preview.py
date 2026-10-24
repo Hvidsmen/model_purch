@@ -27,7 +27,7 @@ class UserPreviewMiddleware:
                 else:
                     request.portal_preview_user = target
                     request.user = target
-                    if request.method not in ('GET', 'HEAD', 'OPTIONS') and not (role_for(target)==MOTIVATION_VIEWER and motivation_viewer_read_request(request)):
+                    if request.method not in ('GET', 'HEAD', 'OPTIONS') and not (role_for(target, 'motivation')==MOTIVATION_VIEWER and motivation_viewer_read_request(request)):
                         if '/api/' in request.path or 'application/json' in request.headers.get('Accept', ''):
                             return JsonResponse({'error': 'В режиме просмотра нельзя изменять данные.'}, status=403)
                         return render(request, 'base/preview_readonly.html', status=403)

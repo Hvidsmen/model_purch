@@ -11,7 +11,7 @@ from .coefficient_groups import GROUP_NAMES
 @transaction.atomic
 def copy_group(user, version_id, revision, source, target, subdivision=None, employee=None):
     version = GlobalCoeffVersion.objects.select_for_update().get(pk=version_id)
-    admin = can_access(user, 'admin')
+    admin = can_access(user, 'motivation_admin')
     if not can_access(user, 'motivation') or (not admin and not version.is_editable):
         raise PermissionDenied
     if str(version.revision) != str(revision):

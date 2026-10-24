@@ -6,6 +6,16 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from .access import ADMIN, DIRECTOR, LOGISTICIAN, ROLES, ensure_roles
 
 
+def choose_legacy_role(page, value):
+    details = page.locator('.access-legacy-role')
+    if details.count():
+        details.evaluate('(el) => el.open = true')
+    if not page.locator('#id_portal_role').is_visible():
+        edit = page.get_by_role('button', name='Изменить роль', exact=True)
+        if edit.is_visible(): edit.click()
+    page.select_option('#id_portal_role', value)
+
+
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class PortalLoginBrowserTests(StaticLiveServerTestCase):
     def test_financier_approved_settings_filters_reports_and_write_denial(self):
@@ -17,6 +27,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
         from admin_motivation import test_shared_versions
         from admin_motivation.models import DiscountSegment, GlobalCoeffVersion
         from admin_motivation.services.approval import approve_review, review_approval
+        GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001, 1, 1))
         test_shared_versions.SharedMotivationVersionTests.setUp(self)
         DiscountSegment.objects.create(version=self.first, type_discount='MASS', o1=10)
         approve_review(review_approval(self.first)['token'])
@@ -223,11 +234,11 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('link', name='Пользователи и права', exact=True).click()
                 page.goto(self.live_server_url + reverse('admin:auth_user_add'))
                 page.fill('#id_username', 'DAICHI\\BrowserEmployee')
-                page.select_option('#id_portal_role', DIRECTOR)
+                choose_legacy_role(page, DIRECTOR)
                 page.locator('input[name=_save]').click()
                 expect(page.locator('#id_username')).to_have_value('daichi\\browseremployee')
                 expect(page.locator('#id_portal_role')).to_have_value(DIRECTOR)
-                page.select_option('#id_portal_role', LOGISTICIAN)
+                choose_legacy_role(page, LOGISTICIAN)
                 page.locator('input[name=_save]').click()
                 expect(page.locator('#result_list')).to_contain_text(LOGISTICIAN)
             finally:
@@ -292,7 +303,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('button', name='Войти', exact=True).click()
                 page.get_by_role('link', name='Группы пользователей', exact=True).click()
                 page.fill('#id_name', 'Политики · Москва и регионы')
-                page.select_option('#id_portal_role', 'Политик')
+                choose_legacy_role(page, 'Политик')
                 expect(page.locator('#id_portal_role option')).to_have_count(len(ROLES)+1)
                 branches_field = page.locator('[data-access-multi]').filter(has=page.locator('input[name=subdivisions]'))
                 branches_field.locator('summary').click()
@@ -314,7 +325,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('link', name='Настроить →', exact=True).click()
                 expect(page.locator('input[name=subdivisions]:checked')).to_have_count(2)
                 expect(page.locator('input[name=members]:checked')).to_have_count(1)
-                page.select_option('#id_portal_role', 'Директор')
+                choose_legacy_role(page, 'Директор')
                 page.get_by_role('button', name='Сохранить изменения', exact=True).click()
                 expect(page.locator('[data-group-card] .access-tag')).to_have_text('Директор')
                 page.goto(self.live_server_url + reverse('portal_users') + '?edit=' + str(member.pk))
@@ -394,7 +405,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                     page.fill('#id_last_name', 'Иванов')
                     page.fill('#id_password1', 'Browser-local-2479!')
                     page.fill('#id_password2', 'Browser-local-2479!')
-                    page.select_option('#id_portal_role', DIRECTOR)
+                    choose_legacy_role(page, DIRECTOR)
                     page.get_by_role('button', name='Добавить пользователя', exact=True).click()
                     expect(page.locator('.access-notice')).to_contain_text('сохранён')
                     page.screenshot(path='/tmp/portal-users.png', full_page=True)
@@ -536,13 +547,13 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                     page.goto(self.live_server_url + '/accounts/users/')
                     page.fill('#id_first_name', 'Дамир Наилович')
                     page.fill('#id_last_name', 'Гафуров')
-                    page.select_option('#id_portal_role', POLITICIAN)
+                    choose_legacy_role(page, POLITICIAN)
                     expect(page.locator('#id_report_author')).to_have_value('Гафуров Дамир Наилович')
                     page.fill('#id_report_author', 'Ручное точное ФИО')
                     page.fill('#id_first_name', 'Дамир')
                     expect(page.locator('#id_report_author')).to_have_value('Ручное точное ФИО')
                     page.fill('#id_report_author', '')
-                    page.select_option('#id_portal_role', '')
+                    choose_legacy_role(page, '')
                     field = page.locator('#portal-user-form [data-access-multi]')
                     field.locator('summary').click()
                     field.get_by_label(group.name, exact=True).check()
@@ -633,7 +644,7 @@ class PortalLoginBrowserTests(StaticLiveServerTestCase):
                     field.get_by_label(team.name, exact=True).check()
                     field.locator('[data-choice-close]').click()
                     page.get_by_role('button', name='Изменить роль', exact=True).click()
-                    page.select_option('#id_portal_role', role)
+                    choose_legacy_role(page, role)
                     expect(page.locator('#id_report_author')).not_to_be_visible()
                     expect(page.locator('#id_report_subdivision')).not_to_be_visible()
                     page.get_by_role('button', name='Добавить пользователя', exact=True).click()

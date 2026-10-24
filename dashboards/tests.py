@@ -6,9 +6,9 @@ from django.urls import reverse
 from django.contrib.auth.models import Group, User
 from django.core.cache import cache
 from django.core.exceptions import ValidationError
-from base.access import ROLES, ADMIN, ensure_roles
+from base.access import ROLES, ADMIN, ANALYST, ensure_roles
 from .services.dealers import analyze, segment, periods
-from .services.source import load_sales
+from .services.source import fetch_sales
 
 
 def sale(code, year, qty, *, month=1, branch='Москва', brand='DAICHI', equipment='Split', name=None, amount=None):
@@ -32,6 +32,14 @@ OPTIONS = {'method': 'threshold', 'scope': 'company', 'measure': 'quantity', 'pe
 class DealerAnalyticsTests(SimpleTestCase):
     def report(self, rows=None, **options):
         return analyze(rows if rows is not None else fixture(), {**OPTIONS, **options}, date(2026, 10, 24))
+
+    def test_custom_size_limits_apply_to_all_periods_and_preserve_bridge_balance(self):
+        default = self.report()
+        custom = self.report(s_max=25, m_max=100, l_max=500)
+        self.assertEqual(custom['thresholds'], (25, 100, 500))
+        self.assertNotEqual(default['overview'][-1]['groups'], custom['overview'][-1]['groups'])
+        self.assertTrue(custom['bridge']['balanced'])
+        self.assertIn('0–25', custom['rules']['threshold'])
 
     def test_threshold_boundaries_and_net_returns(self):
         values = {str(q): {'quantity': Decimal(q), 'amount': Decimal(10)} for q in [-1, 0, 1, 10, 11, 50, 51, 250, 251]}
@@ -130,7 +138,7 @@ class DashboardAccessTests(TestCase):
         self.admin=User.objects.create_superuser('dashboard-admin')
         cache.clear()
 
-    def test_only_admin_can_read_pages_data_and_exports(self):
+    def test_admin_and_analyst_can_read_pages_data_and_exports(self):
         routes=('dashboards_index','dealer_dashboard','dealer_dashboard_data','dealer_dashboard_export')
         for role in ROLES:
             user=User.objects.create_user('role-'+str(ROLES.index(role)))
@@ -138,10 +146,17 @@ class DashboardAccessTests(TestCase):
             self.client.force_login(user)
             for route in routes:
                 with patch('dashboards.views.load_sales',return_value={'rows':fixture(),'loaded_at':'2026-10-24T10:00:00Z','end_exclusive':'2026-10-01'}):
-                    self.assertEqual(self.client.get(reverse(route)).status_code,200 if role==ADMIN else 403,(role,route))
+                    self.assertEqual(self.client.get(reverse(route)).status_code,200 if role in (ADMIN, ANALYST) else 403,(role,route))
         self.client.logout()
         self.assertEqual(self.client.get(reverse('dealer_dashboard_data')).status_code,302)
         self.assertEqual(self.client.get(reverse('dealer_dashboard_data'),HTTP_ACCEPT='application/json').status_code,401)
+
+    def test_invalid_thresholds_are_rejected_before_reading_data(self):
+        self.client.force_login(self.admin)
+        with patch('dashboards.views.load_sales') as source:
+            for values in ({'s_max': '100', 'm_max': '50'}, {'s_max': '0'}, {'m_max': '10'}, {'l_max': 'nan'}, {'s_max': '1.5'}):
+                self.assertEqual(self.client.get(reverse('dealer_dashboard_data'), values).status_code, 400)
+            source.assert_not_called()
 
     def test_navigation_has_third_project_for_admin_only(self):
         self.client.force_login(self.admin)
@@ -171,7 +186,7 @@ class DashboardAccessTests(TestCase):
         cursor.description=[(name,) for name in columns]
         cursor.fetchmany.side_effect=[[tuple(fixture()[0][name] for name in columns)],[]]
         with patch('dashboards.services.source.connect_database',return_value=(connection,cursor)) as connect:
-            result=load_sales(date(2026,10,24))
+            result=fetch_sales(date(2026,10,24))
             sql,*parameters=cursor.execute.call_args.args
             self.assertIn('sub.Chanel =',sql)
             self.assertIn('s.Price - COALESCE(s.AmountUSDIt_ITW, 0)',sql)
@@ -179,7 +194,7 @@ class DashboardAccessTests(TestCase):
             self.assertIn('DATEFROMPARTS',sql)
             self.assertEqual(parameters,[date(2021,1,1),date(2026,10,1)])
             self.assertEqual(result['rows'][0]['dealer_code'],'grow')
-            load_sales(date(2026,10,25));connect.assert_called_once()
+            fetch_sales(date(2026,10,25));connect.assert_called_once()
         connection.close.assert_called_once()
 
     def test_failed_source_closes_connection_and_is_not_cached(self):
@@ -187,6 +202,6 @@ class DashboardAccessTests(TestCase):
         cursor.execute.side_effect=RuntimeError('failed')
         with patch('dashboards.services.source.connect_database',return_value=(connection,cursor)) as connect:
             for attempt in range(2):
-                with self.assertRaises(RuntimeError):load_sales(date(2026,10,24))
+                with self.assertRaises(RuntimeError):fetch_sales(date(2026,10,24))
             self.assertEqual(connect.call_count,2)
         self.assertEqual(connection.close.call_count,2)

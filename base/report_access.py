@@ -1,6 +1,6 @@
 """Server-side report restrictions; never derive identity from query parameters."""
 from django.core.exceptions import PermissionDenied
-from .access import role_for, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, REPORT_ROLES, SALES
+from .access import role_for, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, REPORT_ROLES, SALES, motivation_scopes
 from .models import MotivationReportAccess, PortalReportGroup
 
 PERSONAL_REPORTS = ('manager', 'manager-detail', 'deals')
@@ -12,18 +12,18 @@ def report_kinds(user):
 
 def politician_scope(user):
     scope = _politician_scope(user)
-    if scope and role_for(user) in (POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
+    if scope and role_for(user, 'motivation') in (POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
         scope['pilot_periods'] = True
     return scope
 
 
 def _politician_scope(user):
-    role = role_for(user)
+    role = role_for(user, 'motivation')
     if role not in REPORT_ROLES:
         return None
     if role in (DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
         from admin_motivation.models import TypeCoeff
-        groups = PortalReportGroup.objects.filter(group__user=user).prefetch_related('subdivisions__merged_into')
+        groups = motivation_scopes(user.groups.all()).prefetch_related('subdivisions__merged_into')
         branches = sorted({(branch.merged_into or branch).subdivision_key for group in groups for branch in group.subdivisions.all()})
         types = ['Политики'] if role == DEPUTY_DIRECTOR else sorted({name.strip() for name in TypeCoeff.objects.values_list('type_coeff_name', flat=True) if name and name.strip()})
         if not branches or not types:
@@ -41,7 +41,7 @@ def _politician_scope(user):
     access = MotivationReportAccess.objects.select_related('subdivision__merged_into').filter(user=user).first()
     if not access or not access.deal_author.strip():
         return None
-    groups = list(PortalReportGroup.objects.filter(group__user=user).select_related('employee_type').prefetch_related('subdivisions__merged_into'))
+    groups = list(motivation_scopes(user.groups.all()).select_related('employee_type').prefetch_related('subdivisions__merged_into'))
     if groups:
         rules = []
         for group in groups:

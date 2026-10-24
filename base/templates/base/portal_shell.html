@@ -27,7 +27,7 @@
     <aside class="portal-sidebar" id="portal-sidebar" aria-label="Навигация раздела">
         <a class="portal-home" href="{% url 'index_base' %}">← Главная портала</a>
         <h2>{% block project_name %}Рабочие разделы{% endblock %}</h2>
-        {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы">{% if portal_can_purchases %}<a href="{% url 'scenario_list' %}">Модель закупок</a>{% endif %}{% if portal_can_motivation %}<a href="{% if portal_motivation_landing_reports %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}">Мотивация</a>{% endif %}</nav>{% endblock %}
+        {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы">{% if portal_can_purchases %}<a href="{% url 'scenario_list' %}">Модель закупок</a>{% endif %}{% if portal_can_motivation %}<a href="{% if portal_motivation_landing_reports %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}">Мотивация</a>{% endif %}{% if portal_can_dashboards %}<a href="{% url 'dashboards_index' %}">Дашборды</a>{% endif %}</nav>{% endblock %}
         {% block module_administration %}{% endblock %}
         {% if portal_is_admin %}
         <details class="portal-admin-panel" open>
