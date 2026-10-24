@@ -203,3 +203,64 @@
 #balance-cells .balance-cell-after {
   font-size: 11px;
 }
+
+#balance-summary-table {
+  width: 100%;
+  min-width: 1050px;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 12px;
+}
+#balance-summary-table thead tr:first-child th {
+  height: 38px;
+  top: 0;
+  text-align: center;
+  border-bottom: 1px solid #dbe2f0;
+}
+#balance-summary-table thead tr:nth-child(2) th {
+  top: 38px;
+  text-align: right;
+  font-weight: 500;
+}
+#balance-summary-table th[data-kind="Политики"] {
+  background: #eff6ff;
+}
+#balance-summary-table th[data-kind="Продажи"] {
+  background: #effcf7;
+}
+#balance-summary-table th[data-kind="Директор"] {
+  background: #f5f2ff;
+}
+#balance-summary-table td {
+  text-align: right;
+  white-space: nowrap;
+  min-width: 90px;
+}
+#balance-summary-table tbody th {
+  position: sticky;
+  left: 0;
+  top: auto;
+  z-index: 1;
+  background: white;
+  text-align: left;
+  min-width: 155px;
+  font-weight: 500;
+}
+#balance-summary-table thead th[rowspan] {
+  position: sticky;
+  left: 0;
+  z-index: 3;
+  text-align: left;
+}
+#balance-summary-table .balance-delta-column {
+  border-right: 1px solid #dbe2f0;
+}
+#balance-summary-table .balance-delta-changed {
+  color: #5140a0;
+  font-weight: 600;
+  background: #f6f3ff;
+}
+#balance-summary-table tbody tr:hover td,
+#balance-summary-table tbody tr:hover th {
+  background: #f8f9fd;
+}

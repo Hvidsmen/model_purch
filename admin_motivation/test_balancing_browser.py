@@ -34,6 +34,9 @@ class BalancingBrowserTests(StaticLiveServerTestCase):
             page.get_by_label(f'Участие c:{auto.pk}',exact=True).select_option('auto')
             page.get_by_role('button',name='Рассчитать балансировку',exact=True).click()
             expect(page.locator('#balance-save')).to_be_enabled()
+            expect(page.locator('#balance-summary-table thead tr')).to_have_count(2)
+            expect(page.locator('#balance-summary tr')).to_have_count(2)
+            expect(page.locator('#balance-summary tr').first.locator('td')).to_have_count(9)
             expect(page.locator('#balance-total')).to_contain_text('Разница: 0,00 USD')
             page.screenshot(path='/tmp/coefficient-balancing-desktop.png',full_page=True)
             # Editing invalidates the reviewed result immediately.

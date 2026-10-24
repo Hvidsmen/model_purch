@@ -275,18 +275,33 @@
   function summary(rows) {
     const body = el("summary");
     body.replaceChildren();
+    const subdivisions = new Map();
     for (const item of rows) {
+      if (!subdivisions.has(item.subdivision))
+        subdivisions.set(item.subdivision, new Map());
+      subdivisions.get(item.subdivision).set(item.kind, item);
+    }
+    for (const [subdivision, kinds] of subdivisions) {
       const row = document.createElement("tr");
-      [
-        item.subdivision,
-        item.kind,
-        money(item.before),
-        money(item.after),
-        money(item.delta),
-      ].forEach((value) => td(row, value));
+      const label = document.createElement("th");
+      label.scope = "row";
+      label.textContent = subdivision || "Глобально";
+      row.append(label);
+      for (const kind of ["Политики", "Продажи", "Директор"]) {
+        const item = kinds.get(kind);
+        for (const field of ["before", "after", "delta"]) {
+          const cell = td(row, item ? money(item[field]) : "—");
+          if (field === "delta") {
+            cell.classList.add("balance-delta-column");
+            if (item && Math.abs(Number(item.delta)) >= 0.005)
+              cell.classList.add("balance-delta-changed");
+          }
+        }
+      }
       body.append(row);
     }
   }
+
   form.addEventListener("change", () => {
     scopeNote();
     invalidate();
