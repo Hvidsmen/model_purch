@@ -39,6 +39,12 @@
   }
   function invalidate() {
     preview = null;
+    el("cells")
+      .querySelectorAll(".balance-cell-after")
+      .forEach((node) => node.remove());
+    el("total").textContent =
+      "Изменения ещё не рассчитаны. Выполните балансировку.";
+    el("summary").replaceChildren();
     el("save").disabled = true;
     el("save-note").textContent =
       "Параметры изменились. Выполните предварительный расчёт перед сохранением.";
@@ -114,64 +120,152 @@
     return cell;
   }
   function render() {
-    const visible = filtered(),
-      pages = Math.max(1, Math.ceil(visible.length / pageSize));
+    const visible = filtered();
+    const groupKey = (cell) =>
+      JSON.stringify([
+        cell.subdivision,
+        cell.goods,
+        cell.employee_key || cell.employee,
+      ]);
+    const grouped = new Map();
+    for (const cell of visible) {
+      const key = groupKey(cell);
+      if (!grouped.has(key))
+        grouped.set(key, { sample: cell, cells: new Map() });
+      grouped.get(key).cells.set(`${cell.kind}:${cell.segment}`, cell);
+    }
+    const groups = [...grouped.values()].sort((a, b) =>
+      [
+        a.sample.subdivision,
+        a.sample.planning_group,
+        a.sample.group,
+        a.sample.brand,
+        a.sample.employee,
+      ]
+        .join(" ")
+        .localeCompare(
+          [
+            b.sample.subdivision,
+            b.sample.planning_group,
+            b.sample.group,
+            b.sample.brand,
+            b.sample.employee,
+          ].join(" "),
+          "ru",
+        ),
+    );
+    const kinds = ["Политики", "Продажи", "Директор"].filter(
+      (kind) =>
+        (!el("kind").value || el("kind").value === kind) &&
+        cells.some((cell) => cell.kind === kind),
+    );
+    const pages = Math.max(1, Math.ceil(groups.length / pageSize));
     page = Math.min(page, pages - 1);
-    const body = el("cells").querySelector("tbody");
+    const table = el("cells"),
+      head = table.querySelector("thead"),
+      body = table.querySelector("tbody");
+    head.replaceChildren();
     body.replaceChildren();
-    for (const cell of visible.slice(page * pageSize, (page + 1) * pageSize)) {
-      const selected = choice(cell),
-        row = document.createElement("tr");
-      row.dataset.participation = selected.role;
-      const name = td(
-        row,
-        [cell.planning_group, cell.group, cell.brand].join(" · "),
-      );
-      const note = document.createElement("small");
-      note.textContent = [cell.subdivision || "Глобально", cell.employee]
+    const top = document.createElement("tr"),
+      bottom = document.createElement("tr");
+    for (const title of [
+      "Группа планов продаж",
+      "Группа ERP",
+      "Марка / подразделение",
+    ]) {
+      const th = document.createElement("th");
+      th.textContent = title;
+      th.rowSpan = 2;
+      th.scope = "col";
+      top.append(th);
+    }
+    for (const kind of kinds) {
+      const th = document.createElement("th");
+      th.textContent = kind;
+      th.colSpan = 5;
+      th.scope = "colgroup";
+      th.dataset.kind = kind;
+      top.append(th);
+      for (let index = 0; index < 5; index++) {
+        const step = document.createElement("th");
+        step.textContent = `K${index}`;
+        step.scope = "col";
+        step.dataset.kind = kind;
+        bottom.append(step);
+      }
+    }
+    head.append(top, bottom);
+    table.classList.toggle("show-budgets", el("show-budget").checked);
+    for (const group of groups.slice(page * pageSize, (page + 1) * pageSize)) {
+      const row = document.createElement("tr"),
+        sample = group.sample;
+      td(row, sample.planning_group);
+      td(row, sample.group);
+      const name = td(row, sample.brand),
+        note = document.createElement("small");
+      note.textContent = [sample.subdivision || "Глобально", sample.employee]
         .filter(Boolean)
         .join(" · ");
       name.append(note);
-      td(row, `${cell.kind} / ${cell.segment}`);
-      td(row, money(cell.plan_amount));
-      td(row, money(cell.premium));
-      td(row, percent(cell.value));
-      const role = document.createElement("select");
-      role.setAttribute("aria-label", `Участие ${cell.id}`);
-      for (const [value, label] of [
-        ["fixed", "Не менять"],
-        ["manual", "Ручное"],
-        ["auto", "Компенсация"],
-      ])
-        role.add(new Option(label, value));
-      role.value = selected.role;
-      td(row, "").append(role);
-      const input = document.createElement("input");
-      input.type = "text";
-      input.inputMode = "decimal";
-      input.value = selected.value;
-      input.disabled = selected.role !== "manual";
-      input.setAttribute("aria-label", `Новый процент ${cell.id}`);
-      td(row, "").append(input);
-      td(
-        row,
-        preview?.changes[cell.id]
-          ? percent(preview.changes[cell.id].after)
-          : "—",
-      );
-      role.addEventListener("change", () => {
-        selections.set(cell.id, { role: role.value, value: input.value });
-        invalidate();
-        render();
-      });
-      input.addEventListener("input", () => {
-        selections.set(cell.id, { role: "manual", value: input.value });
-        invalidate();
-      });
+      for (const kind of kinds)
+        for (let index = 0; index < 5; index++) {
+          const cell = group.cells.get(`${kind}:K${index}`),
+            target = td(row, "");
+          if (!cell) {
+            target.textContent = "—";
+            continue;
+          }
+          const selected = choice(cell);
+          target.dataset.participation = selected.role;
+          target.className = "balance-matrix-cell";
+          target.title = `${kind} / K${index} · План: ${money(cell.plan_amount)} USD · Премия до: ${money(cell.premium)} USD`;
+          const before = document.createElement("small");
+          before.className = "balance-cell-before";
+          before.textContent = `Было: ${percent(cell.value)}%`;
+          target.append(before);
+          const role = document.createElement("select");
+          role.setAttribute("aria-label", `Участие ${cell.id}`);
+          for (const [value, label] of [
+            ["fixed", "Не менять"],
+            ["manual", "Ручное"],
+            ["auto", "Авто"],
+          ])
+            role.add(new Option(label, value));
+          role.value = selected.role;
+          role.title =
+            "Не менять / Ручное значение / Автоматическая компенсация";
+          target.append(role);
+          const input = document.createElement("input");
+          input.type = "text";
+          input.inputMode = "decimal";
+          input.value = selected.value;
+          input.disabled = selected.role !== "manual";
+          input.setAttribute("aria-label", `Новый процент ${cell.id}`);
+          target.append(input);
+          if (preview?.changes[cell.id]) {
+            const result = document.createElement("strong");
+            result.className = "balance-cell-after";
+            result.textContent = `→ ${percent(preview.changes[cell.id].after)}%`;
+            target.append(result);
+          }
+          const budget = document.createElement("small");
+          budget.className = "balance-cell-budget";
+          budget.textContent = `План: ${money(cell.plan_amount)} USD · Премия: ${money(cell.premium)} USD`;
+          target.append(budget);
+          role.addEventListener("change", () => {
+            selections.set(cell.id, { role: role.value, value: input.value });
+            invalidate();
+            render();
+          });
+          input.addEventListener("input", () => {
+            selections.set(cell.id, { role: "manual", value: input.value });
+            invalidate();
+          });
+        }
       body.append(row);
     }
     el("page").textContent =
-      `Страница ${page + 1} из ${pages} · строк: ${visible.length}`;
+      `Страница ${page + 1} из ${pages} · товарных строк: ${groups.length} · ячеек: ${visible.length}`;
     el("prev").disabled = page === 0;
     el("next").disabled = page >= pages - 1;
     const selected = [...selections.values()];
@@ -331,5 +425,8 @@
       status("Сохранение не выполнено. Проверьте сообщение об ошибке.");
     }
   };
+  el("show-budget").addEventListener("change", () =>
+    el("cells").classList.toggle("show-budgets", el("show-budget").checked),
+  );
   scopeNote();
 })();

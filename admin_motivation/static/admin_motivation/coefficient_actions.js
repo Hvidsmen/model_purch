@@ -35,6 +35,7 @@
     entries.push({detail, sync}); buttons.append(button); sync();
   }
   addPanel(document.getElementById('add-product-details'), 'Добавить товар', 'add-product-details');
+  addPanel(document.getElementById('bulk-multiply-details'), 'Умножить коэффициенты', 'bulk-multiply-details');
   addPanel(document.querySelector('.bulk-formula'), 'Формула для товаров', 'bulk-formula-details');
   for (const selector of ['.coefficient-copy-between', '#globalBranchCopyForm', '#copy-global-open']) {
     const control = document.querySelector(selector);

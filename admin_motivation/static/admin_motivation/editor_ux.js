@@ -1,24 +1,12 @@
 (() => {
  const table=document.getElementById('coefficient-table');
  if (!table) return;
- // Keep the real controls; moving them preserves edits and form ownership.
- const panel=document.createElement('dialog');panel.className='motivation-side-panel';
- const heading=document.createElement('h2'), close=document.createElement('button');
- close.type='button';close.className='btn btn-outline-primary';close.textContent='Закрыть настройки';
- const body=document.createElement('div');panel.append(heading,close,body);document.body.append(panel);
- let current=null, anchor=null;
- table.addEventListener('click',event=>{
-  const summary=event.target.closest('.brand-settings > summary');if (!summary) return;
-  event.preventDefault(); current=summary.parentElement;
-  anchor=document.createElement('span');current.before(anchor);
-  for (const control of current.querySelectorAll('input,select,button')) {
-   if (control.form) {control.setAttribute('form',control.form.id);control.disabled=control.matches(':disabled');}
-  }
-  heading.textContent=`Настройки товара · ${current.closest('tr').dataset.brand}`;
-  body.append(current);current.open=true;panel.showModal();
+ // Product settings stay beside their row and keep their original form owner.
+ table.addEventListener('keydown', event => {
+  if (event.key !== 'Escape') return;
+  const settings = event.target.closest('.brand-settings[open]');
+  if (settings) {settings.open = false; settings.querySelector('summary').focus();}
  });
- close.addEventListener('click',()=>panel.close());
- panel.addEventListener('close',()=>{if(current){current.open=false;anchor.replaceWith(current);current.querySelector('summary').focus();current=null;}});
  // Group headers keep large matrices readable and can collapse each classification.
  const rows=[...table.querySelectorAll('.coefficient-row')];let lastKey=null,header=null;
  for (const row of rows) {

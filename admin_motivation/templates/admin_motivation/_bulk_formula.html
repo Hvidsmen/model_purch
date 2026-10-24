@@ -9,4 +9,5 @@
 <p data-bulk-error role="alert" hidden></p>{% if portal_motivation_readonly %}</fieldset>{% endif %}</form></details>
 <dialog id="bulk-formula-review" class="motivation-dialog"><h2>Проверка массового изменения</h2><p data-review-summary></p><p data-review-goods></p><div class="ux-actions"><button type="button" class="btn btn-outline-secondary" data-review-cancel>Вернуться к выбору</button><button type="button" class="btn btn-primary" data-review-confirm>Подтвердить формулу</button></div></dialog>
 <script src="{% static 'admin_motivation/bulk_formula.js' %}?v=ux-20261024" defer></script>
+{% include 'admin_motivation/_bulk_multiply.html' %}
 {% endif %}

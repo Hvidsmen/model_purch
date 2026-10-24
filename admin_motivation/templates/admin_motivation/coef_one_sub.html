@@ -806,23 +806,23 @@
                             {% for sgb in gb_coefs %}
                                 {% if forloop.counter0 == 0 %}
                                     {% for gb in sgb %}
-                                    <td data-coefficient-group="policies">
+                                    <td data-coefficient-group="policies" data-coefficient-segment="{{ forloop.counter0 }}">
                                         <input type="text" class="coeff-input policy-input coeff-validate"
-                                               name="sub_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
+                                               name="sub_coeff={{ gb.id }}" data-segment="{{ gb.segment.segment_name }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
                                                value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% else %}
                                     {% for gb in sgb %}
-                                    <td data-coefficient-group="sales" {% if forloop.first %} class="sales-start"{% endif %}>
+                                    <td data-coefficient-group="sales" data-coefficient-segment="{{ forloop.counter0 }}" {% if forloop.first %} class="sales-start"{% endif %}>
                                         <input type="text" class="coeff-input sales-input coeff-validate"
-                                               name="sub_coeff={{ gb.id }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
+                                               name="sub_coeff={{ gb.id }}" data-segment="{{ gb.segment.segment_name }}" {% if not gb %}disabled{% endif %} data-value="{{ gb.motivation_coeff|unlocalize }}" required
                                                value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent">
                                     </td>
                                     {% endfor %}
                                 {% endif %}
                             {% endfor %}
-                            {% if employee %}{% for cell in good.director_cells %}<td data-coefficient-group="directors" {% if forloop.first %}class="director-start"{% endif %}><input type="text" class="coeff-input director-input coeff-validate" name="director_coeff={{ good.pk }}={{ cell.index }}" {% if not director_editable %}disabled{% endif %} data-value="{{ cell.value|unlocalize }}" required value="{{ cell.value|unlocalize }}" maxlength="25" data-type="percent" aria-label="Директор K{{ cell.index }}"></td>{% endfor %}{% else %}<td colspan="5" data-coefficient-group="directors" class="director-start small text-muted">Выберите сотрудника над таблицей</td>{% endif %}
+                            {% if employee %}{% for cell in good.director_cells %}<td data-coefficient-group="directors" data-coefficient-segment="{{ cell.index }}" {% if forloop.first %}class="director-start"{% endif %}><input type="text" class="coeff-input director-input coeff-validate" name="director_coeff={{ good.pk }}={{ cell.index }}" {% if not director_editable %}disabled{% endif %} data-value="{{ cell.value|unlocalize }}" required value="{{ cell.value|unlocalize }}" maxlength="25" data-type="percent" aria-label="Директор K{{ cell.index }}"></td>{% endfor %}{% else %}<td colspan="5" data-coefficient-group="directors" class="director-start small text-muted">Выберите сотрудника над таблицей</td>{% endif %}
                         </tr>
                         {% endfor %}
                         {% endfor %}

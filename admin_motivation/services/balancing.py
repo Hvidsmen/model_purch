@@ -116,7 +116,7 @@ class Budget:
 
     def cell(self, key, row, kind, segment, sub, staff, value):
         self.cells[key] = {'id': key, 'value': str(value), 'kind': kind, 'segment': segment.replace('O', 'K', 1),
-                           'subdivision': sub, 'employee': str(row.employee) if staff else '',
+                           'subdivision': sub, 'employee': str(row.employee) if staff else '', 'employee_key': staff,
                            'goods': str(row.goods), 'planning_group': row.goods.planning_group_sales,
                            'group': row.goods.group, 'brand': row.goods.brand}
         return key

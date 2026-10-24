@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% load static tz %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/balancing.css' %}">
+<link rel="stylesheet" href="{% static 'admin_motivation/balancing.css' %}?v=matrix-20261024">
 <main id="coefficient-balancing" data-endpoint="{% url 'motivation_coefficient_balancing' %}">
 <header class="balance-heading"><div><h1>Балансировка премии</h1><p>Измените выбранные коэффициенты, сохранив плановую премию. Компенсация затронет только отмеченные ячейки.</p></div><a href="{% url 'global_coeff_admin_motivation' %}">К коэффициентам →</a></header>
 <form id="balance-setup" class="balance-card">{% csrf_token %}
@@ -24,13 +24,14 @@
 <label>Подразделение в таблице<select id="balance-branch"><option value="">Все подразделения</option></select></label>
 <label>Показать<select id="balance-show"><option value="all">Все ячейки</option><option value="selected">Выбранные для изменения</option><option value="changed">Изменённые после расчёта</option></select></label>
 </div><div class="balance-actions"><button type="button" id="balance-select" class="btn btn-outline-primary">Компенсировать видимыми</button><button type="button" id="balance-clear" class="btn btn-outline-primary">Снять компенсацию</button><span id="balance-count"></span></div>
-<p class="balance-note">«Ручное» — задайте новый процент. «Компенсация» — разрешите автоматический пересчёт. «Не менять» — сохраните исходное значение. Массовый выбор действует на все строки с текущими фильтрами, включая другие страницы.</p>
-<div class="balance-table-scroll"><table class="table" id="balance-cells"><thead><tr><th>Товар / подразделение</th><th>Тип / ступень</th><th>План, USD</th><th>Премия до, USD</th><th>Было, %</th><th>Участие</th><th>Новое, %</th><th>После расчёта, %</th></tr></thead><tbody></tbody></table></div>
+<label class="balance-budget-toggle"><input type="checkbox" id="balance-show-budget"> Показывать план и премию в ячейках</label>
+<p class="balance-note">«Ручное» — задайте новый процент. «Авто» — разрешите автоматическую компенсацию. «Не менять» — сохраните исходное значение. Массовый выбор действует на все строки с текущими фильтрами, включая другие страницы.</p>
+<div class="balance-table-scroll"><table class="table" id="balance-cells"><thead></thead><tbody></tbody></table></div>
 <div class="balance-actions"><button type="button" id="balance-prev" class="btn btn-outline-primary">← Назад</button><span id="balance-page"></span><button type="button" id="balance-next" class="btn btn-outline-primary">Далее →</button></div>
 </div>
 <div class="balance-card"><h2>Проверка плановой премии</h2><p id="balance-total"></p><div class="balance-table-scroll"><table class="table"><thead><tr><th>Подразделение</th><th>Тип</th><th>Было, USD</th><th>Стало, USD</th><th>Разница, USD</th></tr></thead><tbody id="balance-summary"></tbody></table></div><div class="balance-actions"><button type="button" class="btn btn-primary" id="balance-preview">Рассчитать балансировку</button><button type="button" class="btn btn-outline-primary" id="balance-save" disabled>Сохранить в черновик</button></div><p id="balance-save-note" class="balance-note">Предварительный расчёт не изменяет коэффициенты. После сохранения требуется утверждение версии, выгрузка и расчёт.</p></div>
 </section>
 <details class="balance-card"><summary>История балансировок</summary><div class="balance-table-scroll"><table class="table"><thead><tr><th>Когда</th><th>Версия / план</th><th>Кто</th><th>Было → стало, USD</th><th>Изменено ячеек</th></tr></thead><tbody>{% for log in history %}<tr><td>{% timezone 'Europe/Moscow' %}{{ log.created_at|date:'d.m.Y H:i' }} МСК{% endtimezone %}</td><td>{{ log.version }} / {{ log.plan }}</td><td>{{ log.user.get_full_name|default:log.user.username }}</td><td>{{ log.result.before }} → {{ log.result.after }}</td><td><details><summary>Ячеек: {{ log.result.changes|length }}</summary><ul>{% for key, change in log.result.changes.items %}<li>{{ change.label }}: {{ change.before_percent }}% → {{ change.after_percent }}% · {% if change.source == 'manual' %}вручную{% else %}компенсация{% endif %}</li>{% endfor %}</ul></details></td></tr>{% empty %}<tr><td colspan="5">Сохранённых балансировок пока нет.</td></tr>{% endfor %}</tbody></table></div></details>
 </main>
-<script src="{% static 'admin_motivation/balancing.js' %}" defer></script>
+<script src="{% static 'admin_motivation/balancing.js' %}?v=matrix-20261024" defer></script>
 {% endblock %}

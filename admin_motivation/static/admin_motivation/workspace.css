@@ -278,3 +278,11 @@ body{background:#f4f6fa!important;color:#334155}
 .workflow-provenance{margin-top:5px;color:#68758a;font-size:12px}.workflow-provenance summary{cursor:pointer}.workflow-provenance p{margin:5px 0}.ux-form-error{display:block;white-space:normal;margin-top:4px}.calculation-job-actions [data-job-result]{display:flex;align-items:end;gap:10px;flex-wrap:wrap}.calculation-job-actions [data-job-result]>small{flex-basis:100%;color:#68758a}
 .viewer-notice{padding:9px 12px;border:1px solid #d6ccee;background:#f4f0ff;color:#514580;border-radius:7px;font-size:13px}.motivation-viewer-fields{border:0!important;padding:0!important;margin:0!important;min-width:0}.motivation-viewer form[method=post] button[type=submit],.motivation-viewer form[method=post] button:not([type]),.motivation-viewer form[method=post] input[type=file],.motivation-viewer #editor-save,.motivation-viewer #approval-review,.motivation-viewer #create-version-details,.motivation-viewer #copy-version-details,.motivation-viewer #version-reopen,.motivation-viewer #globalBranchCopyForm,.motivation-viewer .coefficient-copy-between,.motivation-viewer #copy-global-open{display:none!important}.motivation-viewer .calculation-layout{grid-template-columns:1fr}.motivation-viewer .calculation-layout>.calculation-card:first-child,.motivation-viewer details:has(form [name=action][value=create]),.motivation-viewer details:has(form [name=action][value=delete]),.motivation-viewer .discount-import{display:none!important}
 .motivation-viewer button[form=mainCoeffForm][value=file_load],.motivation-viewer button[form=subCoeffForm][value=file_load],.motivation-viewer button[form=mainCoeffForm][value=sync_references],.motivation-viewer input[type=file]{display:none!important}
+
+.bulk-multiply-controls,#multiply-segments{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin:10px 0}
+.bulk-multiply-controls label{display:flex;align-items:center;gap:6px;font-size:13px}
+.bulk-multiply-controls input[type=text]{width:85px;min-height:32px;border:1px solid #cbd5e1;border-radius:5px;padding:5px}
+.bulk-multiply-controls select{min-height:32px;border:1px solid #cbd5e1;border-radius:5px;padding:5px}
+#bulk-multiply-details [hidden]{display:none!important}
+#multiply-error{color:#b91c1c}
+.multiply-review-table{overflow:auto;max-height:45vh}

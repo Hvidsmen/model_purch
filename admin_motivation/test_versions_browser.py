@@ -132,7 +132,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertLessEqual(self.page.locator('#version-history .version-tool-content').bounding_box()['x'] + self.page.locator('#version-history .version-tool-content').bounding_box()['width'],391)
         self.page.screenshot(path='/tmp/portal-compact-version-tools.png',full_page=True)
 
-    def test_workflow_grouping_and_product_side_panel_preserve_edits(self):
+    def test_workflow_grouping_and_inline_product_settings_preserve_edits(self):
         from playwright.sync_api import expect
         formula=self.db(lambda: VariationCalculate.objects.get_or_create(variation_name='Подразделение(Глобально)')[0].pk)
         self.page.set_viewport_size({'width':1920,'height':1080})
@@ -142,12 +142,13 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         group.click();expect(self.page.locator('.coefficient-row')).not_to_be_visible()
         group.click();expect(self.page.locator('.coefficient-row')).to_be_visible()
         self.page.locator('.brand-settings > summary').click()
-        panel=self.page.locator('.motivation-side-panel')
+        panel=self.page.locator('.coefficient-row .brand-settings')
+        expect(self.page.locator('.motivation-side-panel')).to_have_count(0)
         expect(panel).to_be_visible()
         panel.locator('select').select_option(str(formula))
         expect(panel.locator('.formula-explanation')).to_contain_text('личный объём')
         self.page.screenshot(path='/tmp/motivation-ux-desktop.png',full_page=True)
-        panel.get_by_role('button',name='Закрыть настройки').click()
+        panel.locator('summary').click()
         expect(self.page.locator('#mainCoeffForm .select-var-calc')).to_have_value(str(formula))
         expect(self.page.locator('#editor-dirty-count')).not_to_have_text('Изменено: 0')
         self.page.set_viewport_size({'width':390,'height':844})
@@ -157,7 +158,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),391)
         self.page.screenshot(path='/tmp/motivation-ux-mobile.png',full_page=True)
         self.page.keyboard.press('Escape')
-        expect(panel).not_to_be_visible()
+        expect(panel).not_to_have_attribute('open','')
         self.assertEqual(self.errors,[])
 
     def test_completed_job_links_to_report_with_recorded_context(self):
@@ -1440,4 +1441,74 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(root.locator('.native-division-node').first).to_have_attribute('open', '')
             self.page.get_by_role('button',name='Свернуть всё',exact=True).click()
             self.assertEqual(self.page.locator('.native-division-node[open]').count(),0)
+        self.assertEqual(self.errors,[])
+
+    def test_bulk_multiply_common_segments_validation_undo_and_save(self):
+        from playwright.sync_api import expect
+        from .models import GlobalDirectorCoeff
+        def fixture():
+            original=GlobalCoeff.objects.get(pk=self.coeff.pk)
+            original.segment.segment_name='K0';original.segment.save()
+            original.motivation_coeff=.01;original.save()
+            rows=[original]
+            for index in range(1,5):
+                segment=SegmentCoeff.objects.create(segment_name=f'K{index}')
+                rows.append(GlobalCoeff.objects.create(version=self.first,goods=original.goods,type_coeff=original.type_coeff,segment=segment,motivation_coeff=.01*(index+1),manager_coeff=1,variation_calculate=original.variation_calculate))
+            director=GlobalDirectorCoeff.objects.create(version=self.first,goods=original.goods,**{f'k{i}':'.01' for i in range(5)})
+            return original.goods_id,[row.pk for row in rows],director.pk
+        good,ids,director=self.db(fixture)
+        self.page.goto(self.live_server_url+reverse('global_coeff_admin_motivation'))
+        self.page.get_by_role('button',name='Умножить коэффициенты',exact=True).click()
+        self.page.locator(f'.bulk-good[value="{good}"]').check()
+        self.page.locator('#multiply-common').fill('1,1')
+        self.page.locator('#multiply-preview').click()
+        expect(self.page.locator('#multiply-review')).to_be_visible()
+        self.assertEqual(self.db(lambda:GlobalCoeff.objects.get(pk=ids[0]).motivation_coeff),.01)
+        self.page.locator('#multiply-apply').click()
+        first=self.page.locator(f'[name="global_coeff={ids[0]}"]')
+        expect(first).to_have_value('1.1%')
+        self.page.locator('#multiply-undo').click();expect(first).to_have_value('1%')
+        self.page.locator('#multiply-mode').select_option('segments')
+        for i,value in enumerate(['2','1','0.5','1','0']):self.page.locator(f'[data-multiply-segment="{i}"]').fill(value)
+        self.page.locator('#multiply-preview').click();self.page.locator('#multiply-apply').click()
+        expect(first).to_have_value('2%')
+        expect(self.page.locator(f'[name="global_coeff={ids[2]}"]')).to_have_value('1.5%')
+        expect(self.page.locator(f'[name="global_coeff={ids[4]}"]')).to_have_value('0%')
+        self.page.locator('#multiply-mode').select_option('common');self.page.locator('#multiply-common').fill('1000')
+        self.page.locator('#multiply-preview').click();expect(self.page.locator('#multiply-error')).to_contain_text('диапазон')
+        expect(first).to_have_value('2%')
+        self.page.locator('[data-multiply-kind="policies"]').uncheck();self.page.locator('[data-multiply-kind="directors"]').check()
+        self.page.locator('#multiply-common').fill('2');self.page.locator('#multiply-preview').click();self.page.locator('#multiply-apply').click()
+        expect(self.page.locator(f'[name="director_coeff={good}=4"]')).to_have_value('2%')
+        with self.page.expect_navigation():self.page.locator('#editor-save').click()
+        self.assertEqual(self.db(lambda:GlobalCoeff.objects.get(pk=ids[0]).motivation_coeff),.02)
+        self.assertEqual(self.db(lambda:GlobalCoeff.objects.get(pk=ids[4]).motivation_coeff),0)
+        self.assertEqual(str(self.db(lambda:GlobalDirectorCoeff.objects.get(pk=director).k4)),'0.020000')
+        self.assertEqual(self.errors,[])
+
+    def test_local_bulk_multiply_changes_only_selected_director(self):
+        from playwright.sync_api import expect
+        from .models import DirectorEmployee, SubdivisionDirectorCoeff
+        def fixture():
+            original=GlobalCoeff.objects.get(pk=self.coeff.pk)
+            original.segment.segment_name='K0';original.segment.save()
+            channel=Chanel.objects.create(chanel_name='Multiply local')
+            sub=Subdivision.objects.create(subdivision_key='Multiply branch',subdivision_name='Multiply branch',subdivision_global='Multiply branch',chanel=channel)
+            SubdivisionCoeff.objects.create(version=self.first,goods=original.goods,type_coeff=original.type_coeff,segment=original.segment,motivation_coeff=.02,manager_coeff=1,variation_calculate=original.variation_calculate,subdivision=sub)
+            employees=[DirectorEmployee.objects.create(full_name=name) for name in ['Multiply first','Multiply second']]
+            for employee in employees:
+                employee.subdivisions.add(sub)
+                SubdivisionDirectorCoeff.objects.create(version=self.first,goods=original.goods,subdivision=sub,employee=employee,**{f'k{i}':'.01' for i in range(5)})
+            return sub.pk,employees[0].pk,employees[1].pk,original.goods_id
+        branch,first,second,good=self.db(fixture)
+        self.page.goto(self.live_server_url+reverse('coeff_subdivisions_admin_motivation',args=[branch])+f'?employee={first}')
+        self.page.get_by_role('button',name='Умножить коэффициенты',exact=True).click()
+        self.page.locator(f'.bulk-good[value="{good}"]').check()
+        self.page.locator('[data-multiply-kind="policies"]').uncheck();self.page.locator('[data-multiply-kind="directors"]').check()
+        self.page.locator('#multiply-common').fill('2');self.page.locator('#multiply-preview').click();self.page.locator('#multiply-apply').click()
+        expect(self.page.locator(f'[name="director_coeff={good}=0"]')).to_have_value('2%')
+        with self.page.expect_navigation():self.page.locator('#editor-save').click()
+        self.assertEqual(str(self.db(lambda:SubdivisionDirectorCoeff.objects.get(employee_id=first).k0)),'0.020000')
+        self.assertEqual(str(self.db(lambda:SubdivisionDirectorCoeff.objects.get(employee_id=second).k0)),'0.010000')
+        self.assertEqual(self.db(lambda:SubdivisionCoeff.objects.get(subdivision_id=branch).motivation_coeff),.02)
         self.assertEqual(self.errors,[])

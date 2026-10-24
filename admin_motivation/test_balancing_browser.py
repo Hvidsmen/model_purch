@@ -28,6 +28,7 @@ class BalancingBrowserTests(StaticLiveServerTestCase):
             page.locator('[name="plan"]').select_option(str(fixture.scenario.pk))
             page.get_by_role('button',name='Загрузить исходные значения',exact=True).click()
             expect(page.locator('#balance-workspace')).to_be_visible()
+            expect(page.locator('#balance-cells thead tr')).to_have_count(2)
             page.get_by_label(f'Участие c:{manual.pk}',exact=True).select_option('manual')
             page.get_by_label(f'Новый процент c:{manual.pk}',exact=True).fill('20')
             page.get_by_label(f'Участие c:{auto.pk}',exact=True).select_option('auto')

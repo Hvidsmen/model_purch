@@ -104,3 +104,102 @@
   background: #f5f6fa;
   color: #64748b;
 }
+
+#balance-cells {
+  min-width: 100%;
+  width: max-content;
+  table-layout: fixed;
+}
+#balance-cells thead tr:first-child th {
+  top: 0;
+  height: 34px;
+}
+#balance-cells thead tr:nth-child(2) th {
+  top: 34px;
+}
+#balance-cells th[data-kind="Политики"] {
+  background: #eff6ff;
+}
+#balance-cells th[data-kind="Продажи"] {
+  background: #effcf7;
+}
+#balance-cells td:nth-child(-n + 3) {
+  min-width: 145px;
+  max-width: 200px;
+  white-space: normal;
+}
+#balance-cells td.balance-matrix-cell {
+  min-width: 116px;
+  width: 116px;
+  max-width: 116px;
+  padding: 8px;
+  vertical-align: top;
+}
+#balance-cells .balance-matrix-cell input,
+#balance-cells .balance-matrix-cell select {
+  display: block;
+  width: 100%;
+  min-height: 30px;
+  font-size: 12px;
+  margin-top: 5px;
+  padding: 4px;
+}
+#balance-cells td[data-participation="manual"] {
+  background: #f3f0ff;
+}
+#balance-cells td[data-participation="auto"] {
+  background: #eef8ff;
+}
+#balance-cells .balance-cell-before {
+  white-space: nowrap;
+  font-size: 12px;
+}
+#balance-cells .balance-cell-after {
+  display: block;
+  color: #4931a4;
+  margin-top: 5px;
+}
+#balance-cells .balance-cell-budget {
+  display: none;
+  white-space: normal;
+  margin-top: 6px;
+  font-size: 11px;
+}
+#balance-cells.show-budgets .balance-cell-budget {
+  display: block;
+}
+.balance-budget-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+#balance-cells th[rowspan],
+#balance-cells td:nth-child(-n + 3) {
+  width: 120px;
+  min-width: 110px;
+  max-width: 140px;
+  white-space: normal;
+  font-size: 11px;
+}
+#balance-cells td.balance-matrix-cell {
+  width: 80px;
+  min-width: 80px;
+  max-width: 80px;
+  padding: 5px;
+}
+#balance-cells .balance-matrix-cell input,
+#balance-cells .balance-matrix-cell select {
+  min-height: 26px;
+  padding: 2px;
+  font-size: 11px;
+  margin-top: 3px;
+}
+#balance-cells .balance-cell-before {
+  font-size: 10px;
+}
+#balance-cells .balance-cell-after {
+  font-size: 11px;
+}
