@@ -1,0 +1,5 @@
+<section class="content" id="version-panel"><h2>Утверждённые версии коэффициентов</h2>
+<form method="get"><label for="coefficient-version">Версия коэффициентов</label>
+<select id="coefficient-version" name="version" class="form-select">{% for version in versions %}<option value="{{ version.pk }}" {% if version.pk == selected_version.pk %}selected{% endif %}>{{ version }} · Утверждена</option>{% endfor %}</select>
+{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
+<button type="submit" class="btn btn-outline-primary">Открыть</button></form><p>Доступны только утверждённые версии. Коэффициенты и поправки — только для просмотра.</p></section>

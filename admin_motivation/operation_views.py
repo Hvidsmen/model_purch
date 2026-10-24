@@ -10,7 +10,7 @@ from django.http import JsonResponse
 from django.views.decorators.cache import never_cache
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
-from base.access import can_access, role_for, MOTIVATION_VIEWER
+from base.access import can_access, role_for, MOTIVATION_VIEWER, FINANCIER
 from .models import Subdivision, GlobalCoeffVersion, MotivationCalculationSchedule, SubdivisionMergeLog, SalesPlanScenario
 from .services import calculation_jobs, subdivision_merge
 
@@ -59,7 +59,7 @@ class JobForm(forms.ModelForm):
 
 
 def admin_required(request):
-    if not can_access(request.user, 'admin') and not (role_for(request.user)==MOTIVATION_VIEWER and request.method in ('GET','HEAD','OPTIONS')):
+    if not can_access(request.user, 'admin') and not (role_for(request.user) in (MOTIVATION_VIEWER, FINANCIER) and request.method in ('GET','HEAD','OPTIONS')):
         raise PermissionDenied
 
 

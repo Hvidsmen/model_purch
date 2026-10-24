@@ -8,6 +8,59 @@ from .access import ADMIN, DIRECTOR, LOGISTICIAN, ROLES, ensure_roles
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class PortalLoginBrowserTests(StaticLiveServerTestCase):
+    def test_financier_approved_settings_filters_reports_and_write_denial(self):
+        from datetime import date
+        from django.conf import settings
+        from django.urls import reverse
+        from playwright.sync_api import sync_playwright, expect
+        from .access import FINANCIER
+        from admin_motivation import test_shared_versions
+        from admin_motivation.models import DiscountSegment, GlobalCoeffVersion
+        from admin_motivation.services.approval import approve_review, review_approval
+        test_shared_versions.SharedMotivationVersionTests.setUp(self)
+        DiscountSegment.objects.create(version=self.first, type_discount='MASS', o1=10)
+        approve_review(review_approval(self.first)['token'])
+        draft = GlobalCoeffVersion.objects.create(effective_from=date(2027, 1, 1), title='Private UI draft')
+        DiscountSegment.objects.create(version=draft, type_discount='PRIVATE', o1=99)
+        ensure_roles()
+        user = User.objects.create_user('finance-ui')
+        user.groups.add(Group.objects.get(name=FINANCIER))
+        self.client.force_login(user)
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            page = browser.new_page(viewport={'width': 1440, 'height': 1000})
+            page.context.add_cookies([{'name': settings.SESSION_COOKIE_NAME, 'value': self.client.cookies[settings.SESSION_COOKIE_NAME].value, 'url': self.live_server_url}])
+            errors = []
+            page.on('pageerror', lambda error: errors.append(str(error)))
+            url = self.live_server_url + reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk])
+            page.goto(url)
+            expect(page.locator('.viewer-notice')).to_contain_text('Финансист')
+            expect(page.locator('#coefficient-version option')).to_have_count(1)
+            expect(page.locator(f'input[name="sub_coeff={self.local_coeff.pk}"]')).to_be_disabled()
+            expect(page.locator('#coefficient-brand option')).to_have_count(2)
+            page.locator('#coefficient-search').fill('No matching product')
+            expect(page.locator('#coefficient-filter-empty')).to_be_visible()
+            page.locator('#coefficient-reset').click()
+            expect(page.locator('#coefficient-filter-empty')).not_to_be_visible()
+            expect(page.get_by_role('link', name='Глобальные коэффициенты', exact=True)).to_have_count(0)
+            expect(page.get_by_role('link', name='Выгрузка в DWH', exact=True)).to_have_count(0)
+            expect(page.locator('#editor-toolbar')).not_to_be_visible()
+            page.screenshot(path='/tmp/financier-approved-coefficients.png', full_page=True)
+            csrf = next(cookie['value'] for cookie in page.context.cookies() if cookie['name'] == 'csrftoken')
+            response = page.request.post(self.live_server_url + reverse('sub_act', args=[self.sub.pk]), form={'version': str(self.first.pk)}, headers={'X-CSRFToken': csrf})
+            self.assertEqual(response.status, 403)
+            response = page.goto(url + '?version=' + str(draft.pk))
+            self.assertEqual(response.status, 404)
+            page.goto(self.live_server_url + reverse('motivation_discount_segments'))
+            expect(page.locator('#discount-version option')).to_have_count(1)
+            expect(page.locator('input[name="segments-0-o1"]')).to_be_disabled()
+            expect(page.locator('.discount-page')).not_to_contain_text('PRIVATE')
+            page.goto(self.live_server_url + reverse('motivation_reports'))
+            expect(page.get_by_text('Мотивация по подразделениям', exact=True)).to_be_visible()
+            expect(page.get_by_text('Сводный отчёт по плану продаж', exact=True)).to_be_visible()
+            self.assertEqual(errors, [])
+            browser.close()
+
     def test_motivation_viewer_sees_all_sections_and_cannot_write(self):
         from datetime import date
         from unittest.mock import patch

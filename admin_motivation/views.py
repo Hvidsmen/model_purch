@@ -9,6 +9,9 @@ from .models import *
 
 
 def index(request):
+    from base.access import role_for, FINANCIER
+    if role_for(request.user) == FINANCIER:
+        return redirect('motivation_reports')
     return render(request, "admin_motivation/index.html", )
 
 
@@ -239,6 +242,8 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     sub = get_object_or_404(Subdivision, pk=subdivision)
     context = version_context(request, version_form)
     selected = context['selected_version']
+    if selected is None and not context['versions']:
+        return render(request, 'admin_motivation/approved_empty.html', context)
     kinds = list(KindManagerCoeff.objects.order_by('pk'))
     existing = {row.kind_id: row for row in SubdivisionManagerCoeff.objects.filter(version=selected, subdivision=sub).select_related('kind')}
     managers = [existing.get(kind.pk) or SubdivisionManagerCoeff(version=selected, subdivision=sub, kind=kind, coeff=1) for kind in kinds]

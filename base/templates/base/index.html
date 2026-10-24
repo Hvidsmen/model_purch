@@ -5,7 +5,7 @@
 <h1>DA портал</h1><p>Выберите проект, чтобы продолжить работу.</p>
 <div class="portal-cards">
 {% if portal_can_purchases %}<a class="portal-project-card" href="{% url 'scenario_list' %}"><h2>Модель закупок</h2><span>Сценарии, товары, закупки, фрахт и расчёты.</span></a>{% endif %}
-{% if portal_can_motivation %}<a class="portal-project-card" href="{% if portal_reports_only %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}"><h2>Мотивация</h2><span>{% if portal_reports_only %}Отчёты по мотивации и сделкам в рамках вашего доступа.{% else %}Коэффициенты, версии, планы продаж и сравнение мотивации.{% endif %}</span></a>{% endif %}
+{% if portal_can_motivation %}<a class="portal-project-card" href="{% if portal_motivation_landing_reports %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}"><h2>Мотивация</h2><span>{% if portal_reports_only %}Отчёты по мотивации и сделкам в рамках вашего доступа.{% else %}Коэффициенты, версии, планы продаж и сравнение мотивации.{% endif %}</span></a>{% endif %}
 </div>
 {% if not portal_can_purchases and not portal_can_motivation %}<p>Роль не назначена. Обратитесь к администратору для получения доступа.</p>{% endif %}
 {% if portal_is_admin %}<div class="portal-other-links"><h2>Другие разделы</h2>

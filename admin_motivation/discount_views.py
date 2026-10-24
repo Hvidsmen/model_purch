@@ -40,6 +40,8 @@ def discount_segments(request):
     admin_required(request)
     context = version_context(request)
     version = context['selected_version']
+    if version is None and not context['versions']:
+        return render(request, 'admin_motivation/approved_empty.html', context)
     editable = context['version_editable']
     factory = modelformset_factory(DiscountSegment, form=SegmentForm, formset=SegmentFormSet, extra=1 if editable else 0, can_delete=editable)
     kwargs = {'queryset': DiscountSegment.objects.filter(version=version), 'prefix': 'segments'}

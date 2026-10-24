@@ -1,5 +1,5 @@
 from datetime import timedelta
-from base.access import role_for, MOTIVATION_VIEWER
+from base.access import role_for, MOTIVATION_VIEWER, FINANCIER
 from django.db.models import Count
 from ..models import GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
 from django.http import Http404
@@ -10,6 +10,8 @@ from .versions import latest_version, effective_version, today
 
 
 def version_context(request, version_form=None):
+    if role_for(request.user) == FINANCIER:
+        return financier_version_context(request)
     latest = latest_version()
     version_id = request.GET.get('version')
     if version_id:
@@ -42,3 +44,22 @@ def version_context(request, version_form=None):
             'comparison_plan': request.session.get('motivation_comparison_plan'),
             'comparison_baselines': [v for v in versions if not v.is_editable],
             'comparison_baseline': request.session.get('motivation_comparison_baseline')}
+
+
+def financier_version_context(request):
+    versions = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('-effective_from', '-pk'))
+    version_id = request.GET.get('version')
+    if version_id:
+        if not version_id.isdigit():
+            raise Http404('Утверждённая версия не найдена.')
+        selected = next((version for version in versions if version.pk == int(version_id)), None)
+        if selected is None:
+            raise Http404('Утверждённая версия не найдена.')
+        request.session['motivation_version'] = selected.pk
+    else:
+        selected = next((version for version in versions if version.pk == request.session.get('motivation_version')), None)
+        selected = selected or effective_version() or (versions[0] if versions else None)
+    for index, version in enumerate(versions):
+        version.effective_until = versions[index - 1].effective_from - timedelta(days=1) if index else None
+    return {'versions': versions, 'selected_version': selected, 'version_editable': False,
+            'latest_version': versions[0] if versions else None, 'effective_version': effective_version()}
