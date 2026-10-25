@@ -18,20 +18,28 @@ def token_for(row, version, scope):
         'kind': row['kind'], 'subdivision': row['subdivision_id'], 'employee': row['employee_id']}, salt=SALT, compress=True)
 
 
-def default_rates(version, data, subdivision=None):
+def default_rates(version, data, subdivision=None, indexes=None):
     """Use the same indexes and dated scopes as the plan calculation."""
     from .subdivision_aliases import coefficient_rows
-    ids = list(GlobalCoeffVersion.objects.filter(status='approved', effective_from__lt=version.effective_from).values_list('pk', flat=True)) + [version.pk]
+    indexes = {} if indexes is None else indexes
+    if 'versions' not in indexes:
+        indexes['versions'] = list(GlobalCoeffVersion.objects.filter(status='approved', effective_from__lt=version.effective_from).values_list('pk', flat=True)) + [version.pk]
+    ids = indexes['versions']
     sub = subdivision.subdivision_key if subdivision else ''
+    cache_key = ('director' if data['kind'] == 'Директора' else 'ordinary', bool(subdivision))
     if data['kind'] == 'Директора':
         from .director_comparison import DirectorIndex
-        index = DirectorIndex(ids, local=subdivision is not None)
+        if cache_key not in indexes:
+            indexes[cache_key] = DirectorIndex(ids, local=subdivision is not None)
+        index = indexes[cache_key]
         values, source = index.coefficients(version.pk, sub, data['employee'] if subdivision else 0,
                                              data['planning'], data['group'], data['brand'])
         return [(value, source) for value in values]
     from .comparison import Index, _coefficient_rows
-    rows = coefficient_rows(_coefficient_rows(ids, subdivision=subdivision), 1, range(7))
-    index = Index(rows)
+    if cache_key not in indexes:
+        rows = coefficient_rows(_coefficient_rows(ids, subdivision=subdivision), 1, range(7))
+        indexes[cache_key] = Index(rows)
+    index = indexes[cache_key]
     result = []
     for i in range(5):
         value = index.cells.get((version.pk, sub, data['planning'], data['group'], data['brand'], data['kind'], f'O{i}'))

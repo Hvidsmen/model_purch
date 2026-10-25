@@ -1,0 +1,14 @@
+{% extends 'admin_motivation/base.html' %}{% load l10n %}
+{% block content %}<section class="content" style="padding:24px;max-width:1400px;margin:24px auto">
+<a href="{% url 'motivation_coefficient_coverage' %}">← Проверка покрытия</a>
+<h1>Создать коэффициенты для всех пропусков</h1>
+{% if bulk_error %}<p class="alert alert-danger">{{ bulk_error }}</p>{% endif %}
+{% if bulk %}<p>{{ bulk.version }} · {% if bulk.scope == 'global' %}Глобальные коэффициенты{% else %}Коэффициенты подразделений{% endif %}</p>
+<p>Будет добавлено ступеней: <strong>{{ bulk.count }}</strong>. Товарных строк: {{ bulk.items|length }}. Учтены все страницы результатов с выбранными фильтрами. Существующие ставки сохранятся.</p>
+<p>Значения рассчитаны по действующему правилу: минимум по группе, затем минимум по таблице. Для директора — по его ставкам в выбранном подразделении; при полном отсутствии исходных ставок директора — 0%.</p>
+{% if bulk.blocked %}<p class="alert alert-warning">Не будут созданы строки без исходных ставок: {{ bulk.blocked|length }}. Для них заполните проценты вручную через отдельную кнопку в результатах проверки.</p>{% endif %}
+{% if bulk.token %}<form method="post">{% csrf_token %}<input type="hidden" name="token" value="{{ bulk.token }}"><button class="btn btn-primary" name="action" value="save">Создать все предложенные коэффициенты в черновике</button></form>{% endif %}
+<div style="overflow:auto;max-height:600px;margin-top:20px"><table class="table"><thead><tr><th>Подразделение</th><th>Классификация</th><th>Тип / директор</th><th>Новые ставки</th><th>Формула</th></tr></thead><tbody>
+{% for row in bulk.items %}<tr><td>{{ row.subdivision }}</td><td>{{ row.planning }} / {{ row.group }} / {{ row.brand|default:'пусто' }}</td><td>{{ row.kind }}{% if row.employee_id %} · {{ row.employee }}{% endif %}</td><td>{% for cell in row.cells %}{{ cell.segment }}: {{ cell.percent|unlocalize }}%{% if not forloop.last %}; {% endif %}{% endfor %}</td><td>{{ row.formula }}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>После сохранения повторите проверку, согласуйте и выгрузите версию, затем выполните расчёт.</p>{% endif %}</section>{% endblock %}

@@ -31,7 +31,7 @@ def coverage(request):
     subdivision = request.GET.get('subdivision', '')
     if subdivision:
         get_object_or_404(Subdivision, subdivision_key=subdivision)
-    error, result, page = '', None, None
+    error, result, page, bulk_token = '', None, None, ''
     try:
         year = int(request.GET.get('year', today().year))
         if not 1900 <= year <= 9998:
@@ -43,6 +43,8 @@ def coverage(request):
             result = coefficient_coverage.check(selected, rows, kind, scope)
             page = Paginator(result['issues'], 100).get_page(request.GET.get('page'))
             if can_access(request.user, 'motivation_editor') and selected.is_editable:
+                from .services.coverage_bulk import selection_token
+                bulk_token = selection_token(result, selected, scope)
                 from .services.coverage_repair import token_for
                 for row in page.object_list:
                     if row['missing'] and row['version_id'] == selected.pk:
@@ -59,7 +61,7 @@ def coverage(request):
     return render(request, 'admin_motivation/coefficient_coverage.html', {'versions': versions, 'selected_version': selected,
         'scope': scope, 'plans': plans, 'plan': plan, 'source': source, 'kind': kind, 'year': year,
         'subdivision': subdivision, 'subdivisions': Subdivision.objects.all(), 'result': result,
-        'page': page, 'coverage_error': error, 'coverage_query': query.urlencode()})
+        'bulk_token': bulk_token, 'page': page, 'coverage_error': error, 'coverage_query': query.urlencode()})
 
 
 @require_POST
@@ -97,3 +99,18 @@ def repair(request):
         except ValidationError:
             pass
     return render(request, 'admin_motivation/coverage_repair.html', {'proposal': info, 'repair_error': error, 'token': token})
+
+
+@require_POST
+def repair_all(request):
+    from .services.coverage_bulk import preview, save
+    info, error = None, ''
+    try:
+        if request.POST.get('action') == 'save':
+            count, version, scope = save(request.user, request.POST.get('token', ''))
+            messages.success(request, f'Созданы отсутствующие коэффициенты: {count}. Существующие ставки сохранены. Повторите проверку покрытия.')
+            return redirect(reverse('motivation_coefficient_coverage') + f'?version={version}&scope={scope}')
+        info = preview(request.user, request.POST.get('token', ''))
+    except ValidationError as exc:
+        error = ' '.join(exc.messages)
+    return render(request, 'admin_motivation/coverage_bulk.html', {'bulk': info, 'bulk_error': error})

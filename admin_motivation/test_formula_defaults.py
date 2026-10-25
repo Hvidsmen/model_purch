@@ -187,6 +187,88 @@ class FormulaDefaultTests(TestCase):
         data['planning'] = 'Missing director group'
         self.assertEqual(default_rates(self.version, data, local.subdivision), [(Decimal('.01'), 'table_minimum')] * 5)
 
+    def test_bulk_repair_covers_all_pages_and_preserves_existing_rates(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .services.coverage_bulk import selection_token, preview, save
+        from .models import GlobalCoeff
+        original = list(self.version.coefficients.values_list('pk', 'motivation_coeff'))
+        row = list(plan_rows(self.fixture.scenario))[0]
+        rows = [dict(row, brand=f'Bulk brand {i}') for i in range(105)]
+        result = check(self.version, rows, 'Политики', 'global')
+        self.version.refresh_from_db()
+        token = selection_token(result, self.version, 'global')
+        with CaptureQueriesContext(connection) as captured:
+            info = preview(self.actor, token)
+        self.assertLess(len(captured), 20)
+        self.assertEqual(len(info['items']), 105)
+        self.assertEqual(info['count'], 525)
+        self.assertEqual(save(self.actor, info['token'])[0], 525)
+        self.assertEqual(GlobalCoeff.objects.filter(version=self.version, goods__brand__startswith='Bulk brand').count(), 525)
+        retained = dict(self.version.coefficients.values_list('pk', 'motivation_coeff'))
+        for pk, value in original:
+            self.assertEqual(retained[pk], value)
+        with self.assertRaises(ValidationError):
+            save(self.actor, info['token'])
+
+    def test_bulk_preview_skips_missing_donors_and_checks_permissions_and_revision(self):
+        from django.contrib.auth.models import AnonymousUser
+        from django.core.exceptions import PermissionDenied
+        from .services.coverage_bulk import selection_token, preview, save
+        self.version.coefficients.all().delete()
+        self.version.refresh_from_db()
+        row = list(plan_rows(self.fixture.scenario))[0]
+        result = check(self.version, [row], 'Политики', 'global')
+        token = selection_token(result, self.version, 'global')
+        info = preview(self.actor, token)
+        self.assertEqual(info['count'], 0)
+        self.assertEqual(len(info['blocked']), 1)
+        self.assertEqual(info['token'], '')
+        with self.assertRaises(PermissionDenied):
+            preview(AnonymousUser(), token)
+        with self.assertRaises(ValidationError):
+            save(self.actor, token)
+        with self.assertRaises(ValidationError):
+            preview(self.actor, token + 'tamper')
+
+    def test_bulk_local_directors_use_individual_defaults(self):
+        from .services.coverage_bulk import selection_token, preview, save
+        from .models import DirectorEmployee, SubdivisionDirectorCoeff
+        original = self.version.subdivision_coefficients.first()
+        people = []
+        for name, rate in [('First bulk director', '.01'), ('Second bulk director', '.03')]:
+            employee = DirectorEmployee.objects.create(full_name=name)
+            employee.subdivisions.add(original.subdivision)
+            SubdivisionDirectorCoeff.objects.create(version=self.version, goods=original.goods,
+                subdivision=original.subdivision, employee=employee, **{f'k{i}': rate for i in range(5)})
+            people.append(employee)
+        self.version.refresh_from_db()
+        row = {'subdivision': original.subdivision.subdivision_key, 'date': date(2026, 1, 1),
+               'planning': original.goods.planning_group_sales, 'group': original.goods.group,
+               'brand': 'Bulk director missing brand', 'amount': 100}
+        result = check(self.version, [row], 'Директора')
+        info = preview(self.actor, selection_token(result, self.version, 'subdivision'))
+        self.assertEqual(info['count'], 10)
+        by_person = {item['employee_id']: item['rates']['K0'] for item in info['items']}
+        self.assertEqual(Decimal(by_person[people[0].pk]), Decimal('.01'))
+        self.assertEqual(Decimal(by_person[people[1].pk]), Decimal('.03'))
+        save(self.actor, info['token'])
+        self.assertEqual(SubdivisionDirectorCoeff.objects.filter(version=self.version, goods__brand='Bulk director missing brand').count(), 2)
+
+    def test_bulk_http_preview_and_save(self):
+        from .services.coverage_bulk import selection_token
+        row = dict(list(plan_rows(self.fixture.scenario))[0], brand='HTTP bulk brand')
+        result = check(self.version, [row], 'Политики', 'global')
+        token = selection_token(result, self.version, 'global')
+        url = reverse('motivation_coverage_repair_all')
+        self.assertEqual(self.client.get(url).status_code, 405)
+        response = self.client.post(url, {'token': token})
+        self.assertContains(response, 'Создать все предложенные коэффициенты в черновике')
+        prepared = response.context['bulk']['token']
+        response = self.client.post(url, {'token': prepared, 'action': 'save'})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(check(self.version, [row], 'Политики', 'global')['missing'], 0)
+
     def test_export_includes_blank_legacy_boundary_without_changing_coefficients(self):
         cursor = Mock()
         export_defaults(cursor, [self.fixture.version, self.version])
