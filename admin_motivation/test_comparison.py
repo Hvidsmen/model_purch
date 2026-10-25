@@ -14,6 +14,35 @@ from .services.sql_export import export_motivation
 
 
 class ComparisonTests(TestCase):
+    def test_saved_review_does_not_materialize_coefficients_without_edits(self):
+        with self.assertNumQueries(0):
+            self.assertEqual(proposed_changes(self.first, None, {}, []), ({}, []))
+
+    def test_comparison_keeps_only_one_variant_index_in_memory(self):
+        import weakref
+        from .services.comparison import Index
+        from .services.director_comparison import DirectorIndex
+        current = self.draft(date(2026, 1, 1), .2, True)
+        live, directors, created = weakref.WeakSet(), weakref.WeakSet(), []
+        case = self
+        class TrackedIndex(Index):
+            def __init__(self, *args, **kwargs):
+                case.assertEqual(len(live), 0)
+                live.add(self)
+                created.append('index')
+                super().__init__(*args, **kwargs)
+        class TrackedDirectorIndex(DirectorIndex):
+            def __init__(self, *args, **kwargs):
+                case.assertEqual(len(directors), 0)
+                directors.add(self)
+                super().__init__(*args, **kwargs)
+        with patch('admin_motivation.services.comparison.Index', TrackedIndex), patch('admin_motivation.services.director_comparison.DirectorIndex', TrackedDirectorIndex):
+            result = compare_plan(self.plan, current, self.first)
+        self.assertEqual(len(created), 3)
+        self.assertFalse(live)
+        self.assertFalse(directors)
+        self.assertNotIn('error', result['variants']['current'])
+
     def test_director_motivation_global_all_branch_staff_and_unsaved_changes(self):
         from .models import GlobalDirectorCoeff, SubdivisionDirectorCoeff, DirectorEmployee
         current = self.draft(date(2026, 1, 1), .2, True)

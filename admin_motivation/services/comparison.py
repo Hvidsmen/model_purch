@@ -24,7 +24,9 @@ def proposed_changes(version, subdivision, changes=None, deleted=None):
     queryset = model.objects.filter(version=version)
     if subdivision:
         queryset = queryset.filter(subdivision=subdivision)
-    rows = {str(row.pk): row for row in queryset}
+    # Only pending edits need model instances; approval of saved coefficients
+    # must not cache the entire coefficient table in the request worker.
+    rows = {str(row.pk): row for row in queryset.filter(pk__in=[pk for pk in changes if str(pk).isdigit()])} if changes else {}
     normalized = {}
     for pk, value in (changes or {}).items():
         if str(pk) not in rows:
@@ -32,13 +34,13 @@ def proposed_changes(version, subdivision, changes=None, deleted=None):
         parsed = Decimal(str(float(coefficient_input(value))))
         if parsed != Decimal(str(rows[str(pk)].motivation_coeff)):
             normalized[str(pk)] = str(parsed)
-    goods = {row.goods_id for row in rows.values()}
     try:
         deleted = sorted({int(pk) for pk in (deleted or [])})
     except (ValueError, TypeError):
         raise ValidationError('Некорректный список удаляемых товаров.')
     if subdivision and deleted:
         raise ValidationError('Удаление товаров здесь доступно только для глобальных коэффициентов.')
+    goods = set(queryset.filter(goods_id__in=deleted).values_list('goods_id', flat=True)) if deleted else set()
     if set(deleted) - goods:
         raise ValidationError('Удаляемый товар не принадлежит выбранной версии.')
     if (normalized or deleted) and not version.is_editable:
@@ -116,17 +118,7 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
     proposed = [*before, current]
     use_subdivision = subdivision or all_subdivisions
     profiles = [('approved', approved), ('baseline', [baseline] if baseline else []), ('current', proposed)]
-    results, indexes, date_cache, director_indexes = {}, {}, {}, {}
-    for name, versions in profiles:
-        if not versions:
-            results[name] = {'error': 'Нет утверждённых версий.' if name == 'approved' else 'Базовая версия не выбрана.'}
-            continue
-        indexes[name] = Index(coefficient_rows([version.pk for version in versions], use_subdivision,
-            current=current if name == 'current' else None, changes=changes, deleted=deleted, changed_subdivision=change_subdivision or subdivision))
-        director_indexes[name] = DirectorIndex([version.pk for version in versions], local=bool(use_subdivision),
-            current=current if name == 'current' else None, changes=director_changes if name == 'current' else None,
-            subdivision=subdivision, employee=employee, deleted=deleted if name == 'current' else None)
-        results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'directors': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
+    results, date_cache = {}, {}
     from .subdivision_aliases import mapping, expand, canonical
     names = mapping()
     lines = plan.lines.exclude(subdivision='') if use_subdivision else plan.lines.filter(subdivision='')
@@ -139,7 +131,7 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
     virtual = None
     if not use_subdivision and excluded:
         from .plan_scope import global_lines_without_excluded
-        virtual = global_lines_without_excluded(plan)
+        virtual = global_lines_without_excluded(plan, input_only=True)
     costs = lines.aggregate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), rows=Count('pk'), ddp_rows=Count('amount_ddp_usd'))
     if virtual is not None:
         costs = {'plan': sum((line.amount_usd for line in virtual), Decimal(0)),
@@ -149,25 +141,41 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
         costs['ddp'] = None
     found = False
     affected_lines = 0
-    source = ((line.plan_date, line.subdivision, line.planning_group_sales, line.group, line.brand, line.segment_amounts) for line in virtual) if virtual is not None else lines.order_by('pk').values_list(
-            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts').iterator(chunk_size=2000)
-    for on_date, sub, pg, group, brand, amounts in source:
-        if not included(sub, names):
+    def source_rows():
+        if virtual is not None:
+            return ((line.plan_date, line.subdivision, line.planning_group_sales, line.group, line.brand, line.segment_amounts) for line in virtual)
+        return lines.order_by().values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts').iterator(chunk_size=2000)
+
+    # Only one variant's coefficient indexes may be resident at a time. An
+    # approval compares company and branch budgets, so retaining three complete
+    # versions here multiplies peak memory on the largest operation.
+    for name, versions in profiles:
+        if not versions:
+            results[name] = {'error': 'Нет утверждённых версий.' if name == 'approved' else 'Базовая версия не выбрана.'}
             continue
-        sub = canonical(sub, names)
-        found = True
-        if on_date >= current.effective_from:
-            affected_lines += 1
-        usd = [number(amounts.get(segment)) for segment in SEGMENTS]
-        for name, versions in profiles:
+        index = Index(coefficient_rows([version.pk for version in versions], use_subdivision,
+            current=current if name == 'current' else None, changes=changes, deleted=deleted, changed_subdivision=change_subdivision or subdivision))
+        director_index = DirectorIndex([version.pk for version in versions], local=bool(use_subdivision),
+            current=current if name == 'current' else None, changes=director_changes if name == 'current' else None,
+            subdivision=subdivision, employee=employee, deleted=deleted if name == 'current' else None)
+        results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'directors': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
+        for on_date, sub, pg, group, brand, amounts in source_rows():
+            if not included(sub, names):
+                continue
+            sub = canonical(sub, names)
+            if name == 'current':
+                found = True
+                if on_date >= current.effective_from:
+                    affected_lines += 1
             if results[name].get('error'):
                 continue
+            usd = [number(amounts.get(segment)) for segment in SEGMENTS]
             date_key = (name, on_date)
             if date_key not in date_cache:
                 chosen = baseline if name == 'baseline' else next((v for v in reversed(versions) if v.effective_from <= on_date), None)
                 date_cache[date_key] = chosen.pk if chosen else None
             try:
-                matrix, fallbacks = indexes[name].coefficients(date_cache[date_key], sub, pg, group, brand)
+                matrix, fallbacks = index.coefficients(date_cache[date_key], sub, pg, group, brand)
             except ValidationError as error:
                 results[name] = {'error': ' '.join(error.messages)}
                 continue
@@ -175,10 +183,11 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             sales = sum((value * amount for value, amount in zip(matrix[1], usd)), Decimal(0))
             results[name]['policies'] += policies
             results[name]['sales'] += sales
-            directors = director_indexes[name].motivation(date_cache[date_key], sub, pg, group, brand, usd)
+            directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, usd)
             results[name]['directors'] += directors
             results[name]['total'] += policies + sales + directors
             results[name]['fallbacks'] += fallbacks
+        del index, director_index
     if not found:
         raise ValidationError('В выбранном плане нет строк для этого разреза. Сначала загрузите план.')
     output = {}

@@ -4,7 +4,7 @@ from decimal import Decimal
 from .subdivision_scope import excluded_plan_names
 
 
-def global_lines_without_excluded(scenario):
+def global_lines_without_excluded(scenario, *, input_only=False):
     excluded = excluded_plan_names(scenario)
     if not excluded:
         return None
@@ -14,19 +14,20 @@ def global_lines_without_excluded(scenario):
     names = mapping()
     grouped = {}
     source = scenario.lines.exclude(subdivision='').exclude(subdivision__in=excluded)
-    for day, sub, pg, group, brand, amount, ddp, segments in source.order_by('pk').values_list(
+    for day, sub, pg, group, brand, amount, ddp, segments in source.order_by().values_list(
             'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
         key = (day, pg, group, brand)
         data = grouped.setdefault(key, {'plan': Decimal(0), 'ddp': Decimal(0), 'usd': [Decimal(0)] * 5, 'branches': {}})
         data['plan'] += amount
         data['ddp'] = data['ddp'] + ddp if data['ddp'] is not None and ddp is not None else None
-        branch = data['branches'].setdefault(canonical(sub, names), [Decimal(0)] * 5)
+        branch = data['branches'].setdefault(canonical(sub, names), [Decimal(0)] * 5) if not input_only else None
         for index, segment in enumerate(SEGMENTS):
             value = number(segments.get(segment))
             data['usd'][index] += value
-            branch[index] += value
+            if branch is not None:
+                branch[index] += value
     originals = {(line.plan_date, line.planning_group_sales, line.group, line.brand): line
-                 for line in scenario.lines.filter(subdivision='').select_related('coefficient_version')}
+                 for line in (scenario.lines.filter(subdivision='').select_related('coefficient_version') if not input_only else ())}
     result = []
     for (day, pg, group, brand), data in grouped.items():
         original = originals.get((day, pg, group, brand))

@@ -48,6 +48,18 @@ class SubdivisionScopeTests(TestCase):
         global_line.save()
         return local,global_line
 
+    def test_comparison_projection_does_not_read_saved_calculation_json(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .services.plan_scope import global_lines_without_excluded
+        self.legacy_ventilation()
+        with CaptureQueriesContext(connection) as captured:
+            projected = global_lines_without_excluded(self.plan, input_only=True)
+        self.assertEqual(sum(line.amount_usd for line in projected), Decimal(1500))
+        for query in captured.captured_queries:
+            self.assertNotIn('"calculation"', query['sql'])
+        self.assertTrue(all(not line.calculation for line in projected))
+
     def test_import_ignores_excluded_source_before_building_global_plan(self):
         rows=self.fixture.rows()
         self.fixture.cursor.fetchall.return_value=[*rows,(' Вентиляция ',*rows[0][1:]),('вЕнТиЛяЦиЯ',*rows[0][1:])]
