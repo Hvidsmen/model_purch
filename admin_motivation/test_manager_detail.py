@@ -188,8 +188,9 @@ class ManagerDetailTests(TestCase):
         data = manager_detail_report(rows, performance_rows=performance)
         self.assertEqual(len(data['division_execution']), len(data['detail_totals']))
         self.assertEqual([block[16] for block in data['division_execution']], [Decimal('.92'), Decimal('.79'), Decimal('.79')])
-        self.assertEqual(data['division_execution'][0][12], Decimal('.93'))
-        self.assertTrue(all(value is None for index, value in enumerate(data['division_execution'][0]) if index not in (12, 16)))
+        self.assertEqual(data['division_execution'][0][10:13], [Decimal(100), Decimal(93), Decimal('.93')])
+        self.assertEqual(data['division_execution'][0][14:17], [Decimal(100), Decimal(92), Decimal('.92')])
+        self.assertTrue(all(value is None for index, value in enumerate(data['division_execution'][0]) if index not in (10, 11, 12, 14, 15, 16)))
         with patch('admin_motivation.report_views.choices', return_value=[]), \
              patch('admin_motivation.report_views.load_report', return_value=data):
             response = self.client.get(reverse('motivation_report', args=['manager-detail']), {'run': '1', 'type': 'Продажи'})
@@ -272,7 +273,8 @@ class ManagerDetailTests(TestCase):
         self.assertEqual(data['detail_totals'][0][13], metrics([rows[0]])[13])
         self.assertEqual(data['detail_totals'][0][17:], metrics([rows[0]])[17:])
         self.assertEqual(data['division_execution'][0][16], Decimal('.6284'))
-        self.assertIsNone(data['division_execution'][0][12])
+        self.assertEqual(data['division_execution'][0][10:13], metrics([performance[0]])[10:13])
+        self.assertEqual(data['division_execution'][0][14:17], [Decimal(1000), Decimal('628.4'), Decimal('.6284')])
 
     def test_global_execution_is_not_summed_again_for_authors_or_products(self):
         from .services.pilot_formula import GLOBAL_SUBDIVISION

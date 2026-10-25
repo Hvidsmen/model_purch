@@ -1678,12 +1678,23 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             first = self.page.locator('#manager-detail-nodes summary.division-report-grid').first
             expect(first.locator('[data-manager-period-input]').first).to_have_text('—')
             expect(first.locator('[data-manager-reveal=period-input]').first).to_have_text('—')
+            department = self.page.locator('.manager-division-execution')
+            department.locator('[data-manager-reveal=period-input]').first.click()
+            expect(department.locator('[data-manager-period-input]').first).to_be_visible()
+            self.assertEqual(department.locator('[data-manager-period-input]').first.inner_text().replace('\xa0', ' '), '1 000')
+            department.locator('[data-manager-reveal=motivation]').first.click()
+            expect(department.locator('[data-manager-motivation]').first).to_be_visible()
+            self.assertEqual(department.locator('[data-manager-motivation]').first.inner_text().replace('\xa0', ' '), '1 000')
             with self.page.expect_download() as event:
                 self.page.get_by_role('link', name='Скачать расширенную таблицу Excel').click()
             event.value.save_as('/tmp/global-subdivision-execution.xlsx')
             book = load_workbook('/tmp/global-subdivision-execution.xlsx')
             sheet = book.active
             # First period: plan absent; own fact and branch motivation inputs retained.
+            self.assertEqual(sheet.cell(3, 12).value, 1000)
+            self.assertEqual(sheet.cell(3, 13).value, 800)
+            self.assertEqual(sheet.cell(3, 16).value, 1000)
+            self.assertAlmostEqual(sheet.cell(3, 17).value, 628.4)
             self.assertIsNone(sheet.cell(4, 12).value)
             self.assertEqual(sheet.cell(4, 16).value, 1000)
             self.assertAlmostEqual(sheet.cell(4, 18).value, .6284)

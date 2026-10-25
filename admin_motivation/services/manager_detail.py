@@ -180,15 +180,18 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
     execution_rows = [row for row in performance_rows or [] if str(row.get('Год')) in visible_years and row.get('Подразделение') in visible_branches]
     execution = []
     if execution_rows:
-        for values in blocks(execution_rows):
+        by_period = defaultdict(list)
+        for row in execution_rows:
+            by_period[period(row)].append(row)
+        department_blocks = [metrics(by_period[name], currency, coefficients=False) for name in periods] + [
+            metrics(execution_rows, currency, overall=True, coefficients=False)]
+        for values in department_blocks:
             block = [None] * len(HEADERS)
-            block[12], block[16] = values[12], values[16]
+            for index in (10, 11, 12, 14, 15, 16):
+                block[index] = values[index]
             execution.append(block)
     from .pilot_formula import GLOBAL_SUBDIVISION
     global_mode = any(str(row.get('VariationCalculate') or '').strip().casefold() == GLOBAL_SUBDIVISION.casefold() for row in rows)
-    if global_mode:
-        for block in execution:
-            block[12] = None
     return {'global_subdivision_mode': global_mode, 'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
             'headers': [{'label': label, 'detail': index < 13, 'title': f'Средневзвешенный K{index}: Σ(K{index} × O{index}) / Σ(O{index})' if index < 5 else label} for index, label in enumerate(HEADERS)],
             'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency, pilot=pilot)}
