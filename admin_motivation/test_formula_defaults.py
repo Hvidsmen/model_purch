@@ -54,6 +54,37 @@ class FormulaDefaultTests(TestCase):
         self.assertGreater(check(self.version, rows, 'Политики')['formula_mismatches'], 0)
         self.assertIn('examples', plan_warning(self.version, self.fixture.scenario))
 
+    def test_plan_coverage_reads_only_required_columns_without_sorting_or_json(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        # A populated calculation must never even be selected by coverage.
+        self.fixture.scenario.lines.update(calculation={'large_payload': 'x' * 10000})
+        with CaptureQueriesContext(connection) as captured:
+            rows = list(plan_rows(self.fixture.scenario))
+        self.assertTrue(rows)
+        sql = next(query['sql'] for query in captured.captured_queries if 'salesplanline' in query['sql'].lower())
+        self.assertNotIn('"calculation"', sql)
+        self.assertNotIn('"segment_amounts"', sql)
+        self.assertNotIn('ORDER BY', sql.upper())
+        self.assertEqual(check(self.version, rows, 'Политики')['issues'], [])
+
+    def test_streamed_director_coefficients_keep_explicit_formula_priority(self):
+        from .models import DirectorEmployee, SubdivisionDirectorCoeff
+        employee = DirectorEmployee.objects.create(full_name='Coverage director')
+        ordinary = self.version.subdivision_coefficients.first()
+        employee.subdivisions.add(ordinary.subdivision)
+        SubdivisionDirectorCoeff.objects.create(version=self.version, employee=employee,
+            subdivision=ordinary.subdivision, goods=ordinary.goods,
+            variation_calculate=VariationCalculate.objects.get_or_create(variation_name='Подразделение')[0])
+        row = {'subdivision': ordinary.subdivision.subdivision_key, 'date': date(2026, 1, 1),
+               'planning': ordinary.goods.planning_group_sales, 'group': ordinary.goods.group,
+               'brand': ordinary.goods.brand, 'amount': 10}
+        result = check(self.version, [row], 'Директора')
+        self.assertEqual(result['missing'], 0)
+        self.assertEqual(result['formula_mismatches'], 1)
+        self.assertEqual(result['issues'][0]['employee'], employee.full_name)
+        self.assertEqual(result['issues'][0]['formula'], 'Подразделение')
+
     def test_export_includes_blank_legacy_boundary_without_changing_coefficients(self):
         cursor = Mock()
         export_defaults(cursor, [self.fixture.version, self.version])

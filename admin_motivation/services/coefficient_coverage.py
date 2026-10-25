@@ -20,11 +20,16 @@ def legacy_formula(pg):
 
 def plan_rows(plan, subdivision=''):
     names = mapping()
-    for row in plan.lines.exclude(subdivision='').iterator(chunk_size=2000):
-        branch = canonical(row.subdivision, names)
+    # Calculated lines contain large JSON payloads. Coverage only needs the key
+    # and amount: never deserialize calculation/segment_amounts or sort the plan.
+    lines = plan.lines.exclude(subdivision='').order_by()
+    if subdivision:
+        lines = lines.filter(subdivision__in=expand(subdivision, names))
+    for row in lines.values('subdivision', 'plan_date', 'planning_group_sales', 'group', 'brand', 'amount_usd').iterator(chunk_size=2000):
+        branch = canonical(row['subdivision'], names)
         if included(branch) and (not subdivision or key(branch) == key(canonical(subdivision, names))):
-            yield {'subdivision': branch, 'date': row.plan_date, 'planning': row.planning_group_sales,
-                   'group': row.group, 'brand': row.brand, 'amount': row.amount_usd, 'documents': 0}
+            yield {'subdivision': branch, 'date': row['plan_date'], 'planning': row['planning_group_sales'],
+                   'group': row['group'], 'brand': row['brand'], 'amount': row['amount_usd'], 'documents': 0}
 
 
 def fact_rows(year, subdivision='', connector=None):
@@ -85,25 +90,37 @@ def check(version, rows, kind=''):
     ids = [item.pk for item in timeline]
     versions = {item.pk: item for item in timeline}
     index = defaultdict(lambda: {'segments': set(), 'formulas': set()})
-    ordinary = SubdivisionCoeff.objects.filter(version_id__in=ids).select_related('subdivision', 'goods', 'type_coeff', 'segment', 'variation_calculate')
-    raw = [(row.version_id, row.subdivision.subdivision_key, row.goods.planning_group_sales, row.goods.group,
-            row.goods.brand, row.type_coeff.type_coeff_name.strip(), 0, row.segment.segment_name.upper().replace('O', 'K'),
-            row.variation_calculate.variation_name) for row in ordinary]
+    # Flat tuples avoid materializing every coefficient and five related model
+    # instances in the request worker. Do not populate QuerySet result caches.
+    ordinary = SubdivisionCoeff.objects.filter(version_id__in=ids)
+    if kind:
+        ordinary = ordinary.filter(type_coeff__type_coeff_name=kind)
+    raw = ((v, branch, pg, group, brand, employee_kind.strip(), 0, segment.upper().replace('O', 'K'), formula)
+           for v, branch, pg, group, brand, employee_kind, segment, formula in ordinary.order_by().values_list(
+               'version_id', 'subdivision__subdivision_key', 'goods__planning_group_sales', 'goods__group',
+               'goods__brand', 'type_coeff__type_coeff_name', 'segment__segment_name',
+               'variation_calculate__variation_name').iterator(chunk_size=2000))
     for row in coefficient_rows(raw, 1, range(8)):
         identity = (row[0], *map(key, row[1:6]), row[6])
         index[identity]['segments'].add(row[7])
         index[identity]['formulas'].add(row[8])
     names = mapping()
     director_names, staff = {}, defaultdict(set)
-    for row in SubdivisionDirectorCoeff.objects.filter(version_id__in=ids).select_related('subdivision', 'goods', 'employee', 'variation_calculate'):
-        branch = canonical(row.subdivision.subdivision_key, names)
+    director_rows = SubdivisionDirectorCoeff.objects.filter(version_id__in=ids)
+    if kind and kind != 'Директора':
+        director_rows = director_rows.none()
+    for v, branch, pg, group, brand, employee, full_name, formula in director_rows.order_by().values_list(
+            'version_id', 'subdivision__subdivision_key', 'goods__planning_group_sales', 'goods__group',
+            'goods__brand', 'employee_id', 'employee__full_name',
+            'variation_calculate__variation_name').iterator(chunk_size=2000):
+        branch = canonical(branch, names)
         if not included(branch):
             continue
-        identity = (row.version_id, key(branch), key(row.goods.planning_group_sales), key(row.goods.group), key(row.goods.brand), key('Директора'), row.employee_id)
+        identity = (v, key(branch), key(pg), key(group), key(brand), key('Директора'), employee)
         index[identity]['segments'].update(f'K{i}' for i in range(5))
-        index[identity]['formulas'].add(row.variation_calculate.variation_name if row.variation_calculate_id else versions[row.version_id].fallback_variation or legacy_formula(row.goods.planning_group_sales))
-        director_names[row.employee_id] = row.employee.full_name
-        staff[key(branch)].add(row.employee_id)
+        index[identity]['formulas'].add(formula or versions[v].fallback_variation or legacy_formula(pg))
+        director_names[employee] = full_name
+        staff[key(branch)].add(employee)
     names = mapping()
     for employee in DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions'):
         director_names[employee.pk] = employee.full_name
