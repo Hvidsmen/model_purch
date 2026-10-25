@@ -21,7 +21,7 @@ PERIODS = [('all', 'Все доступные периоды'), ('1', '1 ква�
 def available(user):
     role = role_for(user, 'motivation')
     keys = ['detail']
-    if role in PERSONAL_ROLES:
+    if role in (*PERSONAL_ROLES, ADMIN):
         keys.insert(0, 'mine')
     if role not in PERSONAL_ROLES:
         keys.insert(0, 'team')
@@ -185,8 +185,9 @@ def planned_budget(execution, scenario, query):
     aliases, buckets = mapping(), {}
     quarter_share = number(execution.parameters.get('quarter_share'))
     annual_share = number(execution.parameters.get('year_share'))
-    if quarter_share < 0 or annual_share < 0 or quarter_share + annual_share != 1:
+    if not quarter_share.is_finite() or not annual_share.is_finite() or not 0 <= quarter_share <= 100 or not 0 <= annual_share <= 100 or quarter_share + annual_share != 100:
         raise ValidationError('В запуске нет корректного распределения квартальной и годовой премии.')
+    quarter_share, annual_share = quarter_share / 100, annual_share / 100
     share = annual_share if period == '5' else quarter_share if period != 'all' else Decimal(1)
     selected_subdivisions = query.getlist('subdivision')
     for day, original, pg, group, brand, amount, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'segment_amounts').iterator(chunk_size=2000):

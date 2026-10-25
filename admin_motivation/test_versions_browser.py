@@ -12,6 +12,56 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_new_reports_compact_role_screens(self):
+        from contextlib import nullcontext
+        from uuid import uuid4
+        from django.utils import timezone
+        from django.contrib.auth.models import User, Group
+        from base.models import MotivationReportAccess
+        from base.access import POLITICIAN
+        from .models import SalesPlanScenario, MotivationExecution
+        from .services.manager_detail import manager_detail_report, period_motivation_summary
+        from .test_manager_detail import detail_rows
+        from playwright.sync_api import expect
+        def prepare():
+            channel = Chanel.objects.create(chanel_name='Report design')
+            branch = Subdivision.objects.create(subdivision_key='A', subdivision_name='A', subdivision_global='A', chanel=channel)
+            employee = User.objects.create_user('design-employee')
+            employee.groups.add(Group.objects.get(name=POLITICIAN))
+            MotivationReportAccess.objects.create(user=employee, subdivision=branch, deal_author='Иванов')
+            SalesPlanScenario.objects.create(title='План 2026', source_version='Visual plan', loaded_at=timezone.now())
+            MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year': 2026, 'plan_version': 'Visual plan', 'quarter_share': '80', 'year_share': '20', 'payout_threshold': '.8'})
+            return employee.pk
+        employee = self.db(prepare)
+        source = [dict(row, АвторСделки=name, КварталМотивации='4 Квартал(1-4 кв)' if row['КварталМотивации'] != 'Год' else 'Год') for name in ('Иванов', 'Петров', 'Сидоров') for row in detail_rows()]
+        def load(kind, values, **kwargs):
+            rows = [row for row in source if not values.get('DealAuthor') or row['АвторСделки'] in values['DealAuthor']]
+            if kwargs.get('summary_only'):
+                return {'currency': 'USD', 'period_summary': period_motivation_summary(rows)}
+            return manager_detail_report(rows, performance_rows=detail_rows())
+        budget = [{'name': label, 'global': 24000, 'local': 27000, 'difference': 3000, 'difference_percent': .125,
+                   'children': [{'name': 'Политики', 'global': 24000, 'local': 27000, 'difference': 3000, 'children': []}]}
+                  for label in ('Компания', 'Д-Москва')]
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', side_effect=load), patch('admin_motivation.services.reports_next.planned_budget', return_value=budget):
+            self.page.set_viewport_size({'width':1440,'height':1000})
+            self.page.goto(self.live_server_url + reverse('motivation_reports_next'))
+            expect(self.page.get_by_role('link', name='Моя премия', exact=False)).to_be_visible()
+            self.page.screenshot(path='/tmp/new-reports-catalog-compact.png', full_page=True)
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['mine']) + f'?run=1&preview_user={employee}&type=Политики')
+            expect(self.page.locator('.nr-period')).to_have_count(2)
+            expect(self.page.locator('.next-total')).to_contain_text('190,00')
+            self.page.screenshot(path='/tmp/new-reports-mine-compact.png', full_page=True)
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['team']) + '?run=1&type=Политики')
+            expect(self.page.locator('.nr-table tbody tr')).to_have_count(3)
+            self.page.screenshot(path='/tmp/new-reports-team-compact.png', full_page=True)
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['executive']) + '?run=1')
+            expect(self.page.locator('.nr-bars')).to_be_visible()
+            self.page.screenshot(path='/tmp/new-reports-executive-compact.png', full_page=True)
+            self.page.set_viewport_size({'width':390,'height':844})
+            self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 390)
+            self.page.screenshot(path='/tmp/new-reports-mobile-compact.png', full_page=True)
+        self.assertEqual(self.errors, [])
+
     def test_new_report_tab_plan_choice_and_employee_drilldown(self):
         from contextlib import nullcontext
         from uuid import uuid4
@@ -22,7 +72,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         from playwright.sync_api import expect
         def prepare():
             plans = [SalesPlanScenario.objects.create(title=title, source_version=title, loaded_at=timezone.now()) for title in ('Run plan', 'Alternative plan')]
-            execution = MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year': 2026, 'plan_version': 'Run plan', 'quarter_share': '.8', 'year_share': '.2'})
+            execution = MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year': 2026, 'plan_version': 'Run plan', 'quarter_share': '80', 'year_share': '20'})
             return plans[1].pk
         alternate = self.db(prepare)
         budget = [{'name': 'Компания', 'global': 100, 'local': 120, 'difference': 20, 'children': []}]
@@ -34,11 +84,13 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.get_by_role('link', name='Сводный отчёт: план премий', exact=False).click()
             self.page.select_option('select[name=plan]', str(alternate))
             self.page.get_by_role('button', name='Показать', exact=True).click()
-            expect(self.page.get_by_text('Разница: 20 USD', exact=False)).to_be_visible()
+            expect(self.page.locator('.nr-kpi').nth(2)).to_contain_text('20,00')
             self.assertEqual(comparison.call_args.args[1].pk, alternate)
             self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['team']) + '?run=1&type=Политики&period=5')
             expect(self.page.locator('.next-total')).to_contain_text('95,00 USD')
             self.page.get_by_role('link', name='Как рассчитано →', exact=True).first.click()
+            expect(self.page.get_by_role('heading', name='Как получилась сумма')).to_be_visible()
+            self.page.locator('#next-deep-calculation > summary').click()
             expect(self.page.locator('#manager-detail-panel')).to_be_visible()
             expect(self.page.locator('#manager-detail-nodes')).to_contain_text('Иванов')
             self.page.screenshot(path='/tmp/new-motivation-reports-detail.png', full_page=True)

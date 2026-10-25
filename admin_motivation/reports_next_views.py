@@ -7,7 +7,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.http import require_GET
-from base.access import role_for, REPORT_ROLES
+from base.access import role_for, REPORT_ROLES, PERSONAL_ROLES, ADMIN
 from .models import MotivationExecution, SalesPlanScenario, Subdivision
 from .services import reports_next as reports
 
@@ -73,8 +73,23 @@ def report(request, kind):
     if kind not in reports.available(request.user):
         raise PermissionDenied
     query = request.GET.copy()
+    report_user = request.user
+    preview_accounts, preview_user = [], None
+    admin_preview = role_for(request.user, 'motivation') == ADMIN and kind in ('mine', 'detail')
+    if admin_preview:
+        from django.contrib.auth import get_user_model
+        from base.report_access import politician_scope
+        candidates = get_user_model().objects.filter(is_active=True, motivation_report_access__isnull=False).select_related('motivation_report_access').prefetch_related('groups').order_by('last_name', 'first_name', 'username')
+        preview_accounts = [user for user in candidates if role_for(user, 'motivation') in PERSONAL_ROLES and politician_scope(user)]
+        if query.get('preview_user'):
+            preview_user = next((user for user in preview_accounts if str(user.pk) == query['preview_user']), None)
+            if preview_user is None:
+                raise PermissionDenied
+            report_user = preview_user
+    else:
+        query.pop('preview_user', None)
     try:
-        scope, types, period = reports.restrict(request.user, query)
+        scope, types, period = reports.restrict(report_user, query)
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
         return HttpResponseBadRequest(' '.join(exc.messages))
@@ -96,8 +111,12 @@ def report(request, kind):
         ('Валюта', 'USD' if kind == 'executive' else query['currency']),
         ('Порог выполнения для выплаты', selected.parameters.get('payout_threshold', 'Не сохранён') if selected else ''),
         ('Статус выплат', 'Данных о согласовании и фактической оплате нет. Показаны рассчитанные суммы.')]
+    if preview_user:
+        metadata.insert(1, ('Личный отчёт сотрудника', preview_user.motivation_report_access.deal_author))
     try:
         if query.get('run') == '1' or query.get('export') == 'xlsx':
+            if kind == 'mine' and admin_preview and preview_user is None:
+                raise ValidationError('Выберите сотрудника для предпросмотра личной премии.')
             if not selected:
                 raise ValidationError('Нет подтверждённых завершённых расчётов.')
             if kind == 'executive':
@@ -108,7 +127,7 @@ def report(request, kind):
                 data = reports.planned_budget(selected, plan, query)
             else:
                 with reports.current_run(selected):
-                    data = reports.actual_reports(request.user, selected, query, detailed=kind == 'detail')
+                    data = reports.actual_reports(report_user, selected, query, detailed=kind == 'detail')
                 for row in data['rows']:
                     target = query.copy()
                     target['type'], target['period'], target['run'] = row['kind'], row['code'], '1'
@@ -145,16 +164,19 @@ def report(request, kind):
     period_options = [item for item in reports.PERIODS if not scope or not scope.get('pilot_periods') or item[0] in ('all', '4', '5')]
     export_query = query.copy()
     export_query['export'] = 'xlsx'
+    from .services.reports_next_presenter import present
+    presentation = present(kind, data, data if kind != 'executive' else None, query['period'])
     ledger_page = Paginator(data['rows'], 100).get_page(query.get('page')) if data is not None and kind not in ('executive', 'detail') else None
+    employee_page = Paginator(presentation['employees'], 50).get_page(query.get('page')) if kind == 'team' else None
     page_query = query.copy()
     page_query.pop('page', None)
     page_query.pop('export', None)
     all_types = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
     all_types = [all_types] if isinstance(all_types, str) else all_types
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.CATALOG[kind][0],
-        'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
+        'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'current_execution_id': runs.first().pk if runs.exists() else None, 'runs': runs, 'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
         'all_types': all_types,
-        'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
-        'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
+        'period_label': dict(reports.PERIODS).get(query['period'], ''), 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
+        'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})

@@ -30,7 +30,7 @@ class ReportsNextTests(TestCase):
         approve_review(review_approval(fixture.version)['token'])
         self.run = MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed',
             started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year': 2026,
-            'plan_version': fixture.scenario.source_version, 'quarter_share': '.8', 'year_share': '.2', 'payout_threshold': '.8'},
+            'plan_version': fixture.scenario.source_version, 'quarter_share': '80', 'year_share': '20', 'payout_threshold': '.8'},
             export_snapshot=export_snapshot())
 
     def test_new_tab_and_old_reports_remain_available(self):
@@ -40,6 +40,7 @@ class ReportsNextTests(TestCase):
         response = self.client.get(reverse('motivation_reports_next'))
         self.assertContains(response, 'Сводный отчёт: план премий')
         self.assertContains(response, 'Реестр премий к выплате')
+        self.assertContains(response, 'Моя премия')
 
     def test_plan_defaults_to_run_plan_and_compares_frozen_coefficients(self):
         self.assertEqual(reports_next.default_plan(self.run), self.fixture.scenario)
@@ -61,7 +62,8 @@ class ReportsNextTests(TestCase):
         response = self.client.get(url, {'run': '1', 'period': 'all'})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.context['plan'], self.fixture.scenario)
-        self.assertContains(response, 'Разница: 120 USD')
+        self.assertContains(response, 'Разница между моделями')
+        self.assertContains(response, '120,00')
         exported = self.client.get(url, {'run': '1', 'period': 'all', 'export': 'xlsx'})
         from io import BytesIO
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
@@ -102,7 +104,7 @@ class ReportsNextTests(TestCase):
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=data):
             response = self.client.get(reverse('motivation_report_next', args=['registry']), {'run': '1', 'type': 'Политики'})
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, 'выплаты и фактические платежи пока не регистрируются')
+        self.assertContains(response, 'ещё не подтверждены к выплате')
         self.assertContains(response, 'Как рассчитано')
 
     def test_personal_scope_blocks_foreign_author_branch_type_and_privileged_reports(self):
@@ -156,3 +158,55 @@ class ReportsNextTests(TestCase):
             self.assertEqual(book['Премии'].max_row, 252)
             self.assertEqual(sum(row[7].value for row in book['Премии'].iter_rows(min_row=3)), 125 * 95)
             book.close(); exported.close()
+
+    def test_admin_can_preview_mine_but_must_choose_employee(self):
+        user = User.objects.create_user('preview-employee')
+        user.groups.add(Group.objects.get(name=POLITICIAN))
+        MotivationReportAccess.objects.create(user=user, subdivision=self.fixture.subs[0], deal_author='Own Author')
+        url = reverse('motivation_report_next', args=['mine'])
+        self.assertContains(self.client.get(url), 'Сотрудник для предпросмотра')
+        with patch('admin_motivation.services.reports_next.load_report') as load:
+            response = self.client.get(url, {'run': '1'})
+            self.assertContains(response, 'Выберите сотрудника для предпросмотра')
+            load.assert_not_called()
+        own = dict(detail_rows()[1], Подразделение='A', АвторСделки='Own Author')
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=manager_detail_report([own])) as load:
+            response = self.client.get(url, {'run': '1', 'preview_user': user.pk, 'subdivision': 'B', 'author': 'Foreign', 'type': 'Политики'})
+        self.assertContains(response, 'Own Author')
+        self.assertEqual(load.call_args.args[1]['Subdivision'], ['A'])
+        self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Own Author'])
+        self.assertIn('preview_user=', response.context['ledger']['rows'][0]['detail_url'])
+        self.assertEqual(response.context['preview_user'].pk, user.pk)
+
+    def test_employee_cannot_use_admin_preview_to_change_identity(self):
+        user = User.objects.create_user('own-preview-employee')
+        user.groups.add(Group.objects.get(name=POLITICIAN))
+        MotivationReportAccess.objects.create(user=user, subdivision=self.fixture.subs[0], deal_author='Own Author')
+        self.client.force_login(user)
+        own = dict(detail_rows()[1], Подразделение='A', АвторСделки='Own Author')
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=manager_detail_report([own])) as load:
+            response = self.client.get(reverse('motivation_report_next', args=['mine']), {'run': '1', 'preview_user': self.actor.pk})
+        self.assertEqual(response.status_code, 200)
+        self.assertNotContains(response, 'Сотрудник для предпросмотра')
+        self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Own Author'])
+
+    def test_presentation_groups_people_without_changing_calculation_or_export_rows(self):
+        from .services.reports_next_presenter import present
+        ledger = {'total': Decimal(15), 'rows': [
+            {'subdivision': 'A', 'author': 'Own', 'unallocated': False, 'kind': 'Политики', 'code': '4', 'period': '4 кв.', 'amount': Decimal(10), 'bonus': Decimal(0), 'total': Decimal(10), 'detail_url': '/detail/?period=4'},
+            {'subdivision': 'A', 'author': 'Own', 'unallocated': False, 'kind': 'Продажи', 'code': '5', 'period': 'Год', 'amount': Decimal(3), 'bonus': Decimal(2), 'total': Decimal(5), 'detail_url': '/detail/?period=5'}]}
+        display = present('team', ledger, ledger)
+        self.assertEqual(display['people'], 1)
+        self.assertEqual(display['total'], Decimal(15))
+        self.assertEqual(display['employees'][0]['total'], Decimal(15))
+        self.assertEqual(len(ledger['rows']), 2)
+        self.assertEqual(sum(row['total'] for row in display['period_cards']), Decimal(15))
+
+    def test_budget_shares_are_percentage_fields_from_calculation_job(self):
+        query = QueryDict('period=4')
+        self.assertEqual(self.run.parameters['quarter_share'], '80')
+        result = reports_next.planned_budget(self.run, self.fixture.scenario, query)
+        self.assertEqual(result[0]['global'], Decimal(180))
+        self.run.parameters['year_share'] = '30'
+        with self.assertRaises(ValidationError):
+            reports_next.planned_budget(self.run, self.fixture.scenario, query)
