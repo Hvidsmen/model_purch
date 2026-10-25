@@ -394,15 +394,18 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
         if kind == 'manager-detail':
             from .manager_detail import grouped_sql, manager_detail_report
             rows = fetch(cursor, grouped_sql(sql), args)
+            performance_fields = ('СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал', 'СуммаПланUSD', 'СуммаОтгрузокUSD')
+            performance_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE ' + sql_predicate('[Подразделение]') +
+                ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ AND [Год] IN (@Years)' +
+                (' AND ' + PILOT_SQL if pilot else ''))
+            if str(values.get('TypeCoeff_') or '').strip().casefold() == 'директора':
+                # Multiple directors share the same subdivision sales/plan inputs.
+                dimensions = '[Подразделение],[Год],[КварталМотивации],[ГруппаПлановПродаж],[ГруппаТоваров],[Марка]'
+                performance_source = '(SELECT ' + dimensions + ',' + ','.join(f'MAX([{field}]) AS [{field}]' for field in performance_fields) + ' FROM ' + performance_source + ' GROUP BY ' + dimensions + ') AS director_inputs'
             performance_sql, performance_args = bind_sql(
-                'SELECT [Подразделение],[Год],[КварталМотивации],'
-                'SUM([СуммаПланUSDКвартал]) AS [СуммаПланUSDКвартал],'
-                'SUM([СуммаОтгрузокUSDКвартал]) AS [СуммаОтгрузокUSDКвартал],'
-                'SUM([СуммаПланUSD]) AS [СуммаПланUSD],SUM([СуммаОтгрузокUSD]) AS [СуммаОтгрузокUSD] '
-                'FROM DataWH.motivation.ReportMotivationByDealAuthor '
-                'WHERE ' + sql_predicate('[Подразделение]') + ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ AND [Год] IN (@Years) '
-                + ('AND [АвторСделки] IN (@DealAuthor) ' if access_scope else '') + ('AND ' + PILOT_SQL + ' ' if pilot else '') +
-                'GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
+                'SELECT [Подразделение],[Год],[КварталМотивации],' +
+                ','.join(f'SUM([{field}]) AS [{field}]' for field in performance_fields) +
+                ' FROM ' + performance_source + ' GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
             performance = fetch(cursor, performance_sql, performance_args)
             return manager_detail_report(rows, values.get('Currency', 'USD'), performance, pilot=pilot)
         if kind == 'subdivisions':

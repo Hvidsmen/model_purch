@@ -94,7 +94,17 @@ def calculations(request):
                 job.save(update_fields=['synced', 'error'])
             messages.error(request, text)
     jobs = list(MotivationCalculationSchedule.objects.order_by('pk'))
+    approved = GlobalCoeffVersion.objects.filter(status='approved').order_by('-effective_from', '-pk').first()
+    coverage_cache = {}
     for job in jobs:
+        job.coverage_version = approved
+        plan = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False, source_version=job.plan_version).order_by('-loaded_at', '-pk').first()
+        job.coverage_warning = None
+        if approved and plan:
+            from .services.coefficient_coverage import plan_warning
+            if plan.pk not in coverage_cache:
+                coverage_cache[plan.pk] = plan_warning(approved, plan)
+            job.coverage_warning = coverage_cache[plan.pk]
         job.edit_form = form if edited_job_id == job.pk and form.is_bound else JobForm(instance=job, auto_id=f'job_{job.pk}_%s')
         job.edit_open = bool(edited_job_id == job.pk)
         if job.run_at:

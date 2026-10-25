@@ -1,7 +1,9 @@
-from . import review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
+from . import coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path('coefficients/coverage/', coverage_views.coverage, name='motivation_coefficient_coverage'),
+    path('versions/fallback-formula/', coverage_views.save_formula, name='motivation_fallback_formula'),
     path('reviews/', review_views.reviews, name='motivation_reviews'),
     path('reviews/<int:review_id>/', review_views.review_detail, name='motivation_review'),
     path('coefficients/balancing/', balancing_views.balancing, name='motivation_coefficient_balancing'),

@@ -99,10 +99,12 @@ class ReportGroupTests(TestCase):
                   'gp_sales': [], 'GPGoods': [], 'Brend': [], 'Years': [], 'Currency': 'USD'}
         with patch('admin_motivation.services.reports.connect_database', return_value=(Mock(), Mock())), patch('admin_motivation.services.reports.fetch', return_value=[]) as read:
             load_report('manager-detail', values, access_scope=scope)
+        self.assertIn('Личный Автор Сделки', read.call_args_list[0].args[2])
+        self.assertNotIn('[АвторСделки]', read.call_args_list[1].args[1])
+        self.assertNotIn('СуммаМотивацииUSD', read.call_args_list[1].args[1])
         for call in read.call_args_list:
             self.assertIn('Crimea', call.args[2])
             self.assertIn('Директора', call.args[2])
-            self.assertIn('Личный Автор Сделки', call.args[2])
             self.assertNotIn('Volga', call.args[2])
             self.assertNotIn('Other', call.args[2])
 

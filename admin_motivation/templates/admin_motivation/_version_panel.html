@@ -73,7 +73,7 @@
         <div class="d-flex gap-2 flex-wrap align-items-start">
             <div>{{ version_form.effective_from.label_tag }} {{ version_form.effective_from }}
                 {% for error in version_form.effective_from.errors %}<div class="text-danger">{{ error }}</div>{% endfor %}</div>
-            <div>{{ version_form.title.label_tag }} {{ version_form.title }}{{ version_form.title.errors }}</div>
+            <div>{{ version_form.title.label_tag }} {{ version_form.title }}{{ version_form.title.errors }}</div><div>{{ version_form.fallback_variation.label_tag }} {{ version_form.fallback_variation }}{{ version_form.fallback_variation.errors }}</div>
             <div style="max-width:260px;margin-top:20px">{{ version_form.allow_overwrite }} <label for="id_allow_overwrite" style="display:inline">{{ version_form.allow_overwrite.label }}</label></div>
             <button class="btn btn-primary" name="action_button" value="create_version">Создать новую версию</button>
         </div>{{ version_form.source_version.errors }}{{ version_form.non_field_errors }}
@@ -96,6 +96,9 @@
 </div>
     </div>
 
+    {% if selected_version %}<div class="version-tool-content"><strong>Формула без точной настройки:</strong> {{ selected_version.get_fallback_variation_display|default:'Прежнее правило по группе товара' }}
+    {% if version_editable %}<form method="post" action="{% url 'motivation_fallback_formula' %}">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="revision" value="{{ selected_version.revision }}"><label>При отсутствии точной формулы<select name="fallback_variation">{% for value,label in selected_version.fallback_choices %}<option value="{{ value }}" {% if value == selected_version.fallback_variation %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label><button class="btn btn-outline-primary" type="submit">Сохранить формулу по умолчанию</button></form>{% endif %}
+    <p>Точная формула товара имеет приоритет. Подстановка ставки не меняется. <a href="{% url 'motivation_coefficient_coverage' %}?version={{ selected_version.pk }}{% if sub %}&amp;subdivision={{ sub.subdivision_key|urlencode }}{% endif %}">Проверить покрытие коэффициентами →</a></p></div>{% endif %}
     {% if approval_history %}<details class="secondary-block"><summary>История утверждений</summary><div class="table-wrapper"><table class="table"><thead><tr><th>Дата, МСК</th><th>Кто утвердил</th><th>Маршрут / причина</th></tr></thead><tbody>{% for approval in approval_history %}<tr><td>{% timezone 'Europe/Moscow' %}{{ approval.created_at|date:'d.m.Y H:i' }}{% endtimezone %}</td><td>{{ approval.summary.decision.actor|default:'Прежнее утверждение' }}<br>{{ approval.summary.decision.role }}</td><td>{% if approval.summary.decision.route == 'administrator_override' %}Администратор · без прохождения проверок{% elif approval.summary.decision.route == 'finance_director' %}Финансист → Генеральный директор{% endif %}{% if approval.summary.decision.reason %}<br>{{ approval.summary.decision.reason }}{% endif %}</td></tr>{% endfor %}</tbody></table></div></details>{% endif %}
     {% if portal_can_administer_motivation and selected_version.pk == last_approved_version.pk %}
     <details class="secondary-block" id="version-reopen"><summary>Вернуть последнюю утверждённую версию в черновик</summary>

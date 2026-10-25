@@ -34,6 +34,7 @@ def version_context(request, version_form=None):
     last_approved = approved[-1] if approved else None
     minimum = latest.effective_from + timedelta(days=1) if latest else None
     form = version_form or GlobalCoeffVersionForm(initial={'source_version': latest.pk if latest else None,
+        'fallback_variation': latest.fallback_variation if latest and latest.fallback_variation else 'Подразделение(Глобально)',
         'effective_from': max(today(), minimum) if minimum else '2001-01-01'})
     if minimum:
         form.fields['effective_from'].widget.attrs['min'] = '2001-01-01'

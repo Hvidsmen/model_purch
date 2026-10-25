@@ -93,9 +93,21 @@ def prepare(cursor):
                                   'DataWH.motivation.PortalCalculationSubdivisions', changed, flags=re.I)
     if config and not references:
         raise ValidationError('В процедуре не найдена точка объединения подразделений. Расчёт не запущен.')
-    from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff
+    from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff, GlobalCoeffVersion, MotivationExportLog
+    from .formula_defaults import TABLE_SQL, patch_defaults
     from .pilot_formula import GLOBAL_SUBDIVISION, patch_calculation
-    if (SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
+    cursor.execute(TABLE_SQL)
+    # Read the committed DWH configuration as well as the local receipt: a local
+    # log failure or reopening a version must not erase already-exported rules.
+    cursor.execute("SELECT COALESCE(MAX(CASE WHEN DefaultFormula=N'Подразделение(Глобально)' THEN 2 WHEN NULLIF(DefaultFormula,N'') IS NOT NULL THEN 1 ELSE 0 END),0) FROM motivation.PortalFormulaDefaults")
+    remote = cursor.fetchone()
+    remote_mode = remote[0] if remote and len(remote) == 1 and remote[0] in (0, 1, 2) else 0
+    previous_export = MotivationExportLog.objects.order_by('-pk').first()
+    exported_defaults = [item.get('fallback_variation') for item in previous_export.snapshot.get('versions', [])] if previous_export else []
+    configured_default = remote_mode > 0 or any(exported_defaults) or GlobalCoeffVersion.objects.filter(status='approved').exclude(fallback_variation='').exists()
+    changed, _ = patch_defaults(changed, required=configured_default)
+    global_default = remote_mode == 2 or GLOBAL_SUBDIVISION in exported_defaults or GlobalCoeffVersion.objects.filter(status='approved', fallback_variation=GLOBAL_SUBDIVISION).exists()
+    if (global_default or SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
             or SubdivisionDirectorCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()):
         changed = patch_calculation(changed)
     from .payout_threshold import parameterize

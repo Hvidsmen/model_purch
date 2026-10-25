@@ -15,7 +15,7 @@ HEADERS = ['K0', 'K1', 'K2', 'K3', 'K4', 'Отгрузки O0', 'Отгрузк�
 
 
 def grouped_sql(source):
-    fields = [*DIMENSIONS, 'Год', 'КварталМотивации']
+    fields = [*DIMENSIONS, 'Год', 'КварталМотивации', 'VariationCalculate']
     columns = ','.join(f'[{key}]' for key in fields)
     sums = ','.join(f'SUM([{key}]) AS [{key}]' for key in SUM_FIELDS)
     averages = ','.join(f'SUM([{source}] * [O{i}]) AS [K{i}WeightedSum],'
@@ -112,12 +112,48 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
         name = row.get('КварталМотивации') or 'Без периода'
         return f'{row.get("Год") or "Без года"} · {name}' if len(year_scopes) > 1 else name
     periods = sorted({period(row) for row in rows}, key=lambda name: ('Год' in name, name))
+    def execution_metrics(subset, values, overall=False, context=None, target_period=None):
+        from .pilot_formula import GLOBAL_SUBDIVISION
+        modes = {str(row.get('VariationCalculate') or '').strip().casefold() for row in (subset or context or [])}
+        if GLOBAL_SUBDIVISION.casefold() not in modes:
+            return values
+        # A global-subdivision formula has personal shipments, but no personal
+        # period target. Mixing it with other formulae has no additive execution ratio.
+        values[10], values[12] = None, None
+        if modes != {GLOBAL_SUBDIVISION.casefold()}:
+            values[14:17] = [None, None, None]
+            return values
+        expected = {(row.get('Подразделение'), str(row.get('Год')), str(row.get('КварталМотивации') or '').strip()) for row in subset}
+        if not subset and context and target_period:
+            raw_period = target_period
+            scopes = {(row.get('Подразделение'), str(row.get('Год'))) for row in context}
+            if len(year_scopes) > 1:
+                target_year, raw_period = target_period.split(' · ', 1)
+                scopes = {(sub, year) for sub, year in scopes if year == target_year}
+            expected = {(sub, year, str(raw_period).strip()) for sub, year in scopes}
+        if overall:
+            scopes = {(sub, year) for sub, year, _ in expected}
+            department = [row for row in performance_rows or [] if
+                (row.get('Подразделение'), str(row.get('Год'))) in scopes and
+                str(row.get('КварталМотивации') or '').strip().casefold() == 'год']
+            complete = {(row.get('Подразделение'), str(row.get('Год'))) for row in department} == scopes
+        else:
+            department = [row for row in performance_rows or [] if
+                (row.get('Подразделение'), str(row.get('Год')), str(row.get('КварталМотивации') or '').strip()) in expected]
+            complete = {(row.get('Подразделение'), str(row.get('Год')), str(row.get('КварталМотивации') or '').strip()) for row in department} == expected
+        if not department or not complete:
+            values[14:17] = [None, None, None]
+        else:
+            plan, fact = total(department, 'СуммаПланUSD'), total(department, 'СуммаОтгрузокUSD')
+            values[14:17] = [plan, fact, ratio(fact, plan, True)]
+        return values
+
     def blocks(subset, coefficients=True):
         grouped = defaultdict(list)
         for row in subset:
             grouped[period(row)].append(row)
-        return [metrics(grouped[name], currency, coefficients=coefficients) for name in periods] + [
-            metrics(subset, currency, overall=True, coefficients=coefficients)]
+        return [execution_metrics(grouped[name], metrics(grouped[name], currency, coefficients=coefficients), context=subset, target_period=name) for name in periods] + [
+            execution_metrics(subset, metrics(subset, currency, overall=True, coefficients=coefficients), overall=True)]
     def nodes(subset, level=0):
         grouped = defaultdict(list)
         for row in subset:
@@ -140,13 +176,19 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
     performance.sort(key=lambda row: (row['subdivision'], str(row['year']), row['period']))
     # Align branch execution with the visible periods/years of the main report.
     visible_years = {str(row.get('Год')) for row in rows}
-    execution_rows = [row for row in performance_rows or [] if str(row.get('Год')) in visible_years]
+    visible_branches = {row.get('Подразделение') for row in rows}
+    execution_rows = [row for row in performance_rows or [] if str(row.get('Год')) in visible_years and row.get('Подразделение') in visible_branches]
     execution = []
     if execution_rows:
         for values in blocks(execution_rows):
             block = [None] * len(HEADERS)
             block[12], block[16] = values[12], values[16]
             execution.append(block)
-    return {'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
+    from .pilot_formula import GLOBAL_SUBDIVISION
+    global_mode = any(str(row.get('VariationCalculate') or '').strip().casefold() == GLOBAL_SUBDIVISION.casefold() for row in rows)
+    if global_mode:
+        for block in execution:
+            block[12] = None
+    return {'global_subdivision_mode': global_mode, 'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
             'headers': [{'label': label, 'detail': index < 13, 'title': f'Средневзвешенный K{index}: Σ(K{index} × O{index}) / Σ(O{index})' if index < 5 else label} for index, label in enumerate(HEADERS)],
             'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency, pilot=pilot)}

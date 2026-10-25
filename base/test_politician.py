@@ -95,9 +95,14 @@ class PoliticianAccessTests(TestCase):
         values = {'TypeCoeff_': 'Директора', 'Subdivision': ['Other'], 'DealAuthor': ['Other'], 'gp_sales': [], 'qm': '1 Квартал', 'Currency': 'USD', 'Years': [], 'GPGoods': [], 'Brend': []}
         with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch('admin_motivation.services.reports.fetch', return_value=[]) as read:
             load_report('manager-detail', values, access_scope=self.scope)
-            # Both detail rows and branch performance must include the same author.
+            # Personal rows stay author-scoped. Full-branch performance contains
+            # only sales/plan aggregates, without other employees or their payouts.
+            self.assertIn(self.scope['author'], read.call_args_list[0].args[2])
+            aggregate = read.call_args_list[1]
+            self.assertNotIn('[АвторСделки]', aggregate.args[1])
+            self.assertNotIn('СуммаМотивацииUSD', aggregate.args[1])
+            self.assertIn('Own', aggregate.args[2])
             for call in read.call_args_list:
-                self.assertIn(self.scope['author'], call.args[2])
                 self.assertNotIn('Other', call.args[2])
         with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch('admin_motivation.services.reports.fetch', return_value=[]) as read:
             load_report('manager', values, access_scope=self.scope)

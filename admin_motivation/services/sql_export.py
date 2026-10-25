@@ -16,8 +16,7 @@ COEFFICIENT_INSERT = ('INSERT INTO DataWH.motivation.SubdivisionMotiveCoeff '
 
 
 def director_variation(good):
-    # Directors have no separate editable variation. Match the calculation's
-    # default when vSubdivisionMotiveCoeffTo has no VariationCalculate override.
+    # Historical rule for director rows without an explicit or version default.
     return 'Группа планов продаж' if good.planning_group_sales in ('1. RAC', '2. VRF', '3. PROF') else 'Подразделение'
 
 
@@ -43,6 +42,8 @@ def export_motivation(connector, manage_connection=True):
             tables.append('SegmentMotivation')
         for table in tables:
             cursor.execute(f'DELETE FROM DataWH.motivation.{table} WHERE Date_ >= ?', start_date)
+        from .formula_defaults import export_defaults
+        export_defaults(cursor, versions)
         for version in versions:
             date_from = version.effective_from
             if include_segments:
@@ -59,7 +60,7 @@ def export_motivation(connector, manage_connection=True):
             directors = list(SubdivisionDirectorCoeff.objects.filter(version=version).select_related('subdivision', 'goods', 'employee', 'variation_calculate').order_by('subdivision_id', 'employee_id', 'goods_id'))
             coefficient_rows.extend(
                 (date_from, row.subdivision.subdivision_key, row.goods.goods_key, DIRECTOR_TYPE,
-                 f'K{i}', (row.variation_calculate.variation_name if row.variation_calculate_id else director_variation(row.goods)), getattr(row, f'k{i}'),
+                 f'K{i}', (row.variation_calculate.variation_name if row.variation_calculate_id else version.fallback_variation or director_variation(row.goods)), getattr(row, f'k{i}'),
                  row.employee.employee_code, row.employee.full_name)
                 for row in directors for i in range(5))
             coefficient_rows = list(merged_rows(coefficient_rows, 1, [0, 1, 2, 3, 4, 7]))
@@ -71,7 +72,7 @@ def export_motivation(connector, manage_connection=True):
                 cursor.executemany('INSERT INTO DataWH.motivation.GoodsMotivation (Date_, GoodsKey, PGSales, Group_, Brand) VALUES (?, ?, ?, ?, ?)', good_rows)
         if manage_connection:
             from .pilot_formula import GLOBAL_SUBDIVISION
-            if (SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
+            if (any(version.fallback_variation for version in versions) or SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
                     or SubdivisionDirectorCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
                     or SubdivisionManagerCoeff.objects.filter(version__in=versions).exists()):
                 from .calculation_jobs import prepare

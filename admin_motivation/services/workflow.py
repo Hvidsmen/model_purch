@@ -16,7 +16,7 @@ def export_snapshot():
     from .subdivision_scope import POLICY
     payload = {
         'subdivision_policy': POLICY,
-        'versions': [{'id':v.pk,'title':v.title,'from':v.effective_from.isoformat(),'revision':v.revision} for v in versions],
+        'versions': [{'id':v.pk,'title':v.title,'from':v.effective_from.isoformat(),'revision':v.revision,'fallback_variation':v.fallback_variation} for v in versions],
         'aliases': sorted(rules()),
         'goods': list(Goods.objects.filter(pk__in=good_ids).order_by('pk').values('id','goods_key','planning_group_sales','group','brand')),
         'employees': list(SubdivisionDirectorCoeff.objects.filter(version__in=versions).order_by('employee_id').values('employee_id','employee__employee_code','employee__full_name').distinct()),

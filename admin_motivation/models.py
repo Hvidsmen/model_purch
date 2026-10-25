@@ -154,6 +154,7 @@ class GlobalCoeffVersion(models.Model):
     approved_at = models.DateTimeField('Утверждена', null=True, blank=True)
     replaced_by = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='replaced_versions')
     revision = models.PositiveBigIntegerField(default=0)
+    fallback_variation = models.CharField('Формула при отсутствии точной настройки', max_length=64, blank=True, default='', choices=[('', 'Прежнее правило по группе товара'), ('Группа планов продаж', 'Группа планов продаж'), ('Подразделение', 'Подразделение'), ('Подразделение(Глобально)', 'Подразделение(Глобально)')])
 
     class Meta:
         ordering = ['effective_from', 'pk']
@@ -163,6 +164,10 @@ class GlobalCoeffVersion(models.Model):
 
     def __str__(self):
         return f'{self.title or "Версия"} с {self.effective_from:%d.%m.%Y}'
+
+    @property
+    def fallback_choices(self):
+        return self._meta.get_field('fallback_variation').choices
 
     @property
     def approval(self):
@@ -183,6 +188,8 @@ class GlobalCoeffVersion(models.Model):
         if self.pk:
             original = type(self).objects.get(pk=self.pk)
             self.revision = original.revision
+            if original.fallback_variation != self.fallback_variation and not self.is_editable:
+                raise ValidationError('Формулу по умолчанию можно изменять только в последнем черновике.')
             if original.effective_from != self.effective_from:
                 raise ValidationError({'effective_from': 'Дата сохранённой версии не изменяется. Создайте копию с другой датой.'})
             if any(getattr(original, name) != getattr(self, name) for name in ['status', 'approved_at', 'replaced_by_id']):

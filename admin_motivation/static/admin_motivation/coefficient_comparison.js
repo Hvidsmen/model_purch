@@ -178,6 +178,13 @@
                 details.append(list);
                 impact.append(details);
             }
+            if (review.summary.fallback_formula) {
+                const text = document.createElement('p'); text.textContent = 'Формула без точной настройки: ' + review.summary.fallback_formula; impact.append(text);
+            }
+            if (review.summary.coverage?.missing || review.summary.coverage?.formula_mismatches) {
+                const text = document.createElement('p'); text.className = 'alert alert-warning';
+                text.textContent = `Проверка по плану: без точных коэффициентов — ${review.summary.coverage.missing}; с отличающейся явной формулой — ${review.summary.coverage.formula_mismatches}. Проверьте покрытие коэффициентами перед утверждением.`; impact.append(text);
+            }
             const needsConfirm = review.replaced.length > 0 || review.baseline_replaced;
             document.getElementById('approval-confirm-label').hidden = !needsConfirm;
             document.getElementById('approval-baseline-warning').hidden = !review.baseline_replaced;

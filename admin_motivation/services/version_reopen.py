@@ -24,7 +24,7 @@ def reopen_version(actor, version_id, revision, reason):
     latest = next(row for row in reversed(versions) if row.status != 'superseded')
     if latest.pk != version.pk:
         raise ValidationError('Есть более новый черновик. Сохраните нужные изменения или удалите его штатной кнопкой перед возвратом утверждённой версии.')
-    snapshot = {'version': {'id': version.pk, 'title': version.title, 'effective_from': version.effective_from, 'approved_at': version.approved_at, 'revision': version.revision, 'status': version.status}}
+    snapshot = {'version': {'id': version.pk, 'title': version.title, 'effective_from': version.effective_from, 'approved_at': version.approved_at, 'revision': version.revision, 'status': version.status, 'fallback_variation': version.fallback_variation}}
     for model in (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff, DiscountSegment):
         snapshot[model._meta.label] = list(model.objects.filter(version=version).order_by('pk').values())
     snapshot = json.loads(json.dumps(snapshot, cls=DjangoJSONEncoder))

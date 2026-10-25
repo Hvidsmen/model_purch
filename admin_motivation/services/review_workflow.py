@@ -29,7 +29,7 @@ def snapshot(version):
     aliases = mapping()
     for name in ('subdivisioncoeff', 'subdivisionmanagercoeff', 'subdivisiondirectorcoeff'):
         data[name] = [row for row in data[name] if included(branches.get(row['subdivision_id'], ''), aliases)]
-    data['version'] = {'title': version.title, 'effective_from': version.effective_from}
+    data['version'] = {'title': version.title, 'effective_from': version.effective_from, 'fallback_variation': version.fallback_variation}
     data['references'] = {model._meta.model_name: list(model.objects.order_by('pk').values()) for model in
         (Goods, TypeCoeff, SegmentCoeff, VariationCalculate, Subdivision, DirectorEmployee, KindManagerCoeff)}
     data['bindings'] = list(DirectorEmployee.subdivisions.through.objects.order_by('pk').values())
@@ -51,7 +51,7 @@ def fingerprint(version, plan, data=None):
 
 def cells(data):
     refs = {name: {row['id']: row for row in rows} for name, rows in data['references'].items()}
-    result = {}
+    result = {('version_default',): {'scope': 'Вся версия', 'product': 'Формула по умолчанию', 'kind': 'Настройки версии', 'employee': '', 'field': 'Без точной настройки', 'value': data.get('version', {}).get('fallback_variation') or 'Прежнее правило по группе товара'}}
     titles = {'globalcoeff': 'Глобально', 'subdivisioncoeff': 'Подразделение',
               'subdivisionmanagercoeff': 'Поправка руководителя', 'globaldirectorcoeff': 'Директор · глобально',
               'subdivisiondirectorcoeff': 'Директор', 'discountsegment': 'Сегменты скидок'}

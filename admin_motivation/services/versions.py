@@ -22,14 +22,14 @@ def effective_coefficients(on_date=None):
     return GlobalCoeff.objects.filter(version=effective_version(on_date))
 
 
-def create_version(effective_from, title='', source_version=None, allow_overwrite=False):
+def create_version(effective_from, title='', source_version=None, allow_overwrite=False, fallback_variation=None):
     with transaction.atomic():
         latest = GlobalCoeffVersion.objects.select_for_update().exclude(status='superseded').order_by('-pk').first()
         if latest and latest.status in ('finance_review', 'director_review'):
             raise ValidationError('Набор находится на проверке. Сначала завершите проверку или верните его в черновик.')
         if latest and source_version != latest.pk:
             raise ValidationError('Появилась новая версия. Обновите страницу перед созданием следующей.')
-        version = GlobalCoeffVersion(effective_from=effective_from, title=title)
+        version = GlobalCoeffVersion(effective_from=effective_from, title=title, fallback_variation=(latest.fallback_variation if latest else '') if fallback_variation is None else fallback_variation)
         version._allow_overwrite = allow_overwrite
         version.save()
         if latest:

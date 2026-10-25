@@ -111,6 +111,8 @@ def report_excel(data, parameters, scope='all'):
             for _, parameter, caption, _, multiple in FILTERS['manager-detail']:
                 value = parameters.get(parameter)
                 settings.append((caption, ', '.join(value) if isinstance(value, list) and value else str(value) if value else 'Все'))
+            if data.get('global_subdivision_mode'):
+                settings.append(('Подразделение(Глобально)', 'План периода и % периода не задаются; факт периода — собственные отгрузки. План, факт и % мотивации — по всему подразделению и выбранному виду работника.'))
             settings += [('План и отгрузки', 'USD'), ('K0–K4', 'Σ(Ki × Oi) / Σ(Oi), вес — отгрузки соответствующего сегмента'),
                          ('Годовое выполнение', 'План и факт из строк «Год»; мотивация и остаток — по всем периодам')]
             for index, row in enumerate(settings, 3):

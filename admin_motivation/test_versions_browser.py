@@ -1590,3 +1590,62 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.screenshot(path='/tmp/subdivision-report-premium-period.png', full_page=True)
             self.page.wait_for_load_state('networkidle')
         self.assertEqual(self.errors, [])
+
+    def test_version_fallback_setting_and_plan_coverage(self):
+        from playwright.sync_api import expect
+        from django.utils import timezone
+        from .models import SalesPlanScenario, SalesPlanLine
+        from .services.pilot_formula import GLOBAL_SUBDIVISION
+        form_url = reverse('motivation_fallback_formula')
+        self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))
+        form = self.page.locator(f'form[action="{form_url}"]')
+        form.locator('select[name=fallback_variation]').select_option(GLOBAL_SUBDIVISION)
+        with self.page.expect_navigation():
+            form.get_by_role('button', name='Сохранить формулу по умолчанию').click()
+        self.assertEqual(self.db(lambda: GlobalCoeffVersion.objects.get(pk=self.first.pk).fallback_variation), GLOBAL_SUBDIVISION)
+        def create_plan():
+            channel = Chanel.objects.create(chanel_name='Coverage channel')
+            branch = Subdivision.objects.create(subdivision_key='Coverage-A', subdivision_name='Coverage-A', subdivision_global='Coverage-A', chanel=channel)
+            plan = SalesPlanScenario.objects.create(title='Coverage plan', source_version='coverage', loaded_at=timezone.now())
+            SalesPlanLine.objects.create(scenario=plan, plan_date=date(2026, 1, 1), subdivision=branch.subdivision_key,
+                planning_group_sales='Missing planning group', group='Missing group', brand='Missing brand', amount_usd=1000, segment_amounts={'O0': '1000'})
+            return plan.pk
+        plan = self.db(create_plan)
+        self.page.goto(self.live_server_url + reverse('motivation_coefficient_coverage') + f'?version={self.first.pk}&plan={plan}&run=1')
+        expect(self.page.get_by_role('heading', name='Покрытие коэффициентами')).to_be_visible()
+        expect(self.page.locator('tbody')).to_contain_text('Нет точного коэффициента')
+        expect(self.page.locator('tbody')).to_contain_text(GLOBAL_SUBDIVISION)
+        self.page.screenshot(path='/tmp/coefficient-fallback-coverage.png', full_page=True)
+        self.page.wait_for_load_state('networkidle')
+        self.assertEqual(self.errors, [])
+
+    def test_global_subdivision_detail_execution_and_excel(self):
+        from playwright.sync_api import expect
+        from openpyxl import load_workbook
+        from .test_manager_detail import detail_rows
+        from .services.manager_detail import manager_detail_report
+        from .services.pilot_formula import GLOBAL_SUBDIVISION
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=628.4) for row in rows]
+        def result(*args, **kwargs):
+            return manager_detail_report(rows, performance_rows=performance)
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', side_effect=result):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?run=1&type=Политики&details=1')
+            self.page.locator('#manager-detail-expand').click()
+            expect(self.page.locator('#manager-detail-nodes .motivation-execution').first).to_contain_text('62,84%')
+            first = self.page.locator('#manager-detail-nodes summary.division-report-grid').first
+            expect(first.locator('[data-manager-period-input]').first).to_have_text('—')
+            expect(first.locator('[data-manager-reveal=period-input]').first).to_have_text('—')
+            with self.page.expect_download() as event:
+                self.page.get_by_role('link', name='Скачать расширенную таблицу Excel').click()
+            event.value.save_as('/tmp/global-subdivision-execution.xlsx')
+            book = load_workbook('/tmp/global-subdivision-execution.xlsx')
+            sheet = book.active
+            # First period: plan absent; own fact and branch motivation inputs retained.
+            self.assertIsNone(sheet.cell(4, 12).value)
+            self.assertEqual(sheet.cell(4, 16).value, 1000)
+            self.assertAlmostEqual(sheet.cell(4, 18).value, .6284)
+            book.close()
+            self.page.screenshot(path='/tmp/global-subdivision-detail-execution.png', full_page=True)
+            self.page.wait_for_load_state('networkidle')
+        self.assertEqual(self.errors, [])

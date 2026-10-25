@@ -126,7 +126,7 @@ class ManagerDetailTests(TestCase):
     def test_sql_weights_use_each_segment_and_ignore_missing_coefficients(self):
         import sqlite3
         from .services.manager_detail import DIMENSIONS, SUM_FIELDS
-        columns = [*DIMENSIONS, 'Год', 'КварталМотивации', *SUM_FIELDS, 'K0', 'K1', 'K2', 'k3', 'k4']
+        columns = [*DIMENSIONS, 'Год', 'КварталМотивации', 'VariationCalculate', *SUM_FIELDS, 'K0', 'K1', 'K2', 'k3', 'k4']
         database = sqlite3.connect(':memory:')
         try:
             database.execute('CREATE TABLE source (' + ','.join('[' + key + ']' for key in columns) + ')')
@@ -250,3 +250,58 @@ class ManagerDetailTests(TestCase):
         self.assertNotContains(page, 'NoReverseMatch')
         self.client.logout()
         self.assertEqual(self.client.get(reverse('motivation_report', args=['manager-detail'])).status_code, 302)
+
+    def test_global_subdivision_uses_department_execution_at_every_level(self):
+        from .services.pilot_formula import GLOBAL_SUBDIVISION
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=Decimal('628.4')) for row in rows]
+        performance.append(dict(performance[0], Подразделение='Other', СуммаПланUSD=1, СуммаОтгрузокUSD=999))
+        data = manager_detail_report(rows, performance_rows=performance)
+        def check(blocks):
+            for block in blocks:
+                self.assertIsNone(block[10])
+                self.assertIsNone(block[12])
+                self.assertEqual(block[14:17], [Decimal(1000), Decimal('628.4'), Decimal('.6284')])
+        check(data['detail_totals'])
+        def walk(nodes):
+            for node in nodes:
+                check(node['values'])
+                walk(node['children'])
+        walk(data['nodes'])
+        self.assertEqual(data['detail_totals'][0][11], metrics([rows[0]])[11])
+        self.assertEqual(data['detail_totals'][0][13], metrics([rows[0]])[13])
+        self.assertEqual(data['detail_totals'][0][17:], metrics([rows[0]])[17:])
+        self.assertEqual(data['division_execution'][0][16], Decimal('.6284'))
+        self.assertIsNone(data['division_execution'][0][12])
+
+    def test_global_execution_is_not_summed_again_for_authors_or_products(self):
+        from .services.pilot_formula import GLOBAL_SUBDIVISION
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        extra = [dict(row, АвторСделки='Петров', ГруппаПлановПродаж='Other product') for row in rows]
+        performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=600) for row in rows]
+        data = manager_detail_report(rows + extra, performance_rows=performance)
+        self.assertEqual(data['detail_totals'][0][14:17], [1000, 600, Decimal('.6')])
+        self.assertEqual(data['detail_totals'][0][11], metrics([rows[0], extra[0]])[11])
+        mixed = manager_detail_report(rows + [dict(extra[0], VariationCalculate='Группа планов продаж')], performance_rows=performance)
+        self.assertEqual(mixed['detail_totals'][0][14:17], [None, None, None])
+
+    def test_global_product_without_own_period_still_has_department_execution_and_no_personal_plan(self):
+        from .services.pilot_formula import GLOBAL_SUBDIVISION
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        annual_only = dict(rows[1], Марка='Annual-only brand')
+        performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=600) for row in rows]
+        report = manager_detail_report(rows + [annual_only], performance_rows=performance)
+        def find(nodes):
+            for node in nodes:
+                if node['label'] == 'Annual-only brand':
+                    return node
+                found = find(node['children'])
+                if found:
+                    return found
+        node = find(report['nodes'])
+        self.assertIsNotNone(node)
+        quarter = node['values'][0]
+        self.assertIsNone(quarter[10])
+        self.assertIsNone(quarter[12])
+        self.assertEqual(quarter[11], 0)
+        self.assertEqual(quarter[14:17], [1000, 600, Decimal('.6')])

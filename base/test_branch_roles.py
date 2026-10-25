@@ -171,8 +171,12 @@ class BranchRoleTests(TestCase):
                 with patch('admin_motivation.services.reports.connect_database', return_value=(MagicMock(), MagicMock())), patch('admin_motivation.services.reports.fetch', return_value=[]) as fetch:
                     load_report(kind, values, access_scope=scope)
                 self.assertTrue(fetch.called)
-                for call in fetch.call_args_list:
-                    self.assertIn('Волков Максим Игоревич', call.args[2])
+                for index, call in enumerate(fetch.call_args_list):
+                    if kind != 'manager-detail' or index == 0:
+                        self.assertIn('Волков Максим Игоревич', call.args[2])
+                    else:
+                        self.assertNotIn('[АвторСделки]', call.args[1])
+                        self.assertNotIn('СуммаМотивацииUSD', call.args[1])
                     self.assertIn('Директора', call.args[2])
                     self.assertNotIn('Чужой директор', call.args[2])
                     self.assertNotIn('Denied-C', call.args[2])
