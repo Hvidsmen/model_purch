@@ -18,6 +18,34 @@ def token_for(row, version, scope):
         'kind': row['kind'], 'subdivision': row['subdivision_id'], 'employee': row['employee_id']}, salt=SALT, compress=True)
 
 
+def default_rates(version, data, subdivision=None):
+    """Use the same indexes and dated scopes as the plan calculation."""
+    from .subdivision_aliases import coefficient_rows
+    ids = list(GlobalCoeffVersion.objects.filter(status='approved', effective_from__lt=version.effective_from).values_list('pk', flat=True)) + [version.pk]
+    sub = subdivision.subdivision_key if subdivision else ''
+    if data['kind'] == 'Директора':
+        from .director_comparison import DirectorIndex
+        index = DirectorIndex(ids, local=subdivision is not None)
+        values, source = index.coefficients(version.pk, sub, data['employee'] if subdivision else 0,
+                                             data['planning'], data['group'], data['brand'])
+        return [(value, source) for value in values]
+    from .comparison import Index, _coefficient_rows
+    rows = coefficient_rows(_coefficient_rows(ids, subdivision=subdivision), 1, range(7))
+    index = Index(rows)
+    result = []
+    for i in range(5):
+        value = index.cells.get((version.pk, sub, data['planning'], data['group'], data['brand'], data['kind'], f'O{i}'))
+        source = 'exact'
+        if value is None:
+            value = index.group_min.get((version.pk, sub, data['planning'], data['kind']))
+            source = 'group_minimum'
+        if value is None:
+            value = index.table_min.get(data['kind'])
+            source = 'table_minimum' if value is not None else 'missing'
+        result.append((value, source))
+    return result
+
+
 def proposal(actor, token):
     if not can_access(actor, 'motivation_editor'):
         raise PermissionDenied
@@ -58,14 +86,20 @@ def proposal(actor, token):
     global_row = source.first() if director else {row.segment.segment_name.upper().replace('O', 'K'): row for row in source.select_related('segment')}
     formulas = set(rows.values_list('variation_calculate__variation_name', flat=True)) - {None, ''}
     formula_name = next(iter(formulas)) if len(formulas) == 1 else version.fallback_variation or ('Группа планов продаж' if data['planning'] in ('1. RAC', '2. VRF', '3. PROF') else 'Подразделение')
+    defaults = default_rates(version, data, filters.get('subdivision'))
+    source_labels = {'exact': 'Точный коэффициент', 'group_minimum': 'Минимум по группе планов продаж',
+                     'table_minimum': 'Минимум по таблице коэффициентов', 'missing': 'Нет исходных ставок — введите процент'}
     cells = []
     for i in range(5):
         segment = f'K{i}'
         present = bool(existing) if director else segment in existing
         candidate = global_row if director else global_row.get(segment)
-        value = getattr(candidate, f'k{i}') if director and candidate else candidate.motivation_coeff if candidate else None
+        value, rate_source = defaults[i]
+        label = source_labels[rate_source]
+        if director and rate_source == 'missing':
+            label = 'Нет исходных ставок директора — по правилу расчёта 0%'
         cells.append({'name': segment, 'present': present, 'value': Decimal(str(value)) * 100 if value is not None else '',
-                      'source': 'Точный глобальный коэффициент' if candidate else 'Введите ставку'})
+                      'source': label})
     return {'data': data, 'version': version, 'cells': cells, 'filters': filters, 'model': model,
             'formula_name': formula_name, 'global_rows': global_row, 'director': director, 'local': local, 'goods': goods}
 

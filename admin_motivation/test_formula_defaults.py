@@ -143,7 +143,7 @@ class FormulaDefaultTests(TestCase):
         self.version.refresh_from_db()
         local = check(self.version, [rows[0]], 'Директора')['issues'][0]
         token = token_for(local, self.version, 'subdivision')
-        self.assertTrue(all(cell['value'] == Decimal('0.5') for cell in proposal(self.actor, token)['cells']))
+        self.assertTrue(all(cell['value'] == Decimal('0') for cell in proposal(self.actor, token)['cells']))
         create_missing(self.actor, token, {f'K{i}': '0.5' for i in range(5)})
         self.assertTrue(SubdivisionDirectorCoeff.objects.filter(version=self.version, employee=employee).exists())
 
@@ -162,6 +162,30 @@ class FormulaDefaultTests(TestCase):
             **{f'K{i}': '0.25' for i in range(5)}})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(check(self.version, [row], 'Продажи', 'global')['missing'], 0)
+
+    def test_proposed_rates_follow_group_then_table_minimum_and_director_identity(self):
+        from .models import DirectorEmployee, SubdivisionDirectorCoeff, Goods
+        from .services.coverage_repair import default_rates
+        local = self.version.subdivision_coefficients.filter(type_coeff__type_coeff_name='Политики').first()
+        data = {'kind': 'Политики', 'employee': 0, 'planning': local.goods.planning_group_sales,
+                'group': local.goods.group, 'brand': 'New missing brand'}
+        expected = min(Decimal(str(value)) for value in self.version.subdivision_coefficients.filter(
+            subdivision=local.subdivision, type_coeff__type_coeff_name='Политики',
+            goods__planning_group_sales=data['planning']).values_list('motivation_coeff', flat=True))
+        self.assertEqual(default_rates(self.version, data, local.subdivision), [(expected, 'group_minimum')] * 5)
+        data['planning'] = 'Missing planning group'
+        values = default_rates(self.version, data, local.subdivision)
+        self.assertTrue(all(source == 'table_minimum' for value, source in values))
+        employee = DirectorEmployee.objects.create(full_name='Default director')
+        other = DirectorEmployee.objects.create(full_name='Other director')
+        SubdivisionDirectorCoeff.objects.create(version=self.version, goods=local.goods, subdivision=local.subdivision,
+            employee=employee, k0='.04', k1='.03', k2='.02', k3='.01', k4='.05')
+        SubdivisionDirectorCoeff.objects.create(version=self.version, goods=local.goods, subdivision=local.subdivision,
+            employee=other, k0='-.9', k1='-.9', k2='-.9', k3='-.9', k4='-.9')
+        data.update(kind='Директора', employee=employee.pk, planning=local.goods.planning_group_sales)
+        self.assertEqual(default_rates(self.version, data, local.subdivision), [(Decimal('.01'), 'group_minimum')] * 5)
+        data['planning'] = 'Missing director group'
+        self.assertEqual(default_rates(self.version, data, local.subdivision), [(Decimal('.01'), 'table_minimum')] * 5)
 
     def test_export_includes_blank_legacy_boundary_without_changing_coefficients(self):
         cursor = Mock()
