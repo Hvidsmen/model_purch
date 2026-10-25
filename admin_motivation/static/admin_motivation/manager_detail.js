@@ -44,6 +44,10 @@
  const nodes = JSON.parse(document.getElementById('manager-detail-tree').textContent);
  const target = document.getElementById('manager-detail-nodes');
  const extra = document.getElementById('manager-detail-extra');
+ const showUnallocated = document.getElementById('manager-show-unallocated');
+ showUnallocated?.addEventListener('change', () => {
+  document.querySelectorAll('[data-manager-unallocated]').forEach(row => row.hidden = !showUnallocated.checked);
+ });
  const expanded = {segments: false, motivation: false, 'period-input': false};
  const periodToggles = [...document.querySelectorAll('[data-manager-period-toggle]')];
  const hiddenPeriods = new Set();
@@ -52,10 +56,11 @@
  function create(node) {
   const parent = document.createElement(node.children.length ? 'details' : 'div');
   parent.className = node.children.length ? 'native-division-node' : 'native-division-leaf';
+  if (node.unallocated) { parent.dataset.managerUnallocated = ''; parent.hidden = !showUnallocated?.checked; }
   const row = node.children.length ? document.createElement('summary') : parent;
   row.classList.add('division-report-grid');
   row.style.setProperty('--level', node.level);
-  const label = document.createElement('span'); label.className = 'native-label'; label.textContent = node.label; row.appendChild(label);
+  const label = document.createElement('span'); label.className = 'native-label'; label.textContent = node.unallocated ? 'Не распределено по сотрудникам' : node.label; row.appendChild(label);
   node.values.forEach((block, blockIndex) => block.forEach((value, index) => {
    const cell = document.createElement('span'); cell.className = 'report-number';
    if (index >= 18 && blockIndex < node.values.length - 1) cell.classList.add('manager-period-bonus');

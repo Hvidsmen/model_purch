@@ -3,6 +3,10 @@ from collections import defaultdict
 import re
 from .reports import number, ratio, total
 
+def unallocated_author(value):
+    return str(value or '').strip().casefold() == 'политики'
+
+
 DIMENSIONS = ['Подразделение', 'АвторСделки', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка']
 MONEY_FIELDS = ['СуммаМотивацииUSD', 'СуммаМотивацииUSDУчетПроцента', 'Остаток',
                 'СуммаМотивацииRUR', 'СуммаМотивацииRURУчетПроцента', 'ОстатокRUR']
@@ -85,7 +89,7 @@ def period_motivation_summary(rows, currency='USD', pilot=False):
     authors = defaultdict(list)
     for row in rows:
         authors[row.get('Подразделение') or '—', row.get('АвторСделки') or '—'].append(row)
-    details = [{'subdivision': sub, 'author': author, **summary(subset)}
+    details = [{'subdivision': sub, 'author': author, 'unallocated': unallocated_author(author), **summary(subset)}
                for (sub, author), subset in sorted(authors.items())]
     subdivisions = defaultdict(list)
     for row in rows:
@@ -158,7 +162,7 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
         grouped = defaultdict(list)
         for row in subset:
             grouped[row.get(DIMENSIONS[level]) or '—'].append(row)
-        return [{'label': label, 'level': level, 'values': blocks(items),
+        return [{'label': label, 'level': level, 'unallocated': level == 1 and unallocated_author(label), 'values': blocks(items),
                  'children': nodes(items, level + 1) if level + 1 < len(DIMENSIONS) else []}
                 for label, items in sorted(grouped.items())]
     cards = []
@@ -192,6 +196,6 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
             execution.append(block)
     from .pilot_formula import GLOBAL_SUBDIVISION
     global_mode = any(str(row.get('VariationCalculate') or '').strip().casefold() == GLOBAL_SUBDIVISION.casefold() for row in rows)
-    return {'global_subdivision_mode': global_mode, 'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
+    return {'has_unallocated': any(unallocated_author(row.get('АвторСделки')) for row in rows), 'global_subdivision_mode': global_mode, 'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
             'headers': [{'label': label, 'detail': index < 13, 'title': f'Средневзвешенный K{index}: Σ(K{index} × O{index}) / Σ(O{index})' if index < 5 else label} for index, label in enumerate(HEADERS)],
             'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency, pilot=pilot)}

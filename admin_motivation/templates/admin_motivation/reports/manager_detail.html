@@ -2,6 +2,7 @@
 <p class="report-filter-summary" aria-label="Выбранные параметры отчёта">{% for parameter in selected_parameters %}<span><strong>{{ parameter.label }}:</strong> {{ parameter.value }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
 <div class="report-buttons"><a class="btn btn-primary" href="{{ data.excel_urls.all }}">Скачать весь отчёт Excel</a></div>
 {% if not data.nodes %}<p class="report-empty">Нет данных по выбранным параметрам.</p>{% endif %}
+{% if data.has_unallocated %}<label class="report-filter-hint"><input type="checkbox" id="manager-show-unallocated"> Показать нераспределённое</label><p class="report-filter-hint">Служебные строки «ПОЛИТИКИ» скрыты из списка сотрудников. Их суммы включены в итоги и Excel.</p>{% endif %}
 <div class="manager-detail-cards">{% for card in data.cards %}<button type="button" data-manager-open="{{ card.currency }}" aria-controls="manager-detail-panel" aria-expanded="true"><strong>{{ card.currency }}</strong><span>С учётом выполнения: {{ card.paid|report_money }}</span><span>Доплата за кварталы: {{ card.bonus|report_money }}</span><strong>Итого: {{ card.total|report_money }}</strong><span class="manager-card-hint">Перейти к расширенной таблице →</span></button>{% endfor %}</div>
 <section class="manager-period-summary" aria-label="Итого по мотивации">
 <h2 class="report-section-title">Итого по мотивации · {{ data.currency }}</h2>
@@ -11,7 +12,7 @@
 <tr class="report-total-row"><th colspan="2">Итого по компании</th>{% for value in data.period_summary.totals.values %}<td>{{ value|report_money }}</td>{% endfor %}<td class="summary-remainder">{{ data.period_summary.totals.remainder|report_money }}</td><td class="summary-final">{{ data.period_summary.totals.total|report_money }}</td></tr>
 {% for group in data.period_summary.groups %}
 <tr class="report-total-row manager-summary-subdivision"><th>{{ group.subdivision }}</th><th>Итого по подразделению</th>{% for value in group.values %}<td>{{ value|report_money }}</td>{% endfor %}<td class="summary-remainder">{{ group.remainder|report_money }}</td><td class="summary-final">{{ group.total|report_money }}</td></tr>
-{% for row in group.authors %}<tr class="manager-summary-author"><td></td><th style="padding-left:24px">{{ row.author }}</th>{% for value in row.values %}<td>{{ value|report_money }}</td>{% endfor %}<td class="summary-remainder">{{ row.remainder|report_money }}</td><td class="summary-final">{{ row.total|report_money }}</td></tr>{% endfor %}
+{% for row in group.authors %}<tr class="manager-summary-author" {% if row.unallocated %}data-manager-unallocated hidden{% endif %}><td></td><th style="padding-left:24px">{% if row.unallocated %}Не распределено по сотрудникам{% else %}{{ row.author }}{% endif %}</th>{% for value in row.values %}<td>{{ value|report_money }}</td>{% endfor %}<td class="summary-remainder">{{ row.remainder|report_money }}</td><td class="summary-final">{{ row.total|report_money }}</td></tr>{% endfor %}
 {% empty %}<tr><td colspan="{{ data.period_summary.columns|length|add:4 }}">Нет данных по выбранным фильтрам.</td></tr>{% endfor %}</tbody></table></div>
 </section>
 <details id="manager-detail-panel" class="manager-detail-panel" data-currency="{{ data.currency }}" open><summary>Расширенная таблица мотивации · {{ data.currency }}</summary>

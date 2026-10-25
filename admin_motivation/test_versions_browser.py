@@ -1661,6 +1661,30 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.page.wait_for_load_state('networkidle')
         self.assertEqual(self.errors, [])
 
+    def test_unallocated_author_hidden_toggle_preserves_totals(self):
+        from playwright.sync_api import expect
+        from .test_manager_detail import detail_rows
+        from .services.manager_detail import manager_detail_report
+        rows = detail_rows()
+        rows += [dict(row, АвторСделки=' ПОЛИТИКИ ') for row in detail_rows()]
+        data = manager_detail_report(rows)
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=data):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?run=1&type=Политики&details=1')
+            hidden = self.page.locator('[data-manager-unallocated]')
+            expect(hidden).to_have_count(2)
+            for row in hidden.all():
+                expect(row).to_be_hidden()
+            before = self.page.locator('.manager-period-summary .report-total-row').first.inner_text()
+            self.page.locator('#manager-show-unallocated').check()
+            for row in hidden.all():
+                expect(row).to_be_visible()
+            self.assertEqual(self.page.locator('.manager-period-summary .report-total-row').first.inner_text(), before)
+            self.page.locator('#manager-show-unallocated').uncheck()
+            self.page.locator('#manager-detail-expand').click()
+            for row in hidden.all():
+                expect(row).to_be_hidden()
+        self.assertEqual(self.errors, [])
+
     def test_global_subdivision_detail_execution_and_excel(self):
         from playwright.sync_api import expect
         from openpyxl import load_workbook
