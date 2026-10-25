@@ -18,6 +18,8 @@ CATALOG = {
     'manager-detail': {'title': 'Мотивация. Детально', 'description': 'Подробный отчёт: подразделения, сотрудники, кварталы, коэффициенты и товарная матрица. USD и RUB.'},
     'deals': {'title': 'Факт закрытых сделок', 'description': 'Отгрузки и возможная мотивация по сделкам, менеджерам и товарной матрице.'},
 }
+PREMIUM_PERIODS = [('1', '1 квартал'), ('2', '2 квартал'), ('3', '3 квартал'), ('4', '4 квартал'), ('5', 'Год')]
+
 # UI name, RDL parameter, caption, lookup dataset, multiple
 FILTERS = {
  'manager-detail': [('type', 'TypeCoeff_', 'Вид работника', 'TPK', False), ('subdivision', 'Subdivision', 'Подразделение', 'Sub', True),
@@ -33,7 +35,8 @@ FILTERS = {
            ('brand', 'Brend', 'Марка / бренд', 'Brend', True), ('partner', 'Partner', 'Партнёр', 'Partner', True)],
  'subdivisions': [('type', 'type_coeff', 'Тип коэффициента', 'TypeCoeff', True), ('subdivision', 'Subdivision', 'Подразделение', 'Sub', True),
                   ('planning', 'gp_sales', 'Группа планов продаж', 'GPsales', True), ('goods', 'GPGoods', 'Группа товаров', 'GPGoods', True),
-                  ('brand', 'Brend', 'Марка / бренд', 'Brend', True)],
+                  ('brand', 'Brend', 'Марка / бренд', 'Brend', True),
+                  ('period', 'PremiumPeriods', 'Период премии', '_premium_periods', True)],
 }
 
 
@@ -57,6 +60,12 @@ def parameters(kind, query, trusted_identity=False):
             raise ValidationError('Укажите даты начала и окончания периода.')
         if end < start: raise ValidationError('Дата окончания раньше даты начала.')
         values.update(StartDate=start, EndDate=end)
+    if kind == 'subdivisions':
+        periods = values.get('PremiumPeriods', [])
+        if any(value not in dict(PREMIUM_PERIODS) for value in periods):
+            raise ValidationError('Выберите период премии: 1–4 квартал или год.')
+        if not periods:
+            values.pop('PremiumPeriods', None)
     from .subdivision_scope import included
     for key in ('Subdivision', 'Division'):
         selected = values.get(key) or []
@@ -109,6 +118,9 @@ def choices(kind, values, refresh=False, access_scope=None):
         connection.timeout = 30
         result = []
         for name, parameter, caption, dataset, multiple in FILTERS[kind]:
+            if dataset == '_premium_periods':
+                result.append({'name': name, 'label': caption, 'multiple': multiple, 'options': [{'value': value, 'label': label, 'selected': value in values.get(parameter, [])} for value, label in PREMIUM_PERIODS]})
+                continue
             if kind in ('manager', 'manager-detail') and dataset == 'DA' and (not values.get('TypeCoeff_') or (kind == 'manager' and not values.get('Subdivision'))):
                 result.append({'name': name, 'label': caption, 'multiple': multiple, 'options': []})
                 continue
@@ -317,7 +329,7 @@ def subdivision_report(rows, scope='subdivisions'):
             blocks.append([total(items, 'СуммаМотивацииUSD'), total(items, 'СуммаМотивацииUSDУчетПроцента')])
         possible, paid, bonus = total(subset, 'СуммаМотивацииUSD'), total(subset, 'СуммаМотивацииUSDУчетПроцента'), total(subset, 'Остаток')
         return [value for block in blocks for value in block] + [possible, paid, bonus, paid+bonus]
-    return {'periods': periods, 'nodes': nodes(rows) if rows else [], 'detail_totals': metrics(rows),
+    return {'years': sorted({str(value) for value in years if value is not None}), 'periods': periods, 'nodes': nodes(rows) if rows else [], 'detail_totals': metrics(rows),
             'summary': [{'label': name, 'values': summary(items),
                          'children': [{'label': type_name, 'values': summary([row for row in items if (row.get('ТипКоэф') or 'Без типа коэффициента') == type_name])}
                                       for type_name in sorted({row.get('ТипКоэф') or 'Без типа коэффициента' for row in items})]}
@@ -363,6 +375,12 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
         if pilot:
             source_sql = 'SELECT * FROM (' + source_sql + ') AS pilot_source WHERE ' + PILOT_SQL
         sql, args = bind_sql(source_sql, values)
+        if kind == 'subdivisions' and values.get('PremiumPeriods'):
+            periods = values['PremiumPeriods']
+            sql = ('SELECT * FROM (' + sql + ') AS premium_source WHERE '
+                   "CASE WHEN LOWER(LTRIM(RTRIM([КварталМотивации]))) = N'год' THEN N'5' "
+                   "ELSE LEFT(LTRIM([КварталМотивации]),1) END IN (" + ','.join('?' for _ in periods) + ')')
+            args.extend(periods)
         if kind == 'deals':
             source = '(' + sql + ') AS report_source'
             sums = 'SUM([СуммаОтгрузокUSD]) AS shipments, SUM([СуммаКвМотивацииUSD]) AS quarterly, SUM([СуммаМотивацииUSDГод]) AS annual, SUM([СуммаМотивацииUSD]) AS possible'

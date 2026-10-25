@@ -4,7 +4,8 @@
 <link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=group-report-scope-20261021">
 <section class="content native-report">
 <a href="{% url 'motivation_reports' %}">← Все отчёты</a>
-<h1 class="report-title">{{ definition.title }}{% if data.years %} · {{ data.years|join:", " }}{% endif %}{% if kind == 'manager' or kind == 'manager-detail' %} · {% if query.currency == 'RUB' %}RUB{% else %}USD{% endif %}{% endif %}</h1>
+<h1 class="report-title">{{ definition.title }}{% if data.years %} · {% if kind == 'subdivisions' %}Год расчёта: {% endif %}{{ data.years|join:", " }}{% endif %}{% if kind == 'manager' or kind == 'manager-detail' %} · {% if query.currency == 'RUB' %}RUB{% else %}USD{% endif %}{% endif %}</h1>
+{% if kind == 'subdivisions' and data %}<p class="report-filter-hint">Период премии: {{ premium_period_labels|join:', '|default:'Все' }} · USD</p>{% endif %}
 {% if pilot_periods %}<p class="report-filter-hint" role="status">Пилот: доступны только IV квартал и год. В отчёте «Факт закрытых сделок» доступен весь период.</p>{% endif %}
 <aside class="ux-report-receipt" aria-label="Происхождение расчёта">
 {% if execution_receipt %}<strong>Последний подтверждённый запуск</strong><p>{% timezone 'Europe/Moscow' %}{{ execution_receipt.run.started_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК · Год: {{ execution_receipt.run.parameters.fact_year }} · План: {{ execution_receipt.run.parameters.plan_version }} · {% if execution_receipt.run.state == 'completed' %}Завершён{% elif execution_receipt.run.state == 'running' %}Выполняется — данные могут обновляться{% else %}Ошибка — результат может быть неполным{% endif %}</p>

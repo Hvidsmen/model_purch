@@ -5,7 +5,7 @@ from django.core.exceptions import ValidationError, PermissionDenied
 from django.http import Http404, HttpResponse, FileResponse
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
-from .services.reports import CATALOG, FILTERS, parameters, choices, load_report
+from .services.reports import CATALOG, FILTERS, PREMIUM_PERIODS, parameters, choices, load_report
 from .services.versions import today
 from .models import Subdivision, SalesPlanScenario
 
@@ -35,7 +35,7 @@ def report_page(request, kind):
     values = {}
     try:
         values = parameters(kind, query, trusted_identity=True) if access_scope else parameters(kind, query)
-        excel = kind == 'manager-detail' and query.get('export') == 'xlsx'
+        excel = kind in ('manager-detail', 'subdivisions') and query.get('export') == 'xlsx'
         if excel and query.get('table', 'all') not in ('all', 'summary', 'detail'):
             raise ValidationError('Неизвестная таблица для выгрузки.')
         if not excel:
@@ -47,12 +47,19 @@ def report_page(request, kind):
             options = {'access_scope': access_scope} if access_scope else {}
             data = load_report(kind, values, page, 'matrix' if query.get('scope')=='matrix' else 'subdivisions', **options)
             if excel:
-                from .services.report_excel import report_excel
                 table = query.get('table', 'all')
-                return FileResponse(report_excel(data, values, table), as_attachment=True,
-                    filename=f'motivation-manager-{data["currency"]}-{table}.xlsx',
+                if kind == 'subdivisions':
+                    from .services.subdivision_excel import subdivision_excel
+                    output = subdivision_excel(data, values, table, 'matrix' if query.get('scope') == 'matrix' else 'subdivisions')
+                    filename = f'motivation-subdivisions-{table}.xlsx'
+                else:
+                    from .services.report_excel import report_excel
+                    output = report_excel(data, values, table)
+                    filename = f'motivation-manager-{data["currency"]}-{table}.xlsx'
+                return FileResponse(output, as_attachment=True,
+                    filename=filename,
                     content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-            if kind == 'manager-detail':
+            if kind in ('manager-detail', 'subdivisions'):
                 data['excel_urls'] = {}
                 for table in ('all', 'summary', 'detail'):
                     target = query.copy()
@@ -123,6 +130,7 @@ def report_page(request, kind):
     return render(request, 'admin_motivation/reports/report.html', {
         'pilot_periods': bool(access_scope and access_scope.get('pilot_periods') and kind in ('manager', 'manager-detail')),
         'execution_receipt':receipt, 'kind': kind, 'definition': CATALOG[kind], 'filters': filters, 'query': query,
+        'premium_period_labels': [dict(PREMIUM_PERIODS)[value] for value in values.get('PremiumPeriods', [])],
         'selected_parameters': selected_parameters, 'errors': errors, 'data': data, 'ran': request.GET.get('run')=='1',
         'subdivisions': Subdivision.objects.none() if access_scope else Subdivision.objects.all(),
         'scope': query.get('scope','subdivisions'),

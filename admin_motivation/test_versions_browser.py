@@ -1549,3 +1549,44 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(book['Коэффициенты']['E5'].value,'K0')
         book.close()
         self.assertEqual(self.errors,[])
+
+    def test_subdivision_premium_filter_year_header_and_excel_downloads(self):
+        from playwright.sync_api import expect
+        from openpyxl import load_workbook
+        from .services.reports import PREMIUM_PERIODS, subdivision_report
+        from .test_subdivision_report_export import SubdivisionReportExportTests
+        base = SubdivisionReportExportTests.rows()[0]
+        rows = [dict(base, КварталМотивации=f'{quarter} Квартал') for quarter in range(1, 5)] + [dict(base, КварталМотивации='Год')]
+        def options(kind, values, **kwargs):
+            return [{'name': 'period', 'label': 'Период премии', 'multiple': True,
+                'options': [{'value': code, 'label': label, 'selected': code in values.get('PremiumPeriods', [])} for code, label in PREMIUM_PERIODS]}]
+        def report(kind, values, page, scope, **kwargs):
+            selected = values.get('PremiumPeriods')
+            subset = [row for row in rows if not selected or ('5' if row['КварталМотивации'] == 'Год' else row['КварталМотивации'][0]) in selected]
+            return subdivision_report(subset, scope)
+        url = self.live_server_url + reverse('motivation_report', args=['subdivisions'])
+        with patch('admin_motivation.report_views.choices', side_effect=options), patch('admin_motivation.report_views.load_report', side_effect=report):
+            self.page.goto(url)
+            dropdown = self.page.locator('details[data-field=period]')
+            dropdown.locator('summary').click()
+            dropdown.get_by_label('4 квартал', exact=True).check()
+            dropdown.get_by_role('button', name='Применить', exact=True).click()
+            with self.page.expect_navigation():
+                self.page.get_by_role('button', name='Сформировать отчёт', exact=True).click()
+            expect(self.page.locator('h1.report-title')).to_contain_text('Год расчёта: 2026')
+            expect(self.page.locator('#subdivision-summary-table thead')).to_contain_text('4 Квартал')
+            expect(self.page.locator('#subdivision-summary-table thead')).not_to_contain_text('1 Квартал')
+            self.assertIn('period=4', self.page.url)
+            for label, count in [('Скачать весь отчёт Excel', 3), ('Скачать итоговую таблицу Excel', 1), ('Скачать детализацию Excel', 1)]:
+                with self.page.expect_download() as event:
+                    self.page.get_by_role('link', name=label, exact=True).click()
+                download = event.value
+                path = '/tmp/' + download.suggested_filename
+                download.save_as(path)
+                book = load_workbook(path)
+                self.assertEqual(len(book.sheetnames), count)
+                self.assertIn('4 квартал', book.active['A2'].value)
+                book.close()
+            self.page.screenshot(path='/tmp/subdivision-report-premium-period.png', full_page=True)
+            self.page.wait_for_load_state('networkidle')
+        self.assertEqual(self.errors, [])
