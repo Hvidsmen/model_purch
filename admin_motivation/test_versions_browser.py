@@ -534,7 +534,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             execution = self.page.locator('.manager-division-execution')
             expect(execution).to_be_visible()
             self.assertEqual(execution.evaluate('(row) => row.nextElementSibling.classList.contains("report-total-row")'), True)
-            expect(execution.locator('.motivation-execution').first).to_have_text('90,00%')
+            expect(execution.locator('.motivation-execution').first).to_have_text('100,00%')
             root = self.page.locator('#manager-detail-report')
             self.assertEqual(root.locator('.report-column-header > .motivation-execution').first.evaluate('(el) => getComputedStyle(el).backgroundColor'), 'rgb(237, 233, 254)')
             expect(root.locator('[data-manager-period-input]').first).to_be_hidden()
@@ -1685,13 +1685,34 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
                 expect(row).to_be_hidden()
         self.assertEqual(self.errors, [])
 
+    def test_first_quarter_inputs_equal_period_fact(self):
+        from playwright.sync_api import expect
+        from .test_manager_detail import detail_rows
+        from .services.manager_detail import manager_detail_report
+        from .services.pilot_formula import GLOBAL_SUBDIVISION
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        performance = [dict(row, СуммаОтгрузокUSDКвартал=6469139, СуммаПланUSD=235214543, СуммаОтгрузокUSD=235214543) for row in rows]
+        data = manager_detail_report(rows, performance_rows=performance)
+        with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=data):
+            self.page.goto(self.live_server_url + reverse('motivation_report', args=['manager-detail']) + '?run=1&type=Политики&details=1')
+            department = self.page.locator('.manager-division-execution')
+            expect(department.locator('[data-manager-reveal=motivation]').first).to_have_text('100,00%')
+            department.locator('[data-manager-reveal=motivation]').first.click()
+            for index in (0, 1):
+                value = department.locator('[data-manager-motivation]').nth(index)
+                expect(value).to_be_visible()
+                self.assertEqual(value.inner_text().replace('\xa0', ' '), '6 469 139')
+        self.assertEqual(self.errors, [])
+
     def test_global_subdivision_detail_execution_and_excel(self):
         from playwright.sync_api import expect
         from openpyxl import load_workbook
         from .test_manager_detail import detail_rows
         from .services.manager_detail import manager_detail_report
         from .services.pilot_formula import GLOBAL_SUBDIVISION
-        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION,
+                     КварталМотивации='2 Квартал(1-2 кв)' if row['КварталМотивации'] == '1 Квартал' else row['КварталМотивации'])
+                for row in detail_rows()]
         performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=628.4) for row in rows]
         def result(*args, **kwargs):
             return manager_detail_report(rows, performance_rows=performance)

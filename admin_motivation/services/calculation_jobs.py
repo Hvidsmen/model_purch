@@ -110,6 +110,8 @@ def prepare(cursor):
     if (global_default or SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
             or SubdivisionDirectorCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()):
         changed = patch_calculation(changed)
+    from .first_quarter_inputs import patch as patch_first_quarter_inputs
+    changed = patch_first_quarter_inputs(changed)
     from .payout_threshold import parameterize
     changed = parameterize(changed)
     from ..models import SubdivisionManagerCoeff

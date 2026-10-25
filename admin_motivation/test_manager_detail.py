@@ -187,9 +187,9 @@ class ManagerDetailTests(TestCase):
         performance.append(dict(performance[0], Год=2025, СуммаОтгрузокUSD=0))
         data = manager_detail_report(rows, performance_rows=performance)
         self.assertEqual(len(data['division_execution']), len(data['detail_totals']))
-        self.assertEqual([block[16] for block in data['division_execution']], [Decimal('.92'), Decimal('.79'), Decimal('.79')])
+        self.assertEqual([block[16] for block in data['division_execution']], [Decimal('1'), Decimal('.79'), Decimal('.79')])
         self.assertEqual(data['division_execution'][0][10:13], [Decimal(100), Decimal(93), Decimal('.93')])
-        self.assertEqual(data['division_execution'][0][14:17], [Decimal(100), Decimal(92), Decimal('.92')])
+        self.assertEqual(data['division_execution'][0][14:17], [Decimal(93), Decimal(93), Decimal('1')])
         self.assertTrue(all(value is None for index, value in enumerate(data['division_execution'][0]) if index not in (10, 11, 12, 14, 15, 16)))
         with patch('admin_motivation.report_views.choices', return_value=[]), \
              patch('admin_motivation.report_views.load_report', return_value=data):
@@ -254,7 +254,9 @@ class ManagerDetailTests(TestCase):
 
     def test_global_subdivision_uses_department_execution_at_every_level(self):
         from .services.pilot_formula import GLOBAL_SUBDIVISION
-        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION,
+                     КварталМотивации='2 Квартал(1-2 кв)' if row['КварталМотивации'] == '1 Квартал' else row['КварталМотивации'])
+                for row in detail_rows()]
         performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=Decimal('628.4')) for row in rows]
         performance.append(dict(performance[0], Подразделение='Other', СуммаПланUSD=1, СуммаОтгрузокUSD=999))
         data = manager_detail_report(rows, performance_rows=performance)
@@ -278,7 +280,9 @@ class ManagerDetailTests(TestCase):
 
     def test_global_execution_is_not_summed_again_for_authors_or_products(self):
         from .services.pilot_formula import GLOBAL_SUBDIVISION
-        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION,
+                     КварталМотивации='2 Квартал(1-2 кв)' if row['КварталМотивации'] == '1 Квартал' else row['КварталМотивации'])
+                for row in detail_rows()]
         extra = [dict(row, АвторСделки='Петров', ГруппаПлановПродаж='Other product') for row in rows]
         performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=600) for row in rows]
         data = manager_detail_report(rows + extra, performance_rows=performance)
@@ -289,7 +293,9 @@ class ManagerDetailTests(TestCase):
 
     def test_global_product_without_own_period_still_has_department_execution_and_no_personal_plan(self):
         from .services.pilot_formula import GLOBAL_SUBDIVISION
-        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION) for row in detail_rows()]
+        rows = [dict(row, VariationCalculate=GLOBAL_SUBDIVISION,
+                     КварталМотивации='2 Квартал(1-2 кв)' if row['КварталМотивации'] == '1 Квартал' else row['КварталМотивации'])
+                for row in detail_rows()]
         annual_only = dict(rows[1], Марка='Annual-only brand')
         performance = [dict(row, СуммаПланUSD=1000, СуммаОтгрузокUSD=600) for row in rows]
         report = manager_detail_report(rows + [annual_only], performance_rows=performance)

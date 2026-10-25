@@ -105,6 +105,10 @@ def period_motivation_summary(rows, currency='USD', pilot=False):
 
 
 def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=False):
+    from .first_quarter_inputs import normalize
+    rows = normalize(rows)
+    if performance_rows is not None:
+        performance_rows = normalize(performance_rows)
     if pilot:
         from .report_periods import pilot_rows
         rows = pilot_rows(rows)
