@@ -37,6 +37,7 @@
                 <a href="{% url 'portal_users' %}{{ project_query }}" {% if request.resolver_match.url_name == 'portal_users' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="user" %}<span>Пользователи и права</span></a>
                 <a href="{% url 'portal_user_groups' %}{{ project_query }}" {% if request.resolver_match.url_name == 'portal_user_groups' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="group" %}<span>Группы пользователей</span></a>
                 <p class="portal-admin-caption">Управление порталом</p>
+                <a href="{% url 'portal_updates' %}" {% if request.resolver_match.url_name == 'portal_updates' %}aria-current="page"{% endif %}><span aria-hidden="true">↻</span><span>Обновление портала</span></a>
                 <a href="{% url 'motivation_calculations' %}" {% if request.resolver_match.url_name == 'motivation_calculations' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="clock" %}<span>Расчёт и задания</span></a>
                 <a href="{% url 'motivation_subdivision_merge' %}" {% if request.resolver_match.url_name == 'motivation_subdivision_merge' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="merge" %}<span>Слияние подразделений</span></a>
                 <a href="{% url 'admin:index' %}">{% include "base/_nav_icon.html" with kind="settings" %}<span>Настройки системы</span></a>

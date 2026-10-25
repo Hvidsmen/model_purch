@@ -7,6 +7,7 @@ import sys
 from datetime import datetime
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 
 def main():
@@ -22,6 +23,12 @@ def main():
             arguments = ['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
                          '-File', str(ROOT / 'start.ps1'), '-Database', config['Database'],
                          '-BindAddress', config['BindAddress'], '-Port', str(config['Port'])]
+            # Only the separate updater can prepare the checkout while its status
+            # server occupies the portal port. start.ps1 consumes a one-use marker.
+            from scripts.portal_update_state import active, run_directory, read
+            current = active(ROOT)
+            if current and current.get('stage') in ('starting', 'verify') and read(run_directory(ROOT, current['id']) / 'prepared.json'):
+                arguments += ['-PreparedUpdate', current['id']]
             # No password in arguments or settings; use the scheduled Windows identity.
             environment = dict(os.environ, PYTHONIOENCODING='utf-8')
             result = subprocess.run(arguments, cwd=ROOT, stdin=subprocess.DEVNULL,

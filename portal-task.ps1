@@ -1,5 +1,5 @@
-param(
-    [ValidateSet('install', 'start', 'stop', 'restart', 'status')][string]$Action = 'status',
+﻿param(
+    [ValidateSet('install', 'start', 'stop', 'restart', 'status', 'enable-browser-updates')][string]$Action = 'status',
     [string]$TaskName = 'PortalComp',
     [string]$Database = '.\db.sqlite3',
     [ValidateNotNullOrEmpty()][string]$BindAddress = '0.0.0.0',
@@ -65,6 +65,37 @@ if ($Action -eq 'install') {
     exit 0
 }
 $task = Get-PortalTask
+if ($Action -eq 'enable-browser-updates') {
+    # This is a separate Task Scheduler job, never a child of PortalComp.
+    $updateTaskName = $TaskName + '-Updater'
+    $workerPath = Join-Path $PSScriptRoot 'scripts\portal_update_worker.py'
+    $updateAction = New-ScheduledTaskAction -Execute $pythonExecutable -Argument "-u `"$workerPath`"" -WorkingDirectory $PSScriptRoot
+    $existing = Get-ScheduledTask -TaskName $updateTaskName -TaskPath '\' -ErrorAction SilentlyContinue
+    if ($existing) {
+        if ($existing.Actions.Count -ne 1 -or $existing.Actions[0].Execute -ne $pythonExecutable -or $existing.Actions[0].Arguments -ne $updateAction.Arguments -or $existing.Actions[0].WorkingDirectory -ne $PSScriptRoot -or $existing.Principal.UserId -ne $task.Principal.UserId -or $existing.Principal.LogonType -ne $task.Principal.LogonType) {
+            throw 'Updater task belongs to another application. It has not been changed.'
+        }
+    } else {
+        $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        $portalIdentity = $task.Principal.UserId
+        if ($portalIdentity -match '^S-1-') { $portalSid = ([System.Security.Principal.SecurityIdentifier]$portalIdentity).Value }
+        else { $portalSid = ([System.Security.Principal.NTAccount]$portalIdentity).Translate([System.Security.Principal.SecurityIdentifier]).Value }
+        $currentSid = [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+        if ($portalSid -ne $currentSid) { throw 'Enable browser updates using the Windows account that owns the portal task.' }
+        $updateSettings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit ([TimeSpan]::Zero) -RestartCount 3 -RestartInterval (New-TimeSpan -Minutes 1) -MultipleInstances IgnoreNew -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries
+        $definition = New-ScheduledTask -Action $updateAction -Settings $updateSettings -Principal $task.Principal
+        if ($task.Principal.LogonType -eq 'Password') {
+            $credential = Get-Credential -UserName $identity -Message 'One-time credentials for the independent portal updater task.'
+            if (-not $credential -or $credential.UserName -ine $identity) { throw 'Use the current Windows account.' }
+            Register-ScheduledTask -TaskName $updateTaskName -TaskPath '\' -InputObject $definition -User $identity -Password ($credential.GetNetworkCredential().Password) | Out-Null
+        } elseif ($task.Principal.LogonType -in @('Interactive', 'InteractiveOrPassword')) {
+            Register-ScheduledTask -TaskName $updateTaskName -TaskPath '\' -InputObject $definition | Out-Null
+        } else { throw 'This task logon type is not supported for browser updates.' }
+    }
+    @{ root=$PSScriptRoot; task_name=$updateTaskName; portal_task_name=$TaskName } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $localDirectory 'browser-updates.json') -Encoding UTF8
+    Write-Host 'BROWSER UPDATES READY - open Administration / Portal updates.' -ForegroundColor Green
+    exit 0
+}
 if ($Action -eq 'status') {
     $task | Format-List TaskName, State | Out-Host
     Get-ScheduledTaskInfo -InputObject $task | Format-List LastRunTime, LastTaskResult, NextRunTime | Out-Host
