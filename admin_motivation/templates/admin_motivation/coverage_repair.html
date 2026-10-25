@@ -1,0 +1,14 @@
+{% extends 'admin_motivation/base.html' %}{% load l10n %}
+{% block content %}<section class="content" style="max-width:900px;margin:24px auto;padding:24px">
+<a href="{% url 'motivation_coefficient_coverage' %}">← Проверка покрытия</a>
+<h1>Создать недостающие коэффициенты</h1>
+{% if repair_error %}<p class="alert alert-danger">{{ repair_error }}</p>{% endif %}
+{% if proposal %}<p>{{ proposal.version }} · {% if proposal.local %}Подразделение{% else %}Глобально{% endif %} · {{ proposal.data.kind }}</p>
+<p>{{ proposal.data.planning }} / {{ proposal.data.group }} / {{ proposal.data.brand|default:'пустой бренд' }}</p>
+{% if proposal.local %}<p>{{ proposal.filters.subdivision }}{% if proposal.director %} · {{ proposal.filters.employee }}{% endif %}</p>{% endif %}
+<p>Добавятся только отсутствующие ступени. Для подразделения предложены точные глобальные ставки того же вида работника, если они существуют. Иначе введите процент. Формула: {{ proposal.formula_name }}.</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="token" value="{{ token }}"><input type="hidden" name="version" value="{{ proposal.version.pk }}"><input type="hidden" name="scope" value="{{ proposal.data.scope }}">
+<div style="display:grid;gap:12px;margin:20px 0">
+{% for cell in proposal.cells %}<label style="display:flex;flex-wrap:wrap;align-items:center;gap:16px;padding:10px;background:#f8fafc;border-radius:6px"><strong style="width:40px">{{ cell.name }}</strong>{% if cell.present %}<span>Уже существует — сохранится</span>{% else %}<input aria-label="{{ cell.name }}, процент" class="form-control" style="width:160px;min-width:0" type="number" step="any" min="-100" max="100" name="{{ cell.name }}" value="{{ cell.value|unlocalize }}" required><span>% · {{ cell.source }}</span>{% endif %}</label>{% endfor %}
+</div><button class="btn btn-primary">Создать в черновике</button></form>
+<p class="small text-muted">Изменения применятся после утверждения, выгрузки и повторного расчёта.</p>{% endif %}</section>{% endblock %}

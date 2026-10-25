@@ -1,4 +1,5 @@
 from datetime import date
+from decimal import Decimal
 from unittest.mock import Mock
 from django.core.exceptions import ValidationError
 from django.test import TestCase
@@ -84,6 +85,83 @@ class FormulaDefaultTests(TestCase):
         self.assertEqual(result['formula_mismatches'], 1)
         self.assertEqual(result['issues'][0]['employee'], employee.full_name)
         self.assertEqual(result['issues'][0]['formula'], 'Подразделение')
+
+    def test_global_and_subdivision_checks_are_independent_and_repairs_do_not_overwrite(self):
+        from .models import GlobalCoeff, SubdivisionCoeff
+        from .services.coverage_repair import token_for, proposal, create_missing
+        rows = list(plan_rows(self.fixture.scenario))
+        self.version.coefficients.all().delete()
+        self.version.refresh_from_db()
+        self.assertEqual(check(self.version, rows, 'Политики', 'subdivision')['missing'], 0)
+        result = check(self.version, rows, 'Политики', 'global')
+        self.assertGreater(result['missing'], 0)
+        issue = result['issues'][0]
+        token = token_for(issue, self.version, 'global')
+        self.assertTrue(all(cell['value'] == '' for cell in proposal(self.actor, token)['cells']))
+        rates = {f'K{i}': str(i + 1) for i in range(5)}
+        self.assertEqual(create_missing(self.actor, token, rates), 5)
+        with self.assertRaises(ValidationError):
+            create_missing(self.actor, token, rates)
+        self.version.refresh_from_db()
+        issue_row = next(row for row in rows if row['planning'] == issue['planning'] and row['group'] == issue['group'] and row['brand'] == issue['brand'])
+        ordinary = SubdivisionCoeff.objects.filter(version=self.version, goods__planning_group_sales=issue['planning'],
+            goods__group=issue['group'], goods__brand=issue['brand'], type_coeff__type_coeff_name='Политики')
+        old = list(ordinary.values_list('pk', 'motivation_coeff'))
+        ordinary.first().delete()
+        self.version.refresh_from_db()
+        local_issue = check(self.version, [issue_row], 'Политики')['issues'][0]
+        token = token_for(local_issue, self.version, 'subdivision')
+        info = proposal(self.actor, token)
+        missing = [cell for cell in info['cells'] if not cell['present']]
+        self.assertEqual(len(missing), 1)
+        self.assertNotEqual(missing[0]['value'], '')
+        self.assertEqual(create_missing(self.actor, token, rates), 1)
+        retained = dict(ordinary.values_list('pk', 'motivation_coeff'))
+        for pk, value in old:
+            if pk in retained:
+                self.assertEqual(retained[pk], value)
+
+    def test_repair_permissions_and_director_scope(self):
+        from django.contrib.auth.models import AnonymousUser
+        from django.core.exceptions import PermissionDenied
+        from .services.coverage_repair import token_for, proposal, create_missing
+        from .models import GlobalDirectorCoeff
+        rows = list(plan_rows(self.fixture.scenario))
+        self.version.refresh_from_db()
+        issue = check(self.version, [rows[0]], 'Директора', 'global')['issues'][0]
+        token = token_for(issue, self.version, 'global')
+        with self.assertRaises(PermissionDenied):
+            proposal(AnonymousUser(), token)
+        with self.assertRaises(ValidationError):
+            create_missing(self.actor, token, {'K0': 'NaN'})
+        self.assertEqual(create_missing(self.actor, token, {f'K{i}': '0.5' for i in range(5)}), 5)
+        self.assertEqual(GlobalDirectorCoeff.objects.filter(version=self.version).count(), 1)
+        self.assertEqual(check(self.version, [rows[0]], 'Директора', 'global')['missing'], 0)
+        from .models import DirectorEmployee, Subdivision, SubdivisionDirectorCoeff
+        employee = DirectorEmployee.objects.create(full_name='Repair local director')
+        employee.subdivisions.add(Subdivision.objects.get(subdivision_key=rows[0]['subdivision']))
+        self.version.refresh_from_db()
+        local = check(self.version, [rows[0]], 'Директора')['issues'][0]
+        token = token_for(local, self.version, 'subdivision')
+        self.assertTrue(all(cell['value'] == Decimal('0.5') for cell in proposal(self.actor, token)['cells']))
+        create_missing(self.actor, token, {f'K{i}': '0.5' for i in range(5)})
+        self.assertTrue(SubdivisionDirectorCoeff.objects.filter(version=self.version, employee=employee).exists())
+
+    def test_repair_http_flow_and_missing_classification(self):
+        from .services.coverage_repair import token_for
+        rows = list(plan_rows(self.fixture.scenario))
+        row = dict(rows[0], brand='Missing HTTP brand')
+        issue = check(self.version, [row], 'Продажи', 'global')['issues'][0]
+        self.version.refresh_from_db()
+        token = token_for(issue, self.version, 'global')
+        url = reverse('motivation_coverage_repair')
+        self.assertContains(self.client.get(url, {'token': token}), 'Создать в черновике')
+        invalid = self.client.post(url, {'token': token, 'K0': 'not-a-number'})
+        self.assertContains(invalid, 'Укажите процент')
+        response = self.client.post(url, {'token': token, 'version': self.version.pk, 'scope': 'global',
+            **{f'K{i}': '0.25' for i in range(5)}})
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(check(self.version, [row], 'Продажи', 'global')['missing'], 0)
 
     def test_export_includes_blank_legacy_boundary_without_changing_coefficients(self):
         cursor = Mock()

@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 from django.core.exceptions import ValidationError
-from ..models import (GlobalCoeffVersion, SubdivisionCoeff, SubdivisionDirectorCoeff, DirectorEmployee, Subdivision)
+from ..models import (GlobalCoeffVersion, GlobalCoeff, GlobalDirectorCoeff, SubdivisionCoeff, SubdivisionDirectorCoeff, DirectorEmployee, Subdivision)
 from .pilot_formula import GLOBAL_SUBDIVISION
 from .subdivision_aliases import coefficient_rows, mapping, canonical, expand
 from .subdivision_scope import included, sql_predicate
@@ -82,7 +82,10 @@ def fact_rows(year, subdivision='', connector=None):
             connection.close()
 
 
-def check(version, rows, kind=''):
+def check(version, rows, kind='', scope='subdivision'):
+    if scope not in ('global', 'subdivision'):
+        raise ValidationError('Выберите область проверки.')
+    global_scope = scope == 'global'
     approved = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
     timeline = approved if version.status == 'approved' else [item for item in approved if item.effective_from < version.effective_from] + [version]
     if version.status == 'approved' and all(item.pk != version.pk for item in timeline):
@@ -92,27 +95,36 @@ def check(version, rows, kind=''):
     index = defaultdict(lambda: {'segments': set(), 'formulas': set()})
     # Flat tuples avoid materializing every coefficient and five related model
     # instances in the request worker. Do not populate QuerySet result caches.
-    ordinary = SubdivisionCoeff.objects.filter(version_id__in=ids)
+    ordinary = (GlobalCoeff if global_scope else SubdivisionCoeff).objects.filter(version_id__in=ids)
     if kind:
         ordinary = ordinary.filter(type_coeff__type_coeff_name=kind)
+    fields = ['version_id', 'goods__planning_group_sales', 'goods__group', 'goods__brand',
+              'type_coeff__type_coeff_name', 'segment__segment_name', 'variation_calculate__variation_name']
+    if not global_scope:
+        fields.insert(1, 'subdivision__subdivision_key')
+    ordinary_values = ordinary.order_by().values_list(*fields).iterator(chunk_size=2000)
+    if global_scope:
+        ordinary_values = ((row[0], '', *row[1:]) for row in ordinary_values)
     raw = ((v, branch, pg, group, brand, employee_kind.strip(), 0, segment.upper().replace('O', 'K'), formula)
-           for v, branch, pg, group, brand, employee_kind, segment, formula in ordinary.order_by().values_list(
-               'version_id', 'subdivision__subdivision_key', 'goods__planning_group_sales', 'goods__group',
-               'goods__brand', 'type_coeff__type_coeff_name', 'segment__segment_name',
-               'variation_calculate__variation_name').iterator(chunk_size=2000))
+           for v, branch, pg, group, brand, employee_kind, segment, formula in ordinary_values)
     for row in coefficient_rows(raw, 1, range(8)):
         identity = (row[0], *map(key, row[1:6]), row[6])
         index[identity]['segments'].add(row[7])
         index[identity]['formulas'].add(row[8])
     names = mapping()
     director_names, staff = {}, defaultdict(set)
-    director_rows = SubdivisionDirectorCoeff.objects.filter(version_id__in=ids)
+    director_rows = (GlobalDirectorCoeff if global_scope else SubdivisionDirectorCoeff).objects.filter(version_id__in=ids)
     if kind and kind != 'Директора':
         director_rows = director_rows.none()
-    for v, branch, pg, group, brand, employee, full_name, formula in director_rows.order_by().values_list(
-            'version_id', 'subdivision__subdivision_key', 'goods__planning_group_sales', 'goods__group',
-            'goods__brand', 'employee_id', 'employee__full_name',
-            'variation_calculate__variation_name').iterator(chunk_size=2000):
+    fields = ['version_id', 'goods__planning_group_sales', 'goods__group', 'goods__brand',
+              'variation_calculate__variation_name']
+    if not global_scope:
+        fields.insert(1, 'subdivision__subdivision_key')
+        fields[-1:-1] = ['employee_id', 'employee__full_name']
+    director_values = director_rows.order_by().values_list(*fields).iterator(chunk_size=2000)
+    if global_scope:
+        director_values = ((row[0], '', *row[1:4], 0, '', row[4]) for row in director_values)
+    for v, branch, pg, group, brand, employee, full_name, formula in director_values:
         branch = canonical(branch, names)
         if not included(branch):
             continue
@@ -132,14 +144,14 @@ def check(version, rows, kind=''):
     source_count = 0
     kinds = [kind] if kind else ['Политики', 'Продажи', 'Директора']
     for row in rows:
-        branch = canonical(row['subdivision'], names)
-        if not included(branch):
+        branch = '' if global_scope else canonical(row['subdivision'], names)
+        if not included(row['subdivision'], names):
             continue
         source_count += 1
         on_date = row['date'].date() if hasattr(row['date'], 'hour') else row['date']
         selected = next((item for item in reversed(timeline) if item.effective_from <= on_date), None)
         for employee_kind in kinds:
-            employees = sorted(staff[key(branch)]) if employee_kind == 'Директора' else [0]
+            employees = sorted(staff[key(branch)]) if employee_kind == 'Директора' and not global_scope else [0]
             for employee in employees:
                 identity = (selected.pk if selected else None, key(branch), key(row['planning']), key(row['group']), key(row['brand']), key(employee_kind), employee)
                 examined.add(identity)
@@ -161,7 +173,7 @@ def check(version, rows, kind=''):
                     continue
                 group_key = (*identity, tuple(reasons), actual)
                 if group_key not in grouped:
-                    grouped[group_key] = {'subdivision': branch, 'planning': row['planning'], 'group': row['group'], 'brand': row['brand'],
+                    grouped[group_key] = {'subdivision': branch or 'Глобально', 'planning': row['planning'], 'group': row['group'], 'brand': row['brand'],
                         'kind': employee_kind, 'employee': director_names.get(employee, ''), 'employee_id': employee,
                         'subdivision_id': branch_ids.get(key(branch)), 'version_id': selected.pk if selected else None, 'version': str(selected) if selected else 'Нет версии',
                         'reason': '; '.join(reasons), 'missing': ', '.join(missing), 'formula': actual,
@@ -171,7 +183,7 @@ def check(version, rows, kind=''):
     issues = sorted(grouped.values(), key=lambda row: (row['subdivision'], row['kind'], row['planning'], row['group'], row['brand'], row['employee']))
     return {'source_rows': source_count, 'examined': len(examined), 'missing': sum(bool(row['missing']) for row in issues),
             'formula_mismatches': sum('Явная формула' in row['reason'] for row in issues), 'issues': issues,
-            'fallback_formula': version.fallback_variation or 'Прежнее правило по группе товара'}
+            'scope': scope, 'fallback_formula': version.fallback_variation or 'Прежнее правило по группе товара'}
 
 
 def plan_warning(version, plan):

@@ -2,6 +2,7 @@ from . import coverage_views, review_views, balancing_views, discount_views, ope
 from django.urls import include, path
 
 urlpatterns = [
+    path('coefficients/coverage/repair/', coverage_views.repair, name='motivation_coverage_repair'),
     path('coefficients/coverage/', coverage_views.coverage, name='motivation_coefficient_coverage'),
     path('versions/fallback-formula/', coverage_views.save_formula, name='motivation_fallback_formula'),
     path('reviews/', review_views.reviews, name='motivation_reviews'),

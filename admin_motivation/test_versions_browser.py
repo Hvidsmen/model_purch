@@ -12,6 +12,28 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_coverage_scope_and_create_missing_cells(self):
+        from playwright.sync_api import expect
+        from .models import SalesPlanScenario, SalesPlanLine
+        from django.utils import timezone
+        def prepare():
+            scenario = SalesPlanScenario.objects.create(title='Coverage repair', loaded_at=timezone.now())
+            SalesPlanLine.objects.create(scenario=scenario, plan_date=date(2026, 1, 1),
+                subdivision='A', planning_group_sales='Repair planning', group='Repair ERP',
+                brand='Repair brand', amount_usd=100)
+            return scenario.pk
+        plan = self.db(prepare)
+        self.page.goto(self.live_server_url + reverse('motivation_coefficient_coverage') + f'?version={self.first.pk}&plan={plan}&scope=global&kind=Политики&run=1')
+        expect(self.page.locator('select[name=scope]')).to_have_value('global')
+        self.page.get_by_role('link', name='Создать коэффициенты', exact=True).click()
+        expect(self.page.get_by_role('heading', name='Создать недостающие коэффициенты')).to_be_visible()
+        for i in range(5):
+            self.page.locator(f'input[name=K{i}]').fill('0.5')
+        self.page.screenshot(path='/tmp/coverage-create-coefficients.png', full_page=True)
+        self.page.get_by_role('button', name='Создать в черновике', exact=True).click()
+        self.assertEqual(self.db(lambda: GlobalCoeff.objects.filter(version=self.first, goods__brand='Repair brand').count()), 5)
+        self.assertEqual(self.errors, [])
+
     def test_discount_segment_form_copy_history_and_nulls(self):
         from playwright.sync_api import expect
         from .models import DiscountSegment
