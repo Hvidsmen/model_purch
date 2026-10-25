@@ -263,7 +263,7 @@ body{background:#f4f6fa!important;color:#334155}
 .coefficient-action-panel:not([open]){margin:0!important;padding:0!important;border:0!important}
 /* Motivation workspace: one hierarchy for context, states, forms and dense matrices. */
 .motivation-workflow{padding:10px 14px;margin:0 0 10px;border:1px solid #e0dcec;border-radius:9px;background:#fff;font-size:13px}
-.workflow-steps,.workflow-state{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.workflow-steps a{color:#514580;text-decoration:none;padding:4px 0}.workflow-steps a:focus-visible{outline:2px solid #8b71e4}.workflow-steps a span{display:inline-grid;place-items:center;background:#f1edff;border-radius:50%;width:21px;height:21px}.workflow-state{margin-top:5px}.workflow-state>a{margin-left:auto}.state-chip{border:1px solid #d9d4e6;border-radius:5px;padding:3px 7px;font-size:12px}.state-success{background:#edf8f1;color:#256342}.state-warning{background:#fff8e8;color:#805411}.workflow-context{margin:7px 0 0;color:#526074}.workflow-context>span{margin-left:8px;color:#805411}
+.workflow-steps,.workflow-state{display:flex;align-items:center;gap:9px;flex-wrap:wrap}.workflow-steps a{color:#514580;text-decoration:none;padding:4px 0}.workflow-steps a:focus-visible{outline:2px solid #8b71e4}.workflow-steps a span{display:inline-grid;place-items:center;background:#f1edff;border-radius:50%;width:21px;height:21px}.workflow-state{margin-top:5px}.workflow-state>a:not(.state-chip){margin-left:auto}.state-chip{border:1px solid #d9d4e6;border-radius:5px;padding:3px 7px;font-size:12px}.state-success{background:#edf8f1;color:#256342}.state-warning{background:#fff8e8;color:#805411}.workflow-context{margin:7px 0 0;color:#526074}.workflow-context>span{margin-left:8px;color:#805411}
 .content-wrapper .coefficient-table th{position:sticky;top:0;z-index:12;background:#f6f7fc}.content-wrapper .coefficient-table .header-policies{background:#f2efff}.content-wrapper .coefficient-table .header-sales{background:#edf8f7}.content-wrapper .coefficient-table .header-directors{background:#f4f5fa}
 .content-wrapper .table-wrapper:has(>.coefficient-table){max-height:70vh;overflow:auto;scroll-padding:80px 550px}
 .content-wrapper .coefficient-table td{font-size:14px;padding:6px}.content-wrapper .coefficient-table .coeff-input{font-size:13px;min-height:33px}
@@ -286,3 +286,5 @@ body{background:#f4f6fa!important;color:#334155}
 #bulk-multiply-details [hidden]{display:none!important}
 #multiply-error{color:#b91c1c}
 .multiply-review-table{overflow:auto;max-height:45vh}
+
+.workflow-state a.state-chip{text-decoration:none}.workflow-state a.state-chip:hover{text-decoration:underline}.workflow-state a.state-chip:focus-visible{outline:2px solid #8b71e4;outline-offset:2px}
