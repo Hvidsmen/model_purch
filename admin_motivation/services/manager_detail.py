@@ -18,7 +18,12 @@ HEADERS = ['K0', 'K1', 'K2', 'K3', 'K4', 'Отгрузки O0', 'Отгрузк�
            'С учётом % выполнения', 'Доплата за кварталы', 'Итого мотивация']
 
 
-def grouped_sql(source):
+def grouped_sql(source, summary_only=False):
+    if summary_only:
+        fields = ['Подразделение', 'АвторСделки', 'Год', 'КварталМотивации']
+        columns = ','.join(f'[{key}]' for key in fields)
+        sums = ','.join(f'SUM([{key}]) AS [{key}]' for key in MONEY_FIELDS)
+        return f'SELECT {columns},{sums} FROM ({source}) AS manager_source GROUP BY {columns}'
     fields = [*DIMENSIONS, 'Год', 'КварталМотивации', 'VariationCalculate']
     columns = ','.join(f'[{key}]' for key in fields)
     sums = ','.join(f'SUM([{key}]) AS [{key}]' for key in SUM_FIELDS)

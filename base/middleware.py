@@ -31,7 +31,7 @@ class PortalAccessMiddleware:
             from .report_access import politician_scope, report_kinds
             name = match.url_name if match else None
             account_pages = {'index_base', 'portal_login', 'portal_logout', 'portal_windows_login'}
-            personal = name == 'motivation_reports' or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
+            personal = name in ('motivation_reports', 'motivation_reports_next') or (name == 'motivation_report_next' and view_kwargs.get('kind') in ('mine', 'team', 'detail')) or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
             static = module == 'django.views.static' and request.path.startswith(settings.STATIC_URL)
             if personal:
                 request.personal_report_scope = politician_scope(request.user)
@@ -58,7 +58,7 @@ class PortalAccessMiddleware:
                     'motivation_bulk_formula', 'motivation_copy_group', 'motivation_coefficient_coverage', 'motivation_fallback_formula', 'motivation_coverage_repair', 'motivation_coverage_repair_all', 'motivation_director_coeff_import',
                     'motivation_global_template', 'motivation_subdivision_template', 'motivation_director_directory',
                     'motivation_directors_global', 'motivation_directors_local', 'motivation_coefficient_comparison',
-                    'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report'}
+                    'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report', 'motivation_reports_next', 'motivation_report_next'}
                 if not decisions and name not in allowed:
                     return render(request, 'base/forbidden.html', status=403)
             if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and not motivation_viewer_read_request(request):

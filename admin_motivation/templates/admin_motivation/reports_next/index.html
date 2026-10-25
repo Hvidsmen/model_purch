@@ -1,0 +1,6 @@
+{% extends 'admin_motivation/base.html' %}{% block content %}<section class="content" style="padding:24px">
+{% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
+<h1>Новые отчёты мотивации</h1><p>Пилотный блок для проверки. Текущие отчёты доступны на соседней вкладке.</p>
+<div class="next-card-grid">{% for key,item in catalog.items %}<a class="next-card" href="{% url 'motivation_report_next' key %}"><strong>{{ item.0 }}</strong>{{ item.1 }}</a>{% endfor %}</div>
+<p class="next-note">Факт — премии из подтверждённого расчёта. Сравнение глобальных коэффициентов и коэффициентов подразделений выполняется только по плану. Согласование коэффициентов не означает согласование выплаты сотруднику.</p>
+</section>{% endblock %}

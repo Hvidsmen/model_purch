@@ -120,7 +120,7 @@ def financier_read_request(request):
     allowed = {
         'index_admin_motivation', 'coeff_subdivisions_admin_motivation',
         'motivation_directors_local', 'motivation_discount_segments', 'motivation_coefficient_coverage',
-        'motivation_reports', 'motivation_report', 'motivation_plan_summary',
+        'motivation_reports', 'motivation_report', 'motivation_plan_summary', 'motivation_reports_next', 'motivation_report_next',
     }
     return request.method in ('GET', 'HEAD', 'OPTIONS') and bool(match and match.url_name in allowed)
 

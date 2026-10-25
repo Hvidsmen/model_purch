@@ -12,7 +12,7 @@ MONEY = '#,##0.00'
 PERCENT = '0.00%'
 
 
-def report_excel(data, parameters, scope='all'):
+def report_excel(data, parameters, scope='all', *, provenance=None):
     if scope not in ('all', 'summary', 'detail'):
         raise ValidationError('Неизвестная таблица для выгрузки.')
     book = Workbook(write_only=True)
@@ -105,7 +105,7 @@ def report_excel(data, parameters, scope='all'):
             write_nodes(data['nodes'])
             target.auto_filter.ref = f'A2:{get_column_letter(len(headers))}{index}'
 
-        if scope == 'all':
+        if scope == 'all' or provenance:
             target = sheet('Параметры отчёта', ['Параметр', 'Значение'], [38, 95], 'A3')
             settings = [('Валюта мотивации', currency), ('Годы данных', ', '.join(data['years']) or 'Нет данных')]
             for _, parameter, caption, _, multiple in FILTERS['manager-detail']:
@@ -115,6 +115,7 @@ def report_excel(data, parameters, scope='all'):
                 settings.append(('Подразделение(Глобально)', 'План периода и % периода не задаются; факт периода — собственные отгрузки. План, факт и % мотивации — по всему подразделению и выбранному виду работника.'))
             settings += [('План и отгрузки', 'USD'), ('K0–K4', 'Σ(Ki × Oi) / Σ(Oi), вес — отгрузки соответствующего сегмента'),
                          ('Годовое выполнение', 'План и факт из строк «Год»; мотивация и остаток — по всем периодам')]
+            settings.extend((label, str(value)) for label, value in provenance or [])
             for index, row in enumerate(settings, 3):
                 append(target, row, ['text', 'text'], index=index)
         output = TemporaryFile(mode='w+b')

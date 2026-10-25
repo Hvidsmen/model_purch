@@ -12,6 +12,38 @@ from .models import GlobalCoeffVersion, GlobalCoeff, Goods, SegmentCoeff, TypeCo
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Optional Chromium check')
 class GlobalVersionBrowserTests(StaticLiveServerTestCase):
+    def test_new_report_tab_plan_choice_and_employee_drilldown(self):
+        from contextlib import nullcontext
+        from uuid import uuid4
+        from django.utils import timezone
+        from .models import SalesPlanScenario, MotivationExecution
+        from .services.manager_detail import manager_detail_report
+        from .test_manager_detail import detail_rows
+        from playwright.sync_api import expect
+        def prepare():
+            plans = [SalesPlanScenario.objects.create(title=title, source_version=title, loaded_at=timezone.now()) for title in ('Run plan', 'Alternative plan')]
+            execution = MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year': 2026, 'plan_version': 'Run plan', 'quarter_share': '.8', 'year_share': '.2'})
+            return plans[1].pk
+        alternate = self.db(prepare)
+        budget = [{'name': 'Компания', 'global': 100, 'local': 120, 'difference': 20, 'children': []}]
+        annual = manager_detail_report([detail_rows()[1]])
+        with patch('admin_motivation.services.reports_next.planned_budget', return_value=budget) as comparison, patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=annual):
+            self.page.goto(self.live_server_url + reverse('motivation_reports'))
+            self.page.get_by_role('link', name='Новые отчёты · пилот', exact=True).click()
+            expect(self.page.get_by_role('heading', name='Новые отчёты мотивации')).to_be_visible()
+            self.page.get_by_role('link', name='Сводный отчёт: план премий', exact=False).click()
+            self.page.select_option('select[name=plan]', str(alternate))
+            self.page.get_by_role('button', name='Показать', exact=True).click()
+            expect(self.page.get_by_text('Разница: 20 USD', exact=False)).to_be_visible()
+            self.assertEqual(comparison.call_args.args[1].pk, alternate)
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['team']) + '?run=1&type=Политики&period=5')
+            expect(self.page.locator('.next-total')).to_contain_text('95,00 USD')
+            self.page.get_by_role('link', name='Как рассчитано →', exact=True).first.click()
+            expect(self.page.locator('#manager-detail-panel')).to_be_visible()
+            expect(self.page.locator('#manager-detail-nodes')).to_contain_text('Иванов')
+            self.page.screenshot(path='/tmp/new-motivation-reports-detail.png', full_page=True)
+        self.assertEqual(self.errors, [])
+
     def test_coverage_bulk_button_includes_other_pages(self):
         from playwright.sync_api import expect
         from .models import SalesPlanScenario, SalesPlanLine

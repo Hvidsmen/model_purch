@@ -22,3 +22,15 @@ def report_raw_percent(value):
     if value is None: return '—'
     try: return f'{Decimal(str(value)):.2f}'.replace('.', ',')+'%'
     except (InvalidOperation, ValueError): return '—'
+
+
+@register.filter
+def report_cash(value):
+    """Two decimal places for payroll review; legacy report rounding is unchanged."""
+    if value is None:
+        return '—'
+    try:
+        amount = Decimal(str(value)).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+        return f'{amount:,.2f}'.replace(',', '\u00a0').replace('.', ',')
+    except (InvalidOperation, ValueError):
+        return '—'

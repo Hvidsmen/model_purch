@@ -348,13 +348,16 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False):
     if access_scope:
         from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
         access_scope = worker_scope(access_scope, kind, values)
     from .report_periods import pilot_enabled, PILOT_SQL
     pilot = pilot_enabled(kind, access_scope)
+    if premium_period is not None and premium_period not in ('all', '1', '2', '3', '4', '5'):
+        raise ValidationError('Выберите период премии.')
+    period_condition = "LOWER(LTRIM(RTRIM([КварталМотивации]))) = N'год'" if premium_period == '5' else f"LOWER(LTRIM(RTRIM([КварталМотивации]))) LIKE N'{premium_period} кв%'" if premium_period in ('1', '2', '3', '4') else ''
     if kind == 'manager-detail' and not values.get('TypeCoeff_'):
         raise ValidationError('Выберите вид работника.')
     if kind == 'manager' and any(not values.get(key) for key in (('TypeCoeff_', 'Subdivision', 'qm') if access_scope and access_scope.get('all_authors') else ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm'))):
@@ -368,6 +371,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
         source_sql = (SQL_ROOT / f'{kind}.sql').read_text(encoding='utf-8')
         from .subdivision_scope import sql_predicate
         source_sql = 'SELECT * FROM (' + source_sql.strip().rstrip(';') + ') AS included_source WHERE ' + sql_predicate('[Подразделение]')
+        if kind == 'manager-detail' and period_condition:
+            source_sql += ' AND ' + period_condition
         if kind == 'manager':
             source_sql = manager_currency_sql(source_sql, values.get('Currency', 'USD'))
         if access_scope and kind == 'manager':
@@ -393,11 +398,17 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
             return {'summary': summary, 'totals': totals, 'details': details, 'page': page, 'pages': pages, 'offset': (page-1)*50}
         if kind == 'manager-detail':
             from .manager_detail import grouped_sql, manager_detail_report
-            rows = fetch(cursor, grouped_sql(sql), args)
+            rows = fetch(cursor, grouped_sql(sql, summary_only=summary_only), args)
+            if summary_only:
+                from .manager_detail import period_motivation_summary
+                if premium_period and premium_period != 'all':
+                    from .reports_next import period_code
+                    rows = [row for row in rows if period_code(row.get('КварталМотивации')) == premium_period]
+                return {'period_summary': period_motivation_summary(rows, values.get('Currency', 'USD'), pilot=pilot), 'currency': values.get('Currency', 'USD')}
             performance_fields = ('СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал', 'СуммаПланUSD', 'СуммаОтгрузокUSD')
             performance_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE ' + sql_predicate('[Подразделение]') +
                 ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ AND [Год] IN (@Years)' +
-                (' AND ' + PILOT_SQL if pilot else ''))
+                (' AND ' + PILOT_SQL if pilot else '') + (' AND ' + period_condition if period_condition else ''))
             if str(values.get('TypeCoeff_') or '').strip().casefold() == 'директора':
                 # Multiple directors share the same subdivision sales/plan inputs.
                 dimensions = '[Подразделение],[Год],[КварталМотивации],[ГруппаПлановПродаж],[ГруппаТоваров],[Марка]'
@@ -407,6 +418,10 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None):
                 ','.join(f'SUM([{field}]) AS [{field}]' for field in performance_fields) +
                 ' FROM ' + performance_source + ' GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
             performance = fetch(cursor, performance_sql, performance_args)
+            if premium_period and premium_period != 'all':
+                from .reports_next import period_code
+                rows = [row for row in rows if period_code(row.get('КварталМотивации')) == premium_period]
+                performance = [row for row in performance if period_code(row.get('КварталМотивации')) == premium_period]
             return manager_detail_report(rows, values.get('Currency', 'USD'), performance, pilot=pilot)
         if kind == 'subdivisions':
             dimensions = ['Подразделение', 'АвторСделки', 'Год', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']

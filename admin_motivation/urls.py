@@ -1,7 +1,9 @@
-from . import coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
+from . import reports_next_views, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path('reports-next/', reports_next_views.index, name='motivation_reports_next'),
+    path('reports-next/<str:kind>/', reports_next_views.report, name='motivation_report_next'),
     path('coefficients/coverage/repair-all/', coverage_views.repair_all, name='motivation_coverage_repair_all'),
     path('coefficients/coverage/repair/', coverage_views.repair, name='motivation_coverage_repair'),
     path('coefficients/coverage/', coverage_views.coverage, name='motivation_coefficient_coverage'),
