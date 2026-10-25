@@ -73,6 +73,10 @@
         onlyChanged.addEventListener('change', filter);
         selectors.forEach(([, select]) => select.addEventListener('change', filter));
         document.getElementById('coefficient-reset').addEventListener('click', reset);
+        document.querySelectorAll('[data-workflow-dirty]').forEach(node => node.addEventListener('click', () => {
+            onlyChanged.checked = true;
+            filter();
+        }));
         const refresh = () => {
             fields.forEach(field => field.classList.toggle('editor-changed', different(field)));
             const count = changed().length;
