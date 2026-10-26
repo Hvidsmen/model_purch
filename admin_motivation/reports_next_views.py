@@ -104,6 +104,8 @@ def workbook(kind, data, metadata, query=None):
                 matrix_row(section, group, group, 'Всего по расчёту', 'Итог')
                 matrix_nodes(section, group, group['children'])
     notes = book.create_sheet('Параметры')
+    from .services.reports import PILOT_BONUS_NOTE
+    metadata = [*metadata, ('Доплата за кварталы', PILOT_BONUS_NOTE)]
     for label, value in metadata:
         cells = [WriteOnlyCell(notes, value=ILLEGAL_CHARACTERS_RE.sub('', str(item))[:32767]) for item in (label, value)]
         for cell in cells:

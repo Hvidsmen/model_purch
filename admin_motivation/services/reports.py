@@ -164,7 +164,15 @@ def number(value):
     return result
 
 
-def total(rows, key): return sum((number(row.get(key)) for row in rows), Decimal(0))
+PILOT_BONUS_NOTE = 'Пилот включает только 4 квартал и годовую премию. Доплата за кварталы не предусмотрена.'
+
+
+def total(rows, key):
+    # Presentation policy for the current pilot, including old reports and exports.
+    # Preserve the saved DWH results; never include catch-up amounts in displayed totals.
+    if key in ('Остаток', 'ОстатокRUR'):
+        return Decimal(0)
+    return sum((number(row.get(key)) for row in rows), Decimal(0))
 
 
 def ratio(actual, plan, zero_plan_is_actual=False):

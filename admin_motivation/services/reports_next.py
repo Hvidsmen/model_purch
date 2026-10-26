@@ -129,11 +129,7 @@ def actual_reports(user, execution, query, *, detailed=False):
                 ledger.append({'subdivision': item['subdivision'], 'author': item['author'], 'unallocated': item.get('unallocated', False),
                     'kind': kind, 'period': column['label'], 'code': period_code(column['label']), 'amount': amount,
                     'bonus': Decimal(0), 'currency': currency})
-            # Annual remainder is a separate component, never counted twice.
-            if item['remainder'] and (period == 'all' or period == '5' or isinstance(period, list) and '5' in period):
-                ledger.append({'subdivision': item['subdivision'], 'author': item['author'], 'unallocated': item.get('unallocated', False),
-                    'kind': kind, 'period': 'Доплата за кварталы', 'code': '5', 'amount': Decimal(0),
-                    'bonus': item['remainder'], 'currency': currency})
+            # Current Q4/year pilot has no catch-up payments, including exports.
     for item in ledger:
         item['total'] = item['amount'] + item['bonus']
     return {'payout_threshold': number(execution.parameters['payout_threshold']) if execution.parameters.get('payout_threshold') is not None else None, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in ledger), 'sections': results, 'rows': ledger, 'total': sum((item['total'] for item in ledger), Decimal(0)), 'currency': currency}

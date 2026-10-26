@@ -1,12 +1,13 @@
 """Export the same grouped subdivision report used by the browser."""
 from tempfile import TemporaryFile
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 from django.core.exceptions import ValidationError
-from .reports import FILTERS, PREMIUM_PERIODS
+from .reports import PILOT_BONUS_NOTE, FILTERS, PREMIUM_PERIODS
 
 METRICS = [*[f'Отгрузки O{i}, USD' for i in range(5)], 'План периода, USD', 'Факт периода, USD',
     '% выполнения периода', 'Возможная мотивация, USD', 'План мотивации, USD', 'Факт мотивации, USD',
@@ -28,6 +29,8 @@ def subdivision_excel(data, parameters, table='all', scope='subdivisions'):
         if isinstance(value, str):
             value = ILLEGAL_CHARACTERS_RE.sub('', value)[:32767]
         result = WriteOnlyCell(target, value=value)
+        if isinstance(value, str) and 'доплат' in value.casefold():
+            result.comment = Comment(PILOT_BONUS_NOTE, 'Портал')
         if isinstance(value, str):
             result.data_type = 's'
         result.font = Font(name='Calibri', size=11, bold=heading or total, color='24364B')

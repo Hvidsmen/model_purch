@@ -190,7 +190,7 @@ class NativeMotivationReportTests(TestCase):
         self.assertEqual(report['totals'][0],110)
         self.assertEqual(report['totals'][4],390)
         self.assertEqual(report['totals'][7],340)
-        self.assertEqual(report['totals'][9],360)
+        self.assertEqual(report['totals'][9],340)
         self.assertEqual(report['division_ratios'],[Decimal('.9'),Decimal('1.05')])
         self.assertTrue(report['sections'][0]['open'])
         self.assertFalse(report['sections'][1]['open'])
@@ -216,7 +216,7 @@ class NativeMotivationReportTests(TestCase):
                 self.assertEqual(block[9:12], [1000, 800, Decimal('.8')])
             self.assertEqual(quarter[8], 100 * count)
             self.assertEqual(overall[8], 300 * count)
-            self.assertEqual(overall[14], 300 * count)
+            self.assertEqual(overall[14], 240 * count)
             # Two distinct employees and years with identical amounts must both count.
             extra = [dict(row, АвторСделки='Петров') for row in rows]
             doubled = subdivision_report(rows + extra)
@@ -232,18 +232,18 @@ class NativeMotivationReportTests(TestCase):
         report = subdivision_report(rows)
         self.assertIsNone(report['detail_totals'][-1][5])
         self.assertIsNone(report['detail_totals'][-1][7])
-        self.assertEqual(report['detail_totals'][-1][14], 300)
+        self.assertEqual(report['detail_totals'][-1][14], 240)
 
     def test_subdivision_sales_are_not_divided_and_missing_annual_is_not_invented(self):
         report=subdivision_report(self.division_rows())
-        self.assertEqual(report['summary_totals'],[100,80,100,80,20,100])
+        self.assertEqual(report['summary_totals'],[100,80,100,80,0,80])
         root=report['nodes'][0]
         self.assertEqual(root['label'],'Филиал')
         self.assertEqual(root['values'][0][0],200)
         self.assertEqual(root['values'][0][5],2000)
         self.assertEqual(root['values'][0][8],100)
         self.assertIsNone(root['values'][1][5])
-        self.assertEqual(root['values'][1][14],100)
+        self.assertEqual(root['values'][1][14],80)
         matrix=subdivision_report(self.division_rows(),'matrix')
         self.assertEqual(matrix['nodes'][0]['label'],'1. RAC')
         self.assertEqual(matrix['detail_totals'][0][9],1000) # Overall uses the plain motivation basis.

@@ -86,13 +86,14 @@ class ReportsNextTests(TestCase):
             with reports_next.current_run(self.run, lambda *args: (connection, cursor)):
                 self.fail('Must not read during a calculation')
 
-    def test_actuals_filter_period_and_keep_bonus_separate(self):
+    def test_actuals_filter_period_and_exclude_pilot_bonus(self):
         query = QueryDict('year=2026&type=Политики&period=5')
         data = manager_detail_report([row for row in detail_rows() if row['КварталМотивации'] == 'Год'])
         with patch('admin_motivation.services.reports_next.load_report', return_value=data) as load:
             result = reports_next.actual_reports(self.actor, self.run, query)
-        self.assertEqual(result['total'], Decimal(95))
-        self.assertEqual(len(result['rows']), 2)
+        self.assertEqual(result['total'], Decimal(90))
+        self.assertEqual(len(result['rows']), 1)
+        self.assertEqual(result['rows'][0]['bonus'], 0)
         self.assertEqual(load.call_args.kwargs['premium_period'], '5')
         self.assertTrue(load.call_args.kwargs['summary_only'])
         self.assertEqual(result['sections'], [])
@@ -139,7 +140,7 @@ class ReportsNextTests(TestCase):
             data = load_report('manager-detail', values, summary_only=True, premium_period='5')
         self.assertEqual(cursor.execute.call_count, 1)
         self.assertNotIn('K0WeightedSum', cursor.execute.call_args.args[0])
-        self.assertEqual(data['period_summary']['totals']['total'], 95)
+        self.assertEqual(data['period_summary']['totals']['total'], 90)
         self.assertNotIn('nodes', data)
         connection.close.assert_called_once()
         self.assertEqual(reports_next.period_code(None), '')
@@ -151,12 +152,12 @@ class ReportsNextTests(TestCase):
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=data):
             response = self.client.get(url, {'run': '1', 'type': 'Политики', 'page': '2'})
             self.assertEqual(len(response.context['ledger_page']), 25)
-            self.assertEqual(response.context['ledger']['total'], 125 * 95)
+            self.assertEqual(response.context['ledger']['total'], 125 * 90)
             exported = self.client.get(url, {'run': '1', 'type': 'Политики', 'page': '2', 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
             self.assertEqual(book['Премии'].max_row, 127)
-            self.assertEqual(sum(row[6].value for row in book['Премии'].iter_rows(min_row=3)), 125 * 95)
+            self.assertEqual(sum(row[6].value for row in book['Премии'].iter_rows(min_row=3)), 125 * 90)
             book.close(); exported.close()
 
     def test_admin_can_preview_mine_but_must_choose_employee(self):
@@ -270,7 +271,7 @@ class ReportsNextTests(TestCase):
         self.assertIn('brand=%3CBrand%3E', leaf['detail_url'])
         self.assertTrue(leaf['detail_url'].endswith('#next-deep-calculation'))
         self.assertIn('start=2026-01-01', leaf['deals_url'])
-        self.assertEqual(leaf['values'][-1], Decimal(190))
+        self.assertEqual(leaf['values'][-1], Decimal(180))
         self.assertEqual(leaf['metrics'][0]['remaining'], Decimal(400))
         self.assertEqual(leaf['metrics'][0]['ratio'], Decimal('.6'))
         self.assertEqual(result['product_sections'][0]['metric_columns'], 10)
@@ -289,9 +290,10 @@ class ReportsNextTests(TestCase):
         self.assertIn('Цели и потенциал', book.sheetnames)
         self.assertIn('Товарная детализация', book.sheetnames)
         self.assertIn('Товарная матрица', book.sheetnames)
+        self.assertIn('Доплата за кварталы не предусмотрена', dict(book['Параметры'].values)['Доплата за кварталы'])
         self.assertIsNone(book['Цели и потенциал']['H2'].value)
         self.assertIn('будущих личных отгрузок', book['Цели и потенциал']['I2'].value)
-        self.assertEqual(sum(row[7].value for row in book['Товарная детализация'].iter_rows(min_row=2)), 190)
+        self.assertEqual(sum(row[7].value for row in book['Товарная детализация'].iter_rows(min_row=2)), 180)
         book.close(); response.close()
 
     def test_employee_period_columns_and_type_totals_reconcile(self):

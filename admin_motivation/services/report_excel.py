@@ -1,12 +1,13 @@
 """Streaming XLSX exports of the displayed detailed manager report."""
 from tempfile import TemporaryFile
 from openpyxl import Workbook
+from openpyxl.comments import Comment
 from openpyxl.cell import WriteOnlyCell
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 from django.core.exceptions import ValidationError
-from .reports import FILTERS
+from .reports import PILOT_BONUS_NOTE, FILTERS
 
 MONEY = '#,##0.00'
 PERCENT = '0.00%'
@@ -25,6 +26,8 @@ def report_excel(data, parameters, scope='all', *, provenance=None):
         if isinstance(value, str):
             value = ILLEGAL_CHARACTERS_RE.sub('', value)[:32767]
         result = WriteOnlyCell(sheet, value=value)
+        if isinstance(value, str) and 'доплат' in value.casefold():
+            result.comment = Comment(PILOT_BONUS_NOTE, 'Портал')
         if isinstance(value, str):
             result.data_type = 's'  # External labels are never Excel formulas.
         result.font = Font(name='Calibri', size=11, color='312E81' if total else '1E3A5F', bold=heading or total)

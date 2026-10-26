@@ -27,7 +27,9 @@ class ReportExcelTests(TestCase):
                 if scope != 'detail':
                     sheet = book['Итого по мотивации']
                     self.assertEqual(sheet['B5'].value, 'Иванов')
-                    self.assertEqual(sheet['I3'].value, 19000)
+                    self.assertEqual(sheet['I3'].value, 18000)
+                    self.assertEqual(sheet['H3'].value, 0)
+                    self.assertIn('Доплата за кварталы не предусмотрена', sheet['H2'].comment.text)
                     self.assertEqual(sheet['I3'].data_type, 'n')
                     self.assertEqual(sheet['I4'].value, sheet['I3'].value)
                     self.assertEqual(sheet.freeze_panes, 'C3')

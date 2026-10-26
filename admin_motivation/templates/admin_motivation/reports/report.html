@@ -3,6 +3,7 @@
 {% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=group-report-scope-20261021">
 <section class="content native-report">{% include 'admin_motivation/reports_next/_tabs.html' %}
+<p class="nr-note report-filter-hint">Пилот включает только 4 квартал и годовую премию. Доплата за кварталы не предусмотрена: во всех отчётах — 0.</p>
 <a href="{% url 'motivation_reports' %}">← Все отчёты</a>
 <h1 class="report-title">{{ definition.title }}{% if data.years %} · {% if kind == 'subdivisions' %}Год расчёта: {% endif %}{{ data.years|join:", " }}{% endif %}{% if kind == 'manager' or kind == 'manager-detail' %} · {% if query.currency == 'RUB' %}RUB{% else %}USD{% endif %}{% endif %}</h1>
 {% if kind == 'subdivisions' and data %}<p class="report-filter-hint">Период премии: {{ premium_period_labels|join:', '|default:'Все' }} · USD</p>{% endif %}

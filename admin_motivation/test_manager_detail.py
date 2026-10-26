@@ -34,8 +34,8 @@ class ManagerDetailTests(TestCase):
         self.assertEqual(period[10:14], [Decimal(1000), Decimal(800), Decimal('.8'), Decimal(100)])
         self.assertEqual(overall[5:10], [Decimal(100)] * 5)  # Overall inputs come from the annual row.
         self.assertEqual(overall[10:14], [Decimal(1000), Decimal(800), Decimal('.8'), Decimal(200)])
-        self.assertEqual(overall[17:], [Decimal(180), Decimal(10), Decimal(190)])
-        self.assertEqual(manager_detail_report(detail_rows(), 'RUB')['cards'][0]['total'], Decimal(19000))
+        self.assertEqual(overall[17:], [Decimal(180), Decimal(0), Decimal(180)])
+        self.assertEqual(manager_detail_report(detail_rows(), 'RUB')['cards'][0]['total'], Decimal(18000))
         labels = []
         node = data['nodes'][0]
         while True:
@@ -47,7 +47,7 @@ class ManagerDetailTests(TestCase):
         self.assertEqual(data['nodes'][0]['values'][0][0], Decimal('.015'))
         rubles = manager_detail_report(detail_rows(), 'RUB')['detail_totals'][-1]
         self.assertEqual(rubles[13], Decimal(20000))
-        self.assertEqual(rubles[17:], [Decimal(18000), Decimal(1000), Decimal(19000)])
+        self.assertEqual(rubles[17:], [Decimal(18000), Decimal(0), Decimal(18000)])
         self.assertEqual(rubles[10:13], overall[10:13])  # Plan/fact always USD.
 
     def test_overall_uses_annual_execution_at_every_level_and_keeps_payments(self):
@@ -74,7 +74,7 @@ class ManagerDetailTests(TestCase):
         missing = manager_detail_report(rows[:1])['detail_totals'][-1]
         self.assertTrue(all(value is None for value in missing[5:13]))
         self.assertTrue(all(value is None for value in missing[14:17]))
-        self.assertEqual(missing[19], Decimal(95))
+        self.assertEqual(missing[19], Decimal(90))
         extra = dict(rows[0], Марка='Without annual data')
         incomplete = manager_detail_report([*rows, extra])
         self.assertIsNone(incomplete['detail_totals'][-1][16])
@@ -172,7 +172,7 @@ class ManagerDetailTests(TestCase):
         multiple = period_motivation_summary([*rows, extra])
         self.assertIn('2025 · Другой период', [column['label'] for column in multiple['columns']])
         self.assertIn('2026 · 1 кв.', [column['label'] for column in multiple['columns']])
-        self.assertEqual(multiple['rows'][0]['total'], summary['rows'][0]['total'] + Decimal(95))
+        self.assertEqual(multiple['rows'][0]['total'], summary['rows'][0]['total'] + Decimal(90))
         empty = period_motivation_summary([])
         self.assertEqual(empty['totals']['values'], [None] * 5)
         self.assertEqual(empty['totals']['total'], Decimal(0))
@@ -247,7 +247,7 @@ class ManagerDetailTests(TestCase):
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, 'Мотивация. Детально · 2026 · USD')
         self.assertContains(page, 'manager-detail-tree')
-        self.assertContains(page, '190')
+        self.assertContains(page, '180')
         self.assertNotContains(page, 'NoReverseMatch')
         self.client.logout()
         self.assertEqual(self.client.get(reverse('motivation_report', args=['manager-detail'])).status_code, 302)
@@ -313,3 +313,15 @@ class ManagerDetailTests(TestCase):
         self.assertIsNone(quarter[12])
         self.assertEqual(quarter[11], 0)
         self.assertEqual(quarter[14:17], [1000, 600, Decimal('.6')])
+
+
+class PilotBonusPolicyTests(TestCase):
+    def test_saved_bonus_is_not_paid_in_pilot_in_either_currency(self):
+        rows = detail_rows()
+        for currency, expected in [('USD', Decimal(180)), ('RUB', Decimal(18000))]:
+            data = manager_detail_report(rows, currency=currency)
+            self.assertEqual(data['detail_totals'][-1][-3:], [expected, Decimal(0), expected])
+            self.assertEqual(data['period_summary']['totals']['remainder'], 0)
+            self.assertEqual(data['period_summary']['totals']['total'], expected)
+        self.assertEqual(rows[0]['Остаток'], 5)
+        self.assertEqual(rows[0]['ОстатокRUR'], 500)
