@@ -65,11 +65,11 @@ def workbook(kind, data, metadata, query=None):
         from .services.reports_next_presenter import personal_details
         personal = personal_details(data, query)
         sheet = book.create_sheet('Цели и потенциал')
-        append(['Вид', 'Период', 'База цели', 'План мотивации, USD', 'Факт мотивации, USD', 'Выполнение', 'Осталось до 100%, USD', 'Премия при 100%', 'Почему не рассчитана', 'Возможная премия на текущих отгрузках', 'Валюта премии'])
-        for goal in personal['goals']:
+        append(['Вид', 'Период', 'База цели', 'План мотивации, USD', 'Факт мотивации, USD', 'Выполнение', 'Осталось до 100%, USD', 'Премия при 100%', 'Почему не рассчитана', 'Возможная премия на текущих отгрузках', 'Валюта премии', 'Премия по расчёту', 'Пояснение итога'])
+        for goal in personal['goals_with_total']:
             append([goal['kind'], goal['period'], 'Подразделение' if goal['global_scope'] else 'База мотивации',
                 goal['plan'], goal['fact'], goal['ratio'], None if goal['first_quarter'] else goal['remaining'],
-                goal['reward_at_target'], goal['reward_reason'], goal['possible'], data['currency']], percent_columns=(5,))
+                goal['reward_at_target'], goal['reward_reason'], goal['possible'], data['currency'], goal['calculated'], goal.get('basis_note', '')], percent_columns=(5,))
         sheet = book.create_sheet('Товарная детализация')
         append(['Вид', 'Подразделение', 'Автор сделки', 'Группа планов', 'Группа ERP', 'Бренд', 'Период', 'Всего по расчёту', 'Валюта'])
         def products(nodes, section, group, path=()):
@@ -87,6 +87,7 @@ def workbook(kind, data, metadata, query=None):
         all_periods = sorted({period for section in personal['product_sections'] for period in section['periods']}, key=lambda value: (reports.period_code(value), value))
         append(['Вид', 'Подразделение', 'Автор сделки', 'Уровень', 'Товарная матрица',
                 *[period + ' · ' + metric for period in all_periods for metric in ('Возможная премия', 'Осталось до 100%, USD', 'Выполнение', 'Премия по расчёту')],
+                'Итого · Возможная премия', 'Итого · Осталось до 100%, USD', 'Итого · Выполнение', 'Итого · Премия по расчёту',
                 'Годовая доплата за кварталы', 'Всего по расчёту'])
         def matrix_row(section, group, row, label, level):
             lookup = dict(zip(section['periods'], row['metrics']))
@@ -94,7 +95,7 @@ def workbook(kind, data, metadata, query=None):
             for period in all_periods:
                 metric = lookup.get(period)
                 values.extend([metric['possible'], metric['remaining'], metric['ratio'], metric['calculated']] if metric else [None] * 4)
-            append([section['kind'], group['branch'], group['author'], level, label, *values, row['bonus'], row['total']], percent_columns=tuple(7 + index * 4 for index in range(len(all_periods))))
+            append([section['kind'], group['branch'], group['author'], level, label, *values, row['total_metrics']['possible'], row['total_metrics']['remaining'], row['total_metrics']['ratio'], row['total_metrics']['calculated'], row['bonus'], row['total']], percent_columns=tuple(7 + index * 4 for index in range(len(all_periods) + 1)))
         def matrix_nodes(section, group, nodes):
             for row in nodes:
                 matrix_row(section, group, row, row['label'], {2: 'Группа планов', 3: 'Группа ERP', 4: 'Бренд'}[row['level']])

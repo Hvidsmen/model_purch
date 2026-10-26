@@ -259,6 +259,12 @@ class ReportsNextTests(TestCase):
         ledger = {'currency': 'USD', 'sections': [{'kind': 'Политики', 'data': data}]}
         result = personal_details(ledger, QueryDict('year=2026&period=all'))
         self.assertEqual(len(result['goals']), 2)
+        self.assertEqual(result['goal_total']['remaining'], Decimal(400))
+        self.assertEqual(result['goal_total']['possible'], Decimal(200))
+        self.assertEqual(result['goal_total']['calculated'], Decimal(180))
+        self.assertEqual(result['goal_total']['plan'], Decimal(1000))
+        self.assertEqual(result['goal_total']['fact'], Decimal(600))
+        self.assertEqual(len(result['goals_with_total']), 3)
         for goal in result['goals']:
             self.assertEqual(goal['remaining'], Decimal(400))
             self.assertEqual(goal['ratio'], Decimal('.6'))
@@ -274,7 +280,10 @@ class ReportsNextTests(TestCase):
         self.assertEqual(leaf['values'][-1], Decimal(180))
         self.assertEqual(leaf['metrics'][0]['remaining'], Decimal(400))
         self.assertEqual(leaf['metrics'][0]['ratio'], Decimal('.6'))
-        self.assertEqual(result['product_sections'][0]['metric_columns'], 10)
+        self.assertEqual(leaf['total_metrics']['possible'], Decimal(200))
+        self.assertEqual(leaf['total_metrics']['calculated'], Decimal(180))
+        self.assertEqual(leaf['total_metrics']['remaining'], Decimal(400))
+        self.assertEqual(result['product_sections'][0]['metric_columns'], 14)
 
     def test_mine_excel_includes_product_premiums_and_goal_explanation(self):
         user = User.objects.create_user('goal-employee')

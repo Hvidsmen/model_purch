@@ -7,6 +7,6 @@
 {% else %}
 <div class="nr-kpi nr-kpi-primary"><span>{% if kind == 'mine' %}Всего за выбранные периоды{% else %}Рассчитанная премия{% endif %}</span><strong class="next-total">{{ presentation.total|report_cash }} {{ ledger.currency }}</strong><small>Премия + годовая доплата за кварталы</small></div>
 <div class="nr-kpi"><span>Премии по расчёту, без годовой доплаты</span><strong>{{ presentation.base|report_cash }}</strong><small>{{ ledger.currency }} · без доплат</small></div>
-<div class="nr-kpi nr-kpi-green"><span>Годовая доплата за кварталы</span><strong>{{ presentation.bonus|report_cash }}</strong><small>Пилот: 4 квартал и годовая премия, без доплаты</small></div>
+<div class="nr-kpi"><span>Выбранные виды мотивации</span><strong>{{ types|length }}</strong><small>{{ types|join:", " }}</small></div>
 {% if kind == 'mine' %}<div class="nr-kpi"><span>Премия при 100% выполнения</span><strong style="font-size:19px">Не рассчитана</strong><small>Причина — в карточке цели ниже</small></div>{% else %}<div class="nr-kpi"><span>{% if kind == 'mine' or kind == 'detail' %}Периоды в расчёте{% else %}Сотрудники{% endif %}</span><strong>{% if kind == 'mine' or kind == 'detail' %}{{ presentation.period_cards|length }}{% else %}{{ presentation.people }}{% endif %}</strong><small>{% if kind == 'mine' or kind == 'detail' %}Выбранный год: {{ query.year }}{% else %}В {{ presentation.branches }} подразделениях{% endif %}</small></div>{% endif %}
 {% endif %}</div>

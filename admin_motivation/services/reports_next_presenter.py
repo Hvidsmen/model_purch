@@ -114,7 +114,9 @@ def personal_details(ledger, query):
                 result.append({'possible': block[13], 'remaining': max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None and period_code(label) != '1' else None,
                     'ratio': ratio, 'calculated': block[17],
                     'status': 'nr-matrix-good' if ratio is not None and ratio >= (threshold if threshold is not None else Decimal('.8')) else 'nr-matrix-low' if ratio is not None else ''})
-            return {'metrics': result, 'bonus': blocks[-1][18], 'total': blocks[-1][19]}
+            basis_index = max(range(len(data['periods'])), key=lambda index: period_code(data['periods'][index]))
+            basis = result[basis_index]
+            return {'metrics': result, 'total_metrics': {**basis, 'possible': blocks[-1][13], 'calculated': blocks[-1][17]}, 'bonus': blocks[-1][18], 'total': blocks[-1][19]}
         def matrix(node, branch, author, planning='', group=''):
             level = node['level']
             if level == 2:
@@ -163,8 +165,20 @@ def personal_details(ledger, query):
                 groups.append({'branch': branch['label'], 'author': author['label'], **matrix_metrics(author['values']),
                     'children': [matrix(node, branch['label'], author['label']) for node in author['children']]})
         sections.append({'kind': kind, 'periods': data['periods'], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
-                         'metric_columns': len(data['periods']) * 4 + 2, 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
-    return {'goals': goals, 'product_sections': sections}
+                         'metric_columns': len(data['periods']) * 4 + 6, 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
+    # Premium components are additive; cumulative sales targets are not.
+    latest = {}
+    for goal in goals:
+        if goal['kind'] not in latest or period_code(goal['period']) > period_code(latest[goal['kind']]['period']):
+            latest[goal['kind']] = goal
+    basis = next(iter(latest.values())) if len(latest) == 1 else None
+    goal_total = {'plan': None, 'fact': None, 'ratio': None, 'first_quarter': False, 'global_scope': False, **(basis or {}), 'is_total': True, 'period': 'Итого за выбранные периоды', 'kind': '',
+        'possible': sum((goal['possible'] or ZERO for goal in goals), ZERO),
+        'calculated': sum((goal['calculated'] or ZERO for goal in goals), ZERO),
+        'reward_at_target': None, 'remaining': basis['remaining'] if basis and not basis['first_quarter'] else None,
+        'reward_reason': 'Прогноз итоговой премии при 100% пока не рассчитан: неизвестны будущие личные отгрузки, товары и ступени скидки.',
+        'basis_note': ('Цель — ' + basis['period'] + '. Квартальная и годовая цели пересекаются, поэтому план, факт и остаток учтены один раз. Возможная премия и премия по расчёту суммируются за выбранные периоды.') if basis else 'Выбрано несколько видов мотивации с разными базами выполнения. Единого плана, факта, процента и остатка до 100% нет; смотрите цели по видам. Суммы премий сложены за выбранные периоды.'}
+    return {'goals': goals, 'goals_with_total': [*goals, goal_total] if goals else [], 'goal_total': goal_total, 'product_sections': sections}
 
 
 
