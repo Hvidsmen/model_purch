@@ -48,7 +48,7 @@ class PoliticianAccessTests(TestCase):
         from admin_motivation.urls import urlpatterns
         with patch('admin_motivation.report_views.load_report') as read:
             for pattern in urlpatterns:
-                if not isinstance(pattern, URLPattern) or pattern.name in ('motivation_reports', 'motivation_reports_next'):
+                if not isinstance(pattern, URLPattern) or pattern.name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next'):
                     continue
                 route = re.sub(r'<(?:[^:>]+:)?[^>]+>', 'subdivisions' if pattern.name == 'motivation_report' else '1', str(pattern.pattern))
                 with self.subTest(route=route):

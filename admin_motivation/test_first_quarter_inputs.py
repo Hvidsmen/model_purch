@@ -16,9 +16,10 @@ class FirstQuarterInputsTests(SimpleTestCase):
         self.assertEqual(data['detail_totals'][0][14:17], [Decimal(6469139), Decimal(6469139), Decimal(1)])
         self.assertEqual(data['division_execution'][0][14:17], [Decimal(6469139), Decimal(6469139), Decimal(1)])
         self.assertEqual(data['detail_totals'][0][11], 800)  # Own period shipments remain own.
-        self.assertEqual(data['detail_totals'][0][17:], [90, 5, 95])
+        self.assertEqual(data['detail_totals'][0][17:], [90, 0, 90])
         self.assertEqual(data['detail_totals'][1][14], Decimal(235214543))  # Year unchanged.
         self.assertEqual(performance[0]['СуммаПланUSD'], 235214543)
+        self.assertEqual(rows[0]['Остаток'], 5)  # Pilot display policy does not change saved source values.
         for branch in data['nodes']:
             self.assertEqual(branch['values'][0][14:17], [Decimal(6469139), Decimal(6469139), Decimal(1)])
         zero = normalize([dict(rows[0], СуммаОтгрузокUSDКвартал=0)])[0]

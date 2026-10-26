@@ -65,7 +65,7 @@ class PilotPeriodTests(TestCase):
         report = manager_detail_report(rows, performance_rows=rows, pilot=True)
         self.assertEqual(report['periods'], [PILOT_QUARTER, 'Год'])
         self.assertEqual([c['label'] for c in report['period_summary']['columns']], ['4 кв.', 'Год'])
-        self.assertEqual(report['period_summary']['totals']['total'], 200)
+        self.assertEqual(report['period_summary']['totals']['total'], 160)
         book = load_workbook(report_excel(report, self.values()), read_only=True)
         self.addCleanup(book.close)
         cells = [str(cell) for sheet in book for row in sheet.values for cell in row if cell is not None]

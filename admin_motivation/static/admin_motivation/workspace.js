@@ -1,5 +1,20 @@
 (() => {
     const initialize = () => {
+        document.querySelectorAll('form[data-ux-submit]').forEach(form => {
+            let pending = false;
+            const reset = () => { pending = false; form.removeAttribute('aria-busy'); form.querySelector('.ux-submit-status')?.remove(); };
+            window.addEventListener('pageshow', reset);
+            form.addEventListener('submit', event => {
+                if (event.defaultPrevented) return;
+                if (pending) { event.preventDefault(); return; }
+                pending = true;
+                form.setAttribute('aria-busy', 'true');
+                const status = document.createElement('p');
+                status.className = 'ux-submit-status'; status.setAttribute('role', 'status');
+                status.textContent = form.dataset.uxSubmit;
+                form.append(status);
+            });
+        });
         const navigation = document.getElementById('subdivision-nav');
         if (navigation) {
             const search = document.getElementById('subdivision-search');

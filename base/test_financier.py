@@ -130,9 +130,11 @@ class FinancierTests(TestCase):
 
     def test_home_and_preview_use_finance_landing_and_enforce_permissions(self):
         page = self.client.get(reverse('index_base'))
-        self.assertContains(page, 'href="' + reverse('motivation_reports') + '"')
+        self.assertContains(page, 'href="' + reverse('index_admin_motivation') + '"')
         self.assertNotContains(page, reverse('global_coeff_admin_motivation'))
-        self.assertRedirects(self.client.get(reverse('index_admin_motivation')), reverse('motivation_reports'))
+        landing = self.client.get(reverse('index_admin_motivation'))
+        self.assertEqual(landing.status_code, 200)
+        self.assertEqual(landing.context['home_cards'][0]['url'], reverse('motivation_report_next', args=['registry']) + '?run=1')
         self.client.force_login(self.admin)
         self.client.post(reverse('portal_user_preview'), {'user': self.user.pk})
         page = self.client.get(reverse('coeff_subdivisions_admin_motivation', args=[self.sub.pk]))

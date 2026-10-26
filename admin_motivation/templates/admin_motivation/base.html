@@ -202,14 +202,16 @@
         }
     </style>
 
-    <link rel="stylesheet" href="{% static 'admin_motivation/workspace.css' %}?v=workflow-all-links-20261025">
-    <script src="{% static 'admin_motivation/workspace.js' %}?v=all-status-links-financier-20261024" defer></script>
+    <link rel="stylesheet" href="{% static 'admin_motivation/workspace.css' %}?v=ux-foundation-20261026">
+    <link rel="stylesheet" href="{% static 'admin_motivation/motivation_ux.css' %}?v=ux-foundation-20261026">
+    <script src="{% static 'admin_motivation/workspace.js' %}?v=ux-foundation-20261026" defer></script>
     <script src="{% static 'admin_motivation/coefficient_groups.js' %}" defer></script>
     <script src="{% static 'admin_motivation/editor_ux.js' %}?v=inline-product-20261024" defer></script>
 
 {% endblock %}
 {% block module_navigation %}
 <ul class="portal-section-nav">
+<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'index_admin_motivation' %}active{% endif %}" href="{% url 'index_admin_motivation' %}">Обзор</a></li>
 {% if portal_can_review_motivation %}<li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_reviews' or request.resolver_match.url_name == 'motivation_review' %}active{% endif %}" href="{% url 'motivation_reviews' %}">На проверке</a></li>{% endif %}
 {% if not portal_reports_only %}
     {% if not portal_financier %}<li class="nav-item"><a class="nav-link {% if 'motivation_sales_plan' in request.resolver_match.url_name %}active{% endif %}" href="{% url 'motivation_sales_plans' %}">Планы продаж</a></li>{% endif %}
@@ -232,7 +234,7 @@
         </details>
     </li>
 {% endif %}
-    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
+    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports_next' or request.resolver_match.url_name == 'motivation_report_next' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
 {% if portal_can_administer_motivation %}
     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}" href="{% url 'loader_motive' %}">Выгрузка в DWH</a></li>
 {% endif %}
@@ -248,8 +250,8 @@
 {% endblock %}
 {% block portal_content %}
 <div class="content-wrapper{% if portal_motivation_readonly %} motivation-viewer{% endif %}">
-    {% if portal_motivation_readonly %}<p class="viewer-notice" role="status">{{ portal_role_label }} · Мотивация · Только просмотр. Изменение коэффициентов недоступно.{% if portal_can_review_motivation %} Согласование и утверждение — в разделе «На проверке».{% endif %}</p>{% endif %}
-    {% if not portal_reports_only and not portal_financier %}{% motivation_workflow as workflow %}{% include "admin_motivation/_workflow.html" %}{% endif %}
+    {% if portal_motivation_readonly and request.resolver_match.url_name != 'motivation_report_next' and request.resolver_match.url_name != 'motivation_reports_next' and request.resolver_match.url_name != 'index_admin_motivation' %}<p class="viewer-notice" role="status">{{ portal_role_label }} · Мотивация · Только просмотр. Изменение коэффициентов недоступно.{% if portal_can_review_motivation %} Согласование и утверждение — в разделе «На проверке».{% endif %}</p>{% endif %}
+    {% if not portal_reports_only and not portal_financier and request.resolver_match.url_name != 'motivation_report_next' and request.resolver_match.url_name != 'motivation_reports_next' %}{% if request.resolver_match.url_name != 'index_admin_motivation' or portal_can_edit_motivation %}{% motivation_workflow as workflow %}{% include "admin_motivation/_workflow.html" %}{% endif %}{% endif %}
     {% if coefficient_attempt %}{{ coefficient_attempt|json_script:'coefficient-attempt' }}{% endif %}
     {% block content %}
     {% endblock content %}

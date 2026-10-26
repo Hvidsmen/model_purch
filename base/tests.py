@@ -27,7 +27,7 @@ class HomePageTests(TestCase):
             response = self.client.get(reverse(name))
             self.assertEqual(response.status_code, 200)
             parser = Projects(); parser.feed(response.content.decode())
-            self.assertEqual(parser.links, [reverse('scenario_list'), reverse('global_coeff_admin_motivation'), reverse('dashboards_index')])
+            self.assertEqual(parser.links, [reverse('scenario_list'), reverse('index_admin_motivation'), reverse('dashboards_index')])
             self.assertContains(response, 'id="portal-main"')
             self.assertContains(response, 'id="portal-sidebar"')
 

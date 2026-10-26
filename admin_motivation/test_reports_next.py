@@ -424,3 +424,49 @@ class ReportsNextTests(TestCase):
             self.assertEqual(response.context['query'].getlist('type'), ['Политики', 'Продажи'])
             self.assertEqual([choice['value'] for choice in response.context['type_choices'] if choice['selected']], ['Политики', 'Продажи'])
             self.assertEqual(response.context['query'].getlist('period'), ['4', '5'])
+
+
+    def test_role_home_is_scoped_and_never_reads_dwh(self):
+        from base.access import MODELER, DIRECTOR
+        for role, expected in ((POLITICIAN, 'mine'), (FINANCIER, 'registry'), (DIRECTOR, 'executive')):
+            user = User.objects.create_user('ux-' + role)
+            user.groups.add(Group.objects.get(name=role))
+            if role == POLITICIAN:
+                MotivationReportAccess.objects.create(user=user, subdivision=self.fixture.subs[0], deal_author='Own')
+            self.client.force_login(user)
+            with patch('admin_motivation.conns.connect_database', side_effect=AssertionError('Landing must not query DWH')):
+                response = self.client.get(reverse('index_admin_motivation'))
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.context['home_cards'][0]['url'], reverse('motivation_report_next', args=[expected]) + '?run=1')
+            if role == POLITICIAN:
+                self.assertNotContains(response, 'Работа с моделью')
+                self.assertEqual(self.client.post(reverse('index_admin_motivation')).status_code, 403)
+                self.assertEqual(self.client.get(reverse('motivation_report_next', args=['registry'])).status_code, 403)
+        unscoped = User.objects.create_user('ux-no-scope')
+        unscoped.groups.add(Group.objects.get(name=POLITICIAN)); self.client.force_login(unscoped)
+        self.assertEqual(self.client.get(reverse('index_admin_motivation')).status_code, 403)
+
+    def test_goal_shows_threshold_separately_from_full_plan(self):
+        from .services.reports_next_presenter import personal_details
+        source = manager_detail_report([detail_rows()[1]])
+        details = personal_details({'payout_threshold': Decimal('.95'), 'sections': [{'kind': 'Политики', 'data': source}]}, QueryDict('year=2026'))
+        goal = details['goals'][0]
+        self.assertEqual(goal['remaining'], Decimal(60))
+        self.assertEqual(goal['threshold_remaining'], Decimal(30))
+        self.assertEqual(details['goal_total']['threshold_remaining'], Decimal(30))
+
+    def test_employee_search_filters_all_pages_and_export_totals(self):
+        source = manager_detail_report([dict(detail_rows()[1], АвторСделки='Own ' + str(i)) for i in range(125)])
+        url = reverse('motivation_report_next', args=['team'])
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source):
+            response = self.client.get(url, {'run': '1', 'type': 'Политики', 'search': 'Own 124'})
+            self.assertEqual(response.context['presentation']['people'], 1)
+            self.assertEqual(response.context['presentation']['total'], 90)
+            self.assertEqual(response.context['employee_page'][0]['author'], 'Own 124')
+            exported = self.client.get(url, {'run': '1', 'type': 'Политики', 'search': 'Own 124', 'export': 'xlsx'})
+            from io import BytesIO
+            book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
+            self.assertEqual(book['Премии']['B3'].value, 'Own 124')
+            self.assertEqual(book['Премии']['G3'].value, 90)
+            self.assertEqual(book['Премии'].max_row, 3)
+            book.close(); exported.close()

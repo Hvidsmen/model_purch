@@ -65,6 +65,8 @@ def selected_types(query, allowed=None):
 
 
 def restrict(user, query):
+    if len(query.get('search', '')) > 255:
+        raise ValidationError('Поисковый запрос слишком длинный.')
     for field in ('planning', 'goods', 'brand', 'author', 'subdivision'):
         items = query.getlist(field)
         if len(items) > 100 or any(len(value) > 255 for value in items):

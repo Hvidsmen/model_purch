@@ -7,6 +7,14 @@
   const text = event.target.value.trim().toLocaleLowerCase('ru');
   checks.forEach(input => { input.closest('label').hidden = !input.value.toLocaleLowerCase('ru').includes(text); });
  });
+ const updateBranches = () => {
+  const selected = checks.filter(input => input.checked);
+  const caption = branches?.querySelector('[data-branch-caption]');
+  if (caption) caption.textContent = !selected.length || selected.length === checks.length ? 'Все доступные подразделения' : selected.length <= 2 ? selected.map(input => input.value).join(', ') : `Подразделений: ${selected.length}`;
+ };
+ checks.forEach(input => input.addEventListener('change', updateBranches));
+ branches?.querySelector('[data-next-select-all]')?.addEventListener('click', updateBranches);
+ branches?.querySelector('[data-next-clear-all]')?.addEventListener('click', updateBranches);
  const types = document.querySelector('.next-types');
  const typeChecks = [...(types?.querySelectorAll('input[name=type]') || [])];
  const updateTypes = () => {
@@ -30,6 +38,17 @@
  document.addEventListener('click', event => {
   document.querySelectorAll('details.next-branches[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
  });
+ document.querySelectorAll('details.next-branches').forEach(menu => menu.addEventListener('keydown', event => {
+  if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
+ }));
+ const matrixDetails = document.querySelector('[data-matrix-details]');
+ matrixDetails?.addEventListener('change', () => {
+  document.querySelectorAll('.nr-matrix[data-matrix-periods]').forEach(matrix => {
+   const count = Number(matrix.dataset.matrixPeriods);
+   matrix.dataset.mode = matrixDetails.checked ? 'detail' : 'basic';
+   matrix.style.setProperty('--nr-matrix-metrics', count * (matrixDetails.checked ? 4 : 2) + (matrixDetails.checked ? 6 : 4));
+  });
+ });
  const execution = document.querySelector('.next-filter select[name=execution]');
  execution?.addEventListener('change', () => {
   const year = document.querySelector('.next-filter input[name=year]');
@@ -42,6 +61,7 @@
   typeChecks.forEach(input => { input.checked = false; });
   updateTypes();
   checks.forEach(input => { input.checked = false; });
+  updateBranches();
   periodChecks.forEach(input => { if (['1', '2', '3'].includes(input.value)) input.checked = false; });
   updatePeriods();
   const author = document.querySelector('.next-filter input[name=author]');
@@ -65,13 +85,11 @@
  });
  openDeep();
  const toggle = document.getElementById('next-unallocated-toggle');
- const search = document.querySelector('[data-next-person-search]');
+
  const filter = () => {
-  const term = (search?.value || '').trim().toLocaleLowerCase('ru');
   document.querySelectorAll('[data-next-person-row]').forEach(row => {
-   row.hidden = (row.hasAttribute('data-next-unallocated') && !toggle?.checked) || !row.textContent.toLocaleLowerCase('ru').includes(term);
+   row.hidden = (row.hasAttribute('data-next-unallocated') && !toggle?.checked);
   });
  };
  toggle?.addEventListener('change', filter);
- search?.addEventListener('input', filter);
 })();

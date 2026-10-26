@@ -99,6 +99,7 @@ def personal_details(ledger, query):
             first_quarter = period_code(label) == '1'
             goals.append({'period': label, 'kind': kind, 'plan': plan, 'fact': fact, 'ratio': ratio,
                 'remaining': remaining, 'first_quarter': first_quarter,
+                'threshold_remaining': max(plan * ledger['payout_threshold'] - fact, ZERO) if not first_quarter and plan is not None and plan > 0 and fact is not None and ledger.get('payout_threshold') is not None else None,
                 'global_scope': data.get('global_subdivision_mode', False), 'threshold': ledger.get('payout_threshold'),
                 'under_threshold': not first_quarter and ratio is not None and ledger.get('payout_threshold') is not None and ratio < ledger['payout_threshold'],
                 'progress': min(max(ratio * 100, ZERO), Decimal(100)) if ratio is not None else ZERO,
@@ -172,7 +173,7 @@ def personal_details(ledger, query):
         if goal['kind'] not in latest or period_code(goal['period']) > period_code(latest[goal['kind']]['period']):
             latest[goal['kind']] = goal
     basis = next(iter(latest.values())) if len(latest) == 1 else None
-    goal_total = {'plan': None, 'fact': None, 'ratio': None, 'first_quarter': False, 'global_scope': False, **(basis or {}), 'is_total': True, 'period': 'Итого за выбранные периоды', 'kind': '',
+    goal_total = {'plan': None, 'fact': None, 'ratio': None, 'threshold_remaining': None, 'first_quarter': False, 'global_scope': False, **(basis or {}), 'is_total': True, 'period': 'Итого за выбранные периоды', 'kind': '',
         'possible': sum((goal['possible'] or ZERO for goal in goals), ZERO),
         'calculated': sum((goal['calculated'] or ZERO for goal in goals), ZERO),
         'reward_at_target': None, 'remaining': basis['remaining'] if basis and not basis['first_quarter'] else None,

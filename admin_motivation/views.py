@@ -9,10 +9,8 @@ from .models import *
 
 
 def index(request):
-    from base.access import role_for, FINANCIER
-    if role_for(request.user, 'motivation') == FINANCIER:
-        return redirect('motivation_reports')
-    return render(request, "admin_motivation/index.html", )
+    from .services.home import home_context
+    return render(request, "admin_motivation/index.html", home_context(request.user))
 
 
 def goods_matrix(request):

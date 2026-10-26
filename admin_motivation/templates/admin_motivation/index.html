@@ -1,9 +1,8 @@
 {% extends 'admin_motivation/base.html' %}
-
-{% load crispy_forms_tags %}
 {% block content %}
-
-
-
-
-{% endblock content %}
+<section class="content motivation-home">
+<header class="ux-page-heading"><div><p class="ux-eyebrow">{{ portal_role_label }}</p><h1>Мотивация</h1><p>{{ home_description }}</p></div><a class="btn btn-outline-primary" href="{% url 'motivation_reports' %}">Текущие отчёты</a></header>
+<div class="ux-home-grid">{% for card in home_cards %}<a class="ux-home-card{% if card.primary %} ux-home-primary{% endif %}" href="{{ card.url }}">{% if card.primary %}<span class="ux-eyebrow">С чего начать</span>{% endif %}<h2>{{ card.title }}</h2><p>{{ card.description }}</p><span class="ux-card-action">Открыть →</span></a>{% endfor %}</div>
+<p class="ux-footnote">Показаны доступные вашей роли разделы. Премии и детализация учитывают назначенные права доступа.</p>
+</section>
+{% endblock %}

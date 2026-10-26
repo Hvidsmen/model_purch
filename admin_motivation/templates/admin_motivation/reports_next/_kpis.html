@@ -1,4 +1,4 @@
-{% load report_format %}<div class="nr-kpis">
+{% load report_format %}{% if kind != 'executive' and not ledger.rows %}<div class="nr-empty"><strong>Нет рассчитанных строк по выбранным условиям</strong>Измените фильтры или выберите другой расчёт. Отсутствие данных не означает нулевую премию.</div>{% else %}<div class="nr-kpis">
 {% if kind == 'executive' %}
 <div class="nr-kpi nr-kpi-primary"><span>По глобальным коэффициентам</span><strong>{{ presentation.global_plan|report_cash }}</strong><small>Плановая премия · USD</small></div>
 <div class="nr-kpi nr-kpi-green"><span>По коэффициентам подразделений</span><strong>{{ presentation.local_plan|report_cash }}</strong><small>На том же плане · USD</small></div>
@@ -10,3 +10,5 @@
 <div class="nr-kpi"><span>Выбранные виды мотивации</span><strong>{{ types|length }}</strong><small>{{ types|join:", " }}</small></div>
 {% if kind == 'mine' %}<div class="nr-kpi"><span>Премия при 100% выполнения</span><strong style="font-size:19px">Не рассчитана</strong><small>Причина — в карточке цели ниже</small></div>{% else %}<div class="nr-kpi"><span>{% if kind == 'mine' or kind == 'detail' %}Периоды в расчёте{% else %}Сотрудники{% endif %}</span><strong>{% if kind == 'mine' or kind == 'detail' %}{{ presentation.period_cards|length }}{% else %}{{ presentation.people }}{% endif %}</strong><small>{% if kind == 'mine' or kind == 'detail' %}Выбранный год: {{ query.year }}{% else %}В {{ presentation.branches }} подразделениях{% endif %}</small></div>{% endif %}
 {% endif %}</div>
+
+{% endif %}

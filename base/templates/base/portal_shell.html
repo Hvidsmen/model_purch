@@ -16,7 +16,7 @@
     <a class="portal-brand header-brand" href="{% url 'index_base' %}"><img class="portal-brand-icon" src="{% static 'base/da-icon.svg' %}" alt="" width="30" height="30">DA портал</a>
     <nav class="portal-projects" aria-label="Проекты портала">
         {% if portal_can_purchases %}<a href="{% url 'scenario_list' %}" {% if '/model_purch/' in request.path %}aria-current="page"{% endif %}>Модель закупок</a>{% endif %}
-        {% if portal_can_motivation %}<a href="{% if portal_motivation_landing_reports %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}" {% if '/admin_motivation' in request.path %}aria-current="page"{% endif %}>Мотивация</a>{% endif %}
+        {% if portal_can_motivation %}<a href="{% url 'index_admin_motivation' %}" {% if '/admin_motivation' in request.path %}aria-current="page"{% endif %}>Мотивация</a>{% endif %}
         {% if portal_can_dashboards %}<a href="{% url 'dashboards_index' %}" {% if '/dashboards/' in request.path %}aria-current="page"{% endif %}>Дашборды</a>{% endif %}
     </nav>
     {% if request.user.is_authenticated %}<span class="portal-user">{{ request.user.get_full_name|default:request.user.username }}<small>{{ portal_role_label }}</small></span><form class="portal-logout" method="post" action="{% url 'portal_logout' %}">{% csrf_token %}<button type="submit">Выйти</button></form>{% endif %}
@@ -27,7 +27,7 @@
     <aside class="portal-sidebar" id="portal-sidebar" aria-label="Навигация раздела">
         <a class="portal-home" href="{% url 'index_base' %}">← Главная портала</a>
         <h2>{% block project_name %}Рабочие разделы{% endblock %}</h2>
-        {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы">{% if portal_can_purchases %}<a href="{% url 'scenario_list' %}">Модель закупок</a>{% endif %}{% if portal_can_motivation %}<a href="{% if portal_motivation_landing_reports %}{% url 'motivation_reports' %}{% else %}{% url 'global_coeff_admin_motivation' %}{% endif %}">Мотивация</a>{% endif %}{% if portal_can_dashboards %}<a href="{% url 'dashboards_index' %}">Дашборды</a>{% endif %}</nav>{% endblock %}
+        {% block module_navigation %}<nav class="portal-section-nav" aria-label="Рабочие разделы">{% if portal_can_purchases %}<a href="{% url 'scenario_list' %}">Модель закупок</a>{% endif %}{% if portal_can_motivation %}<a href="{% url 'index_admin_motivation' %}">Мотивация</a>{% endif %}{% if portal_can_dashboards %}<a href="{% url 'dashboards_index' %}">Дашборды</a>{% endif %}</nav>{% endblock %}
         {% block module_administration %}{% endblock %}
         {% if portal_is_admin %}
         <details class="portal-admin-panel" open>

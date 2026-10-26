@@ -171,6 +171,8 @@ def report(request, kind):
         ('Валюта', 'USD' if kind == 'executive' else query['currency']),
         ('Порог выполнения для выплаты', selected.parameters.get('payout_threshold', 'Не сохранён') if selected else ''),
         ('Статус выплат', 'Данных о согласовании и фактической оплате нет. Показаны рассчитанные суммы.')]
+    if query.get('search', '').strip() and kind in ('team', 'registry'):
+        metadata.append(('Поиск сотрудника', query['search'].strip()))
     if kind == 'executive':
         metadata.append(('Состав директоров', 'Действующие привязки к подразделениям' if query['director_scope'] == 'active' else 'Все сохранённые коэффициенты, включая архивные'))
     if preview_user:
@@ -190,6 +192,12 @@ def report(request, kind):
             else:
                 with reports.current_run(selected):
                     data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'))
+                if kind in ('team', 'registry') and query.get('search', '').strip():
+                    from decimal import Decimal
+                    term = query['search'].strip().casefold().replace('ё', 'е')
+                    data['rows'] = [row for row in data['rows'] if term in row['author'].casefold().replace('ё', 'е')]
+                    data['total'] = sum((row['total'] for row in data['rows']), Decimal(0))
+                    data['has_unallocated'] = any(row['unallocated'] for row in data['rows'])
                 for row in data['rows']:
                     target = query.copy()
                     target['type'], target['period'], target['run'] = row['kind'], row['code'], '1'
@@ -228,11 +236,19 @@ def report(request, kind):
     period_options = [item for item in reports.PERIODS if not scope or not scope.get('pilot_periods') or item[0] in ('all', '4', '5')]
     export_query = query.copy()
     export_query['export'] = 'xlsx'
+    reset_query = query.copy()
+    for field in ('period', 'type', 'subdivision', 'author', 'planning', 'goods', 'brand', 'page', 'export', 'table', 'search'):
+        reset_query.pop(field, None)
+    branch_label = ', '.join(selected_subs) if len(selected_subs) <= 2 else f'Подразделений: {len(selected_subs)}'
     from .services.reports_next_presenter import present
     presentation = present(kind, data, data if kind != 'executive' else None, query.getlist('period') or ['all'])
     if kind == 'mine' and data:
         from .services.reports_next_presenter import personal_details
         presentation.update(personal_details(data, query))
+        for card in presentation['period_cards']:
+            goals = [goal for goal in presentation['goals'] if reports.period_code(goal['period']) == reports.period_code(card['label'])]
+            if not card['amount'] and goals:
+                card['explanation'] = ('Порог выплаты не достигнут. Остаток до порога показан в целях ниже.' if all(goal['under_threshold'] for goal in goals) else 'На выбранных отгрузках возможная премия равна 0.' if all(not goal['possible'] for goal in goals) else 'Результат расчёта — 0. Проверьте ставки и условия в детализации.')
     ledger_page = Paginator(presentation['registry_rows'], 100).get_page(query.get('page')) if data is not None and kind not in ('executive', 'detail') else None
     employee_page = Paginator(presentation['employees'], 50).get_page(query.get('page')) if kind == 'team' else None
     page_query = query.copy()
@@ -243,7 +259,7 @@ def report(request, kind):
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.CATALOG[kind][0],
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'current_execution_id': runs.first().pk if runs.exists() else None, 'runs': runs, 'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
-        'all_types': all_types, 'type_choices': [{'value': value, 'selected': value in query.getlist('type')} for value in all_types], 'type_label': ', '.join(query.getlist('type')) or 'Все доступные виды',
+        'reset_url': '?' + reset_query.urlencode(), 'branch_label': branch_label or 'Все доступные подразделения', 'selected_branches': selected_subs, 'all_types': all_types, 'type_choices': [{'value': value, 'selected': value in query.getlist('type')} for value in all_types], 'type_label': ', '.join(query.getlist('type')) or 'Все доступные виды',
         'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})
