@@ -1,5 +1,5 @@
 (() => {
- const branches = document.querySelector('.next-branches:not(.next-periods)');
+ const branches = document.querySelector('.next-branches:not(.next-periods):not(.next-types)');
  const checks = [...(branches?.querySelectorAll('input[type=checkbox]') || [])];
  branches?.querySelector('[data-next-select-all]')?.addEventListener('click', () => checks.forEach(input => { input.checked = true; }));
  branches?.querySelector('[data-next-clear-all]')?.addEventListener('click', () => checks.forEach(input => { input.checked = false; }));
@@ -7,6 +7,16 @@
   const text = event.target.value.trim().toLocaleLowerCase('ru');
   checks.forEach(input => { input.closest('label').hidden = !input.value.toLocaleLowerCase('ru').includes(text); });
  });
+ const types = document.querySelector('.next-types');
+ const typeChecks = [...(types?.querySelectorAll('input[name=type]') || [])];
+ const updateTypes = () => {
+  const selected = typeChecks.filter(input => input.checked);
+  const caption = types?.querySelector('[data-type-caption]');
+  if (caption) caption.textContent = !selected.length || selected.length === typeChecks.length ? 'Все доступные виды' : selected.map(input => input.value).join(', ');
+ };
+ types?.querySelector('[data-type-all]')?.addEventListener('click', () => { typeChecks.forEach(input => { input.checked = true; }); updateTypes(); });
+ types?.querySelector('[data-type-clear]')?.addEventListener('click', () => { typeChecks.forEach(input => { input.checked = false; }); updateTypes(); });
+ typeChecks.forEach(input => input.addEventListener('change', updateTypes));
  const periods = document.querySelector('.next-periods');
  const periodChecks = [...(periods?.querySelectorAll('input[name=period]') || [])];
  const updatePeriods = () => {
@@ -29,8 +39,8 @@
  });
  const preview = document.querySelector('.next-filter select[name=preview_user]');
  preview?.addEventListener('change', () => {
-  const type = document.querySelector('.next-filter select[name=type]');
-  if (type) type.value = '';
+  typeChecks.forEach(input => { input.checked = false; });
+  updateTypes();
   checks.forEach(input => { input.checked = false; });
   periodChecks.forEach(input => { if (['1', '2', '3'].includes(input.value)) input.checked = false; });
   updatePeriods();

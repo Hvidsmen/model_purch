@@ -1,5 +1,5 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}{% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=next-20261026"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=boxed-products-20261026">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=next-20261026"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=multi-types-20261026">
 <section class="content native-report nr-page">
 {% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
 <p class="nr-note report-filter-hint">Пилот включает только 4 квартал и годовую премию. Доплата за кварталы не предусмотрена: во всех отчётах — 0.</p>
@@ -31,4 +31,4 @@
 {% endif %}
 <details class="nr-metadata"><summary>Источник данных и параметры расчёта</summary><div class="nr-metadata-grid">{% for label,value in metadata %}<div><strong>{{ label }}</strong>{{ value }}</div>{% endfor %}</div></details>
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/reports_next.js' %}?v=boxed-products-20261026" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=next-20261026" defer></script>{% endif %}{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/reports_next.js' %}?v=multi-types-20261026" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=next-20261026" defer></script>{% endif %}{% endblock %}

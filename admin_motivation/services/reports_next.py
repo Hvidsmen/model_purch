@@ -54,6 +54,16 @@ def period_label(query):
     return ', '.join(labels[value] for value in sorted(values) if value in labels)
 
 
+def selected_types(query, allowed=None):
+    allowed = list(['Политики', 'Продажи', 'Директора'] if allowed is None else allowed)
+    if not allowed:
+        raise PermissionDenied
+    values = list(dict.fromkeys(value for value in query.getlist('type') if value))
+    if len(values) > len(allowed) or any(value not in allowed for value in values):
+        raise PermissionDenied
+    return values or allowed
+
+
 def restrict(user, query):
     for field in ('planning', 'goods', 'brand', 'author', 'subdivision'):
         items = query.getlist(field)
@@ -64,15 +74,13 @@ def restrict(user, query):
         raise PermissionDenied
     allowed = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
     allowed = [allowed] if isinstance(allowed, str) else allowed
-    selected = query.get('type', '')
-    if selected and selected not in allowed:
-        raise PermissionDenied
+    selected = selected_types(query, allowed)
     codes = selected_periods(query)
     explicit = list(dict.fromkeys(query.getlist('period')))
     if scope and scope.get('pilot_periods') and explicit and explicit != ['all'] and any(code not in ('4', '5') for code in codes):
         raise PermissionDenied
     period = 'all' if not explicit or explicit == ['all'] else codes[0] if len(codes) == 1 else codes
-    return scope, [selected] if selected else allowed, period
+    return scope, selected, period
 
 
 @contextmanager
@@ -184,10 +192,7 @@ def planned_budget(execution, scenario, query):
     year = int(query.get('year', execution.parameters['fact_year']))
     periods = selected_periods(query)
     kinds = {'Политики': 'policies', 'Продажи': 'sales', 'Директора': 'directors'}
-    selected = query.get('type', '')
-    if selected and selected not in kinds:
-        raise ValidationError('Выберите вид мотивации.')
-    included_kinds = [kinds[selected]] if selected else list(kinds.values())
+    included_kinds = [kinds[value] for value in selected_types(query, kinds)]
     ids = [version.pk for version in versions]
     indexes = {side: Index(coefficient_rows(ids, subdivision=local)) for side, local in [('global', False), ('local', True)]}
     directors = {side: DirectorIndex(ids, local=local) for side, local in [('global', False), ('local', True)]}

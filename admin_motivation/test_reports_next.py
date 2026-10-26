@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.http import QueryDict
 from django.urls import reverse
 from django.utils import timezone
-from django.core.exceptions import ValidationError
+from django.core.exceptions import ValidationError, PermissionDenied
 from django.contrib.auth.models import User, Group
 from openpyxl import load_workbook
 from base.testing import authorize_admin
@@ -369,3 +369,49 @@ class ReportsNextTests(TestCase):
         response = self.client.get(reverse('motivation_report_next', args=['mine']) + '?period=1&period=4')
         self.assertEqual(response.status_code, 403)
         self.assertEqual(reports_next.restrict(user, QueryDict('period=4&period=5'))[2], ['4', '5'])
+
+
+    def test_multiple_worker_types_are_validated_and_empty_means_all_allowed(self):
+        query = QueryDict('type=Политики&type=Директора&type=Политики&period=4&period=5')
+        self.assertEqual(reports_next.restrict(self.actor, query)[1:], (['Политики', 'Директора'], ['4', '5']))
+        self.assertEqual(reports_next.selected_types(QueryDict(''), ['Политики']), ['Политики'])
+        for raw in ('type=Политики&type=Unknown', 'type=Unknown&type=Политики'):
+            with self.assertRaises(PermissionDenied):
+                reports_next.restrict(self.actor, QueryDict(raw))
+        with self.assertRaises(PermissionDenied):
+            reports_next.selected_types(QueryDict('type=Политики&type=Директора'), ['Политики'])
+
+    def test_multiple_worker_types_in_detail_and_excel_keep_both_sources(self):
+        query = {'run': '1', 'type': ['Политики', 'Продажи'], 'period': ['4', '5']}
+        rows = [dict(row, КварталМотивации='4 Квартал(1-4 кв)' if row['КварталМотивации'] != 'Год' else 'Год') for row in detail_rows()]
+        source = manager_detail_report(rows)
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source) as load:
+            response = self.client.get(reverse('motivation_report_next', args=['detail']), query)
+            self.assertEqual(response.context['ledger']['total'], 360)
+            self.assertEqual(response.context['data']['detail_totals'][-1][19], 360)
+            self.assertEqual([node['label'] for node in response.context['data']['nodes']], ['Политики · A', 'Продажи · A'])
+            self.assertEqual([call.args[1]['TypeCoeff_'] for call in load.call_args_list], ['Политики', 'Продажи'])
+            self.assertEqual(response.context['query'].getlist('period'), ['4', '5'])
+            self.assertContains(response, 'next-types')
+            exported = self.client.get(reverse('motivation_report_next', args=['detail']), {**query, 'export': 'xlsx'})
+            from io import BytesIO
+            book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
+            self.assertIn('Виды мотивации', [row[0].value for row in book['Параметры отчёта']])
+            book.close(); exported.close()
+
+    def test_selected_plan_worker_types_sum_without_unselected_type(self):
+        combined = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('type=Политики&type=Продажи&period=4&period=5'))[0]
+        parts = [reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('type=' + kind + '&period=4&period=5'))[0] for kind in ('Политики', 'Продажи')]
+        self.assertEqual(combined['global'], sum(part['global'] for part in parts))
+        self.assertEqual(combined['local'], sum(part['local'] for part in parts))
+
+
+    def test_all_new_report_filters_keep_multiple_types_and_periods(self):
+        for kind in reports_next.CATALOG:
+            response = self.client.get(reverse('motivation_report_next', args=[kind]), {'type': ['Политики', 'Продажи'], 'period': ['4', '5']})
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, 'next-types')
+            self.assertContains(response, 'next-periods')
+            self.assertEqual(response.context['query'].getlist('type'), ['Политики', 'Продажи'])
+            self.assertEqual([choice['value'] for choice in response.context['type_choices'] if choice['selected']], ['Политики', 'Продажи'])
+            self.assertEqual(response.context['query'].getlist('period'), ['4', '5'])

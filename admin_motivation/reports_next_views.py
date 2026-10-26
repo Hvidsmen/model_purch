@@ -152,8 +152,6 @@ def report(request, kind):
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
         return HttpResponseBadRequest(' '.join(exc.messages))
-    if kind == 'detail' and not query.get('type'):
-        query['type'] = types[0]
     runs = MotivationExecution.objects.filter(state='completed').order_by('-started_at', '-pk')
     selected = get_object_or_404(runs, pk=query['execution']) if query.get('execution', '').isdigit() else runs.first()
     plans = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).order_by('-loaded_at', '-pk')
@@ -168,6 +166,7 @@ def report(request, kind):
     metadata = [('Расчёт', selected.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M МСК') if selected and selected.completed_at else 'Нет'), ('Год', query.get('year', '')),
         ('План расчёта DWH', selected.parameters.get('plan_version', '') if selected else ''),
         ('План сравнения' if kind == 'executive' else 'Загруженная копия плана расчёта', str(plan) if plan else 'Не загружена'), ('Период премии', reports.period_label(query)),
+        ('Виды мотивации', ', '.join(types)),
         ('Валюта', 'USD' if kind == 'executive' else query['currency']),
         ('Порог выполнения для выплаты', selected.parameters.get('payout_threshold', 'Не сохранён') if selected else ''),
         ('Статус выплат', 'Данных о согласовании и фактической оплате нет. Показаны рассчитанные суммы.')]
@@ -198,11 +197,12 @@ def report(request, kind):
                     row['detail_url'] = reverse('motivation_report_next', args=['detail']) + '?' + target.urlencode()
                 if kind == 'detail':
                     from .services.reports_next_presenter import new_detail_labels
-                    detail = new_detail_labels(data['sections'][0]['data']) if data['sections'] else None
+                    from .services.manager_detail import combine_reports
+                    detail = new_detail_labels(combine_reports(data['sections'], query['currency'])) if data['sections'] else None
             if query.get('export') == 'xlsx':
                 if kind == 'detail' and detail:
                     from .services.report_excel import report_excel
-                    output = report_excel(detail, {'Currency': query['currency'], 'Years': [query['year']], 'TypeCoeff_': query.get('type'), 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'), 'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand')}, query.get('table', 'all'), provenance=metadata)
+                    output = report_excel(detail, {'Currency': query['currency'], 'Years': [query['year']], 'TypeCoeff_': query.getlist('type'), 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'), 'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand')}, query.get('table', 'all'), provenance=metadata)
                 else:
                     output = workbook(kind, data, metadata, query=query)
                 return FileResponse(output, as_attachment=True, filename=f'motivation-next-{kind}.xlsx', content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -242,7 +242,7 @@ def report(request, kind):
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.CATALOG[kind][0],
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'current_execution_id': runs.first().pk if runs.exists() else None, 'runs': runs, 'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
-        'all_types': all_types,
+        'all_types': all_types, 'type_choices': [{'value': value, 'selected': value in query.getlist('type')} for value in all_types], 'type_label': ', '.join(query.getlist('type')) or 'Все доступные виды',
         'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})
