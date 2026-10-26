@@ -43,7 +43,14 @@
         const forms = [main, document.getElementById('addProductForm'), document.querySelector('#manager-details form')].filter(Boolean);
         const fields = forms.flatMap(form => [...form.querySelectorAll('input:not([type=hidden]):not([type=file]), select')]
             .filter(input => !input.matches(':disabled, .bulk-good') && input.name !== 'selected_subdivisions'));
-        const original = new Map();
+        const original = new Map(), originalRaw = new Map(), committed = new Map();
+        const history = [];
+        const raw = field => field.type === 'checkbox' ? field.checked : field.value;
+        const put = (field, value) => { if (field.type === 'checkbox') { field.checked = value; field.dispatchEvent(new Event('change', {bubbles:true})); } else {
+            const text=String(value), number=Number(text.replace(',','.'));
+            field.value=field.classList.contains('coeff-input') && text.trim() && !text.includes('%') && Number.isFinite(number) && Math.abs(number)<=1 ? ((number*100).toFixed(12).replace(/\.?0+$/,'')||'0')+'%' : value;
+        } };
+        const equal = (a,b) => typeof a === 'number' && typeof b === 'number' ? Math.abs(a-b) <= 1e-14 : a === b;
         const normalize = field => {
             if (field.type === 'checkbox') return field.checked;
             if (field.classList.contains('coeff-input')) {
@@ -54,7 +61,7 @@
             }
             return field.value;
         };
-        fields.forEach(field => original.set(field, normalize(field)));
+        fields.forEach(field => { original.set(field, normalize(field)); originalRaw.set(field, raw(field)); committed.set(field, {raw:raw(field), normalized:normalize(field)}); });
         const different = field => {
             const old = original.get(field), value = normalize(field);
             return typeof old === 'number' && typeof value === 'number' ? Math.abs(old - value) > 1e-14 : old !== value;
@@ -75,7 +82,7 @@
             const matchesFilter = row => fold([row.dataset.pg,row.dataset.group,row.dataset.brand,row.dataset.key].join(' ')).includes(query)
                 && !selectors.some(([key,select])=>select.value && select.value!==row.dataset[key])
                 && (!onlyChanged.checked || row.querySelector('.editor-changed'));
-            rows.forEach(row => { row.hidden = !matchesFilter(row) || row.dataset.groupCollapsed === 'yes'; });
+            rows.forEach(row => { row.dataset.matchesFilter = matchesFilter(row) ? 'yes' : 'no'; row.hidden = !matchesFilter(row) || row.dataset.groupCollapsed === 'yes'; });
             document.querySelectorAll('.coefficient-group-heading').forEach(header => {
                 header.hidden=!rows.filter(row=>row.dataset.uxGroup===header.dataset.groupKey).some(matchesFilter);
             });
@@ -92,20 +99,137 @@
             onlyChanged.checked = true;
             filter();
         }));
+        const describe = field => {
+            const row = field.closest('.coefficient-row');
+            const group = field.closest('[data-coefficient-group]')?.dataset.coefficientGroup;
+            const groupName = {policies:'Политики',sales:'Продажи',directors:'Директор'}[group];
+            const index = field.dataset.segment || ('K' + (field.closest('td')?.dataset.coefficientSegment ?? ''));
+            return {goods: row ? [row.dataset.pg,row.dataset.group,row.dataset.brand].join(' · ') : field.closest('#manager-details') ? 'Поправки руководителя' : 'Добавление товара',
+                kind: field.name.startsWith('delete_coeff=') ? 'Удаление товара' : field.classList.contains('select-var-calc') ? 'Формула товара' : groupName ? groupName + ' / ' + index : field.getAttribute('aria-label') || field.closest('label')?.textContent.trim().split('\n')[0] || 'Настройка'};
+        };
+        const display = (field, value, normalized) => {
+            if (field.type === 'checkbox') return value ? 'Да' : 'Нет';
+            if (field.tagName === 'SELECT') return [...field.options].find(option => option.value === value)?.textContent || value;
+            if (field.classList.contains('coeff-input') && typeof normalized === 'number' && Number.isFinite(normalized)) return new Intl.NumberFormat('ru-RU',{maximumFractionDigits:10}).format(normalized*100) + '%';
+            return value;
+        };
+        let changePage = 0;
+        const reviewDialog = document.getElementById('editor-changes-dialog');
+        const reviewBody = document.getElementById('editor-changes-rows');
+        const renderReview = () => {
+            if (!reviewBody) return;
+            reviewBody.replaceChildren();
+            const term = document.getElementById('editor-changes-search').value.trim().toLocaleLowerCase('ru');
+            const all = changed().filter(field => Object.values(describe(field)).join(' ').toLocaleLowerCase('ru').includes(term));
+            const pages = Math.max(1, Math.ceil(all.length/100)); changePage = Math.min(changePage,pages-1);
+            document.getElementById('editor-changes-summary').textContent = `Всего правок: ${changed().length}. По поиску: ${all.length}. Страница ${changePage+1} из ${pages}.`;
+            document.getElementById('editor-changes-prev').disabled = changePage === 0;
+            document.getElementById('editor-changes-next').disabled = changePage >= pages-1;
+            for (const field of all.slice(changePage*100,(changePage+1)*100)) {
+                const info = describe(field), tr = document.createElement('tr');
+                for (const text of [info.goods, info.kind, display(field,originalRaw.get(field),original.get(field)), display(field,raw(field),normalize(field))]) {
+                    const td = document.createElement('td'); td.textContent = text; tr.append(td);
+                }
+                const td=document.createElement('td'), button=document.createElement('button');
+                button.type='button';button.className='btn btn-outline-secondary';button.textContent='Вернуть исходное';
+                button.addEventListener('click',()=>{ window.motivationEditor.apply([{input:field,value:originalRaw.get(field)}],'Вернуть исходное значение');renderReview(); });
+                td.append(button);tr.append(td);reviewBody.append(tr);
+            }
+        };
+        document.getElementById('editor-review-changes')?.addEventListener('click',()=>{changePage=0;renderReview();reviewDialog.showModal();});
+        document.getElementById('editor-changes-search')?.addEventListener('input',()=>{changePage=0;renderReview();});
+        document.getElementById('editor-changes-prev')?.addEventListener('click',()=>{changePage--;renderReview();});
+        document.getElementById('editor-changes-next')?.addEventListener('click',()=>{changePage++;renderReview();});
+        document.getElementById('editor-changes-close')?.addEventListener('click',()=>reviewDialog.close());
+        const sourceBadges = [];
+        rows.forEach(row => row.querySelectorAll('input[data-rate-source]').forEach(input => {
+            const badge=document.createElement('small');badge.className='coefficient-source';input.after(badge);
+            if(document.getElementById('subCoeffForm')){
+                const global=document.createElement('small');global.className='coefficient-global-reference';
+                const value=input.dataset.globalValue;
+                global.textContent=value && value !== 'None' ? 'Глобально: '+new Intl.NumberFormat('ru-RU',{maximumFractionDigits:10}).format(Number(value)*100)+'%' : 'Глобально: нет точной ставки';
+                badge.after(global);
+            }
+            sourceBadges.push({input,badge});
+        }));
         const refresh = () => {
             fields.forEach(field => field.classList.toggle('editor-changed', different(field)));
             const count = changed().length;
+            sourceBadges.forEach(({input,badge})=>{
+                const missing=input.dataset.rateExact==='no', dirty=original.has(input)&&different(input);
+                badge.textContent=dirty ? 'Изменено'+(missing?' · новая ставка':'') : missing ? 'Нет точной' : input.dataset.rateSource;
+                badge.hidden=!document.getElementById('subCoeffForm')&&!dirty&&!missing;
+                badge.classList.toggle('coefficient-source-missing',missing&&!dirty);
+                badge.title=missing ? 'Точная запись отсутствует. Ноль в редакторе не подтверждает наличие коэффициента. Создайте недостающие записи через проверку покрытия.' : 'Сохранённая точная ставка выбранной версии. Изменения вступят в действие после утверждения, выгрузки и расчёта.';
+            });
             document.querySelectorAll('[data-workflow-dirty]').forEach(node => { node.hidden = !count; node.textContent = `Не сохранено: ${count}`; });
             document.getElementById('editor-dirty-count').textContent = `Изменено: ${count}`;
             document.getElementById('editor-save-state').textContent = count ? 'Правки ещё не сохранены' : 'Нет несохранённых правок';
             toolbar.querySelector('.editor-state').classList.toggle('has-changes', count > 0);
             document.getElementById('editor-save').disabled = !changed().some(field => field.form === main);
+            document.querySelectorAll('[data-editor-change-total]').forEach(node=>node.textContent=String(count));
+            const changedRows = new Set(changed().map(field=>field.closest('.coefficient-row')).filter(Boolean));
+            const scope = document.getElementById('editor-change-scope');
+            if (scope) scope.textContent = `Товаров: ${changedRows.size} · полей: ${count}`;
+            const undo = document.getElementById('editor-undo'), resetChanges = document.getElementById('editor-reset-changes');
+            if (undo) undo.disabled = !history.length;
+            if (resetChanges) resetChanges.disabled = !count;
+            document.dispatchEvent(new CustomEvent('motivation:editor-state',{detail:{canUndo:history.length>0,changed:count}}));
+            if (reviewDialog?.open) renderReview();
             filter();
         };
+        const notify = items => {
+            for(const {input} of items){
+                if(input.classList.contains('coeff-input')&&typeof window.applyValidation==='function'){
+                    input.dataset.value=String(normalize(input));window.applyValidation(input);
+                    const description=input.getAttribute('aria-describedby');
+                    if(description?.startsWith('restored-error-')){document.getElementById(description)?.remove();input.removeAttribute('aria-describedby');}
+                    if(input.classList.contains('invalid'))input.setAttribute('aria-invalid','true');else input.removeAttribute('aria-invalid');
+                }
+            }
+            refresh();
+            items[0]?.input.dispatchEvent(new Event('input',{bubbles:true}));
+            document.dispatchEvent(new CustomEvent('motivation:editor-updated'));
+        };
+        const rememberManual = field => {
+            const before=committed.get(field), current=normalize(field);
+            if (!equal(before.normalized,current)) {
+                history.push({label:'Ручное изменение',changes:[{input:field,before:before.raw,beforeN:before.normalized,after:raw(field),afterN:current}]});
+                if(history.length>100)history.shift();
+            }
+            committed.set(field,{raw:raw(field),normalized:current});refresh();
+        };
+        window.motivationEditor = {
+            apply(items,label) {
+                if(items.some(item=>!fields.includes(item.input)||item.input.matches(':disabled')))throw new Error('Выбраны недоступные ячейки. Правки не применены.');
+                const changes=items.filter(item=>raw(item.input)!==item.value).map(item=>({input:item.input,before:raw(item.input),beforeN:normalize(item.input),after:item.value}));
+                if(!changes.length)return;
+                // Suppress manual-history hooks while restoring checkbox/select states.
+                applying=true;
+                try{changes.forEach(change=>put(change.input,change.after));}finally{applying=false;}
+                changes.forEach(change=>{change.afterN=normalize(change.input);committed.set(change.input,{raw:raw(change.input),normalized:change.afterN});});
+                history.push({label,changes});if(history.length>100)history.shift();notify(changes);
+            },
+            undo() {
+                const last=history.at(-1);if(!last)return;
+                if(last.changes.some(change=>!equal(normalize(change.input),change.afterN)||change.input.matches(':disabled'))){fail('После действия появились другие изменения. Завершите ввод или верните значение через список «Изменения».');return;}
+                history.pop();applying=true;
+                try{last.changes.forEach(change=>put(change.input,change.before));}finally{applying=false;}
+                last.changes.forEach(change=>committed.set(change.input,{raw:raw(change.input),normalized:normalize(change.input)}));
+                notify(last.changes);
+                document.getElementById('editor-save-state').textContent=`Отменено: ${last.label}. ${changed().length?'Остались несохранённые правки.':'Несохранённых правок нет.'}`;
+            }
+        };
+        let applying=false;
+        document.getElementById('editor-undo')?.addEventListener('click',()=>window.motivationEditor.undo());
+        const resetDialog=document.getElementById('editor-reset-dialog');
+        document.getElementById('editor-reset-changes')?.addEventListener('click',()=>resetDialog.showModal());
+        document.getElementById('editor-reset-cancel')?.addEventListener('click',()=>resetDialog.close());
+        document.getElementById('editor-reset-confirm')?.addEventListener('click',()=>{window.motivationEditor.apply(changed().map(input=>({input,value:originalRaw.get(input)})),'Сбросить правки');resetDialog.close();});
         fields.forEach(field => {
             field.addEventListener('input', refresh);
-            field.addEventListener('change', refresh);
-            field.addEventListener('blur', refresh);
+            field.addEventListener('change', () => { if(!applying)rememberManual(field); });
+            field.addEventListener('blur', () => { if(!applying)rememberManual(field); });
         });
         let leaving = false;
         window.addEventListener('beforeunload', event => {
@@ -188,6 +312,7 @@
             if (restored.action === 'add_product') document.getElementById('add-product-details').open=true;
             if (restored.action === 'update_motive_coeff') document.getElementById('manager-details').open=true;
             refresh();
+            fields.forEach(field=>committed.set(field,{raw:raw(field),normalized:normalize(field)}));
             fail('Правки восстановлены после ошибки. Сверьте их с текущей версией и сохраните повторно.');
         }
     };

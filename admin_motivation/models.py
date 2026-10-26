@@ -878,3 +878,24 @@ class MotivationReviewEvent(models.Model):
     def delete(self, *args, **kwargs):
         from django.core.exceptions import ValidationError
         raise ValidationError('История решений не удаляется.')
+
+
+class CoefficientEditLog(models.Model):
+    """Verified draft table saves; deleting an unused draft also removes its edit journal."""
+    version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.CASCADE, related_name='edit_history')
+    subdivision = models.ForeignKey(Subdivision, on_delete=models.SET_NULL, null=True, blank=True)
+    employee = models.ForeignKey(DirectorEmployee, on_delete=models.SET_NULL, null=True, blank=True)
+    actor = models.ForeignKey('auth.User', on_delete=models.SET_NULL, null=True)
+    actor_label = models.CharField(max_length=255)
+    scope_label = models.CharField(max_length=512)
+    created_at = models.DateTimeField(auto_now_add=True)
+    revision_before = models.PositiveBigIntegerField()
+    revision_after = models.PositiveBigIntegerField()
+    changed_count = models.PositiveIntegerField()
+    changes = models.JSONField(default=list)
+
+    def save(self, *args, **kwargs):
+        if not self._state.adding:
+            from django.core.exceptions import ValidationError
+            raise ValidationError('Журнал сохранений не изменяется.')
+        return super().save(*args, **kwargs)

@@ -233,7 +233,7 @@ def bulk_coefficient_formula(request):
             signed=signing.loads(data.get('review_token',''),salt='bulk-formula-review',max_age=900)
             if signed != {'digest':digest,'actor':request.user.pk}:
                 raise ValidationError('Выбор изменился после проверки. Проверьте операцию повторно.')
-        goods, count=apply_formula(*args,**kwargs)
+        goods, count=apply_formula(*args,actor=request.user,**kwargs)
         messages.success(request,f'Формула применена к товарам: {goods}, записей коэффициентов: {count}. Проценты коэффициентов сохранены.')
     except (ValidationError,ValueError,TypeError,signing.BadSignature) as error:
         text=' '.join(error.messages) if isinstance(error,ValidationError) else 'Проверьте версию, формулу и товары. Повторите предварительную проверку.'
@@ -255,4 +255,26 @@ def version_reopen_snapshot(request, log_id):
     log = get_object_or_404(VersionReopenLog, pk=log_id)
     response = HttpResponse(json.dumps(log.snapshot, ensure_ascii=False, indent=2), content_type='application/json; charset=utf-8')
     response['Content-Disposition'] = f'attachment; filename="version-{log.version_id}-before-reopen-{log.pk}.json"'
+    return response
+
+
+@require_http_methods(['GET'])
+def coefficient_edit_log(request, log_id):
+    from base.access import motivation_editor_required
+    from .models import CoefficientEditLog
+    from .services.edit_history import rows
+    from django.shortcuts import get_object_or_404
+    from django.http import HttpResponse
+    import csv
+    motivation_editor_required(request)
+    log = get_object_or_404(CoefficientEditLog, pk=log_id)
+    response = HttpResponse(content_type='text/csv; charset=utf-8')
+    response['Content-Disposition'] = f'attachment; filename="coefficient-changes-{log.pk}.csv"'
+    response.write('\ufeff')
+    writer = csv.writer(response, delimiter=';')
+    writer.writerow(['Дата, МСК', 'Автор', 'Область', 'Версия', 'Товар / настройка', 'Поле', 'Было', 'Стало'])
+    from zoneinfo import ZoneInfo
+    prefix = [log.created_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S'), log.actor_label, log.scope_label, str(log.version)]
+    for row in rows(log):
+        writer.writerow(["'"+value if value.lstrip().startswith(('=', '+', '-', '@')) else value for value in [*prefix,*row]])
     return response

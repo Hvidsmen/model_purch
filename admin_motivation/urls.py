@@ -2,6 +2,7 @@ from . import reports_next_views, coverage_views, review_views, balancing_views,
 from django.urls import include, path
 
 urlpatterns = [
+    path('coefficients/history/<int:log_id>.csv', operation_views.coefficient_edit_log, name='motivation_coefficient_edit_log'),
     path('reports-next/', reports_next_views.index, name='motivation_reports_next'),
     path('reports-next/<str:kind>/', reports_next_views.report, name='motivation_report_next'),
     path('coefficients/coverage/repair-all/', coverage_views.repair_all, name='motivation_coverage_repair_all'),

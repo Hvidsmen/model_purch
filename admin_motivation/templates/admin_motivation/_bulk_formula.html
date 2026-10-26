@@ -1,5 +1,5 @@
 {% load static %}
-{% if portal_can_administer_motivation and version_editable %}
+{% if portal_can_edit_motivation and version_editable %}
 <details class="bulk-formula"><summary>Применить формулу к нескольким товарам</summary>
 <form method="post" action="{% url 'motivation_bulk_formula' %}" id="bulk-variation-form">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}{% csrf_token %}<input type="hidden" name="review_required" value="yes"><input type="hidden" name="review_token"><input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="revision" value="{{ selected_version.revision }}">{% if sub %}<input type="hidden" name="subdivision" value="{{ sub.pk }}">{% endif %}{% if employee %}<input type="hidden" name="employee" value="{{ employee.pk }}">{% endif %}
 

@@ -44,8 +44,10 @@ def gloabal_coeff(request, version_form=None):
     context = version_context(request, version_form)
     selected = context['selected_version']
     from .services.coefficient_groups import global_matrix
+    from .services.edit_history import history_context
     return render(request, 'admin_motivation/gloabal_coeff.html', {
         **context, **restore_context(request), 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.filter(is_archived=False),
+        **history_context(request.user, selected),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
@@ -201,7 +203,7 @@ def gloabal_coeff_action(request):
                     messages.warning(request, 'Коэффициенты директоров пропущены в филиалах без сотрудников: ' + ', '.join(skipped) + '. Политики и продажи скопированы, если были выбраны.')
             elif action == 'save_coeff':
                 from .services.save_verification import SaveVerification
-                verification = SaveVerification(latest, request.POST)
+                verification = SaveVerification(latest, request.POST, actor=request.user)
                 ids = [key.split('=', 1)[1] for key in request.POST if key.startswith('select_var_calc=')]
                 deleted = [key.split('=', 1)[1] for key in request.POST if key.startswith('delete_coeff=')]
                 # Update existing cells only; never delete cells just because a POST is partial.
@@ -252,6 +254,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     existing = {row.kind_id: row for row in SubdivisionManagerCoeff.objects.filter(version=selected, subdivision=sub).select_related('kind')}
     managers = [existing.get(kind.pk) or SubdivisionManagerCoeff(version=selected, subdivision=sub, kind=kind, coeff=1) for kind in kinds]
     from .services.coefficient_groups import coefficient_matrix
+    from .services.edit_history import history_context
     from .director_forms import DirectorEmployeeForm
     employees = DirectorEmployee.objects.filter(is_archived=False).filter(Q(subdivisions=sub) | Q(subdivisiondirectorcoeff__subdivision=sub,
         subdivisiondirectorcoeff__version=selected)).distinct()
@@ -272,7 +275,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
         'manager_correction_history': ManagerCorrectionLog.objects.filter(version=selected, subdivision=sub).select_related('actor').order_by('-pk')[:30],
         'employee_form': employee_form, 'all_employees': DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions'),
         'copy_employee_options': sub.directors.exclude(pk=employee.pk) if employee else sub.directors.all(),
-        'goods': coefficient_matrix(selected, sub, employee),
+        'goods': coefficient_matrix(selected, sub, employee), **history_context(request.user, selected, sub, employee),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),
         'gp_sales': PlanningGroupSales.objects.all(), 'groups': GroupGoods.objects.all(), 'brands': Brand.objects.all(),
@@ -304,7 +307,7 @@ def sub_act(request, subdivision):
                 raise ValidationError('Историческая версия доступна только для просмотра.')
             if action == 'update_motive_coeff':
                 from .services.save_verification import SaveVerification
-                verification = SaveVerification(latest, request.POST, subdivision=sub, manager=True)
+                verification = SaveVerification(latest, request.POST, subdivision=sub, manager=True, actor=request.user)
                 for kind in KindManagerCoeff.objects.all():
                     key = f'kind_coeff={kind.pk}'
                     if key in request.POST:
@@ -316,7 +319,7 @@ def sub_act(request, subdivision):
                 if request.POST.get('employee') and employee is None:
                     raise ValidationError('Директор удалён. Изменения не сохранены. Выберите действующего сотрудника.')
                 from .services.save_verification import SaveVerification
-                verification = SaveVerification(latest, request.POST, subdivision=sub, employee=employee)
+                verification = SaveVerification(latest, request.POST, subdivision=sub, employee=employee, actor=request.user)
                 for coeff in SubdivisionCoeff.objects.filter(version=version, subdivision=sub):
                     key = f'sub_coeff={coeff.pk}'
                     if key in request.POST:

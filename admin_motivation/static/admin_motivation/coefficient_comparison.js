@@ -68,14 +68,19 @@
         toggle.addEventListener('change', apply);
         apply();
     }
+    const unsupported = () => document.querySelector('.select-var-calc.editor-changed,#manager-details .editor-changed');
+    const clearSummary = () => document.querySelectorAll('[data-amount], [data-delta], [data-summary-amount], [data-summary-delta]').forEach(cell=>{cell.textContent='—';cell.title='Требуется обновить сравнение';cell.classList.remove('delta-up','delta-down');});
     async function compare() {
         const requestRevision = ++revision;
+        const planContext=document.getElementById('editor-plan-context');
+        if(planContext)planContext.textContent=plan.value?'План: '+plan.selectedOptions[0].textContent:'План не выбран';
         controller?.abort();
         document.querySelectorAll('[data-amount], [data-delta], [data-summary-amount], [data-summary-delta]').forEach(cell => {
             cell.textContent = '—'; cell.title = '';
             cell.classList.remove('delta-up', 'delta-down');
         });
         warning.hidden = true; error.hidden = true;
+        if(unsupported()){status.textContent='Сначала сохраните изменения формулы или поправок руководителя, затем обновите сравнение.';summaryStatus('Сначала сохраните настройки');return;}
         if (!plan.value) { status.textContent = 'Выберите план для сравнения.'; summaryStatus('Выберите план ниже'); return; }
         controller = new AbortController();
         error.hidden = true;
@@ -117,9 +122,11 @@
             summaryStatus('Ошибка сравнения');
         }
     }
-    const schedule = () => { clearTimeout(timer); timer = setTimeout(compare, 600); };
+    const schedule = () => { ++revision;controller?.abort();clearTimeout(timer);clearSummary();summaryStatus('Требуется обновить сравнение…');timer = setTimeout(compare, 600); };
     [...inputs(), ...directorInputs()].forEach(input => input.addEventListener('input', schedule));
     document.querySelectorAll('input[name^="delete_coeff="]').forEach(input => input.addEventListener('change', schedule));
+    document.querySelectorAll('.select-var-calc,#manager-details .coeff-input').forEach(input=>input.addEventListener('change',schedule));
+    document.addEventListener('motivation:editor-updated',schedule);
     plan.addEventListener('change', compare);
     baseline.addEventListener('change', compare);
     document.getElementById('comparison-refresh').addEventListener('click', compare);

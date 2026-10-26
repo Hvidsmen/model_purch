@@ -50,7 +50,21 @@ def preview_formula(*args, **kwargs):
 
 
 @transaction.atomic
-def apply_formula(*args, **kwargs):
+def apply_formula(*args, actor=None, **kwargs):
     version, variation, ids, updates = selection(*args, **kwargs)
+    changes = []
+    if actor is not None:
+        for rows in updates:
+            changed = rows.exclude(variation_calculate=variation)
+            if hasattr(rows.model,'type_coeff'):changed=changed.select_related('type_coeff','segment')
+            for row in changed:
+                changes.append({'model':rows.model.__name__,'pk':row.pk,'goods_id':row.goods_id,'kind':row.type_coeff.type_coeff_name if hasattr(row,'type_coeff') else 'Директор', 'segment':row.segment.segment_name if hasattr(row,'segment') else '', 'field':'variation_calculate_id','before':str(row.variation_calculate_id) if row.variation_calculate_id is not None else None,'after':str(variation.pk)})
     count = sum(rows.update(variation_calculate=variation) for rows in updates)
+    if changes:
+        from ..models import CoefficientEditLog, Subdivision, GlobalCoeffVersion, Goods
+        labels={good.pk:' / '.join([good.planning_group_sales or '—',good.group or '—',good.brand or '—']) for good in Goods.objects.filter(pk__in=ids)}
+        for change in changes:change['goods_label']=labels.get(change['goods_id'],'Товар #'+str(change['goods_id']))
+        sub = Subdivision.objects.get(pk=kwargs['subdivision_id']) if kwargs.get('subdivision_id') else None
+        employee = DirectorEmployee.objects.get(pk=kwargs['employee_id']) if sub and kwargs.get('employee_id') else None
+        CoefficientEditLog.objects.create(version=version,subdivision=sub,employee=employee,actor=actor,actor_label=(actor.get_full_name() or actor.get_username())[:255],scope_label=((str(sub) if sub else 'Глобальные коэффициенты')+(' · '+str(employee) if employee else ''))[:512],revision_before=version.revision,revision_after=GlobalCoeffVersion.objects.get(pk=version.pk).revision,changed_count=len(changes),changes=changes)
     return len(ids), count
