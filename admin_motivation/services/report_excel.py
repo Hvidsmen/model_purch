@@ -66,7 +66,7 @@ def report_excel(data, parameters, scope='all', *, provenance=None):
     try:
         if scope in ('all', 'summary'):
             summary = data['period_summary']
-            headers = ['Подразделение', 'Автор сделки', *[column['label'] for column in summary['columns']], 'Доплаты за квартал', 'Итого']
+            headers = ['Подразделение', 'Автор сделки', *[column['label'] for column in summary['columns']], 'Годовая доплата за кварталы' if provenance else 'Доплаты за квартал', 'Всего по расчёту' if provenance else 'Итого']
             target = sheet('Итого по мотивации', headers, [28, 42] + [18] * (len(headers) - 2), 'C3')
             kinds = ['text', 'text'] + ['money'] * (len(headers) - 2)
             totals = summary['totals']
@@ -97,7 +97,7 @@ def report_excel(data, parameters, scope='all', *, provenance=None):
                        index=index, total=total, indent=level)
             if data.get('division_execution'):
                 write_row('% выполнения подразделений', data['division_execution'])
-            write_row('Итого', data['detail_totals'], total=True)
+            write_row('Всего по расчёту' if provenance else 'Итого', data['detail_totals'], total=True)
             def write_nodes(nodes):
                 for node in nodes:
                     write_row(node['label'], node['values'], level=node['level'])

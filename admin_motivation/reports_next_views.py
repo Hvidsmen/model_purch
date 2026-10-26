@@ -17,21 +17,21 @@ def index(request):
     return render(request, 'admin_motivation/reports_next/index.html', {'catalog': reports.available(request.user)})
 
 
-def workbook(kind, data, metadata):
+def workbook(kind, data, metadata, query=None):
     from openpyxl import Workbook
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
     book = Workbook(write_only=True)
     sheet = book.create_sheet('Премии')
     sheet.freeze_panes = 'B3'
-    def append(values):
+    def append(values, percent_columns=()):
         cells = []
         for position, value in enumerate(values):
             cell = WriteOnlyCell(sheet, value=ILLEGAL_CHARACTERS_RE.sub('', value)[:32767] if isinstance(value, str) else value)
             if isinstance(value, str):
                 cell.data_type = 's'
             elif value is not None:
-                cell.number_format = '0.00%' if kind == 'executive' and position == 4 else '#,##0.00'
+                cell.number_format = '0.00%' if position in percent_columns or kind == 'executive' and position == 4 else '#,##0.00'
             cells.append(cell)
         sheet.append(cells)
     append([reports.CATALOG[kind][0]])
@@ -42,10 +42,47 @@ def workbook(kind, data, metadata):
                 append(['  ' * indent + node['name'], node['global'], node['local'], node['difference'], node.get('difference_percent')])
                 write(node.get('children', []), indent + 1)
         write(data)
+    elif kind in ('team', 'registry'):
+        from .services.reports_next_presenter import present
+        display = present(kind, data, data, query.get('period', 'all') if query is not None else 'all')
+        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта', 'Премия по расчёту',
+                'Годовая доплата за кварталы', 'Всего по расчёту',
+                *[column['label'] + ' · без годовой доплаты' for column in display['period_columns']], 'Статус'])
+        for row in display['employees' if kind == 'team' else 'registry_rows']:
+            append([row['subdivision'], row['author'], ', '.join(row['kinds']), data['currency'], row['amount'],
+                    row['bonus'], row['total'], *row['period_values'],
+                    'Не распределено' if row['unallocated'] else 'Рассчитано; выплата не подтверждена'])
+        if kind == 'team':
+            sheet = book.create_sheet('Итого по видам')
+            append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта'])
+            for row in display['type_totals']:
+                append([row['kind'], row['amount'], row['bonus'], row['total'], data['currency']])
     else:
-        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Период', 'Валюта', 'Рассчитано', 'Доплата', 'Всего', 'Статус'])
+        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Период', 'Валюта', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Статус'])
         for row in data['rows']:
             append([row['subdivision'], row['author'], row['kind'], row['period'], row['currency'], row['amount'], row['bonus'], row['total'], 'Не распределено' if row['unallocated'] else 'Рассчитано; выплата не подтверждена'])
+    if kind == 'mine' and query is not None:
+        from .services.reports_next_presenter import personal_details
+        personal = personal_details(data, query)
+        sheet = book.create_sheet('Цели и потенциал')
+        append(['Вид', 'Период', 'База цели', 'План мотивации, USD', 'Факт мотивации, USD', 'Выполнение', 'Осталось до 100%, USD', 'Премия при 100%', 'Почему не рассчитана', 'Возможная премия на текущих отгрузках', 'Валюта премии'])
+        for goal in personal['goals']:
+            append([goal['kind'], goal['period'], 'Подразделение' if goal['global_scope'] else 'База мотивации',
+                goal['plan'], goal['fact'], goal['ratio'], None if goal['first_quarter'] else goal['remaining'],
+                goal['reward_at_target'], goal['reward_reason'], goal['possible'], data['currency']], percent_columns=(5,))
+        sheet = book.create_sheet('Товарная детализация')
+        append(['Вид', 'Подразделение', 'Автор сделки', 'Группа планов', 'Группа ERP', 'Бренд', 'Период', 'Всего по расчёту', 'Валюта'])
+        def products(nodes, section, group, path=()):
+            for node in nodes:
+                current = (*path, node['label'])
+                if node['children']:
+                    products(node['children'], section, group, current)
+                else:
+                    for period, value in zip(section['periods'], node['values'][:-1]):
+                        append([section['kind'], group['branch'], group['author'], *current, period, value, data['currency']])
+        for section in personal['product_sections']:
+            for group in section['groups']:
+                products(group['children'], section, group)
     notes = book.create_sheet('Параметры')
     for label, value in metadata:
         cells = [WriteOnlyCell(notes, value=ILLEGAL_CHARACTERS_RE.sub('', str(item))[:32767]) for item in (label, value)]
@@ -103,6 +140,7 @@ def report(request, kind):
     data, error, detail = None, '', None
     if selected:
         query.setdefault('year', str(selected.parameters.get('fact_year', '')))
+    query.setdefault('director_scope', 'active')
     query.setdefault('currency', 'USD')
     query.setdefault('period', 'all')
     metadata = [('Расчёт', selected.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M МСК') if selected and selected.completed_at else 'Нет'), ('Год', query.get('year', '')),
@@ -111,6 +149,8 @@ def report(request, kind):
         ('Валюта', 'USD' if kind == 'executive' else query['currency']),
         ('Порог выполнения для выплаты', selected.parameters.get('payout_threshold', 'Не сохранён') if selected else ''),
         ('Статус выплат', 'Данных о согласовании и фактической оплате нет. Показаны рассчитанные суммы.')]
+    if kind == 'executive':
+        metadata.append(('Состав директоров', 'Действующие привязки к подразделениям' if query['director_scope'] == 'active' else 'Все сохранённые коэффициенты, включая архивные'))
     if preview_user:
         metadata.insert(1, ('Личный отчёт сотрудника', preview_user.motivation_report_access.deal_author))
     try:
@@ -127,7 +167,7 @@ def report(request, kind):
                 data = reports.planned_budget(selected, plan, query)
             else:
                 with reports.current_run(selected):
-                    data = reports.actual_reports(report_user, selected, query, detailed=kind == 'detail')
+                    data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'))
                 for row in data['rows']:
                     target = query.copy()
                     target['type'], target['period'], target['run'] = row['kind'], row['code'], '1'
@@ -135,13 +175,14 @@ def report(request, kind):
                     target.setlist('author', [row['author']])
                     row['detail_url'] = reverse('motivation_report_next', args=['detail']) + '?' + target.urlencode()
                 if kind == 'detail':
-                    detail = data['sections'][0]['data'] if data['sections'] else None
+                    from .services.reports_next_presenter import new_detail_labels
+                    detail = new_detail_labels(data['sections'][0]['data']) if data['sections'] else None
             if query.get('export') == 'xlsx':
                 if kind == 'detail' and detail:
                     from .services.report_excel import report_excel
-                    output = report_excel(detail, {'Currency': query['currency'], 'Years': [query['year']], 'TypeCoeff_': query.get('type'), 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author')}, query.get('table', 'all'), provenance=metadata)
+                    output = report_excel(detail, {'Currency': query['currency'], 'Years': [query['year']], 'TypeCoeff_': query.get('type'), 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'), 'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand')}, query.get('table', 'all'), provenance=metadata)
                 else:
-                    output = workbook(kind, data, metadata)
+                    output = workbook(kind, data, metadata, query=query)
                 return FileResponse(output, as_attachment=True, filename=f'motivation-next-{kind}.xlsx', content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             if detail:
                 detail['excel_urls'] = {}
@@ -166,7 +207,10 @@ def report(request, kind):
     export_query['export'] = 'xlsx'
     from .services.reports_next_presenter import present
     presentation = present(kind, data, data if kind != 'executive' else None, query['period'])
-    ledger_page = Paginator(data['rows'], 100).get_page(query.get('page')) if data is not None and kind not in ('executive', 'detail') else None
+    if kind == 'mine' and data:
+        from .services.reports_next_presenter import personal_details
+        presentation.update(personal_details(data, query))
+    ledger_page = Paginator(presentation['registry_rows'], 100).get_page(query.get('page')) if data is not None and kind not in ('executive', 'detail') else None
     employee_page = Paginator(presentation['employees'], 50).get_page(query.get('page')) if kind == 'team' else None
     page_query = query.copy()
     page_query.pop('page', None)
@@ -177,6 +221,6 @@ def report(request, kind):
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'current_execution_id': runs.first().pk if runs.exists() else None, 'runs': runs, 'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
         'all_types': all_types,
-        'period_label': dict(reports.PERIODS).get(query['period'], ''), 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
+        'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': dict(reports.PERIODS).get(query['period'], ''), 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})

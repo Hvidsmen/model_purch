@@ -40,6 +40,10 @@ def period_code(label):
 
 
 def restrict(user, query):
+    for field in ('planning', 'goods', 'brand', 'author', 'subdivision'):
+        items = query.getlist(field)
+        if len(items) > 100 or any(len(value) > 255 for value in items):
+            raise ValidationError('Слишком много значений фильтра или слишком длинное значение.')
     scope = politician_scope(user)
     if role_for(user, 'motivation') in REPORT_ROLES and not scope:
         raise PermissionDenied
@@ -95,7 +99,7 @@ def actual_reports(user, execution, query, *, detailed=False):
     results, ledger = [], []
     for kind in kinds:
         values = {'TypeCoeff_': kind, 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'),
-                  'gp_sales': [], 'GPGoods': [], 'Brend': [], 'Years': [year], 'Currency': currency}
+                  'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand'), 'Years': [year], 'Currency': currency}
         if scope:
             values = scoped_values('manager-detail', values, scope)
         data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed)
@@ -117,7 +121,7 @@ def actual_reports(user, execution, query, *, detailed=False):
                     'bonus': item['remainder'], 'currency': currency})
     for item in ledger:
         item['total'] = item['amount'] + item['bonus']
-    return {'has_unallocated': any(row['unallocated'] for row in ledger), 'sections': results, 'rows': ledger, 'total': sum((item['total'] for item in ledger), Decimal(0)), 'currency': currency}
+    return {'payout_threshold': number(execution.parameters['payout_threshold']) if execution.parameters.get('payout_threshold') is not None else None, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in ledger), 'sections': results, 'rows': ledger, 'total': sum((item['total'] for item in ledger), Decimal(0)), 'currency': currency}
 
 
 def frozen_versions(execution):
@@ -183,6 +187,14 @@ def planned_budget(execution, scenario, query):
         quarter = int(period)
         lines = lines.filter(plan_date__month__gte=quarter * 3 - 2, plan_date__month__lte=quarter * 3)
     aliases, buckets = mapping(), {}
+    director_scope = query.get('director_scope', 'active')
+    if director_scope not in ('active', 'coefficients'):
+        raise ValidationError('Выберите состав директоров.')
+    active_staff = {}
+    if director_scope == 'active':
+        bindings = DirectorEmployee.subdivisions.through.objects.filter(directoremployee__is_archived=False).values_list('directoremployee_id', 'subdivision__subdivision_key')
+        for employee, branch in bindings.iterator(chunk_size=2000):
+            active_staff.setdefault(canonical(branch, aliases), set()).add(employee)
     quarter_share = number(execution.parameters.get('quarter_share'))
     annual_share = number(execution.parameters.get('year_share'))
     if not quarter_share.is_finite() or not annual_share.is_finite() or not 0 <= quarter_share <= 100 or not 0 <= annual_share <= 100 or quarter_share + annual_share != 100:
@@ -212,6 +224,8 @@ def planned_budget(execution, scenario, query):
                 bucket[side][target] += value
         if 'directors' in included_kinds:
             staff = directors['local'].by_employee(version.pk, sub, pg, group, brand, amounts)
+            if director_scope == 'active':
+                staff = {employee: value for employee, value in staff.items() if employee in active_staff.get(sub, set())}
             global_amount = directors['global'].motivation(version.pk, '', pg, group, brand, amounts) * share
             bucket['global']['directors'] += global_amount * len(staff)
             bucket['local']['directors'] += sum(staff.values(), Decimal(0)) * share

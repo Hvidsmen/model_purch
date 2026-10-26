@@ -24,6 +24,23 @@
   const author = document.querySelector('.next-filter input[name=author]');
   if (author) author.value = '';
  });
+ const openDeep = () => {
+  if (location.hash === '#next-deep-calculation') {
+   const deep = document.getElementById('next-deep-calculation');
+   if (deep) { deep.open = true; requestAnimationFrame(() => deep.scrollIntoView()); }
+  }
+ };
+ window.addEventListener('hashchange', openDeep);
+ document.addEventListener('DOMContentLoaded', () => {
+  openDeep();
+  if (location.hash === '#next-deep-calculation') {
+   const extra = document.getElementById('manager-detail-extra');
+   if (extra && !extra.checked) { extra.checked = true; extra.dispatchEvent(new Event('change')); }
+   const segments = document.querySelector('[data-manager-reveal=segments]');
+   if (segments && segments.getAttribute('aria-expanded') !== 'true') segments.click();
+  }
+ });
+ openDeep();
  const toggle = document.getElementById('next-unallocated-toggle');
  const search = document.querySelector('[data-next-person-search]');
  const filter = () => {
