@@ -1,5 +1,5 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}{% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=next-20261026"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=multi-period-20261026">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=next-20261026"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=boxed-products-20261026">
 <section class="content native-report nr-page">
 {% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
 <a class="nr-back" href="{% url 'motivation_reports_next' %}">← Новые отчёты</a>
@@ -10,6 +10,7 @@
 {% if admin_preview and kind == 'mine' and not preview_user %}<div class="nr-hero-empty"><strong>Посмотрите премию глазами сотрудника</strong><p>Выберите сотрудника в условиях отчёта. Будут применены его личные ограничения доступа. {% if not preview_accounts %}Нет сотрудников с настроенным личным доступом к отчётам.{% endif %}</p></div>{% endif %}
 {% if data == None and not error %}{% if not admin_preview or kind != 'mine' %}<div class="nr-empty"><strong>{% if kind == 'executive' %}Сравните два варианта премий{% elif kind == 'registry' %}Подготовьте реестр для проверки{% else %}Посмотрите результат расчёта{% endif %}</strong>Выберите условия выше и нажмите «Показать». Итоги появятся здесь, детализация — на следующем уровне.</div>{% endif %}{% endif %}
 {% if data != None %}
+{% if kind == 'mine' %}<div class="nr-note nr-mine-intro"><strong>Как считается ваша премия</strong><br>Отгрузки распределяются по ступеням скидки O0–O4 и умножаются на ставки K0–K4. Затем применяются условия выполнения плана{% if ledger.payout_threshold != None %} (порог выплаты — {{ ledger.payout_threshold|report_percent }}){% endif %}. Годовая доплата за кварталы добавляется отдельно.<br>Ниже — суммы по периодам, цель до 100% и товарная матрица. Возможная премия на текущих отгрузках и прогноз премии при 100% — разные показатели. Для «Подразделение(Глобально)» цель относится к подразделению, а будущую личную премию пока нельзя достоверно определить.</div>{% endif %}
 {% include 'admin_motivation/reports_next/_kpis.html' %}
 {% if kind == 'executive' %}
 <div class="nr-section-title"><h2>Сравнение по подразделениям</h2><div class="nr-legend"><span><i></i>Глобальные</span><span class="local"><i></i>Подразделения</span></div></div>
@@ -28,4 +29,4 @@
 {% endif %}
 <details class="nr-metadata"><summary>Источник данных и параметры расчёта</summary><div class="nr-metadata-grid">{% for label,value in metadata %}<div><strong>{{ label }}</strong>{{ value }}</div>{% endfor %}</div></details>
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/reports_next.js' %}?v=multi-period-20261026" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=next-20261026" defer></script>{% endif %}{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/reports_next.js' %}?v=boxed-products-20261026" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=next-20261026" defer></script>{% endif %}{% endblock %}

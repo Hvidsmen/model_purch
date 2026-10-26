@@ -271,6 +271,9 @@ class ReportsNextTests(TestCase):
         self.assertTrue(leaf['detail_url'].endswith('#next-deep-calculation'))
         self.assertIn('start=2026-01-01', leaf['deals_url'])
         self.assertEqual(leaf['values'][-1], Decimal(190))
+        self.assertEqual(leaf['metrics'][0]['remaining'], Decimal(400))
+        self.assertEqual(leaf['metrics'][0]['ratio'], Decimal('.6'))
+        self.assertEqual(result['product_sections'][0]['metric_columns'], 10)
 
     def test_mine_excel_includes_product_premiums_and_goal_explanation(self):
         user = User.objects.create_user('goal-employee')
@@ -285,6 +288,7 @@ class ReportsNextTests(TestCase):
         book = load_workbook(BytesIO(b''.join(response.streaming_content)))
         self.assertIn('Цели и потенциал', book.sheetnames)
         self.assertIn('Товарная детализация', book.sheetnames)
+        self.assertIn('Товарная матрица', book.sheetnames)
         self.assertIsNone(book['Цели и потенциал']['H2'].value)
         self.assertIn('будущих личных отгрузок', book['Цели и потенциал']['I2'].value)
         self.assertEqual(sum(row[7].value for row in book['Товарная детализация'].iter_rows(min_row=2)), 190)

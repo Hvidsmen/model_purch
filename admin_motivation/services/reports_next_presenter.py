@@ -105,6 +105,16 @@ def personal_details(ledger, query):
                 'possible': block[13], 'calculated': block[17], 'bonus': block[18], 'reward_at_target': None,
                 'reward_reason': 'Выполнение считается по всему подразделению, а личная премия зависит от будущих личных отгрузок, товаров и ступеней скидки. Эти данные пока неизвестны.' if data.get('global_subdivision_mode') else 'В сохранённом расчёте нет отдельного прогноза премии при 100%. Для него нужно знать структуру будущих личных продаж и ставок.',
                 'gap': max(block[13] - block[17], ZERO) if block[13] is not None else None})
+        def matrix_metrics(blocks):
+            result = []
+            for index, label in enumerate(data['periods']):
+                block = blocks[index]
+                plan, fact, ratio = block[14:17]
+                threshold = ledger.get('payout_threshold')
+                result.append({'possible': block[13], 'remaining': max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None and period_code(label) != '1' else None,
+                    'ratio': ratio, 'calculated': block[17],
+                    'status': 'nr-matrix-good' if ratio is not None and ratio >= (threshold if threshold is not None else Decimal('.8')) else 'nr-matrix-low' if ratio is not None else ''})
+            return {'metrics': result, 'bonus': blocks[-1][18], 'total': blocks[-1][19]}
         def matrix(node, branch, author, planning='', group=''):
             level = node['level']
             if level == 2:
@@ -141,7 +151,7 @@ def personal_details(ledger, query):
                 link['end'] = date(year, end, monthrange(year, end)[1]).isoformat()
                 deal_links.append({'label': 'Год' if selected == '5' else selected + ' кв.', 'url': reverse('motivation_report', args=['deals']) + '?' + link.urlencode()})
             return {'label': node['label'], 'level': level,
-                'values': [block[19] for block in node['values']],
+                'values': [block[19] for block in node['values']], **matrix_metrics(node['values']),
                 'detail_url': detail_url,
                 'deals_url': deal_links[0]['url'], 'deal_links': deal_links,
                 'children': [matrix(child, branch, author, planning, group) for child in node['children']]}
@@ -150,9 +160,10 @@ def personal_details(ledger, query):
             for author in branch['children']:
                 if author.get('unallocated'):
                     continue
-                groups.append({'branch': branch['label'], 'author': author['label'],
+                groups.append({'branch': branch['label'], 'author': author['label'], **matrix_metrics(author['values']),
                     'children': [matrix(node, branch['label'], author['label']) for node in author['children']]})
-        sections.append({'kind': kind, 'periods': data['periods'], 'groups': groups})
+        sections.append({'kind': kind, 'periods': data['periods'], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
+                         'metric_columns': len(data['periods']) * 4 + 2, 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
     return {'goals': goals, 'product_sections': sections}
 
 

@@ -83,6 +83,26 @@ def workbook(kind, data, metadata, query=None):
         for section in personal['product_sections']:
             for group in section['groups']:
                 products(group['children'], section, group)
+        sheet = book.create_sheet('Товарная матрица')
+        all_periods = sorted({period for section in personal['product_sections'] for period in section['periods']}, key=lambda value: (reports.period_code(value), value))
+        append(['Вид', 'Подразделение', 'Автор сделки', 'Уровень', 'Товарная матрица',
+                *[period + ' · ' + metric for period in all_periods for metric in ('Возможная премия', 'Осталось до 100%, USD', 'Выполнение', 'Премия по расчёту')],
+                'Годовая доплата за кварталы', 'Всего по расчёту'])
+        def matrix_row(section, group, row, label, level):
+            lookup = dict(zip(section['periods'], row['metrics']))
+            values = []
+            for period in all_periods:
+                metric = lookup.get(period)
+                values.extend([metric['possible'], metric['remaining'], metric['ratio'], metric['calculated']] if metric else [None] * 4)
+            append([section['kind'], group['branch'], group['author'], level, label, *values, row['bonus'], row['total']], percent_columns=tuple(7 + index * 4 for index in range(len(all_periods))))
+        def matrix_nodes(section, group, nodes):
+            for row in nodes:
+                matrix_row(section, group, row, row['label'], {2: 'Группа планов', 3: 'Группа ERP', 4: 'Бренд'}[row['level']])
+                matrix_nodes(section, group, row['children'])
+        for section in personal['product_sections']:
+            for group in section['groups']:
+                matrix_row(section, group, group, 'Всего по расчёту', 'Итог')
+                matrix_nodes(section, group, group['children'])
     notes = book.create_sheet('Параметры')
     for label, value in metadata:
         cells = [WriteOnlyCell(notes, value=ILLEGAL_CHARACTERS_RE.sub('', str(item))[:32767]) for item in (label, value)]
