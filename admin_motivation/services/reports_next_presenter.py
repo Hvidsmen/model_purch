@@ -61,7 +61,7 @@ def present(kind, data, ledger=None, period='all'):
             return ''
         parts = urlsplit(url)
         params = QueryDict(parts.query, mutable=True)
-        params['period'] = selected
+        params.setlist('period', list(selected) if isinstance(selected, (list, tuple)) else [selected])
         return parts.path + '?' + params.urlencode()
     codes = sorted({row['code'] for row in ledger['rows'] if row['code']})
     result['period_columns'] = [{'code': code, 'label': 'Год' if code == '5' else f'{code} кв.'} for code in codes]
@@ -88,7 +88,7 @@ def personal_details(ledger, query):
     from calendar import monthrange
     from datetime import date
     from django.urls import reverse
-    from .reports_next import period_code
+    from .reports_next import period_code, selected_periods
     goals, sections = [], []
     for section in ledger.get('sections', []):
         data, kind = section['data'], section['kind']
@@ -122,7 +122,8 @@ def personal_details(ledger, query):
                     target.pop(key, None)
             detail_url = reverse('motivation_report_next', args=['detail']) + '?' + target.urlencode() + '#next-deep-calculation'
             year = int(query['year'])
-            code = query.get('period', 'all')
+            codes = selected_periods(query)
+            code = codes[0] if len(codes) == 1 else 'all'
             first_month, last_month = (int(code) * 3 - 2, int(code) * 3) if code in ('1', '2', '3', '4') else (1, 12)
             deals = QueryDict(mutable=True)
             for key, value in {'type': kind, 'subdivision': branch, 'author': author, 'run': '1',
@@ -132,10 +133,17 @@ def personal_details(ledger, query):
             for key, value in [('planning', planning), ('goods', group), ('brand', node['label'] if level == 4 else '')]:
                 if value and value not in ('*', '—'):
                     deals[key] = value
+            deal_links = []
+            for selected in (['5'] if '5' in codes else codes):
+                start, end = (int(selected) * 3 - 2, int(selected) * 3) if selected != '5' else (1, 12)
+                link = deals.copy()
+                link['start'] = date(year, start, 1).isoformat()
+                link['end'] = date(year, end, monthrange(year, end)[1]).isoformat()
+                deal_links.append({'label': 'Год' if selected == '5' else selected + ' кв.', 'url': reverse('motivation_report', args=['deals']) + '?' + link.urlencode()})
             return {'label': node['label'], 'level': level,
                 'values': [block[19] for block in node['values']],
                 'detail_url': detail_url,
-                'deals_url': reverse('motivation_report', args=['deals']) + '?' + deals.urlencode(),
+                'deals_url': deal_links[0]['url'], 'deal_links': deal_links,
                 'children': [matrix(child, branch, author, planning, group) for child in node['children']]}
         groups = []
         for branch in data['nodes']:

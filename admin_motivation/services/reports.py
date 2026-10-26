@@ -355,9 +355,11 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         access_scope = worker_scope(access_scope, kind, values)
     from .report_periods import pilot_enabled, PILOT_SQL
     pilot = pilot_enabled(kind, access_scope)
-    if premium_period is not None and premium_period not in ('all', '1', '2', '3', '4', '5'):
+    period_codes = list(premium_period) if isinstance(premium_period, (list, tuple)) else [premium_period] if premium_period not in (None, 'all') else []
+    if any(code not in ('1', '2', '3', '4', '5') for code in period_codes):
         raise ValidationError('Выберите период премии.')
-    period_condition = "LOWER(LTRIM(RTRIM([КварталМотивации]))) = N'год'" if premium_period == '5' else f"LOWER(LTRIM(RTRIM([КварталМотивации]))) LIKE N'{premium_period} кв%'" if premium_period in ('1', '2', '3', '4') else ''
+    conditions = ["LOWER(LTRIM(RTRIM([КварталМотивации]))) = N'год'" if code == '5' else f"LOWER(LTRIM(RTRIM([КварталМотивации]))) LIKE N'{code} кв%'" for code in period_codes]
+    period_condition = '(' + ' OR '.join(conditions) + ')' if conditions else ''
     if kind == 'manager-detail' and not values.get('TypeCoeff_'):
         raise ValidationError('Выберите вид работника.')
     if kind == 'manager' and any(not values.get(key) for key in (('TypeCoeff_', 'Subdivision', 'qm') if access_scope and access_scope.get('all_authors') else ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm'))):
@@ -403,7 +405,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                 from .manager_detail import period_motivation_summary
                 if premium_period and premium_period != 'all':
                     from .reports_next import period_code
-                    rows = [row for row in rows if period_code(row.get('КварталМотивации')) == premium_period]
+                    rows = [row for row in rows if period_code(row.get('КварталМотивации')) in period_codes]
                 return {'period_summary': period_motivation_summary(rows, values.get('Currency', 'USD'), pilot=pilot), 'currency': values.get('Currency', 'USD')}
             performance_fields = ('СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал', 'СуммаПланUSD', 'СуммаОтгрузокUSD')
             performance_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE ' + sql_predicate('[Подразделение]') +
@@ -420,8 +422,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             performance = fetch(cursor, performance_sql, performance_args)
             if premium_period and premium_period != 'all':
                 from .reports_next import period_code
-                rows = [row for row in rows if period_code(row.get('КварталМотивации')) == premium_period]
-                performance = [row for row in performance if period_code(row.get('КварталМотивации')) == premium_period]
+                rows = [row for row in rows if period_code(row.get('КварталМотивации')) in period_codes]
+                performance = [row for row in performance if period_code(row.get('КварталМотивации')) in period_codes]
             return manager_detail_report(rows, values.get('Currency', 'USD'), performance, pilot=pilot)
         if kind == 'subdivisions':
             dimensions = ['Подразделение', 'АвторСделки', 'Год', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']

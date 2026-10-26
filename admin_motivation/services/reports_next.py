@@ -39,6 +39,21 @@ def period_code(label):
     return '5' if name == 'год' else name[0] if name and name[:1] in '1234' else ''
 
 
+def selected_periods(query):
+    values = list(dict.fromkeys(query.getlist('period'))) or ['all']
+    if len(values) > 5 or any(value not in dict(PERIODS) for value in values) or 'all' in values and len(values) > 1:
+        raise ValidationError('Выберите корректные периоды премии.')
+    return ['1', '2', '3', '4', '5'] if values == ['all'] else sorted(values)
+
+
+def period_label(query):
+    values = list(dict.fromkeys(query.getlist('period')))
+    if not values or values == ['all'] or set(values) == set('12345'):
+        return 'Все доступные периоды'
+    labels = dict(PERIODS)
+    return ', '.join(labels[value] for value in sorted(values) if value in labels)
+
+
 def restrict(user, query):
     for field in ('planning', 'goods', 'brand', 'author', 'subdivision'):
         items = query.getlist(field)
@@ -52,11 +67,11 @@ def restrict(user, query):
     selected = query.get('type', '')
     if selected and selected not in allowed:
         raise PermissionDenied
-    period = query.get('period', 'all')
-    if period not in dict(PERIODS):
-        raise ValidationError('Выберите период премии.')
-    if scope and scope.get('pilot_periods') and period not in ('all', '4', '5'):
+    codes = selected_periods(query)
+    explicit = list(dict.fromkeys(query.getlist('period')))
+    if scope and scope.get('pilot_periods') and explicit and explicit != ['all'] and any(code not in ('4', '5') for code in codes):
         raise PermissionDenied
+    period = 'all' if not explicit or explicit == ['all'] else codes[0] if len(codes) == 1 else codes
     return scope, [selected] if selected else allowed, period
 
 
@@ -115,7 +130,7 @@ def actual_reports(user, execution, query, *, detailed=False):
                     'kind': kind, 'period': column['label'], 'code': period_code(column['label']), 'amount': amount,
                     'bonus': Decimal(0), 'currency': currency})
             # Annual remainder is a separate component, never counted twice.
-            if item['remainder']:
+            if item['remainder'] and (period == 'all' or period == '5' or isinstance(period, list) and '5' in period):
                 ledger.append({'subdivision': item['subdivision'], 'author': item['author'], 'unallocated': item.get('unallocated', False),
                     'kind': kind, 'period': 'Доплата за кварталы', 'code': '5', 'amount': Decimal(0),
                     'bonus': item['remainder'], 'currency': currency})
@@ -171,9 +186,7 @@ def planned_budget(execution, scenario, query):
     from .subdivision_scope import included
     versions = frozen_versions(execution)
     year = int(query.get('year', execution.parameters['fact_year']))
-    period = query.get('period', '5')
-    if period not in dict(PERIODS):
-        raise ValidationError('Выберите период премии.')
+    periods = selected_periods(query)
     kinds = {'Политики': 'policies', 'Продажи': 'sales', 'Директора': 'directors'}
     selected = query.get('type', '')
     if selected and selected not in kinds:
@@ -183,9 +196,9 @@ def planned_budget(execution, scenario, query):
     indexes = {side: Index(coefficient_rows(ids, subdivision=local)) for side, local in [('global', False), ('local', True)]}
     directors = {side: DirectorIndex(ids, local=local) for side, local in [('global', False), ('local', True)]}
     lines = scenario.lines.exclude(subdivision='').filter(plan_date__year=year).order_by()
-    if period in ('1', '2', '3', '4'):
-        quarter = int(period)
-        lines = lines.filter(plan_date__month__gte=quarter * 3 - 2, plan_date__month__lte=quarter * 3)
+    if '5' not in periods:
+        months = [month for code in periods for month in range(int(code) * 3 - 2, int(code) * 3 + 1)]
+        lines = lines.filter(plan_date__month__in=months)
     aliases, buckets = mapping(), {}
     director_scope = query.get('director_scope', 'active')
     if director_scope not in ('active', 'coefficients'):
@@ -200,9 +213,9 @@ def planned_budget(execution, scenario, query):
     if not quarter_share.is_finite() or not annual_share.is_finite() or not 0 <= quarter_share <= 100 or not 0 <= annual_share <= 100 or quarter_share + annual_share != 100:
         raise ValidationError('В запуске нет корректного распределения квартальной и годовой премии.')
     quarter_share, annual_share = quarter_share / 100, annual_share / 100
-    share = annual_share if period == '5' else quarter_share if period != 'all' else Decimal(1)
     selected_subdivisions = query.getlist('subdivision')
     for day, original, pg, group, brand, amount, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'segment_amounts').iterator(chunk_size=2000):
+        share = (annual_share if '5' in periods else Decimal(0)) + (quarter_share if str((day.month - 1) // 3 + 1) in periods else Decimal(0))
         sub = canonical(original, aliases)
         if not included(original, aliases) or selected_subdivisions and sub not in selected_subdivisions:
             continue

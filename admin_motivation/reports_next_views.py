@@ -44,7 +44,7 @@ def workbook(kind, data, metadata, query=None):
         write(data)
     elif kind in ('team', 'registry'):
         from .services.reports_next_presenter import present
-        display = present(kind, data, data, query.get('period', 'all') if query is not None else 'all')
+        display = present(kind, data, data, query.getlist('period') or ['all'] if query is not None else 'all')
         append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта', 'Премия по расчёту',
                 'Годовая доплата за кварталы', 'Всего по расчёту',
                 *[column['label'] + ' · без годовой доплаты' for column in display['period_columns']], 'Статус'])
@@ -145,7 +145,7 @@ def report(request, kind):
     query.setdefault('period', 'all')
     metadata = [('Расчёт', selected.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M МСК') if selected and selected.completed_at else 'Нет'), ('Год', query.get('year', '')),
         ('План расчёта DWH', selected.parameters.get('plan_version', '') if selected else ''),
-        ('План сравнения' if kind == 'executive' else 'Загруженная копия плана расчёта', str(plan) if plan else 'Не загружена'), ('Период премии', dict(reports.PERIODS).get(query['period'], '')),
+        ('План сравнения' if kind == 'executive' else 'Загруженная копия плана расчёта', str(plan) if plan else 'Не загружена'), ('Период премии', reports.period_label(query)),
         ('Валюта', 'USD' if kind == 'executive' else query['currency']),
         ('Порог выполнения для выплаты', selected.parameters.get('payout_threshold', 'Не сохранён') if selected else ''),
         ('Статус выплат', 'Данных о согласовании и фактической оплате нет. Показаны рассчитанные суммы.')]
@@ -206,7 +206,7 @@ def report(request, kind):
     export_query = query.copy()
     export_query['export'] = 'xlsx'
     from .services.reports_next_presenter import present
-    presentation = present(kind, data, data if kind != 'executive' else None, query['period'])
+    presentation = present(kind, data, data if kind != 'executive' else None, query.getlist('period') or ['all'])
     if kind == 'mine' and data:
         from .services.reports_next_presenter import personal_details
         presentation.update(personal_details(data, query))
@@ -221,6 +221,6 @@ def report(request, kind):
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'current_execution_id': runs.first().pk if runs.exists() else None, 'runs': runs, 'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
         'all_types': all_types,
-        'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': dict(reports.PERIODS).get(query['period'], ''), 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
+        'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})

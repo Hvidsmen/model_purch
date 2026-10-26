@@ -1,11 +1,24 @@
 (() => {
- const branches = document.querySelector('.next-branches');
+ const branches = document.querySelector('.next-branches:not(.next-periods)');
  const checks = [...(branches?.querySelectorAll('input[type=checkbox]') || [])];
  branches?.querySelector('[data-next-select-all]')?.addEventListener('click', () => checks.forEach(input => { input.checked = true; }));
  branches?.querySelector('[data-next-clear-all]')?.addEventListener('click', () => checks.forEach(input => { input.checked = false; }));
  branches?.querySelector('[data-next-branch-search]')?.addEventListener('input', event => {
   const text = event.target.value.trim().toLocaleLowerCase('ru');
   checks.forEach(input => { input.closest('label').hidden = !input.value.toLocaleLowerCase('ru').includes(text); });
+ });
+ const periods = document.querySelector('.next-periods');
+ const periodChecks = [...(periods?.querySelectorAll('input[name=period]') || [])];
+ const updatePeriods = () => {
+  const selected = periodChecks.filter(input => input.checked);
+  const caption = periods?.querySelector('[data-next-period-caption]');
+  if (caption) caption.textContent = !selected.length || selected.length === periodChecks.length ? 'Все доступные периоды' : selected.map(input => input.dataset.caption).join(', ');
+ };
+ periods?.querySelector('[data-period-all]')?.addEventListener('click', () => { periodChecks.forEach(input => { input.checked = true; }); updatePeriods(); });
+ periods?.querySelector('[data-period-clear]')?.addEventListener('click', () => { periodChecks.forEach(input => { input.checked = false; }); updatePeriods(); });
+ periodChecks.forEach(input => input.addEventListener('change', updatePeriods));
+ document.addEventListener('click', event => {
+  document.querySelectorAll('details.next-branches[open]').forEach(menu => { if (!menu.contains(event.target)) menu.open = false; });
  });
  const execution = document.querySelector('.next-filter select[name=execution]');
  execution?.addEventListener('change', () => {
@@ -19,8 +32,8 @@
   const type = document.querySelector('.next-filter select[name=type]');
   if (type) type.value = '';
   checks.forEach(input => { input.checked = false; });
-  const period = document.querySelector('.next-filter select[name=period]');
-  if (period && ['1', '2', '3'].includes(period.value)) period.value = 'all';
+  periodChecks.forEach(input => { if (['1', '2', '3'].includes(input.value)) input.checked = false; });
+  updatePeriods();
   const author = document.querySelector('.next-filter input[name=author]');
   if (author) author.value = '';
  });

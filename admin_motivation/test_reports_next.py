@@ -307,3 +307,59 @@ class ReportsNextTests(TestCase):
         self.assertEqual([item['total'] for item in data['type_totals']], [Decimal(35), Decimal(7)])
         self.assertEqual(len(data['registry_rows']), 2)
         self.assertEqual(sum(item['total'] for item in data['registry_rows']), ledger['total'])
+
+    def test_multiple_periods_plan_sums_selected_quarters_and_annual_share_once(self):
+        from datetime import date
+        line = self.fixture.scenario.lines.get(subdivision='A')
+        line.pk = None
+        line.plan_date = date(2026, 1, 1)
+        line.save()
+        query = QueryDict('period=4&period=5')
+        result = reports_next.planned_budget(self.run, self.fixture.scenario, query)
+        self.assertEqual(result[0]['global'], Decimal(255))  # Q4 180 + annual 75.
+        self.assertEqual(result[0]['local'], Decimal(391))
+        only_quarters = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('period=1&period=4'))
+        self.assertEqual(only_quarters[0]['global'], Decimal(300))
+        self.assertEqual(reports_next.period_label(query), '4 квартал, Год')
+        exported = self.client.get(reverse('motivation_report_next', args=['executive']),
+            {'run': '1', 'period': ['4', '5'], 'plan': self.fixture.scenario.pk, 'export': 'xlsx'})
+        from io import BytesIO
+        book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
+        self.assertEqual(book['Премии']['B3'].value, 255)
+        self.assertEqual(dict(book['Параметры'].values)['Период премии'], '4 квартал, Год')
+        book.close(); exported.close()
+
+    def test_multiperiod_summary_query_filters_selected_periods_only(self):
+        from .services.reports import load_report
+        source = [dict(detail_rows()[0], КварталМотивации=label, Остаток=0, ОстатокRUR=0)
+                  for label in ('2 Квартал(1-2 кв)', '4 Квартал(1-4 кв)', 'Год')]
+        fields = ['Подразделение', 'АвторСделки', 'Год', 'КварталМотивации',
+                  'СуммаМотивацииUSD', 'СуммаМотивацииUSDУчетПроцента', 'Остаток',
+                  'СуммаМотивацииRUR', 'СуммаМотивацииRURУчетПроцента', 'ОстатокRUR']
+        cursor, connection = Mock(), Mock()
+        cursor.description = [(field,) for field in fields]
+        cursor.fetchmany.side_effect = [[tuple(row[field] for field in fields) for row in source], []]
+        values = {'TypeCoeff_': 'Политики', 'Subdivision': ['A'], 'DealAuthor': [], 'gp_sales': [],
+                  'GPGoods': [], 'Brend': [], 'Years': ['2026'], 'Currency': 'USD'}
+        with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)):
+            data = load_report('manager-detail', values, summary_only=True, premium_period=['2', '4'])
+        self.assertIn("LIKE N'2 кв%'", cursor.execute.call_args.args[0])
+        self.assertIn("LIKE N'4 кв%'", cursor.execute.call_args.args[0])
+        self.assertEqual(data['period_summary']['totals']['total'], 180)
+        self.assertIsNone(data['period_summary']['rows'][0]['values'][-1])
+
+    def test_multi_period_links_and_pilot_scope_cannot_be_bypassed(self):
+        from .services.reports_next_presenter import present
+        row = {'subdivision': 'A', 'author': 'Own', 'unallocated': False, 'kind': 'Политики',
+               'code': '4', 'period': '4 кв.', 'amount': Decimal(10), 'bonus': Decimal(0),
+               'total': Decimal(10), 'detail_url': '/detail/?period=4'}
+        ledger = {'rows': [row], 'total': Decimal(10)}
+        output = present('team', ledger, ledger, ['4', '5'])
+        self.assertIn('period=4&period=5', output['employees'][0]['detail_url'])
+        user = User.objects.create_user('multi-period-employee')
+        user.groups.add(Group.objects.get(name=POLITICIAN))
+        MotivationReportAccess.objects.create(user=user, subdivision=self.fixture.subs[0], deal_author='Own')
+        self.client.force_login(user)
+        response = self.client.get(reverse('motivation_report_next', args=['mine']) + '?period=1&period=4')
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(reports_next.restrict(user, QueryDict('period=4&period=5'))[2], ['4', '5'])
