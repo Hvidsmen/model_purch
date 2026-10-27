@@ -20,7 +20,7 @@
             }
             const exw = numeric('exw_usd');
             const ratio = numeric('volume') / numeric('container_volume');
-            const duty = numeric('duty_rate') / 100;
+            const duty = numeric('duty_rate');
             if (!Number.isFinite(ratio) || numeric('container_volume') <= 0) return;
             const isRussian = russian.has(key(field('purch')?.value));
             const shipping = isRussian ? 0 : ratio * Number(options.container_price);

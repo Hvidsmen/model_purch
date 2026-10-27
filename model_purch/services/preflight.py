@@ -11,6 +11,7 @@ from ..models import Freight, PGGoods, Purch, PurchPay, ScenarioModel, ScenarioP
 def snapshot(scenario):
     purchases = Purch.objects.all().order_by('pk')
     data = {
+        'pricing_policy': 'duty-coefficient-v1',
         'scenario': ScenarioModel.objects.filter(pk=scenario.pk).values().get(),
         'plans': list(ScenarioPlanSales.objects.filter(scenario_model=scenario).order_by('pk').values()),
         'goods': list(PGGoods.objects.filter(scenario_plan=scenario).order_by('pk').values()),
@@ -51,7 +52,7 @@ def validation_errors(scenario):
             if not valid_number(getattr(good, name), strictly_positive=(name in {'volume', 'container_volume', 'exw_usd'})):
                 errors.append(f'{good.planning_group}: {label} должен быть конечным числом {"больше нуля" if name in {"volume", "container_volume", "exw_usd"} else "не меньше нуля"}.')
         if not valid_number(good.duty_rate, maximum=100):
-            errors.append(f'{good.planning_group}: пошлина должна быть от 0 до 100%.')
+            errors.append(f'{good.planning_group}: коэффициент пошлины должен быть от 0 до 100; 0,1 = 10%.')
         if not valid_number(good.percent_stock_end, maximum=100):
             errors.append(f'{good.planning_group}: процент конечного запаса должен быть от 0 до 100.')
         if not valid_number(good.stock_cnt_day):

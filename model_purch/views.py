@@ -1107,7 +1107,7 @@ def export_to_excel(request):
     header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
     editable_number_fill = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
     editable_number_font = Font(name='Calibri', size=11, bold=True, color='065F46')
-    editable_number_headers = {'Объём', 'EXW USD', 'Запас (дни)', 'Объём контейнера, м³', 'Пошлина, %'}
+    editable_number_headers = {'Объём', 'EXW USD', 'Запас (дни)', 'Объём контейнера, м³', 'Пошлина, коэффициент'}
     header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     thin_border = Border(
         left=Side(style='thin'), right=Side(style='thin'),
@@ -1117,7 +1117,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, коэффициент', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1280,7 +1280,7 @@ def import_from_excel(request):
                                 from decimal import Decimal
                                 duty_value = float(str(duty_rate).replace(',', '.'))
                                 if not math.isfinite(duty_value) or not 0 <= duty_value <= 100:
-                                    raise ValueError('Пошлина должна быть конечным числом от 0 до 100%.')
+                                    raise ValueError('Коэффициент пошлины должен быть конечным числом от 0 до 100; 0,1 = 10%.')
                                 defaults['duty_rate'] = duty_value
                             if container_volume is not None:
                                 container_value = float(str(container_volume).replace(',', '.'))
@@ -1454,7 +1454,7 @@ def goods_groups(request):
         except ValidationError as error:
             messages.error(request, 'Пошлина не применена: ' + ' '.join(error.messages))
         else:
-            messages.success(request, f'Пошлина {group.duty_rate}% применена к {count} товарам во всех сценариях. DDP и KDDP пересчитаны. Повторите экспорт изменённых сценариев в MS SQL.')
+            messages.success(request, f'Коэффициент пошлины {group.duty_rate} применён к {count} товарам во всех сценариях. DDP и KDDP пересчитаны. Повторите экспорт изменённых сценариев в MS SQL.')
         return redirect('goods_groups')
     form = GoodsGroupForm(request.POST if request.method == 'POST' else None, instance=group)
     if request.method == 'POST' and form.is_valid():

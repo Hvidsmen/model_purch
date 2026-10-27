@@ -217,16 +217,22 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.errors, [], self.asset_events)
 
     def test_product_duty_can_be_saved_from_goods_table(self):
+        self.db(lambda: Freight.objects.filter(scenario=self.source).update(price_per_container=1000,customs_rate=22,warehouse_delivery_cost=500))
+        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=100,volume=2,container_volume=50))
         self.visit('pggoods_list')
         self.select(self.source)
         field = self.page.locator('[name="duty_rate"]')
-        field.fill('7.25')
+        field.fill('0.1')
+        row=self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
+        self.assertEqual(row.locator('[name="customs_payment_usd"]').input_value(),'33.88')
+        self.assertEqual(row.locator('[name="ddp_usd"]').input_value(),'193.88')
         with self.page.expect_response(lambda response: '/pggoods/bulk-update/' in response.url) as result:
             self.page.locator('#saveAllBtn').click()
         self.assertEqual(result.value.status, 200)
-        self.assertEqual(self.db(lambda: str(PGGoods.objects.get(pk=self.good.pk).duty_rate)), '7.25')
+        self.assertEqual(self.db(lambda: str(PGGoods.objects.get(pk=self.good.pk).duty_rate)), '0.1')
+        self.assertAlmostEqual(self.db(lambda:PGGoods.objects.get(pk=self.good.pk).customs_payment_usd),33.88)
         self.page.reload()
-        self.assertEqual(self.page.locator('[name="duty_rate"]').input_value(), '7.25')
+        self.assertEqual(self.page.locator('[name="duty_rate"]').input_value(), '0.1')
         self.assertEqual(self.errors, [])
 
     def test_product_filters_order_search_and_two_decimal_price_display(self):
@@ -338,13 +344,13 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
 
     def test_group_default_and_price_preview_match_saved_price(self):
         from .models import GoodsGroup
-        self.db(lambda: GoodsGroup.objects.create(name='Tariff group', duty_rate=5))
+        self.db(lambda: GoodsGroup.objects.create(name='Tariff group', duty_rate=.05))
         self.db(lambda: Freight.objects.filter(scenario=self.source).update(price_per_container=1000, customs_rate=10, warehouse_delivery_cost=500))
         self.visit('pggoods_list')
         self.select(self.source)
         row = self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
         row.locator('[name="group_goods"]').select_option('Tariff group')
-        self.assertEqual(row.locator('[name="duty_rate"]').input_value(), '5.00')
+        self.assertEqual(row.locator('[name="duty_rate"]').input_value(), '0.05')
         row.locator('[name="volume"]').fill('2')
         row.locator('[name="container_volume"]').fill('50')
         row.locator('[name="exw_usd"]').fill('100')

@@ -220,12 +220,12 @@ class ProductPricingTests(TestCase):
             update.assert_called_once()
 
     def test_duty_accepts_float_precision_in_product_and_group(self):
-        value = 7.123456789123
+        value = .07123456789123
         response = self.client.post(reverse('edit_pggoods', args=[self.good.pk]), {'scenario': self.scenario.pk, 'duty_rate': str(value)})
         self.assertEqual(response.status_code, 302)
         self.good.refresh_from_db()
         self.assertEqual(self.good.duty_rate, value)
-        self.assertAlmostEqual(self.good.customs_payment_usd, 140 * .1 * (1 + value / 100))
+        self.assertAlmostEqual(self.good.customs_payment_usd, 140 * .1 * (1 + value))
         response = self.client.post(reverse('goods_groups'), {'name': 'Precise duty', 'duty_rate': str(value), 'container_volume': '65'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(GoodsGroup.objects.get(name='Precise duty').duty_rate, value)
@@ -238,7 +238,21 @@ class ProductPricingTests(TestCase):
         self.freight = Freight.objects.create(scenario=self.scenario, price_per_container=1000, customs_rate=10, warehouse_delivery_cost=500)
         self.good = PGGoods.objects.create(scenario_plan=self.scenario, planning_group='Unit', planning_sales='Sales',
             group_goods='Group', brand='Brand', purch='Supplier', kind_purch=self.kind, volume=2, container_volume=50,
-            duty_rate=5, exw_usd=100, stock_cnt_day=30, percent_stock_end=20)
+            duty_rate=.05, exw_usd=100, stock_cnt_day=30, percent_stock_end=20)
+
+    def test_duty_is_a_coefficient_and_is_not_divided_by_100(self):
+        self.good.duty_rate=.1
+        self.good.save()
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.duty_rate,.1)
+        self.assertAlmostEqual(self.good.customs_payment_usd,15.4) # 140 × 10% × 1.1.
+        self.assertAlmostEqual(self.good.ddp_usd,175.4)
+        self.freight.price_per_container=0
+        self.freight.customs_rate=22
+        self.freight.warehouse_delivery_cost=0
+        self.good.exw_usd=68710.91
+        apply_price(self.good,self.freight)
+        self.assertAlmostEqual(self.good.customs_payment_usd,16628.04022)
 
     def test_formula_percentages_and_domestic_exception(self):
         self.assertAlmostEqual(self.good.freight_usd, 40)
@@ -272,17 +286,17 @@ class ProductPricingTests(TestCase):
         self.assertEqual(set(response.context['form'].fields), {'purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch', 'volume', 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day'})
 
     def test_group_duty_default_and_explicit_override(self):
-        group = GoodsGroup.objects.create(name='New group', duty_rate=12)
+        group = GoodsGroup.objects.create(name='New group', duty_rate=.12)
         url = reverse('edit_pggoods', args=[self.good.pk]) + f'?scenario={self.scenario.pk}'
         self.client.post(url, {'scenario': self.scenario.pk, 'group_goods': group.name})
         self.good.refresh_from_db()
-        self.assertEqual(self.good.duty_rate, Decimal('12'))
-        self.client.post(url, {'scenario': self.scenario.pk, 'duty_rate': '7.25'})
+        self.assertEqual(self.good.duty_rate, .12)
+        self.client.post(url, {'scenario': self.scenario.pk, 'duty_rate': '0.0725'})
         self.good.refresh_from_db()
-        self.assertEqual(self.good.duty_rate, Decimal('7.25'))
+        self.assertEqual(self.good.duty_rate, .0725)
         new = PGGoods.objects.create(scenario_plan=self.scenario, planning_group='New', planning_sales='Sales', group_goods=group.name,
             kind_purch=self.kind, volume=2, exw_usd=100, stock_cnt_day=1, percent_stock_end=0)
-        self.assertEqual(new.duty_rate, Decimal('12'))
+        self.assertEqual(new.duty_rate, .12)
 
     def test_scenario_parameters_reprice_existing_goods(self):
         response = self.client.post(reverse('freight'), {'scenario': self.scenario.pk, 'price_per_container': '2000',
@@ -307,9 +321,9 @@ class ProductPricingTests(TestCase):
         user = User.objects.create_user('logistician')
         user.groups.add(Group.objects.get(name=LOGISTICIAN))
         self.client.force_login(user)
-        response = self.client.post(reverse('goods_groups'), {'name': 'Duty group', 'duty_rate': '7.25', 'container_volume': '65'})
+        response = self.client.post(reverse('goods_groups'), {'name': 'Duty group', 'duty_rate': '0.0725', 'container_volume': '65'})
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(GoodsGroup.objects.get(name='Duty group').duty_rate, Decimal('7.25'))
+        self.assertEqual(GoodsGroup.objects.get(name='Duty group').duty_rate, .0725)
 
     def test_copy_recalculates_prices_using_target_scenario(self):
         from .services.copying import copy_goods
@@ -332,36 +346,36 @@ class ProductPricingTests(TestCase):
 
     def test_apply_group_duty_replaces_overrides_across_scenarios_and_reprices(self):
         group = GoodsGroup.objects.get(name='Group')
-        group.duty_rate = Decimal('20')
+        group.duty_rate = Decimal('0.2')
         group.save()
         other_scenario = ScenarioModel.objects.create(name='Other', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         second = PGGoods.objects.create(scenario_plan=other_scenario, planning_group='Second',
-            group_goods=' group ', kind_purch=self.kind, volume=1, container_volume=65, duty_rate=3, exw_usd=50, stock_cnt_day=30, percent_stock_end=0)
+            group_goods=' group ', kind_purch=self.kind, volume=1, container_volume=65, duty_rate=.03, exw_usd=50, stock_cnt_day=30, percent_stock_end=0)
         unrelated = PGGoods.objects.create(scenario_plan=self.scenario, planning_group='Unrelated',
-            group_goods='Different', kind_purch=self.kind, volume=1, container_volume=65, duty_rate=7, exw_usd=80, stock_cnt_day=30, percent_stock_end=0)
+            group_goods='Different', kind_purch=self.kind, volume=1, container_volume=65, duty_rate=.07, exw_usd=80, stock_cnt_day=30, percent_stock_end=0)
         self.good.refresh_from_db()
-        self.assertEqual(self.good.duty_rate, Decimal('5'))
+        self.assertEqual(self.good.duty_rate, .05)
         response = self.client.post(reverse('goods_groups'), {'id': group.pk, 'action': 'apply_duty', 'confirm_apply': 'yes'})
         self.assertEqual(response.status_code, 302)
         self.good.refresh_from_db(); second.refresh_from_db(); unrelated.refresh_from_db()
-        self.assertEqual(self.good.duty_rate, Decimal('20'))
-        self.assertEqual(second.duty_rate, Decimal('20'))
-        self.assertEqual(unrelated.duty_rate, Decimal('7'))
+        self.assertEqual(self.good.duty_rate, .2)
+        self.assertEqual(second.duty_rate, .2)
+        self.assertEqual(unrelated.duty_rate, .07)
         self.assertAlmostEqual(self.good.customs_payment_usd, 16.8)
         self.assertAlmostEqual(self.good.ddp_usd, 176.8)
         self.assertAlmostEqual(self.good.kddp, 1.768)
 
     def test_apply_group_duty_requires_confirmation_and_rolls_back_invalid_prices(self):
         group = GoodsGroup.objects.get(name='Group')
-        group.duty_rate = Decimal('20')
+        group.duty_rate = Decimal('0.2')
         group.save()
         self.client.post(reverse('goods_groups'), {'id': group.pk, 'action': 'apply_duty'})
         self.good.refresh_from_db()
-        self.assertEqual(self.good.duty_rate, Decimal('5'))
+        self.assertEqual(self.good.duty_rate, .05)
         PGGoods.objects.filter(pk=self.good.pk).update(container_volume=0)
         self.client.post(reverse('goods_groups'), {'id': group.pk, 'action': 'apply_duty', 'confirm_apply': 'yes'})
         self.good.refresh_from_db()
-        self.assertEqual(self.good.duty_rate, Decimal('5'))
+        self.assertEqual(self.good.duty_rate, .05)
         self.assertAlmostEqual(self.good.ddp_usd, 174.7)
 
     def test_product_classification_fields_offer_existing_and_reference_choices(self):
@@ -402,7 +416,7 @@ class ProductPricingTests(TestCase):
         group = GoodsGroup.objects.get(name='Group')
         self.assertEqual(group.container_volume, 65)
         group.container_volume = 100
-        group.duty_rate = 20
+        group.duty_rate = .2
         group.save()
         response = self.client.post(reverse('goods_groups'), {
             'action': 'apply_parameters', 'confirm_apply': 'yes',
@@ -411,14 +425,14 @@ class ProductPricingTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.good.refresh_from_db()
         self.assertEqual(self.good.container_volume, 100)
-        self.assertEqual(self.good.duty_rate, 5)
+        self.assertEqual(self.good.duty_rate, .05)
         self.assertAlmostEqual(self.good.freight_usd, 20)
         self.client.post(reverse('goods_groups'), {
             'action': 'apply_parameters', 'confirm_apply': 'yes',
             'group_ids': [group.pk], 'parameter': 'both',
         })
         self.good.refresh_from_db()
-        self.assertEqual(self.good.duty_rate, 20)
+        self.assertEqual(self.good.duty_rate, .2)
         self.assertAlmostEqual(self.good.customs_payment_usd, 14.4)
 
     def test_group_container_application_requires_confirmation(self):

@@ -34,7 +34,7 @@ class PGGoodsEditForm(forms.ModelForm):
         labels = {'purch': _('Закупка'), 'planning_sales': _('Группа планов продаж'),
                   'group_goods': _('Группа товаров'), 'brand': _('Бренд'), 'kind_purch': _('Вид закупки'),
                   'volume': _('Объём'), 'container_volume': _('Объём контейнера, м³'),
-                  'duty_rate': _('Пошлина, %'), 'exw_usd': _('Цена EXW (USD)'), 'stock_cnt_day': _('Запас в днях')}
+                  'duty_rate': _('Пошлина, коэффициент (0,1 = 10%)'), 'exw_usd': _('Цена EXW (USD)'), 'stock_cnt_day': _('Запас в днях')}
         widgets = {
             'purch': forms.TextInput(attrs={'class': 'form-control', 'list': 'purchase-options'}),
             'planning_sales': forms.TextInput(attrs={'class': 'form-control'}),

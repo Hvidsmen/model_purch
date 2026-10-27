@@ -1,5 +1,5 @@
 from django.db import transaction
-"""One source of truth for unit prices; percentages are stored as 0..100."""
+"""One source of truth for unit prices; duty is a coefficient; other percentage rates use 0..100."""
 from decimal import Decimal, localcontext
 import math
 from django.core.exceptions import ValidationError
@@ -26,7 +26,7 @@ def apply_price(good, freight=None, is_russian=False, supply_type=None):
         exw = number(good.exw_usd, 'EXW')
         volume = number(good.volume, 'Объём товара')
         container = number(good.container_volume, 'Объём контейнера', positive=True)
-        duty = number(good.duty_rate, 'Пошлина', maximum=100) / 100
+        duty = number(good.duty_rate, 'Коэффициент пошлины', maximum=100)
         ratio = volume / container
         shipping = number(freight.price_per_container, 'Фрахт') * ratio if freight else Decimal(0)
         cif = exw + shipping

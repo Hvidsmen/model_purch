@@ -129,7 +129,7 @@ class GoodsGroup(models.Model):
     container_volume = models.DecimalField('Объём контейнера, м³', max_digits=12, decimal_places=3, default=65, validators=[MinValueValidator(Decimal('0.001'))])
     name = models.CharField('Группа товаров', max_length=255)
     name_key = models.CharField(max_length=64, unique=True, editable=False, default='')
-    duty_rate = models.FloatField('Пошлина, %', default=0,
+    duty_rate = models.FloatField('Пошлина, коэффициент', default=0, help_text='0,1 = 10%. Вводите коэффициент без знака процента.',
                                     validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
 
     class Meta:
@@ -190,7 +190,7 @@ class PGGoods(models.Model):
 
     volume = models.FloatField()
     container_volume = models.FloatField('Объём контейнера, м³', default=65, validators=[MinValueValidator(0.001)])
-    duty_rate = models.FloatField('Пошлина, %', default=0,
+    duty_rate = models.FloatField('Пошлина, коэффициент', default=0, help_text='0,1 = 10%. Вводите коэффициент без знака процента.',
                                     validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
     exw_usd = models.FloatField()
     plan_ddp_usd = models.FloatField('DDP по плану за единицу, USD', null=True, blank=True, editable=False)
