@@ -1107,7 +1107,7 @@ def export_to_excel(request):
     header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
     editable_number_fill = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
     editable_number_font = Font(name='Calibri', size=11, bold=True, color='065F46')
-    editable_number_headers = {'Объём', 'EXW USD', 'Запас (дни)', 'Объём контейнера, м³', 'Пошлина, коэффициент'}
+    editable_number_headers = {'Объём', 'EXW USD', 'Запас (дни)', 'Объём контейнера, м³', 'Пошлина, %'}
     header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     thin_border = Border(
         left=Side(style='thin'), right=Side(style='thin'),
@@ -1117,7 +1117,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, коэффициент', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1164,6 +1164,8 @@ def export_to_excel(request):
         for col_num, value in enumerate(data, 1):
             cell = ws.cell(row=row_num, column=col_num, value=value)
             cell.border = thin_border
+            if col_num == 16:
+                cell.number_format = '0.00%'
             if headers[col_num - 1] == 'Ср. взв. DDP, USD':
                 cell.number_format = '0.00'
             if col_num in [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23]:
@@ -1171,6 +1173,8 @@ def export_to_excel(request):
             else:
                 cell.alignment = Alignment(horizontal='left')
 
+    from openpyxl.comments import Comment
+    ws.cell(1, 16).comment = Comment('Введите ставку со знаком процента: 10%. Excel хранит это как коэффициент 0,1. Не вводите число 10 без знака процента.', 'DA портал')
     ws.freeze_panes = 'A2'
 
     scenario_name = current_scenario.name if current_scenario else 'all'

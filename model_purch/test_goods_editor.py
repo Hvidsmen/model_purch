@@ -44,7 +44,7 @@ class GoodsEditorTests(TestCase):
             self.assertAlmostEqual(cell.value,110)
             self.assertEqual(cell.data_type,'n')
             self.assertEqual(cell.number_format,'0.00')
-            self.assertEqual(headers[10:16],['DDP USD','KDDP','Запас (дни)','% запаса','Объём контейнера, м³','Пошлина, коэффициент'])
+            self.assertEqual(headers[10:16],['DDP USD','KDDP','Запас (дни)','% запаса','Объём контейнера, м³','Пошлина, %'])
         finally:workbook.close()
         PGGoods.objects.filter(pk=self.good.pk).update(stock_quantity=1000)
         response=self.client.get(reverse('export_pggoods'),{'scenario':self.scenario.pk})
@@ -210,7 +210,8 @@ class GoodsEditorTests(TestCase):
         response = self.client.get(reverse('export_pggoods'), {'scenario': self.scenario.pk})
         workbook = load_workbook(io.BytesIO(response.content))
         sheet = workbook.active
-        self.assertEqual((sheet.cell(1, 16).value, sheet.cell(2, 16).value), ('Пошлина, коэффициент', 7.25))
+        self.assertEqual((sheet.cell(1, 16).value, sheet.cell(2, 16).value), ('Пошлина, %', 7.25))
+        self.assertIn('%', sheet.cell(2, 16).number_format)
         sheet.cell(2, 16).value = 12.5
         for legacy in (False, True):
             if legacy:

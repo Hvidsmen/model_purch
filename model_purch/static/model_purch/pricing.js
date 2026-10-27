@@ -14,7 +14,28 @@
         const display = (name, value) => { if (field(name)) field(name).value = Number.isFinite(value) ? value.toFixed(2) : ''; };
         const purchaseLink = row.querySelector('[data-purchase-link]');
         const purchaseListUrl = purchaseLink?.href;
+        const percent = row.querySelector('[data-duty-percent]');
+        if (percent) {
+            percent.addEventListener('keydown', event => {
+                if (event.key !== 'Escape') return;
+                event.preventDefault();
+                percent.setCustomValidity('');
+                row.querySelectorAll('.editable-field').forEach(input => { input.value = input.dataset.original; });
+                percent.blur();
+                field('duty_rate').dispatchEvent(new Event('input', {bubbles:true}));
+            });
+            percent.addEventListener('input', () => {
+                const value = Number(percent.value.replace(',', '.'));
+                percent.setCustomValidity(percent.value === '' || !Number.isFinite(value) || value < 0 || value > 10000 ? 'Введите пошлину в процентах: например, 10 для 10%.' : '');
+                if (!percent.checkValidity()) { percent.reportValidity(); return; }
+                field('duty_rate').value = String(value / 100);
+                field('duty_rate').dispatchEvent(new Event('input', {bubbles:true}));
+            });
+        }
         function calculate() {
+            if (percent && document.activeElement !== percent) percent.value = String(Number((numeric('duty_rate') * 100).toPrecision(15)));
+            const source = row.querySelector('[data-duty-source]');
+            if (source) source.textContent = duties.has(key(field('group_goods')?.value)) && Number(duties.get(key(field('group_goods')?.value))) === numeric('duty_rate') ? 'Совпадает с группой' : 'Ставка товара';
             if (purchaseLink) {
                 purchaseLink.href = purchaseUrls.get(key(field('purch')?.value)) || purchaseListUrl;
             }
@@ -45,6 +66,11 @@
                     ? ((purchaseQuantity ? ddp * purchaseQuantity : 0) + (stockUsed ? stockPrice * stockUsed : 0)) / planQuantity : NaN;
                 field('weighted_ddp_usd').value = Number.isFinite(weighted) && weighted >= 0 ? weighted.toFixed(2) : '—';
             }
+            const money = value => Number.isFinite(value) ? value.toLocaleString('ru-RU', {maximumFractionDigits:2}) : '—';
+            const explanation = row.querySelector('[data-price-explanation]');
+            if (explanation) explanation.textContent = isRussian ? `Российская закупка: DDP = EXW = ${money(exw)} USD/шт.` : `CIF ${money(cif)} + таможня ${money(customs)} + доставка ${money(delivery)} = DDP ${money(ddp)} USD/шт. Таможня = CIF × ${options.customs_rate}% × (1 + ${money(duty)}). Фрахт и доставка распределяются по доле объёма товара в контейнере.`;
+            const stockExplanation = row.querySelector('[data-stock-explanation]');
+            if (stockExplanation) stockExplanation.textContent = validQuantities ? `План: ${money(planQuantity)} шт. Из стока: ${money(stockUsed)} шт. по ${stockDdp === '' ? 'неизвестной цене' : money(Number(stockDdp)) + ' USD/шт.'} Закупка: ${money(purchaseQuantity)} шт. по ${money(ddp)} USD/шт. Средняя стоимость = (стоимость закупки + стоимость используемого стока) / план.` : 'Средняя стоимость недоступна: нужны положительный план и корректное количество стока.';
             const purchaseNote = row.querySelector('[data-purchase-plan-note]');
             if (purchaseNote) purchaseNote.hidden = !(validQuantities && purchaseQuantity === 0);
             if (exw > 0) display('kddp', ddp / exw);

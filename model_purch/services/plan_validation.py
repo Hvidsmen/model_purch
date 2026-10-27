@@ -13,7 +13,7 @@ def plan_warnings(good, threshold=10):
             warnings.append(('ddp', 'DDP отличается от нулевого плана'))
         elif deviation / abs(good.plan_ddp_usd) * 100 > threshold + 1e-9:
             percent = deviation / abs(good.plan_ddp_usd) * 100
-            warnings.append(('ddp', f'DDP отличается от плана на {percent:.1f}% (порог {threshold:g}%)'))
+            warnings.append(('ddp', f'DDP отличается от плана на {percent:.1f}% (порог {threshold:g}%): сейчас {good.ddp_usd or 0:,.2f}, план {good.plan_ddp_usd:,.2f} USD/шт. Откройте расчёт стоимости.'))
     if good.plan_volume is None:
         missing.append('объём')
     elif not math.isclose(good.volume or 0, good.plan_volume, rel_tol=1e-9, abs_tol=1e-9):
@@ -22,7 +22,7 @@ def plan_warnings(good, threshold=10):
             warnings.append(('volume', 'Объём отличается от нулевого плана'))
         elif deviation / abs(good.plan_volume) * 100 > threshold + 1e-9:
             percent = deviation / abs(good.plan_volume) * 100
-            warnings.append(('volume', f'Объём отличается от плана на {percent:.1f}% (порог {threshold:g}%)'))
+            warnings.append(('volume', f'Объём отличается от плана на {percent:.1f}% (порог {threshold:g}%): сейчас {good.volume or 0:,.2f}, план {good.plan_volume:,.2f} м³/шт. Проверьте объём товара.'))
     for kind, label, current, actual in (
         ('fact_ddp', 'DDP', good.ddp_usd, good.fact_ddp_usd),
         ('fact_volume', 'Объём', good.volume, good.fact_volume),
@@ -34,7 +34,7 @@ def plan_warnings(good, threshold=10):
         else:
             percent = abs((current or 0) - actual) / abs(actual) * 100
             if percent > threshold + 1e-9:
-                warnings.append((kind, f'{label} отличается от факта на {percent:.1f}% (порог {threshold:g}%)'))
+                warnings.append((kind, f'{label} отличается от факта на {percent:.1f}% (порог {threshold:g}%): сейчас {current or 0:,.2f}, факт {actual:,.2f}. Проверьте параметры товара.'))
     if missing:
         warnings.append(('missing', 'Не загружены плановые значения: ' + ', '.join(missing)))
     return warnings
