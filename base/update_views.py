@@ -92,3 +92,22 @@ def credentials(request, run_id):
         return JsonResponse({'token': token, 'control': control})
     except (ValueError, OSError) as error:
         return JsonResponse({'error': str(error) if isinstance(error, ValueError) else 'Задание уже запускается.'}, status=409)
+
+
+@never_cache
+@require_POST
+def database_diagnostics(request):
+    administrator(request)
+    from django.db import connections
+    from model_purch.services.database_diagnostics import diagnose_database
+    connection = connections['default']
+    if connection.vendor != 'sqlite':
+        return JsonResponse({'error': 'Эта диагностика предназначена для SQLite.'}, status=400)
+    try:
+        report = diagnose_database(connection.settings_dict['NAME'], include_tables=True, max_seconds=15,
+            backup_directory=portal_updates.root() / '.local' / 'backups')
+    except Exception:
+        return JsonResponse({'error': 'Не удалось прочитать диагностику. Используйте команду database_diagnostics на сервере.'}, status=503)
+    response = JsonResponse(report, json_dumps_params={'ensure_ascii': False, 'indent': 2})
+    response['Content-Disposition'] = 'attachment; filename="database-diagnostics.json"'
+    return response

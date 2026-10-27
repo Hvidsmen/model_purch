@@ -53,6 +53,8 @@ class Updater:
             protocol.update(self.root, self.run_id, detail='Резервная копия ожидает завершения записи в SQLite')
         elif line.startswith('Backup verified'):
             protocol.update(self.root, self.run_id, detail='Резервная копия проверена. Применение миграций')
+        elif line.startswith('Только подписи и подсказки полей:'):
+            protocol.update(self.root, self.run_id, detail='Только подписи полей: миграции без полного копирования базы')
         elif line.startswith('Обновление статических файлов…'):
             self.report('static')
         elif line.startswith('Проверка и применение миграций…'):
@@ -248,6 +250,32 @@ class Updater:
             self.report('complete', 'Установлена актуальная версия. Перезапуск не потребовался')
             protocol.update(self.root, self.run_id, status='completed', finished_at=protocol.utcnow(), maintenance=False)
             return
+        # Fetch and build all dependencies while the current portal is still serving.
+        # Never install into its live interpreter before it has been stopped.
+        self.report('download', 'Подготовка компонентов. Портал продолжает работать')
+        requirements = self.command(['git', 'show', f'{target}:requirements.txt'], capture=True)
+        staged_requirements = self.folder / 'requirements-target.txt'
+        staged_requirements.write_text(requirements + '\n', encoding='utf-8')
+        wheels = self.folder / 'wheels'
+        wheels.mkdir(exist_ok=True)
+        dependency_report = self.folder / 'dependencies.json'
+        self.command([sys.executable, '-m', 'pip', 'install', '--dry-run', '--report', str(dependency_report),
+            '-r', str(staged_requirements), '--disable-pip-version-check', '--no-input'], timeout=1800)
+        resolution = json.loads(dependency_report.read_text(encoding='utf-8'))
+        needed = []
+        for item in resolution['install']:
+            name, version = item['metadata']['name'], item['metadata']['version']
+            if not re.fullmatch(r'[A-Za-z0-9_.-]+', name) or not re.fullmatch(r'[A-Za-z0-9_.+!-]+', version):
+                raise UpdateFailure('Не удалось проверить список компонентов. Портал не остановлен.')
+            needed.append(f'{name}=={version}')
+        if needed:
+            resolved_requirements = self.folder / 'requirements-resolved.txt'
+            resolved_requirements.write_text('\n'.join(needed) + '\n', encoding='utf-8')
+            self.command([sys.executable, '-m', 'pip', 'wheel', '--no-deps', '-r', str(resolved_requirements),
+                '--wheel-dir', str(wheels), '--disable-pip-version-check', '--no-input'], timeout=1800)
+        # A failed preparation leaves the running portal and checkout untouched.
+        if self.command(['git', 'rev-parse', 'HEAD'], capture=True) != old or self.command(['git', 'status', '--porcelain'], capture=True):
+            raise UpdateFailure('Файлы портала изменились во время подготовки. Портал не остановлен; запустите обновление заново.')
         self.report('stop')
         self.task_command('stop-portal')
         protocol.update(self.root, self.run_id, portal_stopped=True)
@@ -255,7 +283,7 @@ class Updater:
         self.report('checkout')
         self.command(['git', '-c', 'gc.auto=0', '-c', 'maintenance.auto=false', 'merge', '--ff-only', target], timeout=180)
         self.report('dependencies')
-        self.command([sys.executable, '-m', 'pip', 'install', '-r', 'requirements.txt', '--disable-pip-version-check', '--no-input'], timeout=1800)
+        self.command([sys.executable, '-m', 'pip', 'install', '--no-index', '--find-links', str(wheels), '-r', str(staged_requirements), '--disable-pip-version-check', '--no-input'], timeout=1800)
         self.report('prepare')
         self.command([sys.executable, '-u', 'scripts/prepare_local.py', '--database', self.task['Database']], timeout=7200)
         # prepare_local performs backups/migrations/collectstatic and persists DB selection.
@@ -265,6 +293,8 @@ class Updater:
         self.task_command('start-portal')
         self.report('verify')
         self.verify(target)
+        import shutil
+        shutil.rmtree(wheels, ignore_errors=True)
         self.report('complete')
         protocol.update(self.root, self.run_id, status='completed', maintenance=False, finished_at=protocol.utcnow())
 

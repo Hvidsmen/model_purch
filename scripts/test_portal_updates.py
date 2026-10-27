@@ -98,9 +98,12 @@ class UpdateProtocolTests(unittest.TestCase):
     def test_clean_fast_forward_pipeline_prepares_before_starting_and_verifies_revision(self):
         worker = self.updater()
         old, target = 'a' * 40, 'b' * 40
-        commands, tasks = [], []
+        commands, tasks, timeline = [], [], []
         def command(args, **kwargs):
             commands.append(args)
+            timeline.append(args)
+            if '--report' in args:
+                state.write(Path(args[args.index('--report') + 1]), {'install': [{'metadata': {'name': 'Example', 'version': '1.0'}}]})
             if args[:3] == ['git', 'branch', '--show-current']: return 'main'
             if args[:3] == ['git', 'status', '--porcelain']: return ''
             if args[:3] == ['git', 'rev-parse', 'HEAD']: return old
@@ -108,6 +111,7 @@ class UpdateProtocolTests(unittest.TestCase):
             return ''
         def task(action):
             tasks.append(action)
+            timeline.append(action)
             if action == 'start-portal':
                 marker = state.read(worker.folder / 'prepared.json')
                 self.assertEqual(marker['revision'], target)
@@ -115,9 +119,34 @@ class UpdateProtocolTests(unittest.TestCase):
         with patch.object(worker, 'command', side_effect=command), patch.object(worker, 'task_command', side_effect=task), patch.object(worker, 'verify') as verify:
             self.assertEqual(worker.run(), 0)
         self.assertEqual(tasks, ['check', 'stop-portal', 'start-portal'])
+        dry_run = next(args for args in commands if '--dry-run' in args)
+        wheel = next(args for args in commands if 'wheel' in args)
+        install = next(args for args in commands if 'install' in args and '--dry-run' not in args)
+        self.assertLess(timeline.index(dry_run), timeline.index('stop-portal'))
+        self.assertLess(timeline.index(wheel), timeline.index('stop-portal'))
+        self.assertGreater(timeline.index(install), timeline.index('stop-portal'))
+        self.assertIn('--no-index', install)
+        self.assertFalse((worker.folder / 'wheels').exists())
         verify.assert_called_once_with(target)
         self.assertTrue(any('scripts/prepare_local.py' in args for args in commands))
         self.assertEqual(state.state(self.root, self.record['id'])['status'], 'completed')
+
+    def test_dependency_failure_does_not_stop_portal_or_change_checkout(self):
+        worker = self.updater()
+        commands = []
+        def command(args, **kwargs):
+            commands.append(args)
+            if '--dry-run' in args:
+                raise UpdateFailure('Dependency download unavailable')
+            if args[:3] == ['git', 'branch', '--show-current']: return 'main'
+            if args[:3] == ['git', 'rev-parse', 'HEAD']: return 'a' * 40
+            if args[:3] == ['git', 'rev-parse', 'FETCH_HEAD']: return 'b' * 40
+            return ''
+        with patch.object(worker, 'command', side_effect=command), patch.object(worker, 'task_command') as task:
+            self.assertEqual(worker.run(), 1)
+        task.assert_called_once_with('check')
+        self.assertFalse(any('--ff-only' in args for args in commands))
+        self.assertFalse(state.state(self.root, self.record['id'])['maintenance'])
 
     def test_dirty_checkout_aborts_without_stopping_portal(self):
         worker = self.updater()

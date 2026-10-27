@@ -5,6 +5,7 @@ from django.core.management.commands.migrate import Command as DjangoMigrate
 from django.db import connections
 from django.db.migrations.executor import MigrationExecutor
 from model_purch.services.backups import backup_sqlite
+from model_purch.services.migration_safety import metadata_only_plan
 
 
 class Command(DjangoMigrate):
@@ -17,7 +18,12 @@ class Command(DjangoMigrate):
         if not read_only and connection.vendor == 'sqlite' and not name.startswith(('file:', ':memory:')) and Path(name).is_file():
             executor = MigrationExecutor(connection)
             # A backup is also required for explicitly requested reverse/fake migrations.
-            if options.get('app_label') or executor.migration_plan(executor.loader.graph.leaf_nodes()):
+            plan = executor.migration_plan(executor.loader.graph.leaf_nodes())
+            explicit = bool(options.get('app_label') or options.get('fake') or options.get('fake_initial') or options.get('run_syncdb'))
+            label_only = not explicit and metadata_only_plan(executor, plan)
+            if label_only:
+                self.stdout.write('Только подписи и подсказки полей: структура и данные не меняются; полная резервная копия не требуется.')
+            if explicit or plan and not label_only:
                 size_mb = Path(name).stat().st_size / (1024 * 1024)
                 self.stdout.write(f'Есть изменения схемы. Создание и проверка резервной копии SQLite ({size_mb:.1f} МБ)…')
                 self.stdout.flush()

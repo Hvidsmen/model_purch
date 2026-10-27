@@ -3,7 +3,7 @@
     if (!root) return;
     const base = root.dataset.base;
     const el = id => document.getElementById(`update-${id}`);
-    const labels = {queued: 'Ожидание задания Windows', fetch: 'Проверка новой версии', stop: 'Остановка портала', checkout: 'Обновление кода', dependencies: 'Обновление компонентов', prepare: 'Резервная копия и миграции', static: 'Подготовка файлов интерфейса', starting: 'Запуск портала', verify: 'Проверка готовности', complete: 'Портал готов'};
+    const labels = {queued: 'Ожидание задания Windows', fetch: 'Проверка новой версии', download: 'Подготовка компонентов — портал работает', stop: 'Остановка портала', checkout: 'Обновление кода', dependencies: 'Обновление компонентов', prepare: 'Резервная копия и миграции', static: 'Подготовка файлов интерфейса', starting: 'Запуск портала', verify: 'Проверка готовности', complete: 'Портал готов'};
     const time = value => new Intl.DateTimeFormat('ru-RU', {timeZone: 'Europe/Moscow', dateStyle: 'short', timeStyle: 'medium'}).format(new Date(value));
     const storageKey = id => `portal-update:${id}`;
     const store = (key, value) => { try { sessionStorage.setItem(key, JSON.stringify(value)); } catch (_) {} };

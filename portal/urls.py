@@ -26,6 +26,7 @@ urlpatterns = ([
                    path('accounts/administration/', admin_views.dashboard, name='portal_administration'),
                    path('accounts/windows/', identity_views.windows_login, name='portal_windows_login'),
                    path('accounts/updates/', update_views.updates, name='portal_updates'),
+                   path('accounts/updates/database-diagnostics/', update_views.database_diagnostics, name='portal_database_diagnostics'),
                    path('accounts/updates/start/', update_views.start, name='portal_update_start'),
                    path('accounts/updates/launch/<str:run_id>/', update_views.launch, name='portal_update_launch'),
                    path('accounts/updates/status/<str:run_id>/', update_views.status, name='portal_update_status'),

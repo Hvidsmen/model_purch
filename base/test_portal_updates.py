@@ -82,3 +82,21 @@ class PortalUpdatesTests(TestCase):
         with patch('base.portal_updates.revision', return_value='a' * 40):
             response = Client().get(reverse('portal_update_health'))
         self.assertEqual(response.json(), {'ready': True, 'revision': 'a' * 40})
+
+    def test_storage_report_is_admin_only_csrf_protected_and_downloadable(self):
+        user = User.objects.create_user('diagnostics-project-admin')
+        UserProjectAccess.objects.create(user=user, project='purchases', role=ADMIN)
+        client = Client()
+        client.force_login(user)
+        url = reverse('portal_database_diagnostics')
+        self.assertEqual(client.post(url).status_code, 403)
+        csrf = Client(enforce_csrf_checks=True)
+        csrf.force_login(self.actor)
+        self.assertEqual(csrf.post(url).status_code, 403)
+        self.assertEqual(self.client.get(url).status_code, 405)
+        with patch('model_purch.services.database_diagnostics.diagnose_database', return_value={'database_bytes': 4096, 'objects': []}) as diagnose:
+            response = self.client.post(url)
+        self.assertEqual(response.status_code, 200)
+        self.assertIn('database-diagnostics.json', response['Content-Disposition'])
+        self.assertEqual(response.json()['database_bytes'], 4096)
+        self.assertEqual(diagnose.call_args.kwargs, {'include_tables': True, 'max_seconds': 15, 'backup_directory': self.root / '.local' / 'backups'})
