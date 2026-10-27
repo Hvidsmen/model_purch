@@ -82,7 +82,7 @@ def fact_rows(year, subdivision='', connector=None):
             connection.close()
 
 
-def check(version, rows, kind='', scope='subdivision'):
+def check(version, rows, kind='', scope='subdivision', patch=None):
     if scope not in ('global', 'subdivision'):
         raise ValidationError('Выберите область проверки.')
     global_scope = scope == 'global'
@@ -102,11 +102,17 @@ def check(version, rows, kind='', scope='subdivision'):
               'type_coeff__type_coeff_name', 'segment__segment_name', 'variation_calculate__variation_name']
     if not global_scope:
         fields.insert(1, 'subdivision__subdivision_key')
+    fields += ['pk','goods_id']
     ordinary_values = ordinary.order_by().values_list(*fields).iterator(chunk_size=2000)
     if global_scope:
         ordinary_values = ((row[0], '', *row[1:]) for row in ordinary_values)
-    raw = ((v, branch, pg, group, brand, employee_kind.strip(), 0, segment.upper().replace('O', 'K'), formula)
-           for v, branch, pg, group, brand, employee_kind, segment, formula in ordinary_values)
+    def patched_ordinary():
+        for v,branch,pg,group,brand,employee_kind,segment,formula,pk,good in ordinary_values:
+            if patch and v==version.pk and (global_scope or key(branch)==key(patch['subdivision'])):
+                if good in patch['deleted']:continue
+                formula=patch['core'].get(pk,formula)
+            yield (v,branch,pg,group,brand,employee_kind.strip(),0,segment.upper().replace('O','K'),formula)
+    raw=patched_ordinary()
     for row in coefficient_rows(raw, 1, range(8)):
         identity = (row[0], *map(key, row[1:6]), row[6])
         index[identity]['segments'].add(row[7])
@@ -121,10 +127,17 @@ def check(version, rows, kind='', scope='subdivision'):
     if not global_scope:
         fields.insert(1, 'subdivision__subdivision_key')
         fields[-1:-1] = ['employee_id', 'employee__full_name']
+    fields += ['goods_id']
     director_values = director_rows.order_by().values_list(*fields).iterator(chunk_size=2000)
     if global_scope:
-        director_values = ((row[0], '', *row[1:4], 0, '', row[4]) for row in director_values)
-    for v, branch, pg, group, brand, employee, full_name, formula in director_values:
+        director_values = ((row[0], '', *row[1:4], 0, '', row[4],row[5]) for row in director_values)
+    if patch:
+        from itertools import chain
+        director_values=chain(director_values,patch['new_directors'])
+    for v, branch, pg, group, brand, employee, full_name, formula, good in director_values:
+        if patch and v==version.pk and (global_scope or key(branch)==key(patch['subdivision'])) and (global_scope or employee==patch['employee']):
+            if good in patch['deleted']:continue
+            formula=patch['directors'].get(good,formula)
         branch = canonical(branch, names)
         if not included(branch):
             continue

@@ -42,7 +42,7 @@
         const main = document.getElementById(toolbar.dataset.form);
         const forms = [main, document.getElementById('addProductForm'), document.querySelector('#manager-details form')].filter(Boolean);
         const fields = forms.flatMap(form => [...form.querySelectorAll('input:not([type=hidden]):not([type=file]), select')]
-            .filter(input => !input.matches(':disabled, .bulk-good') && input.name !== 'selected_subdivisions'));
+            .filter(input => !input.matches(':disabled, .bulk-good, .select-var-calc') && input.name !== 'selected_subdivisions'));
         const original = new Map(), originalRaw = new Map(), committed = new Map();
         const history = [];
         const raw = field => field.type === 'checkbox' ? field.checked : field.value;
@@ -101,11 +101,11 @@
         }));
         const describe = field => {
             const row = field.closest('.coefficient-row');
-            const group = field.closest('[data-coefficient-group]')?.dataset.coefficientGroup;
+            const group = field.dataset.formulaGroup || field.closest('[data-coefficient-group]')?.dataset.coefficientGroup;
             const groupName = {policies:'Политики',sales:'Продажи',directors:'Директор'}[group];
             const index = field.dataset.segment || ('K' + (field.closest('td')?.dataset.coefficientSegment ?? ''));
             return {goods: row ? [row.dataset.pg,row.dataset.group,row.dataset.brand].join(' · ') : field.closest('#manager-details') ? 'Поправки руководителя' : 'Добавление товара',
-                kind: field.name.startsWith('delete_coeff=') ? 'Удаление товара' : field.classList.contains('select-var-calc') ? 'Формула товара' : groupName ? groupName + ' / ' + index : field.getAttribute('aria-label') || field.closest('label')?.textContent.trim().split('\n')[0] || 'Настройка'};
+                kind: field.name.startsWith('delete_coeff=') ? 'Удаление товара' : field.classList.contains('editor-formula-field') ? (groupName||'Ставки')+' / Формула' : field.classList.contains('select-var-calc') ? 'Формула товара' : groupName ? groupName + ' / ' + index : field.getAttribute('aria-label') || field.closest('label')?.textContent.trim().split('\n')[0] || 'Настройка'};
         };
         const display = (field, value, normalized) => {
             if (field.type === 'checkbox') return value ? 'Да' : 'Нет';
@@ -154,6 +154,16 @@
         }));
         const refresh = () => {
             fields.forEach(field => field.classList.toggle('editor-changed', different(field)));
+            rows.forEach(row=>{
+                const director=row.querySelector('[name^="director_formula="]'), label=row.querySelector('[data-director-formula-label]');
+                if(director&&label){label.hidden=!director.value;label.textContent='Директор: '+(director.selectedOptions[0]?.textContent||'По умолчанию');}
+                const selects=[...row.querySelectorAll('[name^="formula_coeff="]')], trigger=row.querySelector('.select-var-calc');
+                if(trigger&&selects.length){
+                    const values=new Set(selects.map(select=>select.value));
+                    if(values.size===1)trigger.value=selects[0].value;
+                    else{if(!trigger.querySelector('[value="__mixed__"]')){const option=document.createElement('option');option.value='__mixed__';option.textContent='Разные формулы';option.disabled=true;trigger.prepend(option);}trigger.value='__mixed__';}
+                }
+            });
             const count = changed().length;
             sourceBadges.forEach(({input,badge})=>{
                 const missing=input.dataset.rateExact==='no', dirty=original.has(input)&&different(input);
@@ -166,7 +176,7 @@
             document.getElementById('editor-dirty-count').textContent = `Изменено: ${count}`;
             document.getElementById('editor-save-state').textContent = count ? 'Правки ещё не сохранены' : 'Нет несохранённых правок';
             toolbar.querySelector('.editor-state').classList.toggle('has-changes', count > 0);
-            document.getElementById('editor-save').disabled = !changed().some(field => field.form === main);
+            document.getElementById('editor-save').disabled = toolbar.dataset.editable!=='yes'||!changed().some(field => field.form === main || field.closest('#manager-details'));
             document.querySelectorAll('[data-editor-change-total]').forEach(node=>node.textContent=String(count));
             const changedRows = new Set(changed().map(field=>field.closest('.coefficient-row')).filter(Boolean));
             const scope = document.getElementById('editor-change-scope');
@@ -220,6 +230,16 @@
                 document.getElementById('editor-save-state').textContent=`Отменено: ${last.label}. ${changed().length?'Остались несохранённые правки.':'Несохранённых правок нет.'}`;
             }
         };
+        window.motivationEditor.patch = () => {
+            const data={version:toolbar.dataset.version,revision:toolbar.dataset.revision};
+            const employee=main.querySelector('[name=employee]');if(employee)data.employee=employee.value;
+            for(const input of changed().filter(input=>input.form===main||input.closest('#manager-details')))data[input.name]=input.type==='checkbox'?'on':input.value;
+            return data;
+        };
+        main.addEventListener('formdata',event=>{
+            if(event.formData.get('action_button')!=='save_coeff')return;
+            for(const field of fields){if(field.form===main&&!different(field))event.formData.delete(field.name);if(field.closest('#manager-details')&&different(field))event.formData.set(field.name,field.value);}
+        });
         let applying=false;
         document.getElementById('editor-undo')?.addEventListener('click',()=>window.motivationEditor.undo());
         const resetDialog=document.getElementById('editor-reset-dialog');
@@ -231,6 +251,10 @@
             field.addEventListener('change', () => { if(!applying)rememberManual(field); });
             field.addEventListener('blur', () => { if(!applying)rememberManual(field); });
         });
+        document.querySelectorAll('.select-var-calc').forEach(select=>select.addEventListener('change',()=>{
+            const fields=[...select.closest('.coefficient-row').querySelectorAll('[name^="formula_coeff="]:not(:disabled)')];
+            window.motivationEditor.apply(fields.map(input=>({input,value:select.value})),'Формула товара');
+        }));
         let leaving = false;
         window.addEventListener('beforeunload', event => {
             if (!leaving && changed().length) { event.preventDefault(); event.returnValue = ''; }
@@ -249,7 +273,7 @@
             error.hidden = true;
             const action = event.submitter?.value;
             if (form.id === 'director-employee-picker') { leaving = true; queueMicrotask(() => { if (event.defaultPrevented) leaving = false; }); return; }
-            if (form.id === 'bulk-variation-form' && changed().length) { event.preventDefault(); fail('Сначала сохраните или отмените правки коэффициентов, затем примените формулу.'); return; }
+            if (form.id === 'bulk-variation-form') {event.preventDefault();return;}
             let warning;
             if (action === 'copy_to_director') warning = 'Заменить коэффициенты выбранного получателя сохранёнными значениями текущего директора? Остальные сотрудники и группы сохранятся.';
             if (action === 'copy_from_global') { const group = form.querySelector('[name=copy_groups]')?.selectedOptions?.[0]?.textContent || 'Политики и продажи'; warning = `Заменить коэффициенты группы «${group}» глобальными значениями выбранной версии? Остальные группы сохраняются. Несохранённые правки будут потеряны.`; }
@@ -273,7 +297,7 @@
                 event.preventDefault(); fail('Сначала выберите файл для импорта.'); return;
             }
             const savedForm = ['save_coeff', 'update_motive_coeff', 'update_approved_manager', 'add_product'].includes(action) ? form : null;
-            if (!warning && changed().some(field => field.form !== savedForm)) warning = 'Несохранённые правки, не относящиеся к этому действию, будут потеряны. Продолжить?';
+            if (!warning && changed().some(field => field.form !== savedForm && !(action==='save_coeff'&&field.closest('#manager-details')))) warning = 'Несохранённые правки, не относящиеся к этому действию, будут потеряны. Продолжить?';
             if (warning && !window.confirm(warning)) { event.preventDefault(); event.stopImmediatePropagation(); return; }
             leaving = true;
             queueMicrotask(() => { if (event.defaultPrevented) leaving = false; });
@@ -283,7 +307,7 @@
             const details = event.target.closest('details'); if (details) details.open = true;
         }, true);
         document.addEventListener('motivation:before-approval', event => {
-            const notInPreview = changed().filter(field => field.form !== main || field.name.startsWith('select_var_calc='));
+            const notInPreview = changed().filter(field => field.form !== main || field.classList.contains('editor-formula-field') || field.name.startsWith('select_var_calc='));
             if (notInPreview.length) {
                 event.preventDefault();
                 fail('Сначала сохраните настройки руководителя, формул или добавляемого товара. В предварительное утверждение входят правки коэффициентов и удаления строк.');

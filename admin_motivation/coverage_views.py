@@ -56,12 +56,28 @@ def coverage(request):
         import logging
         logging.getLogger(__name__).exception('Coefficient coverage query failed')
         error = 'Не удалось проверить факт. Проверьте подключение к DWH и журнал сервера.'
+    grouped=[]
+    if result:
+        groups={}
+        for row in result['issues']:
+            identity=tuple(row[key] for key in ('subdivision','version_id','planning','group','brand','kind','reason','formula','missing'))
+            groups.setdefault(identity,[]).append(row)
+        for rows in groups.values():
+            first=rows[0];item={**first,'count':len(rows),'employees':len({row['employee_id'] for row in rows if row['employee_id']}),'rows':rows[:50],'extra':max(0,len(rows)-50),'min_amount':min(row['amount'] for row in rows),'max_amount':max(row['amount'] for row in rows)}
+            if can_access(request.user,'motivation_editor') and selected.is_editable:
+                from .services.coverage_bulk import selection_token
+                from .services.coverage_repair import token_for
+                item['token']=selection_token({'issues':rows},selected,scope)
+                for row in item['rows']:
+                    if row['missing'] and row['version_id']==selected.pk:row['repair_token']=token_for(row,selected,scope)
+            grouped.append(item)
+    group_page=Paginator(grouped,50).get_page(request.GET.get('page'))
     query = request.GET.copy()
     query.pop('page', None)
     return render(request, 'admin_motivation/coefficient_coverage.html', {'versions': versions, 'selected_version': selected,
         'scope': scope, 'plans': plans, 'plan': plan, 'source': source, 'kind': kind, 'year': year,
         'subdivision': subdivision, 'subdivisions': Subdivision.objects.all(), 'result': result,
-        'bulk_token': bulk_token, 'page': page, 'coverage_error': error, 'coverage_query': query.urlencode()})
+        'bulk_token': bulk_token, 'page': page, 'coverage_groups':group_page, 'coverage_error': error, 'coverage_query': query.urlencode()})
 
 
 @require_POST

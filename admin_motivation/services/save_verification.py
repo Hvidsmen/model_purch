@@ -37,6 +37,8 @@ class SaveVerification:
             for query in self.deletions:
                 for row in query.values():
                     self.audit_changes.append({'model':query.model.__name__, 'pk':row['id'], 'goods_id':row.get('goods_id'), 'field':'delete', 'before':{key:str(value) if value is not None else None for key,value in row.items()}, 'after':None})
+        from .editor_patch import formulas
+        formula_core,formula_directors = formulas(version,data,subdivision,employee) if not manager else ({},{})
         prefix = 'sub_coeff=' if subdivision else 'global_coeff='
         for key in data:
             if key.startswith(prefix) and not manager:
@@ -64,12 +66,17 @@ class SaveVerification:
                     if not rows.exists():
                         raise ValidationError('Товар для изменения формулы не найден. Изменения не сохранены.')
                     for pk in rows.values_list('pk', flat=True):
+                        if f'formula_coeff={pk}' in data:continue
                         self.add(core.filter(pk=pk), 'variation_calculate_id', int(data[key]))
-            elif key.startswith('kind_coeff=') and manager:
+            elif key.startswith('kind_coeff=') and subdivision is not None:
                 kind = int(key.split('=')[1])
                 if not KindManagerCoeff.objects.filter(pk=kind).exists():
                     raise ValidationError('Период поправочного коэффициента не найден.')
                 self.add(SubdivisionManagerCoeff.objects.filter(version=version, subdivision=subdivision, kind_id=kind), 'coeff', coefficient_number(data[key]))
+        for pk,value in formula_core.items():
+            self.add(core.filter(pk=pk),'variation_calculate_id',value)
+        for good,value in formula_directors.items():
+            self.add(directors.filter(goods_id=good),'variation_calculate_id',value,goods_id=good)
         if not self.checks and not self.deletions:
             raise ValidationError('Нет коэффициентов для сохранения. Изменения не внесены.')
 

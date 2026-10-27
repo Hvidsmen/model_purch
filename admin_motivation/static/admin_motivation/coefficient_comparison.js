@@ -42,7 +42,9 @@
         directorInputs().filter(input => !input.matches(':disabled') && input.classList.contains('editor-changed')).forEach(input => {
             const [, goods, segment] = input.name.split('='); director_changes[`${goods}:${segment}`] = input.value;
         });
-        return {employee: panel.dataset.employee || null, director_changes, action, version: panel.dataset.version, subdivision: panel.dataset.subdivision || null,
+        const formula_changes={};document.querySelectorAll('.editor-formula-field.editor-changed:not(:disabled)').forEach(input=>formula_changes[input.name]=input.value);
+        const manager_changes={};document.querySelectorAll('#manager-details .coeff-input.editor-changed:not(:disabled)').forEach(input=>manager_changes[input.name]=input.value);
+        return {manager_changes,revision:document.querySelector('#editor-toolbar')?.dataset.revision,formula_changes,employee: panel.dataset.employee || null, director_changes, action, version: panel.dataset.version, subdivision: panel.dataset.subdivision || null,
                 plan: plan.value || null, baseline: baseline.value || null, changes, deleted};
     }
     async function post(data, signal) {
@@ -68,7 +70,7 @@
         toggle.addEventListener('change', apply);
         apply();
     }
-    const unsupported = () => document.querySelector('.select-var-calc.editor-changed,#manager-details .editor-changed');
+    const unsupported = () => false;
     const clearSummary = () => document.querySelectorAll('[data-amount], [data-delta], [data-summary-amount], [data-summary-delta]').forEach(cell=>{cell.textContent='—';cell.title='Требуется обновить сравнение';cell.classList.remove('delta-up','delta-down');});
     async function compare() {
         const requestRevision = ++revision;
@@ -80,7 +82,7 @@
             cell.classList.remove('delta-up', 'delta-down');
         });
         warning.hidden = true; error.hidden = true;
-        if(unsupported()){status.textContent='Сначала сохраните изменения формулы или поправок руководителя, затем обновите сравнение.';summaryStatus('Сначала сохраните настройки');return;}
+        if(unsupported()){status.textContent='Сначала сохраните поправки руководителя, затем обновите сравнение.';summaryStatus('Сначала сохраните настройки');return;}
         if (!plan.value) { status.textContent = 'Выберите план для сравнения.'; summaryStatus('Выберите план ниже'); return; }
         controller = new AbortController();
         error.hidden = true;
@@ -104,6 +106,7 @@
             summaryStatus(result.variants.current.error ? 'Расчёт недоступен' : result.unsaved ? 'Предварительно · есть правки' : 'По сохранённым значениям');
             status.textContent = result.unsaved ? 'Предварительный расчёт: учтены несохранённые изменения.' : 'Сравнение по сохранённым коэффициентам.';
             const messages = Object.entries(result.variants).filter(([key, value]) => value.error && (key !== 'baseline' || baseline.value)).map(([key, value]) => `${key === 'approved' ? 'Утверждённый' : key === 'baseline' ? 'Базовый' : 'Предлагаемый'}: ${value.error}`);
+            if(result.formula_notice)messages.push(result.formula_notice);if(result.manager_notice)messages.push(result.manager_notice);
             if (result.affected_plan_lines === 0) {
                 const date = result.current_date.split('-').reverse().join('.');
                 messages.push(`В выбранном плане нет строк с датой ${date} или позже. Предлагаемая версия не применяется к этому периоду: изменения коэффициентов не изменят сумму. Выберите другой план или создайте версию с более ранней датой начала действия.`);
@@ -125,7 +128,7 @@
     const schedule = () => { ++revision;controller?.abort();clearTimeout(timer);clearSummary();summaryStatus('Требуется обновить сравнение…');timer = setTimeout(compare, 600); };
     [...inputs(), ...directorInputs()].forEach(input => input.addEventListener('input', schedule));
     document.querySelectorAll('input[name^="delete_coeff="]').forEach(input => input.addEventListener('change', schedule));
-    document.querySelectorAll('.select-var-calc,#manager-details .coeff-input').forEach(input=>input.addEventListener('change',schedule));
+    document.querySelectorAll('.editor-formula-field,#manager-details .coeff-input').forEach(input=>input.addEventListener('change',schedule));
     document.addEventListener('motivation:editor-updated',schedule);
     plan.addEventListener('change', compare);
     baseline.addEventListener('change', compare);

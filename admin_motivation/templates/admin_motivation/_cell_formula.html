@@ -1,0 +1,1 @@
+{% if gb %}<select hidden class="editor-formula-field" name="formula_coeff={{ gb.pk }}" aria-label="Формула {{ gb.type_coeff }} {{ gb.segment }}">{% for choice in var_calcs %}<option value="{{ choice.pk }}" {% if choice.pk == gb.variation_calculate_id %}selected{% endif %}>{{ choice }}</option>{% endfor %}</select>{% endif %}

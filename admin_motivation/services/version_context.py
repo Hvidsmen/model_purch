@@ -38,13 +38,15 @@ def version_context(request, version_form=None):
         'effective_from': max(today(), minimum) if minimum else '2001-01-01'})
     if minimum:
         form.fields['effective_from'].widget.attrs['min'] = '2001-01-01'
+    plans=SalesPlanScenario.objects.filter(is_deleted=False,loaded_at__isnull=False).order_by('-loaded_at','-pk')
+    comparison_plan=plans.filter(pk=request.session.get('motivation_comparison_plan')).first() or plans.first()
     return {'versions': versions, 'selected_version': selected, 'latest_version': latest, 'reopen_logs': selected.reopen_history.select_related('actor').order_by('-pk')[:20] if selected else [],
             'approval_history': selected.approvals.order_by('-pk')[:20] if selected else [],
             'effective_version': effective_version(), 'last_approved_version': last_approved, 'version_form': form,
             'version_creation_available': not latest or latest.status not in ('finance_review', 'director_review'),
             'version_editable': bool(selected and selected.is_editable and can_access(request.user, 'motivation_editor')),
-            'comparison_plans': SalesPlanScenario.objects.filter(is_deleted=False),
-            'comparison_plan': request.session.get('motivation_comparison_plan'),
+            'comparison_plans': plans,
+            'comparison_plan': comparison_plan.pk if comparison_plan else None,
             'comparison_baselines': [v for v in versions if not v.is_editable],
             'comparison_baseline': request.session.get('motivation_comparison_baseline')}
 

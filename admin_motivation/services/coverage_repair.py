@@ -118,6 +118,8 @@ def create_missing(actor, token, values):
     version = lock_editable(info['version'].pk)
     if version.revision != info['data']['revision']:
         raise ValidationError('Черновик изменился. Повторите проверку.')
+    from .operation_audit import snapshot,record
+    audit_before=snapshot(version);audit_revision=version.revision
     rates = {}
     for cell in info['cells']:
         if cell['present']:
@@ -152,4 +154,5 @@ def create_missing(actor, token, values):
             info['model'].objects.create(**filters, type_coeff=kind, segment=seg,
                 motivation_coeff=value, manager_coeff=candidate.manager_coeff if candidate else 1,
                 variation_calculate=formula)
+    record(actor,version,audit_before,'coverage',audit_revision)
     return len(rates)

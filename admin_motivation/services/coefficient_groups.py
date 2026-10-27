@@ -41,6 +41,7 @@ def coefficient_matrix(version, subdivision=None, employee=None):
                             cell.editor_global_value = global_core.get((good.pk, cell.type_coeff_id, cell.segment_id))
                 good.has_core_coefficients = any(cell is not None for group in goods[good] for cell in group)
                 row = directors.get(good.pk)
+                good.director_formula_id = row.variation_calculate_id if row else None
                 good.director_formula_label = row.variation_calculate.variation_name if row and row.variation_calculate_id else ''
                 good.director_cells = [{'index': i, 'exists': row is not None, 'global_value': getattr(global_directors[good.pk], f'k{i}') if good.pk in global_directors else None, 'value': getattr(row, f'k{i}') if row else Decimal(0)} for i in range(5)]
     return matrix

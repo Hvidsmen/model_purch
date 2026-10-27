@@ -38,6 +38,7 @@ from base.access import can_access
 
 from .services.version_context import version_context
 from .services.editor_feedback import restore_context, recover
+from .services.operation_audit import audit_request
 
 
 def gloabal_coeff(request, version_form=None):
@@ -101,6 +102,7 @@ def coefficient_return_route(request, subdivision=None):
 
 
 @require_POST
+@audit_request
 def gloabal_coeff_action(request):
     action = request.POST.get('action_button')
     if action == 'copy_version':
@@ -204,22 +206,8 @@ def gloabal_coeff_action(request):
             elif action == 'save_coeff':
                 from .services.save_verification import SaveVerification
                 verification = SaveVerification(latest, request.POST, actor=request.user)
-                ids = [key.split('=', 1)[1] for key in request.POST if key.startswith('select_var_calc=')]
-                deleted = [key.split('=', 1)[1] for key in request.POST if key.startswith('delete_coeff=')]
-                # Update existing cells only; never delete cells just because a POST is partial.
-                for coeff in version.coefficients.filter(goods_id__in=ids):
-                    key = f'global_coeff={coeff.pk}'
-                    if key in request.POST:
-                        coeff.motivation_coeff = coefficient_number(request.POST[key])
-                        selected_formula = request.POST[f'select_var_calc={coeff.goods_id}']
-                        if request.POST.get(f'original_var_calc={coeff.goods_id}') != selected_formula:
-                            coeff.variation_calculate = get_object_or_404(VariationCalculate, pk=selected_formula)
-                        coeff.manager_coeff = 1
-                        coeff.save()
-                version.coefficients.filter(goods_id__in=deleted).delete()
-                from .services.coefficient_groups import save_global_directors
-                save_global_directors(version, request.POST, deleted)
-                saved_count = verification.verify()
+                from .services.editor_patch import save_table
+                saved_count = save_table(version,request.POST,verification)
                 # Keep Goods and previous versions' coefficients intact.
             else:
                 raise ValidationError('Неизвестное действие.')
@@ -284,6 +272,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
 
 
 @require_POST
+@audit_request
 def sub_act(request, subdivision):
     sub = get_object_or_404(Subdivision, pk=subdivision)
     version = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
@@ -320,18 +309,8 @@ def sub_act(request, subdivision):
                     raise ValidationError('Директор удалён. Изменения не сохранены. Выберите действующего сотрудника.')
                 from .services.save_verification import SaveVerification
                 verification = SaveVerification(latest, request.POST, subdivision=sub, employee=employee, actor=request.user)
-                for coeff in SubdivisionCoeff.objects.filter(version=version, subdivision=sub):
-                    key = f'sub_coeff={coeff.pk}'
-                    if key in request.POST:
-                        coeff.motivation_coeff = coefficient_number(request.POST[key])
-                        select = f'select_var_calc={coeff.goods_id}'
-                        if select in request.POST and request.POST.get(f'original_var_calc={coeff.goods_id}') != request.POST[select]:
-                            coeff.variation_calculate = get_object_or_404(VariationCalculate, pk=request.POST[select])
-                        coeff.manager_coeff = 1
-                        coeff.save()
-                from .services.coefficient_groups import save_global_directors
-                save_global_directors(version, request.POST, subdivision=sub, employee=employee)
-                saved_count = verification.verify()
+                from .services.editor_patch import save_table
+                saved_count = save_table(version,request.POST,verification,sub,employee)
             elif action == 'copy_to_director':
                 from .services.directors import copy_to_employee
                 if request.POST.get('confirm_copy') != 'yes':

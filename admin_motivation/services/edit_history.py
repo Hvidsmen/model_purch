@@ -31,7 +31,10 @@ def rows(log):
 def history_context(user, version, subdivision=None, employee=None):
     if not can_access(user,'motivation_editor'):
         return {}
-    logs = list(CoefficientEditLog.objects.filter(version=version, subdivision=subdivision, employee=employee).order_by('-pk')[:20])
+    from django.db.models import Q
+    query=CoefficientEditLog.objects.filter(version=version,subdivision=subdivision)
+    query=query.filter(Q(employee=employee)|Q(employee__isnull=True)) if employee else query.filter(employee__isnull=True)
+    logs = list(query.order_by('-pk')[:20])
     for log in logs:
         from itertools import islice
         log.preview_rows=list(islice(rows(log),50))

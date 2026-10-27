@@ -1,7 +1,8 @@
-from . import reports_next_views, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
+from . import editor_views, reports_next_views, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 
 urlpatterns = [
+    path('coefficients/editor/check/',editor_views.check,name='motivation_editor_check'),
     path('coefficients/history/<int:log_id>.csv', operation_views.coefficient_edit_log, name='motivation_coefficient_edit_log'),
     path('reports-next/', reports_next_views.index, name='motivation_reports_next'),
     path('reports-next/<str:kind>/', reports_next_views.report, name='motivation_report_next'),

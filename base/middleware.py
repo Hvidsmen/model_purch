@@ -55,7 +55,7 @@ class PortalAccessMiddleware:
             if role == MODELER:
                 allowed = {'index_admin_motivation', 'global_coeff_admin_motivation', 'gb_act', 'sub_act',
                     'coeff_subdivisions_admin_motivation', 'motivation_discount_segments', 'motivation_coefficient_balancing',
-                    'motivation_bulk_formula', 'motivation_coefficient_edit_log', 'motivation_copy_group', 'motivation_coefficient_coverage', 'motivation_fallback_formula', 'motivation_coverage_repair', 'motivation_coverage_repair_all', 'motivation_director_coeff_import',
+                    'motivation_bulk_formula', 'motivation_editor_check', 'motivation_coefficient_edit_log', 'motivation_copy_group', 'motivation_coefficient_coverage', 'motivation_fallback_formula', 'motivation_coverage_repair', 'motivation_coverage_repair_all', 'motivation_director_coeff_import',
                     'motivation_global_template', 'motivation_subdivision_template', 'motivation_director_directory',
                     'motivation_directors_global', 'motivation_directors_local', 'motivation_coefficient_comparison',
                     'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report', 'motivation_reports_next', 'motivation_report_next'}

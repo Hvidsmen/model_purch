@@ -1,3 +1,4 @@
+from .services.operation_audit import audit_request
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -17,6 +18,7 @@ from .services.version_context import version_context
 
 
 @require_http_methods(['GET', 'POST'])
+@audit_request
 def coefficient_group_copy(request):
     from base.access import can_access
     from .models import GlobalCoeffVersion, CoefficientGroupCopyLog
@@ -235,6 +237,7 @@ def director_coefficients(request, local=False, version_form=None):
 
 
 @require_http_methods(['GET', 'POST'])
+@audit_request
 def director_coeff_import(request):
     from .models import GlobalCoeffVersion
     from .services.director_coeff_import import import_director_coefficients

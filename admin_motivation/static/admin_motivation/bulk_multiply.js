@@ -17,7 +17,7 @@
  };
  const percent = value => ((value*100).toFixed(10).replace(/\.?0+$/,'')||'0')+'%';
  const showError = message => { el('error').textContent = message; el('error').hidden = false; };
- const signature = () => [el('operation').value, el('mode').value, el('common').value, ...[...root.querySelectorAll('[data-multiply-segment]')].map(input=>input.value), ...boxes.filter(box => box.checked).map(box => box.value), ...root.querySelectorAll('[data-multiply-kind]:checked:not(:disabled),[data-multiply-step]:checked')].map(item => typeof item === 'string' ? item : item.dataset.multiplyKind || item.dataset.multiplyStep).join('|');
+ const signature = () => [el('operation').value, el('formula').value, el('mode').value, el('common').value, ...[...root.querySelectorAll('[data-multiply-segment]')].map(input=>input.value), ...boxes.filter(box => box.checked).map(box => box.value), ...root.querySelectorAll('[data-multiply-kind]:checked:not(:disabled),[data-multiply-step]:checked')].map(item => typeof item === 'string' ? item : item.dataset.multiplyKind || item.dataset.multiplyStep).join('|');
  boxes.forEach(box => box.addEventListener('change', count));
  for (const selector of ['[data-bulk-visible]', '[data-bulk-clear]']) document.querySelector(`#bulk-variation-form ${selector}`)?.addEventListener('click', count);
  for (const [id, mode] of [['visible','visible'],['filtered','filtered'],['clear','clear']]) el(id).addEventListener('click', () => {
@@ -33,10 +33,12 @@
   set:['Новая ставка, %','0,20 означает ставку 0,20%. Будут заменены только выбранные виды и ступени.',''],
   relative:['Изменение, %','10 — увеличить на 10%: 0,20% → 0,22%. −10 — уменьшить на 10%.',''],
   points:['Прибавить, п.п.','0,10 — прибавить 0,10 процентного пункта: 0,20% → 0,30%. Можно указать отрицательное число.',''],
+  formula:['','Формулы изменятся в таблице и сохранятся вместе со ставками. У директора одна формула для K0–K4.',''],
   global:['','Берутся только точные глобальные ставки той же версии, товара, вида и ступени. Если исходной ставки нет, вся операция не применяется.','']
  };
  const controls = () => {
-  const global = el('operation').value === 'global', separate = el('mode').value === 'segments';
+  const global = ['global','formula'].includes(el('operation').value), separate = el('mode').value === 'segments';
+  el('formula-label').hidden = el('operation').value !== 'formula';
   root.querySelector('label[data-multiply-operand]').hidden = global;
   el('segments').hidden = global || !separate; el('common-label').hidden = global || separate;
  };
@@ -58,7 +60,7 @@
    if (!kinds.length) throw new Error('Выберите хотя бы один вид мотивации.');
    if (!steps.size) throw new Error('Выберите хотя бы одну ступень K0–K4.');
    const operand = index => {
-    if (operation === 'global') return null;
+    if (['global','formula'].includes(operation)) return null;
     let text = el('mode').value === 'common' ? el('common').value : root.querySelector(`[data-multiply-segment="${index}"]`).value;
     if(['set','relative'].includes(operation))text=text.trim().replace(/%$/,'');
     const value = number(text);
@@ -71,6 +73,17 @@
    for (const box of selected) {
     const row = box.closest('tr');
     if (row.querySelector('[name^="delete_coeff="]:checked')) { skipped++; continue; }
+    if(operation==='formula'){
+     if(kinds.includes('directors')&&steps.size!==5)throw new Error('Формула директора общая для K0–K4. Выберите все ступени или только политики/продажи.');
+     for(const group of kinds){
+      const targets=group==='directors'?[row.querySelector('[name^="director_formula="]')]:[...row.querySelectorAll(`[data-coefficient-group="${group}"]`)].filter(cell=>steps.has(Number(cell.dataset.coefficientSegment))).map(cell=>cell.querySelector('.editor-formula-field'));
+      for(const input of targets){
+       if(!input||input.matches(':disabled')){skipped++;continue;}
+       if(input.value!==el('formula').value)pending.push({input,original:input.value,value:el('formula').value,before:input.selectedOptions[0]?.textContent||'По умолчанию',goods:[row.dataset.pg,row.dataset.group,row.dataset.brand].join(' · '),kind:names[group]+' / Формула',display:el('formula').selectedOptions[0].textContent});
+      }
+     }
+     continue;
+    }
     for (const group of kinds) for (const cell of row.querySelectorAll(`[data-coefficient-group="${group}"]`)) {
      const input = cell.querySelector('.coeff-input');
      if (!input || input.matches(':disabled')) { skipped++; continue; }
@@ -101,7 +114,7 @@
    el('review-rows').replaceChildren();
    for (const change of pending.slice(0,100)) {
     const row = document.createElement('tr');
-    for (const text of [change.goods,change.kind,change.before,change.value]) { const cell=document.createElement('td'); cell.textContent=text;row.append(cell); }
+    for (const text of [change.goods,change.kind,change.before,change.display||change.value]) { const cell=document.createElement('td'); cell.textContent=text;row.append(cell); }
     el('review-rows').append(row);
    }
    dialog.showModal();

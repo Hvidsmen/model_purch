@@ -6,7 +6,7 @@ def restore_context(request):
     data = getattr(request,'coefficient_attempt',None)
     if data is None:
         return {}
-    allowed = re.compile(r'^(?:(?:global_coeff|sub_coeff|select_var_calc|delete_coeff|kind_coeff)=\d+|director_coeff=\d+=[0-4])$')
+    allowed = re.compile(r'^(?:(?:global_coeff|sub_coeff|select_var_calc|delete_coeff|kind_coeff|formula_coeff|director_formula)=\d+|director_coeff=\d+=[0-4])$')
     fields = {key:value for key,value in data.items() if allowed.fullmatch(key) or data.get('action_button')=='add_product' and (key in {'pg_sales','group','brand','select_var_calc'} or re.fullmatch(r'[ks]\d+',key))}
     errors = {}
     from ..views import coefficient_number

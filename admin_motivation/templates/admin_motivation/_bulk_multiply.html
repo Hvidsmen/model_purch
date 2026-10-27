@@ -3,7 +3,8 @@
 <div id="bulk-multiply-controls">
 <p class="small text-muted">Отметьте товары в первом столбце. Изменяются текущие значения в таблице, включая несохранённые правки. Сохранение — отдельной кнопкой после проверки.</p>
 <div class="bulk-multiply-controls">
-<label>Действие<select id="multiply-operation"><option value="multiply">Умножить на множитель</option><option value="set">Задать ставку, %</option><option value="relative">Изменить на % от текущей ставки</option><option value="points">Прибавить процентные пункты</option><option value="global">Взять точные глобальные ставки</option></select></label>
+<label>Действие<select id="multiply-operation"><option value="multiply">Умножить на множитель</option><option value="set">Задать ставку, %</option><option value="relative">Изменить на % от текущей ставки</option><option value="points">Прибавить процентные пункты</option><option value="global">Взять точные глобальные ставки</option><option value="formula">Задать формулу расчёта</option></select></label>
+<label id="multiply-formula-label" hidden>Формула<select id="multiply-formula">{% for choice in var_calcs %}<option value="{{ choice.pk }}">{{ choice }}</option>{% endfor %}</select></label>
 <label data-multiply-operand>Режим<select id="multiply-mode"><option value="common">Один множитель для K0–K4</option><option value="segments">Отдельно для K0–K4</option></select></label>
 <label id="multiply-common-label" data-multiply-operand><span id="multiply-value-label">Множитель</span><input id="multiply-common" type="text" inputmode="decimal" value="1" aria-label="Общий множитель"></label>
 <div id="multiply-segments" data-multiply-operand hidden>{% for index in '01234' %}<label>K{{ index }}<input type="text" inputmode="decimal" value="1" data-multiply-segment="{{ index }}" aria-label="Множитель K{{ index }}"></label>{% endfor %}</div>
@@ -16,4 +17,4 @@
 <p id="multiply-status" role="status" aria-live="polite"></p><p id="multiply-error" role="alert" hidden></p>
 </div></details>
 <dialog id="multiply-review" class="motivation-dialog"><h2>Проверка изменения ставок</h2><p id="multiply-review-context"></p><p id="multiply-review-summary"></p><p>Изменения появятся в таблице. В базу они попадут после «Сохранить изменения».</p><div class="multiply-review-table"><table class="table"><thead><tr><th>Товар</th><th>Тип / ступень</th><th>Было</th><th>Стало</th></tr></thead><tbody id="multiply-review-rows"></tbody></table></div><div class="ux-actions"><button type="button" class="btn btn-outline-secondary" id="multiply-cancel">Вернуться к настройкам</button><button type="button" class="btn btn-primary" id="multiply-apply">Применить к таблице</button></div></dialog>
-<script src="{% static 'admin_motivation/bulk_multiply.js' %}?v=rate-editor-20261027" defer></script>
+<script src="{% static 'admin_motivation/bulk_multiply.js' %}?v=complete-editor-20261027" defer></script>

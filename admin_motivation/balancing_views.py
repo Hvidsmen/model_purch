@@ -96,6 +96,9 @@ def _save(request, data):
     budget = dataset(params)
     if budget.fingerprint != params['fingerprint']:
         raise ValidationError('План или коэффициенты изменились после расчёта. Загрузите исходные значения заново.')
+    from .services.operation_audit import snapshot, record
+    audit_before=snapshot(budget.version)
+    audit_revision=budget.version.revision
     result = budget.balance(params['manual'], params['compensate'], params['mode'])
     model = SubdivisionCoeff if budget.local else GlobalCoeff
     director_model = SubdivisionDirectorCoeff if budget.local else GlobalDirectorCoeff
@@ -127,4 +130,5 @@ def _save(request, data):
     log = CoefficientBalanceLog.objects.create(version=budget.version, plan=budget.plan, user=request.user,
         parameters={**{key: value for key, value in params.items() if key != 'fingerprint'},
                     'version_snapshot': {'id': budget.version.pk, 'title': str(budget.version), 'effective_from': budget.version.effective_from.isoformat()}}, result=result, fingerprint=budget.fingerprint)
+    record(request.user,budget.version,audit_before,'balancing',audit_revision)
     return JsonResponse({'message': 'Балансировка сохранена в черновик. Плановая премия проверена. Для применения утвердите версию и выполните выгрузку и расчёт.', 'log': log.pk, 'version': budget.version.pk})

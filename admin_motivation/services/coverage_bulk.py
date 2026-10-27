@@ -69,6 +69,8 @@ def save(actor, token):
     version = lock_editable(data['version'])
     if not data.get('prepared') or version.revision != data['revision']:
         raise ValidationError('Сначала подготовьте список коэффициентов.')
+    from .operation_audit import snapshot,record
+    audit_before=snapshot(version);audit_revision=version.revision
     local = data['scope'] == 'subdivision'
     models = (SubdivisionCoeff, SubdivisionDirectorCoeff) if local else (GlobalCoeff, GlobalDirectorCoeff)
     goods = {(row.planning_group_sales, row.group, row.brand): row for row in Goods.objects.all()}
@@ -119,4 +121,5 @@ def save(actor, token):
     for model, objects in batches.items():
         if objects:
             model.objects.bulk_create(objects, batch_size=500)
+    record(actor,version,audit_before,'coverage',audit_revision)
     return count, version.pk, data['scope']

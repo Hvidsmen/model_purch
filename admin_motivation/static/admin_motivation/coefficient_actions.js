@@ -6,7 +6,7 @@
   const panels = hub.querySelector('[data-action-panels]');
   const entries = [];
   function addPanel(detail, label, id) {
-    if (!detail) return;
+    if (!detail || detail.hidden) return;
     if (!detail.id) detail.id = id;
     // Import controls used to live inside the main coefficient form.
     for (const control of detail.querySelectorAll('input,select,textarea,button')) {
