@@ -21,6 +21,11 @@ if ($portal.Principal.UserId -ne $updater.Principal.UserId -or $portal.Principal
 if ($Action -eq 'check') { exit 0 }
 if ($Action -eq 'start-updater') { Start-ScheduledTask -InputObject $updater; exit 0 }
 if ($Action -eq 'stop-portal') {
+    # Stop the recorded PowerShell/Django tree while its wrapper is still alive.
+    # PID plus process creation time prevents killing a reused PID.
+    & $python -u (Join-Path $root 'scripts\portal_task_process.py') stop
+    if ($LASTEXITCODE -ne 0) { throw 'Portal child processes did not stop safely.' }
+    $portal = Get-VerifiedTask $PortalTaskName 'portal_task_worker.py'
     if ($portal.State -eq 'Running') { Stop-ScheduledTask -InputObject $portal }
     $deadline = (Get-Date).AddSeconds(30)
     do {

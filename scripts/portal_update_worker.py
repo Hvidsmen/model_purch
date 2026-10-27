@@ -64,53 +64,73 @@ class Updater:
             process = subprocess.Popen(arguments, cwd=self.root, stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, encoding='utf-8', errors='replace', env=environment)
             lines = queue.Queue()
+            stop_reading = threading.Event()
             def drain():
-                for line in process.stdout:
-                    lines.put(line)
-                lines.put(None)
+                # A descendant may inherit stdout after its parent exits. Only
+                # this thread closes the stream: close() in the main thread can
+                # wait forever for the reader's buffered-I/O lock.
+                try:
+                    for line in process.stdout:
+                        if not stop_reading.is_set():lines.put(line)
+                finally:
+                    process.stdout.close()
+                    lines.put(None)
             reader = threading.Thread(target=drain, daemon=True)
             reader.start()
-            deadline, heartbeat, completed = time.monotonic() + timeout, 0, False
+            deadline, heartbeat = time.monotonic() + timeout, 0
             captured = []
+            def consume(line):
+                if line:
+                    logfile.write(line)
+                    logfile.flush()
+                    self.output(line.strip())
+                    if capture:
+                        captured.append(line)
             try:
-                while not completed:
+                while True:
+                    result = process.poll()
+                    if result is not None:
+                        # Normally EOF follows immediately. Never require it:
+                        # a surviving descendant can keep the pipe open.
+                        reader.join(timeout=.5)
+                        drain_deadline=time.monotonic()+.5
+                        while time.monotonic()<drain_deadline:
+                            try:consume(lines.get_nowait())
+                            except queue.Empty:break
+                        if result:
+                            raise UpdateFailure('Этап завершился с ошибкой. Подробности сохранены в журнале обновления.')
+                        return ''.join(captured).strip()
                     if time.monotonic() > deadline:
                         raise UpdateFailure('Превышено время выполнения этапа. Подробности в журнале обновления.')
                     try:
-                        line = lines.get(timeout=.5)
+                        consume(lines.get(timeout=.5))
                     except queue.Empty:
-                        line = ''
-                    if line is None:
-                        completed = True
-                    elif line:
-                        logfile.write(line)
-                        logfile.flush()
-                        self.output(line.strip())
-                        if capture:
-                            captured.append(line)
+                        pass
                     if time.monotonic() >= heartbeat:
                         protocol.update(self.root, self.run_id)
                         heartbeat = time.monotonic() + 5
-                result = process.wait(timeout=10)
-                if result:
-                    raise UpdateFailure('Этап завершился с ошибкой. Подробности сохранены в журнале обновления.')
-                return ''.join(captured).strip()
             finally:
+                stop_reading.set()
                 if process.poll() is None:
                     if os.name == 'nt':
-                        subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True, timeout=30)
+                        try:
+                            subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True, timeout=30)
+                        except (OSError, subprocess.TimeoutExpired):
+                            process.kill()
                     else:
                         process.kill()
-                    process.wait(timeout=30)
-                process.stdout.close()
-                reader.join(timeout=2)
+                    try:process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                # Do not block on stdout.close() while a descendant owns the pipe.
+                reader.join(timeout=.5)
 
     def task_command(self, action):
         return self.command(['powershell.exe', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass',
             '-File', str(self.root / 'scripts' / 'portal_update_task.ps1'), '-Action', action,
             '-TaskName', self.config['task_name'], '-PortalTaskName', self.config['portal_task_name']], timeout=60)
 
-    def maintenance(self):
+    def maintenance(self, timeout=20):
         if self.server is not None:
             return
         updater = self
@@ -163,7 +183,20 @@ class Updater:
         address = self.task['BindAddress']
         if ':' in address:
             Server.address_family = socket.AF_INET6
-        self.server = Server((address, int(self.task['Port'])), Handler)
+        deadline=time.monotonic()+timeout
+        while True:
+            try:
+                self.server=Server((address,int(self.task['Port'])),Handler)
+                break
+            except OSError as error:
+                import errno
+                occupied=error.errno==errno.EADDRINUSE or getattr(error,'winerror',None)==10048
+                if not occupied:
+                    raise UpdateFailure('Не удалось открыть экран обслуживания. Проверьте адрес и права на порт; подробности в журнале.') from error
+                if time.monotonic()>=deadline:
+                    raise UpdateFailure(f"Порт {self.task['Port']} остался занят после остановки задания. Код и база ещё не обновлялись. Проверьте оставшийся процесс портала; чужие процессы автоматически не останавливаются.") from error
+                protocol.update(self.root,self.run_id,detail='Задание остановлено. Ожидаем освобождения порта портала')
+                time.sleep(.25)
         threading.Thread(target=self.server.serve_forever, daemon=True).start()
         protocol.update(self.root, self.run_id, maintenance=True)
 

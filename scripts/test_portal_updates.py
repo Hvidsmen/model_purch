@@ -148,6 +148,40 @@ class UpdateProtocolTests(unittest.TestCase):
         self.assertNotIn('private-password', json.dumps(state.state(self.root, self.record['id'])))
         self.assertIn('private-password', (worker.folder / 'worker.log').read_text())
 
+    def test_exited_parent_does_not_wait_for_descendant_stdout(self):
+        import os,signal,sys,time
+        worker=self.updater()
+        pidfile=self.root/'test-child.pid'
+        code=("import subprocess,sys,pathlib; "
+              "child=subprocess.Popen([sys.executable,'-c','import time; time.sleep(10)']); "
+              "pathlib.Path(sys.argv[1]).write_text(str(child.pid)); "
+              "print('parent completed',flush=True)")
+        started=time.monotonic()
+        try:
+            output=worker.command([sys.executable,'-c',code,str(pidfile)],timeout=2,capture=True)
+            self.assertEqual(output,'parent completed')
+            self.assertLess(time.monotonic()-started,4)
+        finally:
+            if pidfile.exists():
+                try:os.kill(int(pidfile.read_text()),signal.SIGTERM)
+                except ProcessLookupError:pass
+
+    def test_timeout_is_bounded_even_when_stdout_is_closed(self):
+        import sys,time
+        worker=self.updater();started=time.monotonic()
+        with self.assertRaisesRegex(UpdateFailure,'Превышено время'):
+            worker.command([sys.executable,'-c','import os,time; os.close(1); os.close(2); time.sleep(10)'],timeout=.2)
+        self.assertLess(time.monotonic()-started,3)
+
+    def test_busy_port_reports_clear_failure_after_bounded_wait(self):
+        worker=self.updater()
+        with socket.socket() as listener:
+            listener.bind(('127.0.0.1',0));listener.listen()
+            worker.task['Port']=listener.getsockname()[1]
+            with self.assertRaisesRegex(UpdateFailure,'остался занят'):
+                worker.maintenance(timeout=.01)
+        self.assertIsNone(worker.server)
+
     def test_current_version_does_not_stop_or_reinstall(self):
         worker = self.updater()
         target = 'a' * 40

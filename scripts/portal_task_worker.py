@@ -31,10 +31,23 @@ def main():
                 arguments += ['-PreparedUpdate', current['id']]
             # No password in arguments or settings; use the scheduled Windows identity.
             environment = dict(os.environ, PYTHONIOENCODING='utf-8')
-            result = subprocess.run(arguments, cwd=ROOT, stdin=subprocess.DEVNULL,
-                                    stdout=output, stderr=subprocess.STDOUT, env=environment)
-            report(f'Task ended; exit code {result.returncode}.')
-            return result.returncode
+            from scripts.portal_task_process import record,clear
+            process=subprocess.Popen(arguments,cwd=ROOT,stdin=subprocess.DEVNULL,
+                                     stdout=output,stderr=subprocess.STDOUT,env=environment)
+            stamp=None
+            try:
+                stamp=record(ROOT,process)
+                result=process.wait()
+            except Exception:
+                if process.poll() is None:
+                    # Identity could not be stored: do not leave an untracked server.
+                    try:subprocess.run(['taskkill.exe','/PID',str(process.pid),'/T','/F'],check=True,timeout=20,capture_output=True)
+                    except (OSError,subprocess.SubprocessError):process.kill()
+                raise
+            finally:
+                if stamp is not None:clear(ROOT,process.pid,stamp)
+            report(f'Task ended; exit code {result}.')
+            return result
         except Exception as error:
             report(f'Start failed: {type(error).__name__}: {error}')
             return 1

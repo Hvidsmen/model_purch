@@ -29,6 +29,9 @@ function Get-PortalTask {
 }
 function Stop-PortalTask {
     $task = Get-PortalTask
+    & $pythonExecutable -u (Join-Path $PSScriptRoot 'scripts\portal_task_process.py') stop
+    if ($LASTEXITCODE -ne 0) { throw 'Portal child processes did not stop safely; restart cancelled.' }
+    $task = Get-PortalTask
     if ($task.State -eq 'Running') { Stop-ScheduledTask -InputObject $task }
     $deadline = (Get-Date).AddSeconds(30)
     while ((Get-PortalTask).State -eq 'Running') {
@@ -121,7 +124,15 @@ if ($Action -in @('start', 'restart')) {
     # Do not launch a second copy if an old manual/background server still owns the port.
     $settings = Get-Content -LiteralPath $settingsPath -Raw -Encoding UTF8 | ConvertFrom-Json
     $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Parse($settings.BindAddress), [int]$settings.Port)
-    try { $listener.Start() } finally { $listener.Stop() }
+    $portDeadline = (Get-Date).AddSeconds(30)
+    while ($true) {
+        try { $listener.Start(); break }
+        catch {
+            if ((Get-Date) -ge $portDeadline) { throw 'Portal port is still occupied; a second server was not started. Check the remaining process.' }
+            Start-Sleep -Milliseconds 300
+        }
+        finally { $listener.Stop() }
+    }
     Start-ScheduledTask -InputObject (Get-PortalTask)
     & $pythonExecutable -u (Join-Path $PSScriptRoot 'scripts\portal_wait_ready.py') --address $settings.BindAddress --port $settings.Port --log "$localDirectory\portal-task.log"
     if ($LASTEXITCODE -ne 0) { throw 'Portal readiness was not confirmed. Check status and log; the task has not been stopped.' }

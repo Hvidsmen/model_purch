@@ -15,7 +15,7 @@ class ScheduledWorkerTests(unittest.TestCase):
             local.mkdir()
             config = {'Database': 'C:/Работа/db.sqlite3', 'BindAddress': '0.0.0.0', 'Port': 8000}
             (local / 'task-settings.json').write_text(json.dumps(config), encoding='utf-8-sig')
-            with patch.object(worker, 'ROOT', root), patch.object(worker.subprocess, 'run', return_value=Mock(returncode=7)) as run:
+            with patch.object(worker, 'ROOT', root), patch.object(worker.subprocess, 'Popen', return_value=Mock(pid=123,wait=Mock(return_value=7))) as run, patch('scripts.portal_task_process.record',return_value=456), patch('scripts.portal_task_process.clear'):
                 self.assertEqual(worker.main(), 7)
             arguments = run.call_args.args[0]
             self.assertIn(config['Database'], arguments)

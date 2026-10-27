@@ -10,6 +10,7 @@
     const read = key => { try { return JSON.parse(sessionStorage.getItem(key)); } catch (_) { return null; } };
     let selected = root.dataset.run || null;
     let current = null, credentials = null, timer = null, generation = 0, starting = false;
+    let disconnectedAt = null;
     const initial = document.getElementById('portal-update-current');
     if (initial) { try { current = JSON.parse(initial.textContent); selected ||= current?.id; } catch (_) {} }
     selected ||= read('portal-update-active');
@@ -68,18 +69,30 @@
             const headers = credentials?.token ? {'X-Portal-Update-Status': credentials.token} : {};
             const data = await request(`status/${selected}/`, {headers});
             if (expected !== generation) return;
+            disconnectedAt = null;
             render(data);
-            el('connection').textContent = data.status === 'completed' ? 'Новая версия ответила и готова к работе.' : data.status === 'queued' ? 'Ожидается запуск независимого задания Windows.' : 'Статус обновляется автоматически. Индикатор показывает этапы, а не оставшееся время.';
+            el('connection').textContent = data.status === 'completed' ? 'Новая версия ответила и готова к работе.' : data.status === 'queued' ? 'Ожидается запуск независимого задания Windows.' : data.status === 'failed' ? 'Обновление остановлено с ошибкой. Повторный запуск автоматически не выполняется.' : 'Статус обновляется автоматически. Индикатор показывает этапы, а не оставшееся время.';
             if (data.status === 'queued' || data.status === 'running' || data.maintenance) schedule();
         } catch (error) {
             if (expected !== generation) return;
             el('status-card').hidden = false;
-            el('connection').textContent = 'Переключаемся между порталом и заданием обновления. Переподключаемся автоматически…';
+            if (error.status === 401 || error.status === 403) {
+                el('connection').textContent = 'Нет доступа к статусу обновления. Используйте исходную вкладку запуска или войдите администратором после восстановления портала. Задание продолжает работать независимо от вкладки.';
+                return;
+            }
+            disconnectedAt ??= Date.now();
+            const offlineSeconds = Math.floor((Date.now() - disconnectedAt) / 1000);
+            if (offlineSeconds >= 30) {
+                el('connection').textContent = `Нет связи с сервером обновления ${Math.floor(offlineSeconds / 60)} мин ${offlineSeconds % 60} сек. На экране последний полученный этап; выполнение сейчас не подтверждено. Повторно обновление не запускайте. Проверьте состояние задания на Windows-сервере. Переподключение продолжается автоматически.`;
+            } else {
+                el('connection').textContent = 'Переключаемся между порталом и заданием обновления. Переподключаемся автоматически…';
+            }
             schedule(3000);
         }
     }
     function select(id, data = null) {
         generation += 1;
+        disconnectedAt = null;
         selected = id;
         credentials = read(storageKey(id));
         if (data) render(data);
