@@ -5,7 +5,7 @@
 <section class="access-groups">
 <header class="access-groups-heading"><div><p class="access-eyebrow">Администрирование · Доступ к отчётам</p><h1>Группы пользователей</h1><p>Независимые права в Мотивации, Модели закупок и Дашбордах.</p></div><a class="access-button access-secondary" href="{% url 'portal_users' %}{{ project_query }}">Пользователи и роли</a></header>
 {% include 'base/_project_catalog_tabs.html' %}
-{% for message in messages %}<p class="access-notice" role="status">{{ message }}</p>{% endfor %}
+{% for message in messages %}<p class="access-notice {{ message.tags }}" role="status">{{ message }}</p>{% endfor %}
 <div class="access-group-layout">
 <section class="access-panel"><header class="access-panel-header"><h2>Группы доступа <span class="access-count">{{ catalog|length }}</span></h2><a href="{% url 'portal_user_groups' %}{{ project_query }}" class="access-button access-secondary">+ Новая группа</a></header>
 <input class="access-search" type="search" id="group-search" placeholder="Найти группу…" aria-label="Найти группу">
@@ -17,7 +17,7 @@
 {% include 'base/_group_multi.html' with field=form.subdivisions hint='Для политиков, продаж, заместителей и директоров выберите подразделения.' %}
 {% include 'base/_group_multi.html' with field=form.members hint='Участников можно добавить сейчас или позже.' %}
 <p class="access-explanation">Участники наследуют роль отдельно в каждом проекте. Персональное назначение пользователя имеет приоритет. Политик и Продажи видят свои сделки. Зам. директора видит всех политиков выбранных подразделений. Директор видит все данные выбранных филиалов. Администратор, Генеральный директор и Логист имеют тот же доступ, что и при назначении роли пользователю. Подразделения не ограничивают доступ этих трёх ролей.</p>
-<div class="access-form-footer"><button type="submit" class="access-button">{% if editing %}Сохранить изменения{% else %}Создать группу{% endif %}</button>{% if editing %}<a href="{% url 'portal_user_groups' %}{{ project_query }}">Отмена</a>{% endif %}</div>
+<div class="access-form-footer admin-access-sticky"><button type="submit" class="access-button">{% if editing %}Сохранить изменения{% else %}Создать группу{% endif %}</button>{% if editing %}<a href="{% url 'portal_user_groups' %}{{ project_query }}">Отмена</a>{% endif %}</div>
 </form></section>
 </div></section><script src="{% static 'base/user_groups.js' %}?v=20261021-auto-author" defer></script>
 {% endblock %}

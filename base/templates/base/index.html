@@ -1,6 +1,7 @@
 {% extends 'base/base.html' %}
 {% block title %}Главная · DA портал{% endblock %}
 {% block content %}
+{% if portal_is_admin %}<p><a class="admin-button secondary" href="{% url 'portal_administration' %}">Обзор администратора →</a></p>{% endif %}
 <section class="portal-welcome">
 <h1>DA портал</h1><p>Выберите проект, чтобы продолжить работу.</p>
 <div class="portal-cards">

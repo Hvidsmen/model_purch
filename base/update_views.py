@@ -20,7 +20,8 @@ def updates(request):
     administrator(request)
     available, reason = portal_updates.availability()
     current = protocol.observe(portal_updates.root(), protocol.active(portal_updates.root()))
-    return render(request, 'base/updates.html', {'update_available': available, 'update_disabled_reason': reason,
+    from .release_notes import RELEASE
+    return render(request, 'base/updates.html', {'installed_release':RELEASE, 'update_available': available, 'update_disabled_reason': reason,
         'update_current': current, 'update_history': [protocol.observe(portal_updates.root(), row) for row in protocol.history(portal_updates.root())],
         'update_revision': portal_updates.revision()[:12]})
 

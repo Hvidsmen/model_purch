@@ -19,8 +19,8 @@ class UserPortalTests(TestCase):
 
     def test_create_local_and_edit_without_resetting_password(self):
         response = self.client.post(reverse('portal_users'), self.local_data())
-        self.assertRedirects(response, reverse('portal_users'))
         user = User.objects.get(username='local-test')
+        self.assertRedirects(response, reverse('portal_users') + f'?edit={user.pk}#user-editor')
         self.assertTrue(user.check_password('Local-test-9274!'))
         old = user.password
         response = self.client.post(reverse('portal_users'), self.local_data(user=str(user.pk), password1='', password2='', username='tampered', first_name='Пётр'))

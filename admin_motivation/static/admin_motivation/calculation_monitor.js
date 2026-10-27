@@ -52,7 +52,10 @@
             const node=document.querySelector(selector);if(!node)continue;
             node.textContent=data.workflow[label];node.classList.toggle('state-success',data.workflow[current]);node.classList.toggle('state-warning',!data.workflow[current]);
           }
-          history(card, data.history);
+          history(card, data.history||[]);
+          const last=card.querySelector('[data-job-last]');if(last)last.textContent=data.history?.length ? data.history[0].started+' · '+data.history[0].status : 'Запусков в журнале нет';
+          card.dataset.state=data.status;
+          card.querySelectorAll('button[name=action][value=run]').forEach(button=>{button.disabled=button.closest('fieldset[disabled]')!==null||['Выполняется','Ожидает запуска'].includes(data.status);});
           const link = card.querySelector('[data-job-report]');
           if (link) {
             link.hidden = !data.report_url;
@@ -63,7 +66,9 @@
           if (provenance) provenance.textContent = data.execution ? `Расчёт ${data.execution.completed} МСК · ${data.execution.year} · ${data.execution.plan}${data.execution.stale ? ' · Настройки изменены: нужен пересчёт' : ''}` : 'Версия завершённого расчёта пока не подтверждена. После обновления сохраните параметры задания для регистрации новых запусков.';
           note.textContent = `Проверено в ${data.checked_at} МСК · автообновление каждые 10 секунд`;
         } catch (_) {
-          note.textContent = 'Не удалось проверить статус. Показаны последние полученные данные; повтор через 10 секунд.';
+          card.querySelectorAll('button[name=action][value=run]').forEach(button=>button.disabled=true);
+          const last=card.querySelector('[data-job-last]');if(last&&last.textContent==='Проверяем…')last.textContent='Статус недоступен';
+          note.textContent = 'Не удалось проверить статус. Показаны последние полученные данные; запуск недоступен до восстановления связи. Повтор проверки через 10 секунд.';
         } finally { clearTimeout(timeout); }
       }
     } finally { active = false; }

@@ -459,9 +459,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.locator('#id_name').fill('Browser calculation')
             self.page.locator('#id_fact_year').fill('2026')
             self.page.locator('#id_plan_version').select_option('Selected SQL plan')
-            self.page.get_by_role('button', name='Сохранить задание в SQL Server', exact=True).click()
+            self.page.get_by_role('button', name='Создать задание', exact=True).click()
             expect(self.page.get_by_text('Browser calculation', exact=True)).to_be_visible()
             card = self.page.locator('.calculation-job')
+            card.locator('.admin-job-details > summary').click()
             card.locator('.calculation-edit > summary').click()
             card.locator('[name=fact_year]').fill('2025')
             card.locator('[name=plan_version]').select_option('Other SQL plan')
@@ -470,10 +471,11 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             card.locator('[name=payout_threshold]').fill('0.85')
             card.get_by_role('button', name='Сохранить параметры и расписание', exact=True).click()
             expect(self.page.locator('.calculation-job')).to_contain_text('Год факта: 2025')
-            self.page.get_by_role('button', name='Запустить сейчас', exact=True).click()
+            # A running task must not accept another launch from the interface.
+            expect(self.page.get_by_role('button', name='Запустить сейчас', exact=True)).to_be_disabled()
             expect(self.page.locator('[data-job-status]')).to_have_text('Выполняется')
             self.assertEqual(sync.call_count, 2)
-            start.assert_called_once()
+            start.assert_not_called()
             self.assertEqual(self.errors, [])
 
     def test_approved_manager_correction_has_reason_confirmation_and_audit(self):

@@ -128,7 +128,7 @@ def groups(request):
     form = ReportGroupForm(request.POST if request.method == 'POST' else None, group=group, actor=request.user)
     if request.method == 'POST' and form.is_valid():
         saved = form.save()
-        messages.success(request, f'Группа «{saved.name}» сохранена. Доступ участников обновлён.')
+        messages.success(request, f'Группа «{saved.name}» сохранена. Доступ участников обновлён. Персональные назначения сохраняют приоритет. Участники увидят изменения при следующем открытии страницы.')
         from django.urls import reverse
         return redirect(reverse('portal_user_groups') + project_context['project_query'])
     catalog = list(Group.objects.exclude(name__in=ROLES).select_related('portal_scope__employee_type').prefetch_related('project_access', 'user_set', 'portal_scope__subdivisions__merged_into').order_by('name'))

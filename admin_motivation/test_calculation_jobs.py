@@ -23,7 +23,7 @@ class CalculationJobsTests(TestCase):
 
     def test_admin_page_and_manual_run(self):
         url = reverse('motivation_calculations')
-        self.assertContains(self.client.get(url), 'Расчёт и задания')
+        self.assertContains(self.client.get(url), 'Центр расчётов')
         with patch.object(jobs, 'start_job') as start:
             response = self.client.post(url, {'job': self.job.pk, 'action': 'run'})
         self.assertEqual(response.status_code, 302)

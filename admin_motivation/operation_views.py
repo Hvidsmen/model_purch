@@ -76,7 +76,7 @@ def calculations(request):
                 calculation_jobs.start_job(job)
                 job.synced, job.error = True, ''
                 job.save(update_fields=['synced', 'error'])
-                messages.success(request, 'Задание отправлено в SQL Server Agent. Завершение проверяется по статусу SQL Server, а не по времени ожидания.')
+                messages.success(request, 'Запуск задания принят сервером расчёта. Дождитесь статуса «Завершено», затем откройте результат. Статус обновляется автоматически.')
                 return redirect('motivation_calculations')
             form = JobForm(request.POST, instance=job, auto_id=f'job_{job.pk}_%s' if job else 'id_%s')
             if form.is_valid():
@@ -84,7 +84,7 @@ def calculations(request):
                 calculation_jobs.sync_job(job)
                 job.synced, job.error = True, ''
                 job.save()
-                messages.success(request, 'Задание сохранено в SQL Server Agent.')
+                messages.success(request, 'Параметры задания сохранены и переданы серверу расчёта. Для ручного расчёта нажмите «Запустить сейчас»; для автоматического проверьте расписание.')
                 return redirect('motivation_calculations')
         except Exception as error:
             text = ' '.join(error.messages) if isinstance(error, ValidationError) else 'Не удалось настроить или запустить SQL Agent. Проверьте DWH_SQL_CONN_STR, службу Agent и права на создание заданий и процедур; подробности в журнале.'
@@ -109,6 +109,17 @@ def calculations(request):
         job.edit_open = bool(edited_job_id == job.pk)
         if job.run_at:
             job.edit_form.initial['run_at'] = job.run_at.astimezone(ZoneInfo('Europe/Moscow')).replace(tzinfo=None)
+        from datetime import timedelta
+        now=timezone.now().astimezone(ZoneInfo('Europe/Moscow'))
+        if job.mode=='manual' or not job.enabled or not job.run_at:
+            job.next_run_label='Только вручную' if job.mode=='manual' else 'Автозапуск отключён'
+        elif job.mode=='daily':
+            next_run=now.replace(hour=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).hour,minute=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).minute,second=job.run_at.second,microsecond=0)
+            if next_run<=now:next_run+=timedelta(days=1)
+            if next_run<job.run_at:next_run=job.run_at.astimezone(ZoneInfo('Europe/Moscow'))
+            job.next_run_label=next_run.strftime('%d.%m %H:%M')+' · по расписанию'
+        else:
+            job.next_run_label=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M') if job.run_at>timezone.now() else 'Время прошло · проверьте историю'
         job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
     return render(request, 'admin_motivation/calculations.html', {'form': JobForm() if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
 

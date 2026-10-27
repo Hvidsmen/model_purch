@@ -105,11 +105,11 @@ def users(request):
     form = UserForm(request.POST if request.method == 'POST' else None, actor=request.user, instance=editing, initial={'is_active': True} if not editing else None)
     if request.method == 'POST' and form.is_valid():
         saved = form.save()
-        messages.success(request, f'Пользователь «{saved.username}» сохранён.')
+        messages.success(request, f'Пользователь «{saved.username}» сохранён. Права применятся при следующем открытии страницы сотрудником.')
         from django.urls import reverse
-        return redirect(reverse('portal_users') + project_context['project_query'])
+        return redirect(reverse('portal_users') + (project_context['project_query'] + '&' if project_context['project_query'] else '?') + f'edit={saved.pk}#user-editor')
     query = request.GET.get('q', '').strip()[:150]
-    catalog = User.objects.prefetch_related('groups__project_access', 'groups__portal_scope', 'project_access').order_by('username')
+    catalog = User.objects.select_related('motivation_report_access__subdivision__merged_into').prefetch_related('groups__project_access', 'groups__portal_scope__subdivisions__merged_into', 'project_access').order_by('username')
     if query:
         catalog = catalog.filter(Q(username__icontains=query) | Q(first_name__icontains=query) | Q(last_name__icontains=query) | Q(email__icontains=query))
     filters = UserFilters(request.GET, project=project)
@@ -142,6 +142,21 @@ def users(request):
     for row in catalog:
         row.portal_role_label = ' · '.join(PROJECT_LABELS[key] + ': ' + role for key, role in row.catalog_assignments.items() if not project or key == project) or 'Без доступа'
         row.catalog_groups = [group for group in row.groups.all() if group.name not in ROLES and (not project or project in group_roles(group))]
+        row.catalog_branches=[]
+        motivation=row.catalog_assignments.get('motivation')
+        from .access import REPORT_ROLES, PROJECT_ROLES
+        if motivation in REPORT_ROLES:
+            scoped=[]
+            for group in row.groups.all():
+                scope=getattr(group,'portal_scope',None)
+                grant=next((grant for grant in group.project_access.all() if grant.project=='motivation'),None)
+                eligible=(grant.role if grant else scope.portal_role if scope else '')
+                if scope and eligible in PROJECT_ROLES['motivation']:
+                    scoped.extend((branch.merged_into or branch).subdivision_key for branch in scope.subdivisions.all())
+            personal=getattr(row,'motivation_report_access',None)
+            if not scoped and personal and motivation in ('Политик','Продажи'):
+                scoped=[(personal.subdivision.merged_into or personal.subdivision).subdivision_key]
+            row.catalog_branches=sorted(set(scoped))
     sections = {}
     selected = set(filters.cleaned_data.get('group', [])) if filters.is_valid() else set()
     for row in catalog:
@@ -156,7 +171,9 @@ def users(request):
             section = sections.setdefault(key, {'key': key, 'name': name, 'users': []})
             section['users'].append(row)
     sections = sorted(sections.values(), key=lambda section: (section['name'] == 'Без группы', section['name'].casefold()))
-    return render(request, 'base/users.html', {**project_context, 'form': form, 'editing': editing, 'catalog': catalog, 'sections': sections, 'query': query, 'filters': filters, 'filter_query': request.GET.urlencode()})
+    from .admin_ux import effective_access
+    access_summary=effective_access(User.objects.get(pk=editing.pk)) if editing else []
+    return render(request, 'base/users.html', {**project_context, 'form': form, 'editing': editing, 'catalog': catalog, 'sections': sections, 'query': query, 'filters': filters, 'filter_query': request.GET.urlencode(), 'access_summary':access_summary})
 
 
 @require_GET

@@ -8,6 +8,7 @@
     <title>{% block title %}DA портал{% endblock %}</title>
     {% block module_css %}<link rel="stylesheet" href="{% static 'vendor/bootstrap-5.3.2/bootstrap.min.css' %}">{% endblock %}
     <link rel="stylesheet" href="{% static 'base/portal.css' %}?v=da-brand-20261023">
+    <link rel="stylesheet" href="{% static 'base/admin_ux.css' %}?v=admin-20261027">
     <script src="{% static 'base/portal.js' %}" defer></script>
 </head>
 <body class="portal-body">
@@ -33,14 +34,16 @@
         <details class="portal-admin-panel" open>
             <summary><span class="portal-admin-symbol" aria-hidden="true">⚙</span> Администрирование<span class="portal-admin-chevron" aria-hidden="true">⌄</span></summary>
             <nav aria-label="Действия администратора">
+                <a href="{% url 'portal_administration' %}" {% if request.resolver_match.url_name == 'portal_administration' %}aria-current="page"{% endif %}><span aria-hidden="true">◫</span><span>Обзор администратора</span></a>
                 <p class="portal-admin-caption">Доступ сотрудников</p>
                 <a href="{% url 'portal_users' %}{{ project_query }}" {% if request.resolver_match.url_name == 'portal_users' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="user" %}<span>Пользователи и права</span></a>
                 <a href="{% url 'portal_user_groups' %}{{ project_query }}" {% if request.resolver_match.url_name == 'portal_user_groups' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="group" %}<span>Группы пользователей</span></a>
-                <p class="portal-admin-caption">Управление порталом</p>
+                <p class="portal-admin-caption">Мотивация</p>
+                <a href="{% url 'motivation_calculations' %}" {% if request.resolver_match.url_name == 'motivation_calculations' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="clock" %}<span>Центр расчётов</span></a>
+                <p class="portal-admin-caption">Обслуживание портала и данных</p>
                 <a href="{% url 'portal_updates' %}" {% if request.resolver_match.url_name == 'portal_updates' %}aria-current="page"{% endif %}><span aria-hidden="true">↻</span><span>Обновление портала</span></a>
-                <a href="{% url 'motivation_calculations' %}" {% if request.resolver_match.url_name == 'motivation_calculations' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="clock" %}<span>Расчёт и задания</span></a>
                 <a href="{% url 'motivation_subdivision_merge' %}" {% if request.resolver_match.url_name == 'motivation_subdivision_merge' %}aria-current="page"{% endif %}>{% include "base/_nav_icon.html" with kind="merge" %}<span>Слияние подразделений</span></a>
-                <a href="{% url 'admin:index' %}">{% include "base/_nav_icon.html" with kind="settings" %}<span>Настройки системы</span></a>
+                <a href="{% url 'admin:index' %}">{% include "base/_nav_icon.html" with kind="settings" %}<span>Расширенные настройки</span></a>
             </nav>
         </details>
         {% endif %}
