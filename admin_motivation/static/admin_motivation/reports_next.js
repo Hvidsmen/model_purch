@@ -41,6 +41,34 @@
  document.querySelectorAll('details.next-branches').forEach(menu => menu.addEventListener('keydown', event => {
   if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
  }));
+ const form = document.getElementById('native-report-filters');
+ if (form) {
+  const snapshot = () => JSON.stringify([...new FormData(form).entries()].filter(([key]) => key !== 'run').sort(([a, av], [b, bv]) => a.localeCompare(b) || String(av).localeCompare(String(bv))));
+  const applied = snapshot();
+  const panel = form.closest('.nr-filter-panel');
+  const pending = document.querySelector('[data-report-pending]');
+  const draft = document.querySelector('[data-report-draft]');
+  const updateDirty = () => {
+   const dirty = snapshot() !== applied;
+   if (pending) pending.hidden = !dirty;
+   if (draft) draft.hidden = !dirty;
+   panel?.toggleAttribute('data-dirty', dirty);
+  };
+  document.addEventListener('input', event => { if (event.target.form === form) updateDirty(); });
+  document.addEventListener('change', event => { if (event.target.form === form) queueMicrotask(updateDirty); });
+  form.addEventListener('click', event => { if (event.target.closest('button[type=button]')) queueMicrotask(updateDirty); });
+  form.addEventListener('reset', () => queueMicrotask(() => {
+   updateBranches(); updateTypes(); updatePeriods();
+   checks.forEach(input => { input.closest('label').hidden = false; });
+   updateDirty();
+  }));
+  document.querySelector('[data-report-revert]')?.addEventListener('click', () => {
+   form.reset();
+   panel.open = true;
+   panel.querySelector('summary').focus();
+  });
+  window.addEventListener('pageshow', updateDirty);
+ }
  const matrixDetails = document.querySelector('[data-matrix-details]');
  matrixDetails?.addEventListener('change', () => {
   document.querySelectorAll('.nr-matrix[data-matrix-periods]').forEach(matrix => {

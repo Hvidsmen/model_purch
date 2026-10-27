@@ -1,0 +1,1 @@
+<nav class="nr-report-nav" aria-label="Переключить отчёт">{% for item in report_navigation %}<a href="{{ item.url }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}</nav>

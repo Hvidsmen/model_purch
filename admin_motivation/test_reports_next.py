@@ -314,10 +314,11 @@ class ReportsNextTests(TestCase):
                 'total': Decimal(amount + bonus), 'detail_url': '/detail/?type=' + kind + '&period=' + code})
         ledger = {'kinds': ['Политики', 'Продажи'], 'rows': rows, 'total': Decimal(42)}
         data = present('team', ledger, ledger)
-        self.assertEqual([column['label'] for column in data['period_columns']], ['4 кв.', 'Год'])
+        self.assertEqual([column['label'] for column in data['period_columns']], ['Премия за 4 кв.', 'Годовая премия'])
         self.assertEqual(len(data['employees']), 1)
         person = data['employees'][0]
         self.assertEqual(person['period_values'], [Decimal(17), Decimal(20)])
+        self.assertEqual(data['period_totals'], [Decimal(17), Decimal(20)])
         self.assertEqual(sum(person['period_values']) + person['bonus'], person['total'])
         self.assertEqual([item['total'] for item in data['type_totals']], [Decimal(35), Decimal(7)])
         self.assertEqual(len(data['registry_rows']), 2)
@@ -470,3 +471,20 @@ class ReportsNextTests(TestCase):
             self.assertEqual(book['Премии']['G3'].value, 90)
             self.assertEqual(book['Премии'].max_row, 3)
             book.close(); exported.close()
+
+    def test_report_switcher_keeps_shared_filters_without_personal_drilldown(self):
+        from urllib.parse import urlsplit, parse_qs
+        from .reports_next_views import report_navigation
+        query = QueryDict('year=2026&period=4&period=5&type=Политики&subdivision=A&currency=USD&author=Own&preview_user=123&planning=RAC&search=Own&export=1&run=1&page=2')
+        navigation = report_navigation(self.actor, 'team', query)
+        self.assertEqual(sum(item['active'] for item in navigation), 1)
+        for item in navigation:
+            values = parse_qs(urlsplit(item['url']).query)
+            self.assertEqual(values['period'], ['4', '5'])
+            self.assertEqual(values['subdivision'], ['A'])
+            self.assertEqual(values['run'], ['1'])
+            for name in ('author', 'preview_user', 'planning', 'search', 'export', 'page'):
+                self.assertNotIn(name, values)
+        employee = User.objects.create_user('nav-employee')
+        employee.groups.add(Group.objects.get(name=POLITICIAN))
+        self.assertEqual({item['key'] for item in report_navigation(employee, 'mine', query)}, {'mine', 'detail'})

@@ -64,7 +64,8 @@ def present(kind, data, ledger=None, period='all'):
         params.setlist('period', list(selected) if isinstance(selected, (list, tuple)) else [selected])
         return parts.path + '?' + params.urlencode()
     codes = sorted({row['code'] for row in ledger['rows'] if row['code']})
-    result['period_columns'] = [{'code': code, 'label': 'Год' if code == '5' else f'{code} кв.'} for code in codes]
+    result['period_totals'] = [sum((row['amount'] for row in ledger['rows'] if row['code'] == code), ZERO) for code in codes]
+    result['period_columns'] = [{'code': code, 'label': 'Годовая премия' if code == '5' else f'Премия за {code} кв.'} for code in codes]
     for group in [*employees.values(), *registry.values()]:
         group['kinds'] = sorted(group['kinds'])
         group['detail_url'] = url_for_period(group['rows'][0].get('detail_url', ''), period)
