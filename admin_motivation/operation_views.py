@@ -147,7 +147,8 @@ def calculation_monitor(request, job_id):
         data['report_url'] = reverse('motivation_report',args=['manager-detail']) + '?' + urlencode({'year':params['fact_year'],'job':job.pk,'run':'1',**({'execution':execution.pk} if execution.pk else {})})
         data['execution'] = {'completed':execution.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S') if execution.completed_at else '',
             'year':params['fact_year'],'plan':params['plan_version'],
-            'stale': not (state['export_current'] and state['exported'] and state['exported'].fingerprint==execution.export_snapshot.get('fingerprint'))}
+            'pilot_current':params.get('premium_periods')==['4','5'] and params.get('quarter_catchup') is False,
+            'stale': not (params.get('premium_periods')==['4','5'] and params.get('quarter_catchup') is False and state['export_current'] and state['exported'] and state['exported'].fingerprint==execution.export_snapshot.get('fingerprint'))}
     else:
         data['report_url'] = None
     data['checked_at'] = timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%H:%M:%S')

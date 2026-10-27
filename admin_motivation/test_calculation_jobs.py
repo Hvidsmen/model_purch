@@ -67,6 +67,8 @@ class CalculationJobsTests(TestCase):
     @patch.object(jobs, 'rules', return_value=[('Old', 'New', 'target')])
     def test_prepare_copies_procedure_and_redirects_reference(self, rules):
         definition = 'ALTER PROCEDURE [motivation].[sp_CalcBySub] AS SELECT IIF(SUM(Fact) OVER(PARTITION BY SubdivisionName)/SUM(Plan_) OVER(PARTITION BY SubdivisionName)<0.8,1,0) FROM [DataWH].[dbo].[Subdivisions];'
+        from .test_pilot_calculation import procedure
+        definition+='\n'+procedure().split(' AS\n',1)[1]
         self.cursor.fetchone.return_value = (definition, None)
         self.cursor.fetchall.return_value = [('SubdivisionKey',), ('SubdivisionName',)]
         jobs.prepare(self.cursor)

@@ -25,8 +25,12 @@ UPDATE r SET
  [СуммаМотивацииRUR]=r.[СуммаМотивацииRUR]*COALESCE(k.Coeff_,1),
  [СуммаМотивацииRURУчетПроцента]=r.[СуммаМотивацииRURУчетПроцента]*COALESCE(k.Coeff_,1)
 FROM DataWH.motivation.ReportMotivationByDealAuthor r
-CROSS APPLY (SELECT CASE r.[КварталМотивации] WHEN N'1 Квартал' THEN 1 WHEN N'2 Квартал' THEN 2
- WHEN N'3 Квартал' THEN 3 WHEN N'4 Квартал' THEN 4 WHEN N'Год' THEN 5 END AS PeriodId) p
+CROSS APPLY (SELECT CASE
+ WHEN LOWER(LTRIM(RTRIM(r.[КварталМотивации]))) LIKE N'1 кв%' THEN 1
+ WHEN LOWER(LTRIM(RTRIM(r.[КварталМотивации]))) LIKE N'2 кв%' THEN 2
+ WHEN LOWER(LTRIM(RTRIM(r.[КварталМотивации]))) LIKE N'3 кв%' THEN 3
+ WHEN LOWER(LTRIM(RTRIM(r.[КварталМотивации]))) LIKE N'4 кв%' THEN 4
+ WHEN LOWER(LTRIM(RTRIM(r.[КварталМотивации])))=N'год' THEN 5 END AS PeriodId) p
 OUTER APPLY (SELECT TOP (1) c.Coeff_ FROM #portal_manager_correction c
  WHERE c.Subdivision=r.[Подразделение] AND c.PeriodId=p.PeriodId
  AND c.Date_<=EOMONTH(DATEFROMPARTS(r.[Год],CASE WHEN p.PeriodId=5 THEN 12 ELSE p.PeriodId*3 END,1))

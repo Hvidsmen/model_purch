@@ -107,7 +107,7 @@ class FinancierTests(TestCase):
         self.local_coeff.refresh_from_db()
         self.assertEqual(self.local_coeff.motivation_coeff, .15)
 
-    def test_all_reports_and_exports_have_no_pilot_or_identity_restrictions(self):
+    def test_all_reports_and_exports_use_shared_pilot_without_identity_restrictions(self):
         from admin_motivation.services.reports import CATALOG
         page = self.client.get(reverse('motivation_reports'))
         for entry in CATALOG.values():
@@ -120,7 +120,7 @@ class FinancierTests(TestCase):
                 self.assertNotIn('access_scope', load.call_args.kwargs)
                 self.assertFalse(page.context['pilot_periods'])
                 if kind == 'manager':
-                    self.assertEqual(load.call_args.args[1]['qm'], '1 Квартал')
+                    self.assertEqual(load.call_args.args[1]['qm'], '4 Квартал(1-4 кв)')
             load.return_value = {'currency': 'USD'}
             from io import BytesIO
             with patch('admin_motivation.services.report_excel.report_excel', return_value=BytesIO(b'xlsx')):

@@ -118,6 +118,8 @@ def prepare(cursor):
     if SubdivisionManagerCoeff.objects.filter(version__status='approved').exists():
         from .manager_correction import patch
         changed = patch(changed)
+    from .pilot_calculation import patch as pilot_patch
+    changed = pilot_patch(changed)
     cursor.execute(changed)
 
 

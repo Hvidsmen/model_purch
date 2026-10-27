@@ -4,7 +4,7 @@
 <section class="calculation-page admin-calculations">
 <header class="calculation-heading"><div><p class="calculation-eyebrow">Администрирование · Мотивация</p><h1>Центр расчётов</h1><p>Запускайте расчёт вручную или настройте автоматическое расписание. Время — московское.</p></div>{% if portal_is_admin %}<a class="calculation-button calculation-secondary" href="{% url 'portal_administration' %}">Обзор администратора →</a>{% endif %}</header>
 {% for message in messages %}<div class="calculation-notice {% if message.tags == 'error' %}calculation-error{% endif %}" role="status">{{ message }}</div>{% endfor %}
-<div class="calculation-layout">
+<p class="admin-notice warning">Пилот: рассчитываются только премия за 4-й квартал нарастающим итогом и годовая премия. Данные всего года сохраняются; доплат за предыдущие кварталы нет. После обновления запустите расчёт заново. Для автоматического задания сначала сохраните параметры и расписание.</p><div class="calculation-layout">
 <details class="calculation-card ux-create-job" {% if not jobs or form.errors %}open{% endif %}><summary>Создать задание</summary><header><h2>Параметры нового задания</h2><p>Сохраните параметры, затем запустите расчёт или дождитесь времени по расписанию.</p></header>
 <p>Версии берутся из загруженных планов портала. <a href="{% url 'motivation_sales_plans' %}">Открыть планы продаж →</a></p>
 <form method="post" class="calculation-form" data-ux-submit="Сохраняем параметры задания…">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}{% csrf_token %}{{ form.non_field_errors }}
@@ -26,5 +26,5 @@
 </section></div>
 <details class="calculation-help"><summary>Как выполняется расчёт и что нужно для подключения</summary><p>Задания выполняет SQL Server Agent, в том числе после перезапуска портала. Одновременные запуски из портала блокируются.</p><p>Процедура <code>motivation.sp_CalcBySub</code> запускается через подготовленную копию <code>motivation.PortalCalcBySub</code>, которая учитывает объединённые подразделения. Исходная процедура сохраняется.</p><p>Подключение: <code>DWH_SQL_CONN_STR</code>. Нужны работающая служба SQL Server Agent, права на задания msdb, чтение определения исходной процедуры и создание объектов в схеме motivation.</p></details>
 </section>
-<script src="{% static 'admin_motivation/calculation_monitor.js' %}?v=admin-20261027" defer></script>
+<script src="{% static 'admin_motivation/calculation_monitor.js' %}?v=pilot-periods-20261027" defer></script>
 {% endblock %}

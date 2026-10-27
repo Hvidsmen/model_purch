@@ -94,13 +94,14 @@ class NativeMotivationReportTests(TestCase):
         from .services.reports import choices
         database = sqlite3.connect(':memory:')
         self.addCleanup(database.close)
+        database.create_function('LOWER',1,lambda value:value.lower() if value is not None else None)
         database.execute('CREATE TABLE report (Подразделение, АвторСделки, ТипКоэф, ГруппаПлановПродаж, КварталМотивации)')
-        database.execute("INSERT INTO report VALUES ('Д-Астрахань', NULL, 'Директора', 'RAC', '1 Квартал')")
+        database.execute("INSERT INTO report VALUES ('Д-Астрахань', NULL, 'Директора', 'RAC', '4 Квартал(1-4 кв)')")
         connection, cursor = Mock(), Mock()
         calls = []
         def read(cursor, sql, args=(), **kwargs):
             calls.append((sql, args))
-            actual = database.execute(sql.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'report'), args)
+            actual = database.execute(sql.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'report').replace("N'", "'"), args)
             return [dict(zip([c[0] for c in actual.description], row)) for row in actual.fetchall()]
         values = parameters('manager', QueryDict('type=Директора&subdivision=Д-Астрахань'))
         with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), patch(
@@ -108,10 +109,10 @@ class NativeMotivationReportTests(TestCase):
             first = choices('manager', values, refresh=True)
             self.assertEqual(next(f for f in first if f['name'] == 'author')['options'], [])
             database.executemany('INSERT INTO report VALUES (?, ?, ?, ?, ?)', [
-                ('Д-Астрахань', 'Иванов', 'Директора', 'RAC', '1 Квартал'),
-                ('Д-Астрахань', '   ', 'Директора', 'RAC', '1 Квартал'),
-                ('Д-Астрахань', 'Другой тип', 'Продажи', 'RAC', '1 Квартал'),
-                ('Другой филиал', 'Другой директор', 'Директора', 'RAC', '1 Квартал')])
+                ('Д-Астрахань', 'Иванов', 'Директора', 'RAC', '4 Квартал(1-4 кв)'),
+                ('Д-Астрахань', '   ', 'Директора', 'RAC', '4 Квартал(1-4 кв)'),
+                ('Д-Астрахань', 'Другой тип', 'Продажи', 'RAC', '4 Квартал(1-4 кв)'),
+                ('Другой филиал', 'Другой директор', 'Директора', 'RAC', '4 Квартал(1-4 кв)')])
             second = choices('manager', values)
         self.assertEqual(next(f for f in second if f['name'] == 'author')['options'], [{'value': 'Иванов', 'selected': False}])
         author_calls = [(sql, args) for sql, args in calls if 'АвторСделки' in sql]

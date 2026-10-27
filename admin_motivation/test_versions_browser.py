@@ -243,6 +243,21 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator('#id_segments-0-o4')).to_have_value('24.0000')
         self.assertEqual(self.errors, [])
 
+    def test_pilot_periods_for_administrator_only_offer_q4_and_annual(self):
+        from playwright.sync_api import expect
+        self.page.goto(self.live_server_url+reverse('motivation_report_next',args=['team']))
+        self.assertEqual(self.page.locator('input[name=period]').evaluate_all('(items)=>items.map(item=>item.value)'),['4','5'])
+        self.page.locator('.next-periods > summary').click()
+        expect(self.page.locator('input[name=period][value="4"]')).to_be_visible()
+        expect(self.page.locator('input[name=period][value="5"]')).to_be_visible()
+        self.page.locator('input[name=period][value="4"]').check()
+        self.page.locator('input[name=period][value="5"]').check()
+        self.assertEqual(self.page.locator('input[name=period]:checked').count(),2)
+        self.page.screenshot(path='/tmp/pilot-q4-year-periods.png',full_page=True)
+        self.page.goto(self.live_server_url+reverse('motivation_calculations'))
+        expect(self.page.locator('.admin-notice')).to_contain_text('нарастающим итогом')
+        self.assertEqual(self.errors,[])
+
     def test_spreadsheet_preview_undo_validation_and_preflight(self):
         from playwright.sync_api import expect
         self.page.goto(self.live_server_url + reverse('global_coeff_admin_motivation'))

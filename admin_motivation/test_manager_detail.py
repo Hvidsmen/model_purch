@@ -223,7 +223,7 @@ class ManagerDetailTests(TestCase):
         connection, cursor = Mock(), Mock()
         values['DealAuthor'] = [attack]
         with patch('admin_motivation.services.reports.connect_database', return_value=(connection, cursor)), \
-             patch('admin_motivation.services.reports.fetch', return_value=detail_rows()) as fetch:
+             patch('admin_motivation.services.reports.fetch', return_value=[dict(row,КварталМотивации='4 Квартал(1-4 кв)') if row['КварталМотивации']!='Год' else row for row in detail_rows()]) as fetch:
             result = load_report('manager-detail', values)
         sql, args = fetch.call_args_list[0].args[1:3]
         self.assertIn('GROUP BY', sql)

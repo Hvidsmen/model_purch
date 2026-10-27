@@ -36,7 +36,7 @@ def context():
     execution = MotivationExecution.objects.order_by('-started_at').first()
     current = bool(exported and exported.fingerprint == snapshot['fingerprint'])
     complete = bool(execution and execution.state == 'completed')
-    calculated_current = bool(complete and current and execution.export_snapshot.get('fingerprint') == snapshot['fingerprint'])
+    calculated_current = bool(complete and current and execution.export_snapshot.get('fingerprint') == snapshot['fingerprint'] and execution.parameters.get('premium_periods')==['4','5'] and execution.parameters.get('quarter_catchup') is False)
     if not snapshot['versions']:
         next_label, next_route = 'Настройте и утвердите версию', 'global_coeff_admin_motivation'
     elif not current:

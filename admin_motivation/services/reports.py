@@ -18,7 +18,7 @@ CATALOG = {
     'manager-detail': {'title': 'Мотивация. Детально', 'description': 'Подробный отчёт: подразделения, сотрудники, кварталы, коэффициенты и товарная матрица. USD и RUB.'},
     'deals': {'title': 'Факт закрытых сделок', 'description': 'Отгрузки и возможная мотивация по сделкам, менеджерам и товарной матрице.'},
 }
-PREMIUM_PERIODS = [('1', '1 квартал'), ('2', '2 квартал'), ('3', '3 квартал'), ('4', '4 квартал'), ('5', 'Год')]
+PREMIUM_PERIODS = [('4', '4 квартал'), ('5', 'Год')]
 
 # UI name, RDL parameter, caption, lookup dataset, multiple
 FILTERS = {
@@ -63,7 +63,7 @@ def parameters(kind, query, trusted_identity=False):
     if kind == 'subdivisions':
         periods = values.get('PremiumPeriods', [])
         if any(value not in dict(PREMIUM_PERIODS) for value in periods):
-            raise ValidationError('Выберите период премии: 1–4 квартал или год.')
+            raise ValidationError('Пилот: доступны только 4-й квартал и год.')
         if not periods:
             values.pop('PremiumPeriods', None)
     from .subdivision_scope import included
@@ -127,7 +127,11 @@ def choices(kind, values, refresh=False, access_scope=None):
             if kind == 'deals' and dataset not in ('Sub', 'TC') and not values.get('Division'):
                 result.append({'name': name, 'label': caption, 'multiple': multiple, 'options': []})
                 continue
-            sql, args = bind_sql(queries[dataset], values)
+            lookup=queries[dataset]
+            if kind!='deals':
+                from .report_periods import PILOT_SQL
+                lookup+=(' AND ' if re.search(r'\bWHERE\b',lookup,re.I) else ' WHERE ')+PILOT_SQL
+            sql, args = bind_sql(lookup, values)
             # Keep large deal lookup lists scoped to the selected branch and date range.
             if kind == 'deals' and dataset not in ('Sub', 'TC', 'DataSet1') and values.get('Division'):
                 sql += ' AND ' if re.search(r'\bWHERE\b', sql, re.I) else ' WHERE '
@@ -149,6 +153,10 @@ def choices(kind, values, refresh=False, access_scope=None):
                     cache.set(cache_key, options, 300)
             selected = values.get(parameter)
             selected = selected if isinstance(selected, list) else ([selected] if selected is not None else [])
+            if name=='quarter':
+                from .report_periods import allowed_period
+                options=[value for value in options if allowed_period(value)]
+                selected=[value for value in selected if allowed_period(value)]
             result.append({'name': name, 'label': caption, 'multiple': multiple,
                            'options': [{'value': item, 'selected': item in selected} for item in sorted(set(options) | set(selected)) if parameter not in ('Subdivision', 'Division') or included(item)]})
         return result
@@ -363,6 +371,9 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         access_scope = worker_scope(access_scope, kind, values)
     from .report_periods import pilot_enabled, PILOT_SQL
     pilot = pilot_enabled(kind, access_scope)
+    if pilot and kind=='manager':
+        from .report_periods import allowed_period,PILOT_QUARTER
+        values={**values,'qm':values.get('qm') if allowed_period(values.get('qm')) else PILOT_QUARTER}
     period_codes = list(premium_period) if isinstance(premium_period, (list, tuple)) else [premium_period] if premium_period not in (None, 'all') else []
     if any(code not in ('1', '2', '3', '4', '5') for code in period_codes):
         raise ValidationError('Выберите период премии.')

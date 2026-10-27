@@ -15,7 +15,7 @@ CATALOG = {
     'executive': ('Сводный отчёт: план премий', 'Глобальные коэффициенты и коэффициенты подразделений на одинаковом плане.'),
     'detail': ('Детальный расчёт', 'Отгрузки, ставки K0–K4, условия выполнения и итоговая премия.'),
 }
-PERIODS = [('all', 'Все доступные периоды'), ('1', '1 квартал'), ('2', '2 квартал'), ('3', '3 квартал'), ('4', '4 квартал'), ('5', 'Год')]
+PERIODS = [('all', 'Все доступные периоды'), ('4', '4 квартал'), ('5', 'Год')]
 
 
 def available(user):
@@ -43,12 +43,12 @@ def selected_periods(query):
     values = list(dict.fromkeys(query.getlist('period'))) or ['all']
     if len(values) > 5 or any(value not in dict(PERIODS) for value in values) or 'all' in values and len(values) > 1:
         raise ValidationError('Выберите корректные периоды премии.')
-    return ['1', '2', '3', '4', '5'] if values == ['all'] else sorted(values)
+    return ['4', '5'] if values == ['all'] else sorted(values)
 
 
 def period_label(query):
     values = list(dict.fromkeys(query.getlist('period')))
-    if not values or values == ['all'] or set(values) == set('12345'):
+    if not values or values == ['all'] or set(values) == set('45'):
         return 'Все доступные периоды'
     labels = dict(PERIODS)
     return ', '.join(labels[value] for value in sorted(values) if value in labels)
@@ -77,10 +77,9 @@ def restrict(user, query):
     allowed = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
     allowed = [allowed] if isinstance(allowed, str) else allowed
     selected = selected_types(query, allowed)
-    codes = selected_periods(query)
     explicit = list(dict.fromkeys(query.getlist('period')))
-    if scope and scope.get('pilot_periods') and explicit and explicit != ['all'] and any(code not in ('4', '5') for code in codes):
-        raise PermissionDenied
+    if scope and explicit and explicit!=['all'] and any(code not in ('4','5') for code in explicit):raise PermissionDenied
+    codes = selected_periods(query)
     period = 'all' if not explicit or explicit == ['all'] else codes[0] if len(codes) == 1 else codes
     return scope, selected, period
 
@@ -199,9 +198,6 @@ def planned_budget(execution, scenario, query):
     indexes = {side: Index(coefficient_rows(ids, subdivision=local)) for side, local in [('global', False), ('local', True)]}
     directors = {side: DirectorIndex(ids, local=local) for side, local in [('global', False), ('local', True)]}
     lines = scenario.lines.exclude(subdivision='').filter(plan_date__year=year).order_by()
-    if '5' not in periods:
-        months = [month for code in periods for month in range(int(code) * 3 - 2, int(code) * 3 + 1)]
-        lines = lines.filter(plan_date__month__in=months)
     aliases, buckets = mapping(), {}
     director_scope = query.get('director_scope', 'active')
     if director_scope not in ('active', 'coefficients'):
@@ -218,7 +214,7 @@ def planned_budget(execution, scenario, query):
     quarter_share, annual_share = quarter_share / 100, annual_share / 100
     selected_subdivisions = query.getlist('subdivision')
     for day, original, pg, group, brand, amount, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'segment_amounts').iterator(chunk_size=2000):
-        share = (annual_share if '5' in periods else Decimal(0)) + (quarter_share if str((day.month - 1) // 3 + 1) in periods else Decimal(0))
+        share = (annual_share if '5' in periods else Decimal(0)) + (quarter_share if '4' in periods else Decimal(0))
         sub = canonical(original, aliases)
         if not included(original, aliases) or selected_subdivisions and sub not in selected_subdivisions:
             continue

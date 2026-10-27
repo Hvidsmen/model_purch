@@ -63,7 +63,7 @@
             if (data.report_url) {card.dataset.reportBase=data.report_url;reportTarget(card,data.report_url);}
           }
           const provenance = card.querySelector('[data-job-provenance]');
-          if (provenance) provenance.textContent = data.execution ? `Расчёт ${data.execution.completed} МСК · ${data.execution.year} · ${data.execution.plan}${data.execution.stale ? ' · Настройки изменены: нужен пересчёт' : ''}` : 'Версия завершённого расчёта пока не подтверждена. После обновления сохраните параметры задания для регистрации новых запусков.';
+          if (provenance) provenance.textContent = data.execution ? `Расчёт ${data.execution.completed} МСК · ${data.execution.year} · ${data.execution.plan}${data.execution.pilot_current===false ? ' · Запуск до ограничения пилота: сохраните параметры и повторите расчёт' : data.execution.stale ? ' · Настройки изменены: нужен пересчёт' : ''}` : 'Версия завершённого расчёта пока не подтверждена. После обновления сохраните параметры задания для регистрации новых запусков.';
           note.textContent = `Проверено в ${data.checked_at} МСК · автообновление каждые 10 секунд`;
         } catch (_) {
           card.querySelectorAll('button[name=action][value=run]').forEach(button=>button.disabled=true);

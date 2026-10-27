@@ -36,7 +36,7 @@ class PilotPeriodTests(TestCase):
             self.assertEqual(scoped_values('manager', {**self.values(), 'qm': period}, self.scope)['qm'], period)
         query = scoped_query(QueryDict('quarter=1+Квартал&quarter=Год'), self.scope, 'manager')
         self.assertEqual(query.getlist('quarter'), [PILOT_QUARTER])
-        self.assertEqual(scoped_values('manager', self.values(), {**self.scope, 'pilot_periods': False})['qm'], '1 Квартал')
+        self.assertEqual(scoped_values('manager', self.values(), {**self.scope, 'pilot_periods': False})['qm'], PILOT_QUARTER)
 
     def test_predicate_matches_actual_period_labels(self):
         import sqlite3

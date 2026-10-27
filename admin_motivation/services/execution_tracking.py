@@ -17,9 +17,10 @@ IF OBJECT_ID(N'motivation.PortalMotivationRun',N'U') IS NULL
 
 
 def parameters(job):
+    from .pilot_calculation import PERIODS
     return {'fact_year':job.fact_year,'plan_version':job.plan_version,
             'quarter_share':str(job.quarter_share),'year_share':str(job.year_share),
-            'payout_threshold':str(job.payout_threshold)}
+            'payout_threshold':str(job.payout_threshold), 'premium_periods':list(PERIODS), 'quarter_catchup':False}
 
 
 def tracked_statement(job, statement):

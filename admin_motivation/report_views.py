@@ -26,6 +26,9 @@ def report_page(request, kind):
     if role_for(request.user, 'motivation') in REPORT_ROLES and (not access_scope or kind not in report_kinds(request.user)):
         raise PermissionDenied
     query = scoped_query(request.GET, access_scope, kind) if access_scope else request.GET.copy()
+    if kind=='manager':
+        from .services.report_periods import allowed_period,PILOT_QUARTER
+        if not allowed_period(query.get('quarter')):query['quarter']=PILOT_QUARTER
     if kind == 'deals':
         query.setdefault('start', today().replace(month=1, day=1).isoformat())
         query.setdefault('end', today().isoformat())
