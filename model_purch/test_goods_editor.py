@@ -31,6 +31,28 @@ class GoodsEditorTests(TestCase):
                 self.assertEqual(workbook.active.cell(2, 3).value, self.good.planning_group)
                 workbook.close()
 
+    def test_excel_exports_weighted_ddp_as_number_or_blank(self):
+        import io
+        from openpyxl import load_workbook
+        PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=120,plan_quantity=100,stock_quantity=25,stock_ddp_usd=80)
+        response=self.client.get(reverse('export_pggoods'),{'scenario':self.scenario.pk})
+        workbook=load_workbook(io.BytesIO(response.content))
+        try:
+            sheet=workbook.active
+            headers=[cell.value for cell in sheet[1]]
+            cell=sheet.cell(2,headers.index('Ср. взв. DDP, USD')+1)
+            self.assertAlmostEqual(cell.value,110)
+            self.assertEqual(cell.data_type,'n')
+            self.assertEqual(cell.number_format,'0.00')
+            self.assertEqual(headers[10:16],['DDP USD','KDDP','Запас (дни)','% запаса','Объём контейнера, м³','Пошлина, %'])
+        finally:workbook.close()
+        PGGoods.objects.filter(pk=self.good.pk).update(plan_quantity=0)
+        response=self.client.get(reverse('export_pggoods'),{'scenario':self.scenario.pk})
+        workbook=load_workbook(io.BytesIO(response.content))
+        try:
+            self.assertIsNone(workbook.active.cell(2,23).value)
+        finally:workbook.close()
+
     def setUp(self):
         authorize_test_case(self)
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2026-01-01', date_end_plan='2026-12-31')

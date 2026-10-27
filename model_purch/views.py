@@ -1115,7 +1115,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1127,7 +1127,7 @@ def export_to_excel(request):
         cell.alignment = header_alignment
         cell.border = thin_border
 
-    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14, 22, 18, 24, 24, 32, 30]
+    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14, 22, 18, 24, 24, 32, 30, 20]
     for col_num, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1150,12 +1150,15 @@ def export_to_excel(request):
             item.container_volume,
             item.duty_rate,
             item.freight_usd, item.cif_usd, item.customs_payment_usd, item.warehouse_delivery_usd, item.foreign_delivery_usd, item.nr_customs_vat_usd,
+            item.weighted_ddp_usd,
         ]
 
         for col_num, value in enumerate(data, 1):
             cell = ws.cell(row=row_num, column=col_num, value=value)
             cell.border = thin_border
-            if col_num in [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]:
+            if headers[col_num - 1] == 'Ср. взв. DDP, USD':
+                cell.number_format = '0.00'
+            if col_num in [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 23]:
                 cell.alignment = Alignment(horizontal='right')
             else:
                 cell.alignment = Alignment(horizontal='left')
