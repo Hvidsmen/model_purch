@@ -75,3 +75,9 @@ html{scrollbar-gutter:stable}
 .portal-body .portal-brand{display:inline-flex;align-items:center;gap:9px}
 .portal-brand-icon{display:block;flex:0 0 30px;border-radius:7px}
 .portal-login-brand{display:flex;align-items:center;gap:12px}
+
+/* The menu control stays available when the sidebar is hidden. */
+.portal-body .portal-topbar .portal-menu-toggle{display:inline-flex;align-items:center;justify-content:center;margin:0;padding:7px 12px;border:1px solid #d5daea;background:#fff;border-radius:7px;color:#475569;font:inherit;font-size:13px;white-space:nowrap;cursor:pointer}
+.portal-body .portal-topbar .portal-menu-toggle:hover{background:#f3f0ff;border-color:#bfb2e5}
+.portal-body .portal-sidebar[hidden]{display:none!important}
+.portal-body .portal-layout.portal-menu-collapsed{grid-template-columns:minmax(0,1fr)}
