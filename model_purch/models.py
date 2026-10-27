@@ -217,16 +217,29 @@ class PGGoods(models.Model):
     scenario_plan = models.ForeignKey(ScenarioModel, on_delete=models.CASCADE, null=True)
 
     @property
-    def weighted_ddp_usd(self):
-        if not self.plan_quantity or self.plan_quantity <= 0:
-            return None
-        stock_quantity = self.stock_quantity or 0
-        if stock_quantity and self.stock_ddp_usd is None:
-            return None
-        result = (self.ddp_usd * (self.plan_quantity - stock_quantity)
-                  + (self.stock_ddp_usd or 0) * stock_quantity) / self.plan_quantity
+    def purchase_plan_quantity(self):
         import math
-        return result if math.isfinite(result) else None
+        plan=self.plan_quantity
+        stock=self.stock_quantity if self.stock_quantity is not None else 0
+        if plan is None or not all(math.isfinite(value) and value>=0 for value in (plan,stock)):
+            return None
+        return max(plan-stock,0)
+
+    @property
+    def weighted_ddp_usd(self):
+        import math
+        purchase=self.purchase_plan_quantity
+        if purchase is None or not self.plan_quantity:
+            return None
+        stock_used=self.plan_quantity-purchase
+        components=((purchase,self.ddp_usd),(stock_used,self.stock_ddp_usd))
+        amount=0
+        for quantity,price in components:
+            if not quantity:continue
+            if price is None or not math.isfinite(price) or price<0:return None
+            amount+=quantity*price
+        result=amount/self.plan_quantity
+        return result if math.isfinite(result) and result>=0 else None
 
     class Meta:
         constraints = [

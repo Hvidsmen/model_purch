@@ -65,6 +65,24 @@ class ProductPricingTests(TestCase):
         self.good.fact_ddp_usd = self.good.fact_volume = 0
         self.assertEqual([kind for kind, _ in plan_warnings(self.good)], ['fact_ddp', 'fact_volume'])
 
+    def test_stock_covering_plan_has_zero_purchase_and_stock_ddp(self):
+        self.good.plan_quantity=100
+        self.good.ddp_usd=2650.74
+        self.good.stock_ddp_usd=1000
+        for stock in (100,200,1000):
+            with self.subTest(stock=stock):
+                self.good.stock_quantity=stock
+                self.assertEqual(self.good.purchase_plan_quantity,0)
+                self.assertEqual(self.good.weighted_ddp_usd,1000)
+        self.good.stock_ddp_usd=0
+        self.assertEqual(self.good.weighted_ddp_usd,0)
+        self.good.stock_ddp_usd=None
+        self.assertIsNone(self.good.weighted_ddp_usd)
+        self.good.stock_ddp_usd=-10
+        self.assertIsNone(self.good.weighted_ddp_usd)
+        self.good.stock_quantity=-1
+        self.assertIsNone(self.good.weighted_ddp_usd)
+
     def test_fact_stock_parameters_and_weighted_ddp(self):
         from unittest.mock import Mock
         from .services.erp_plan_parameters import update_parameters

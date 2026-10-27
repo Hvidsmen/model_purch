@@ -16,7 +16,14 @@ if (-not (Test-Path -LiteralPath $pythonExecutable)) {
 }
 # Existing terminal sessions do not refresh environment variables saved to Windows.
 # Preserve explicit process overrides, otherwise read the saved user/machine value.
-foreach ($connectionVariable in @('MS_SQL_CONN_STR', 'DWH_SQL_CONN_STR')) {
+$portalEnvironmentVariables = @(
+    'MS_SQL_CONN_STR', 'DWH_SQL_CONN_STR',
+    'PORTAL_AD_AUTH', 'PORTAL_AD_AUTH_METHOD', 'PORTAL_AD_NETBIOS_DOMAIN', 'PORTAL_AD_UPN_SUFFIX',
+    'PORTAL_AD_LDAPS_URL', 'PORTAL_AD_SEARCH_BASE', 'PORTAL_AD_CA_CERT_FILE',
+    'PORTAL_AD_TRUSTED_DOMAINS', 'PORTAL_AD_FOREST_DISCOVERY', 'PORTAL_AD_ALLOW_HTTP',
+    'PORTAL_WINDOWS_AUTH', 'PORTAL_WINDOWS_DOMAINS'
+)
+foreach ($connectionVariable in $portalEnvironmentVariables) {
     $connectionValue = [Environment]::GetEnvironmentVariable($connectionVariable, 'Process')
     if ([string]::IsNullOrWhiteSpace($connectionValue)) {
         $connectionValue = [Environment]::GetEnvironmentVariable($connectionVariable, 'User')

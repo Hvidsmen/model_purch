@@ -268,6 +268,17 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertAlmostEqual(weighted, (ddp * 75 + 80 * 25) / 100, places=2)
         self.assertEqual(self.errors, [])
 
+    def test_stock_above_plan_keeps_zero_purchase_and_positive_weighted_ddp(self):
+        from playwright.sync_api import expect
+        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(plan_quantity=100,stock_quantity=1000,stock_ddp_usd=80))
+        self.visit('pggoods_list');self.select(self.source)
+        row=self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
+        expect(row.locator('[data-purchase-plan-note]')).to_be_visible()
+        expect(row.locator('[name="weighted_ddp_usd"]')).to_have_value('80.00')
+        row.locator('[name="exw_usd"]').fill('2650.74')
+        expect(row.locator('[name="weighted_ddp_usd"]')).to_have_value('80.00')
+        self.assertEqual(self.errors,[])
+
     def test_common_purchase_settings_collapse_and_remember_state(self):
         from playwright.sync_api import expect
         self.visit('pggoods_list')

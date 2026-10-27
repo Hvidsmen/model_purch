@@ -35,11 +35,18 @@
             const planQuantity = Number(row.dataset.planQuantity);
             const stockQuantity = Number(row.dataset.stockQuantity || 0);
             const stockDdp = row.dataset.stockDdp;
+            const validQuantities = Number.isFinite(planQuantity) && planQuantity > 0 && Number.isFinite(stockQuantity) && stockQuantity >= 0;
+            const purchaseQuantity = validQuantities ? Math.max(planQuantity - stockQuantity, 0) : NaN;
+            const stockUsed = validQuantities ? Math.min(stockQuantity, planQuantity) : NaN;
             if (field('weighted_ddp_usd')) {
-                const weighted = planQuantity > 0 && (!stockQuantity || stockDdp !== '')
-                    ? (ddp * (planQuantity - stockQuantity) + Number(stockDdp || 0) * stockQuantity) / planQuantity : NaN;
-                field('weighted_ddp_usd').value = Number.isFinite(weighted) ? weighted.toFixed(2) : '—';
+                const stockPrice = stockDdp === '' ? NaN : Number(stockDdp);
+                const validPrices = (!purchaseQuantity || Number.isFinite(ddp) && ddp >= 0) && (!stockUsed || Number.isFinite(stockPrice) && stockPrice >= 0);
+                const weighted = validQuantities && validPrices
+                    ? ((purchaseQuantity ? ddp * purchaseQuantity : 0) + (stockUsed ? stockPrice * stockUsed : 0)) / planQuantity : NaN;
+                field('weighted_ddp_usd').value = Number.isFinite(weighted) && weighted >= 0 ? weighted.toFixed(2) : '—';
             }
+            const purchaseNote = row.querySelector('[data-purchase-plan-note]');
+            if (purchaseNote) purchaseNote.hidden = !(validQuantities && purchaseQuantity === 0);
             if (exw > 0) display('kddp', ddp / exw);
             else if (field('kddp')) field('kddp').value = previousKddp;
         }
