@@ -13,6 +13,7 @@
         .card-header { font-weight: 600; }
     </style>
     {% block extra_css %}{% endblock %}
+    <link href="{% static 'model_purch/readonly.css' %}?v=analyst-20261027" rel="stylesheet">
     <link href="{% static 'model_purch/workspace.css' %}?v=unified-shell-20261023" rel="stylesheet">
 
 {% endblock %}
@@ -52,7 +53,8 @@
                 </ul>
 {% endblock %}
 {% block portal_content %}
-    <div class="container-fluid px-4">
+    <div class="container-fluid px-4{% if portal_purchases_readonly %} purchases-readonly{% endif %}">
+        {% if portal_purchases_readonly %}<p class="alert alert-info" role="status">Аналитик · Только просмотр и скачивание Excel. Изменение данных и запуск расчёта недоступны.</p>{% endif %}
         <section class="workspace-panel" aria-label="Рабочий сценарий">
             <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
                 {% if workspace_shared_purchases %}<div><strong>Общий справочник закупок</strong><div class="text-muted small">Настройки используются во всех сценариях</div></div>{% else %}
@@ -70,7 +72,7 @@
                     <span class="workspace-status {{ workspace_export_state }}">{{ workspace_export_label }}</span>
                 </div>
                 {% endif %}
-                <details class="workspace-database"><summary>Активная база</summary><span id="active-database">{{ active_database }}</span></details>
+                {% if not portal_purchases_readonly %}<details class="workspace-database"><summary>Активная база</summary><span id="active-database">{{ active_database }}</span></details>{% endif %}
             </div>
         </section>
         <!-- Глобальные сообщения -->
@@ -92,6 +94,7 @@
 
 {% endblock %}
 {% block module_js %}
+    {% if portal_purchases_readonly %}<script src="{% static 'model_purch/readonly.js' %}?v=analyst-20261027" defer></script>{% endif %}
     <!-- Глобальные скрипты -->
     <script src="{% static 'vendor/bootstrap-5.3.2/bootstrap.bundle.min.js' %}"></script>
     <script src="{% static 'model_purch/workspace.js' %}"></script>

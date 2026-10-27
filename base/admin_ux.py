@@ -20,6 +20,8 @@ def effective_access(user):
         description='Доступ к проекту отсутствует.' if not role else 'Работа в проекте в рамках назначенной роли.'
         branches=[];author='';warning=''
         if conflict and not role:warning='В группах назначены разные роли. Устраните конфликт или задайте персональную роль.'
+        if project=='purchases' and role=='Аналитик':
+            description='Просмотр модели закупок и скачивание Excel. Изменение данных, импорт, экспорт в MS SQL и запуск расчёта недоступны.'
         if project=='motivation' and role:
             if role in REPORT_ROLES:
                 from .report_access import politician_scope

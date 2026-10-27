@@ -1,7 +1,7 @@
 {% extends 'model_purch/base.html' %}
 {% load static %}
 
-{% block title %}{{ title }}{% endblock %}
+{% block title %}{% if portal_purchases_readonly %}Параметры: {{ title|cut:'Редактирование:' }}{% else %}{{ title }}{% endif %}{% endblock %}
 
 {% block extra_css %}
 <style>
@@ -74,7 +74,7 @@
 <div class="row justify-content-center">
     <div class="col-lg-10">
         <div class="d-flex justify-content-between align-items-center mb-3">
-            <h3 class="mb-0"><i class="bi bi-cart-check"></i> {{ title }}</h3>
+            <h3 class="mb-0"><i class="bi bi-cart-check"></i> {% if portal_purchases_readonly %}Параметры: {{ title|cut:'Редактирование:' }}{% else %}{{ title }}{% endif %}</h3>
             <a href="{% url 'purch_list' %}"
                class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-arrow-left"></i> Назад к списку
@@ -82,7 +82,7 @@
         </div>
 
         <p class="text-muted">Настройки общие для всех сценариев. После изменения повторите экспорт сценариев в MS SQL.</p>
-        <form method="post" id="purchForm" novalidate>
+        <form method="post" id="purchForm" novalidate>{% if portal_purchases_readonly %}<fieldset disabled class="purchases-viewer-fields">{% endif %}
             {% csrf_token %}
             {{ formset.management_form }}
 
@@ -224,7 +224,7 @@
                     <i class="bi bi-check-lg"></i> Сохранить
                 </button>
             </div>
-        </form>
+        {% if portal_purchases_readonly %}</fieldset>{% endif %}</form>
     </div>
 </div>
 

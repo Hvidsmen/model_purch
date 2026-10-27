@@ -8,9 +8,9 @@
 <div class="p-3 bg-light rounded border"><strong>Планы продаж текущего сценария</strong>
 <ul class="mt-2 mb-2">{% for source in sources %}<li>{{ source }}</li>{% empty %}<li>Планы продаж не указаны.</li>{% endfor %}</ul>
 <a href="{% url 'scenario_edit' current_scenario.pk %}">Изменить планы и период в сценарии</a></div>
-<form method="post" class="mt-3">{% csrf_token %}<input type="hidden" name="action" value="load">
+<form method="post" class="mt-3">{% if portal_purchases_readonly %}<fieldset disabled class="purchases-viewer-fields">{% endif %}{% csrf_token %}<input type="hidden" name="action" value="load">
 <label class="mt-3"><input type="checkbox" name="confirm" value="yes" required> Подтверждаю замену плановых значений, факта и данных стока всех товаров текущего сценария</label>
 <p class="mt-3"><button class="btn btn-primary" {% if not sources %}disabled{% endif %}>Обновить параметры из плана</button> <a class="btn btn-outline-secondary" href="{% url 'pggoods_list' %}?scenario={{ current_scenario.pk }}">К товарам</a></p>
-</form></section>
+{% if portal_purchases_readonly %}</fieldset>{% endif %}</form></section>
 
 {% endblock %}

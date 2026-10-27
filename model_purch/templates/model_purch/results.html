@@ -272,7 +272,7 @@
             <p>Есть незавершённые расчёты. Перед новым запуском завершите их или отмените остановленные, в том числе после перезагрузки сервера:</p>
             {% for active_run in active_runs %}
                 <div class="mb-2">#{{ active_run.pk }} — {% if active_run.parameters.scope == 'all' %}Все сценарии{% else %}{{ active_run.scenario.name|default:"старый запуск без сценария" }}{% endif %} — {{ active_run.started_at|date:"d.m.Y H:i:s" }}
-                    <button class="btn btn-outline-danger btn-sm" onclick="cancelRun({{ active_run.pk }})">Отменить остановленный расчёт</button>
+                    <button data-purchases-write class="btn btn-outline-danger btn-sm" onclick="cancelRun({{ active_run.pk }})">Отменить остановленный расчёт</button>
                 </div>
             {% endfor %}
         </div>
@@ -292,7 +292,7 @@
             Нажмите кнопку ниже, чтобы запустить алгоритм расчета.
             Все шаги будут выполнены последовательно с фиксацией их состояния.
         </p>
-        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors or active_runs %}disabled{% endif %}>
+        <button data-purchases-write class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors or active_runs %}disabled{% endif %}>
             <i aria-hidden="true" class="bi bi-play-fill"></i> Запустить
         </button>
     </div>
@@ -306,10 +306,10 @@
             Шаги выполняются автоматически...
         </p>
         <div class="d-flex justify-content-center gap-3">
-            <button class="btn btn-success btn-execute" id="btnExecuteNext" onclick="executeNextStep()" disabled>
+            <button data-purchases-write class="btn btn-success btn-execute" id="btnExecuteNext" onclick="executeNextStep()" disabled>
                 <i aria-hidden="true" class="bi bi-arrow-right-circle"></i> Выполнить следующий шаг
             </button>
-            <button class="btn btn-outline-danger btn-execute" id="btnStop" onclick="stopAutoExecute()" style="display: none;">
+            <button data-purchases-write class="btn btn-outline-danger btn-execute" id="btnStop" onclick="stopAutoExecute()" style="display: none;">
                 <i aria-hidden="true" class="bi bi-stop-fill"></i> Остановить
             </button>
         </div>
@@ -330,7 +330,7 @@
         <h5 class="mb-3 text-success">
             <i aria-hidden="true" class="bi bi-check-circle-fill"></i> Алгоритм полностью выполнен!
         </h5>
-        <button class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors or active_runs %}disabled{% endif %}>
+        <button data-purchases-write class="btn btn-primary btn-execute" onclick="startAlgorithm()" {% if readiness_errors or active_runs %}disabled{% endif %}>
             <i aria-hidden="true" class="bi bi-arrow-repeat"></i> Запустить заново
         </button>
     </div>

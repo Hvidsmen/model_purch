@@ -1,7 +1,7 @@
 <details class="card card-body mb-3" id="freight-settings" open data-has-errors="{% if freight_form.errors %}true{% else %}false{% endif %}">
     <summary class="h5 mb-0" id="freight-heading" style="cursor:pointer">Общие параметры закупок · {{ current_scenario.name }}</summary>
     <div class="row g-3 align-items-start mt-2">
-        <form class="col-lg-6" method="post" action="{% url 'freight' %}">
+        <form class="col-lg-6" method="post" action="{% url 'freight' %}">{% if portal_purchases_readonly %}<fieldset disabled class="purchases-viewer-fields">{% endif %}
             {% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
             {{ freight_form.non_field_errors }}
             <label class="form-label" for="{{ freight_form.price_per_container.id_for_label }}">Цена фрахта за контейнер, USD</label>
@@ -15,12 +15,12 @@
             </div>
             <button type="submit" class="btn btn-primary mt-3">Сохранить</button>
             <p class="text-muted small mt-2 mb-0">Фрахт и доставка задаются за контейнер. Объём контейнера задаётся отдельно у каждого товара в таблице ниже. Загран доставка без DDP и НР_Таможенный НДС рассчитываются отдельно и не увеличивают DDP.</p>
-        </form>
-        <form class="col-lg-6" method="post" action="{% url 'copy_freight' %}" data-copy-target="{{ current_scenario.name }}">
+        {% if portal_purchases_readonly %}</fieldset>{% endif %}</form>
+        <form data-purchases-write class="col-lg-6" method="post" action="{% url 'copy_freight' %}" data-copy-target="{{ current_scenario.name }}">{% if portal_purchases_readonly %}<fieldset disabled class="purchases-viewer-fields">{% endif %}
             {% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}">
             <label class="form-label" for="freight-source">Копировать общие параметры из сценария</label>
             <div class="d-flex gap-2"><select id="freight-source" class="form-select" name="source_scenario_id" required><option value="">Выберите сценарий</option>{% for scenario in freight_sources %}<option value="{{ scenario.pk }}">{{ scenario.name }}</option>{% endfor %}</select><button class="btn btn-outline-primary" type="submit" {% if not freight_sources %}disabled{% endif %}>Копировать</button></div>
-        </form>
+        {% if portal_purchases_readonly %}</fieldset>{% endif %}</form>
     </div>
 </details>
 <script>

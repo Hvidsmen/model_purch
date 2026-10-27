@@ -72,7 +72,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="card card-body mb-3"><div class="d-flex align-items-center gap-3 flex-wrap"><a class="btn btn-outline-success" href="{% url 'export_purchases' %}">Выгрузить закупки и платежи в Excel</a><details><summary>Загрузить из Excel</summary>
+<div class="card card-body mb-3"><div class="d-flex align-items-center gap-3 flex-wrap"><a class="btn btn-outline-success" href="{% url 'export_purchases' %}">Выгрузить закупки и платежи в Excel</a><details data-purchases-write><summary>Загрузить из Excel</summary>
 <p class="small mt-2">Используйте выгрузку как шаблон: листы «Закупки» и «Платежи». Для новой закупки оставьте ID пустым, в платежах укажите её название. Типы лага перечислены на листе «Точки отсчёта».</p>
 <form method="post" action="{% url 'import_purchases' %}" enctype="multipart/form-data">{% csrf_token %}<input type="file" name="file" accept=".xlsx" required><p class="mt-2"><label><input type="checkbox" name="confirm" value="yes" required> Обновить перечисленные закупки и заменить их графики платежей во всех сценариях</label></p><p class="small">Закупки вне файла сохраняются. Пустой график на листе «Платежи» удаляет платежи соответствующей закупки.</p><button class="btn btn-primary">Загрузить</button></form></details></div></div>
 <!-- Красивая шапка страницы -->
@@ -89,7 +89,7 @@
         </div>
 
         <div class="page-actions d-flex gap-2">
-            <a href="{% url 'purch_create' %}"
+            <a data-purchases-write href="{% url 'purch_create' %}"
                class="btn btn-primary">
                 <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать закупку
             </a>
@@ -153,7 +153,7 @@
 {% if missing_purchases or blank_purchase_count %}
 <div class="alert alert-warning" id="purchase-coverage-errors">
     <strong>Не заполнены настройки закупок:</strong>
-    {% for name in missing_purchases %}<div>«{{ name }}» — <a href="{% url 'purch_create' %}?name={{ name|urlencode }}">Создать закупку</a></div>{% endfor %}
+    {% for name in missing_purchases %}<div>«{{ name }}» — <a data-purchases-write href="{% url 'purch_create' %}?name={{ name|urlencode }}">Создать закупку</a></div>{% endfor %}
     {% if blank_purchase_count %}<div>Не заполнена колонка «Закупка» у товаров: {{ blank_purchase_count }}. <a href="{% url 'pggoods_list' %}">Открыть товары</a></div>{% endif %}
 </div>
 {% else %}<div class="text-muted small mb-3">Для всех названий закупок в товарах есть записи справочника.</div>{% endif %}
@@ -226,7 +226,7 @@
                             </td>
                             <td class="text-center">
     <a href="{% url 'purch_edit' purch.id %}"
-       class="btn btn-sm btn-outline-primary" title="Редактировать">
+       class="btn btn-sm btn-outline-primary" title="{% if portal_purchases_readonly %}Посмотреть параметры{% else %}Редактировать{% endif %}">
         <i aria-hidden="true" class="bi bi-pencil"></i>
     </a>
     <form method="post"
@@ -246,7 +246,7 @@
                                 <i aria-hidden="true" class="bi bi-inbox fs-3 d-block mb-2"></i>
                                 Справочник закупок пуст. Создайте закупку и настройте график платежей.
                                 <br>
-                                <a href="{% url 'purch_create' %}" class="btn btn-sm btn-primary mt-2">
+                                <a data-purchases-write href="{% url 'purch_create' %}" class="btn btn-sm btn-primary mt-2">
                                     <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать первую закупку
                                 </a>
                             </td>

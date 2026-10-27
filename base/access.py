@@ -39,10 +39,17 @@ def legacy_role_for(user):
 
 PROJECT_ROLES = {
     'motivation': (ADMIN, MODELER, DIRECTOR, *REPORT_ROLES, *MOTIVATION_READONLY_ROLES),
-    'purchases': (ADMIN, LOGISTICIAN),
+    'purchases': (ADMIN, LOGISTICIAN, ANALYST),
     'dashboards': (ADMIN, ANALYST),
 }
 PROJECT_LABELS = {'motivation': 'Мотивация', 'purchases': 'Модель закупок', 'dashboards': 'Дашборды'}
+
+
+def legacy_project_role(legacy, project):
+    # Existing legacy analysts belong to dashboards. Procurement viewing is an
+    # explicit new grant, not additional access for all existing analysts.
+    if project=='purchases' and legacy==ANALYST:return None
+    return legacy if legacy in PROJECT_ROLES[project] else None
 
 
 def role_for(user, project=None):
@@ -63,7 +70,7 @@ def role_for(user, project=None):
     if inherited:
         roles = {role for role in inherited if role}
         return next(iter(roles)) if len(roles) == 1 and roles <= set(PROJECT_ROLES[project]) else None
-    return legacy if legacy in PROJECT_ROLES[project] else None
+    return legacy_project_role(legacy,project)
 
 
 def can_access(user, project):
@@ -84,10 +91,11 @@ def project_role_summary(user):
 def portal_access(request):
     from django.conf import settings
     motivation_role = role_for(request.user, 'motivation')
+    purchases_role = role_for(request.user,'purchases')
     active_project = 'motivation' if request.path.startswith('/admin_motivation') else 'purchases' if request.path.startswith('/model_purch/') else 'dashboards' if request.path.startswith('/dashboards/') else None
-    return {'portal_can_administer_dashboards': can_access(request.user, 'dashboards_admin'), 'portal_can_administer_motivation': can_access(request.user, 'motivation_admin'), 'ad_auth_enabled': settings.AD_AUTH_ENABLED, 'ad_forest_discovery': settings.AD_AUTH_METHOD == 'windows' and settings.AD_FOREST_DISCOVERY, 'ad_netbios_domain': settings.AD_NETBIOS_DOMAIN, 'ad_upn_suffix': settings.AD_UPN_SUFFIX, 'ad_https_ready': request.is_secure(), 'ad_password_login_ready': request.is_secure() or not settings.AD_REQUIRE_HTTPS, 'windows_auth_enabled': settings.WINDOWS_AUTH_ENABLED, 'portal_is_admin': can_access(request.user, 'admin'),
+    return {'portal_purchases_readonly': purchases_role==ANALYST, 'portal_can_edit_purchases': purchases_role in (ADMIN,LOGISTICIAN), 'portal_can_administer_dashboards': can_access(request.user, 'dashboards_admin'), 'portal_can_administer_motivation': can_access(request.user, 'motivation_admin'), 'ad_auth_enabled': settings.AD_AUTH_ENABLED, 'ad_forest_discovery': settings.AD_AUTH_METHOD == 'windows' and settings.AD_FOREST_DISCOVERY, 'ad_netbios_domain': settings.AD_NETBIOS_DOMAIN, 'ad_upn_suffix': settings.AD_UPN_SUFFIX, 'ad_https_ready': request.is_secure(), 'ad_password_login_ready': request.is_secure() or not settings.AD_REQUIRE_HTTPS, 'windows_auth_enabled': settings.WINDOWS_AUTH_ENABLED, 'portal_is_admin': can_access(request.user, 'admin'),
             'portal_can_dashboards': can_access(request.user, 'dashboards'),
-            'portal_can_purchases': can_access(request.user, 'purchases'),
+            'portal_can_purchases': purchases_role is not None,
             'portal_can_motivation': can_access(request.user, 'motivation'),
             'portal_can_edit_motivation': can_access(request.user, 'motivation_editor'), 'portal_can_review_motivation': motivation_role in (ADMIN, MODELER, DIRECTOR, FINANCIER), 'portal_motivation_modeler': motivation_role == MODELER, 'portal_financier': motivation_role == FINANCIER, 'portal_motivation_landing_reports': motivation_role in (*REPORT_ROLES, FINANCIER),
             'portal_motivation_readonly': motivation_role in (*MOTIVATION_READONLY_ROLES, DIRECTOR), 'portal_can_view_motivation_settings': motivation_role in (ADMIN, MODELER, DIRECTOR, *MOTIVATION_READONLY_ROLES), 'portal_reports_only': motivation_role in REPORT_ROLES, 'portal_can_plan_summary': motivation_role in (ADMIN, MODELER, DIRECTOR, *MOTIVATION_READONLY_ROLES), 'portal_role_label': (role_for(request.user, active_project) or 'Нет доступа') if active_project else ADMIN if can_access(request.user, 'admin') else project_role_summary(request.user)}

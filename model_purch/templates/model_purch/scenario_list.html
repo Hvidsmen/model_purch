@@ -226,9 +226,9 @@
         <div class="page-actions d-flex gap-2">
             <a href="{% url 'scenario_archive' %}" class="btn btn-outline-secondary"><i class="bi bi-archive" aria-hidden="true"></i> Архив</a>
             <a href="{% url 'results_page' %}" class="btn btn-success">
-                <i aria-hidden="true" class="bi bi-calculator"></i> Рассчитать
+                <i aria-hidden="true" class="bi bi-calculator"></i> {% if portal_purchases_readonly %}Результаты расчёта{% else %}Рассчитать{% endif %}
             </a>
-            <a href="{% url 'scenario_create' %}" class="btn btn-primary">
+            <a data-purchases-write href="{% url 'scenario_create' %}" class="btn btn-primary">
                 <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать сценарий
             </a>
         </div>
@@ -236,7 +236,7 @@
 </div>
 
 {% if scenarios %}
-    <form id="bulk-export-form" method="post" action="{% url 'bulk_export_scenarios' %}" class="mb-3">
+    <form data-purchases-write id="bulk-export-form" method="post" action="{% url 'bulk_export_scenarios' %}" class="mb-3">
         {% csrf_token %}
         <button id="bulk-export-button" class="btn btn-success" type="submit">Экспортировать выбранные в MS SQL</button>
         <span class="text-muted ms-2">Выберите сценарии галочками. Существующие данные будут обновлены.</span>
@@ -245,7 +245,7 @@
         <table class="table table-scenarios">
             <thead>
                 <tr>
-                    <th><input id="select-all-scenarios" type="checkbox" class="form-check-input" aria-label="Выбрать все сценарии"></th>
+                    <th data-purchases-write><input id="select-all-scenarios" type="checkbox" class="form-check-input" aria-label="Выбрать все сценарии"></th>
                     <th class="col-id">#</th>
                     <th>Название сценария</th>
                     <th class="col-date">Дата начала</th>
@@ -257,7 +257,7 @@
             <tbody>
                 {% for scenario in scenarios %}
                     <tr>
-                        <td><input type="checkbox" class="form-check-input scenario-export-checkbox" name="scenarios" value="{{ scenario.pk }}" form="bulk-export-form" aria-label="Выбрать сценарий {{ scenario.name }}"></td>
+                        <td data-purchases-write><input type="checkbox" class="form-check-input scenario-export-checkbox" name="scenarios" value="{{ scenario.pk }}" form="bulk-export-form" aria-label="Выбрать сценарий {{ scenario.name }}"></td>
                         <td class="col-id">{{ scenario.id }}</td>
                         <td class="col-name">
                             {{ scenario.name }}
@@ -279,13 +279,13 @@
                             <!-- Кнопка редактирования -->
                             <a href="{% url 'scenario_edit' scenario.pk %}"
                                class="btn-action btn-edit"
-                               title="Редактировать">
+                               title="{% if portal_purchases_readonly %}Посмотреть параметры{% else %}Редактировать{% endif %}">
                                 <i aria-hidden="true" class="bi bi-pencil-square"></i>
                             </a>
 
                             <!-- Кнопка экспорта в SQL (открывает модальное окно) -->
                             <button type="button"
-                                    class="btn-action btn-export"
+                                    data-purchases-write class="btn-action btn-export"
                                     data-bs-toggle="modal"
                                     data-bs-target="#exportSqlModal{{ scenario.pk }}"
                                     title="Экспорт в SQL и расчет">
@@ -293,7 +293,7 @@
                             </button>
 
                             <!-- Кнопка удаления -->
-                            <a href="{% url 'scenario_delete' scenario.pk %}"
+                            <a data-purchases-write href="{% url 'scenario_delete' scenario.pk %}"
                                class="btn-action btn-delete"
                                title="Переместить в архив">
                                 <i aria-hidden="true" class="bi bi-archive"></i>
@@ -361,7 +361,7 @@
         <i aria-hidden="true" class="bi bi-clipboard-data"></i>
         <h5>Сценарии не созданы</h5>
         <p>Создайте первый сценарий планирования, затем заполните товары, закупки и фрахт. Если ваши сценарии уже существовали, проверьте путь в разделе «Активная база» выше.</p>
-        <a href="{% url 'scenario_create' %}" class="btn btn-primary">
+        <a data-purchases-write href="{% url 'scenario_create' %}" class="btn btn-primary">
             <i aria-hidden="true" class="bi bi-plus-lg"></i> Создать сценарий
         </a>
     </div>

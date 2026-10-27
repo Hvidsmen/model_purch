@@ -135,11 +135,11 @@ def groups(request):
     catalog = [row for row in catalog if not project or project in group_roles(row)]
     for row in catalog:
         scope = getattr(row, 'portal_scope', None)
-        from .access import PROJECT_ROLES, PROJECT_LABELS
+        from .access import PROJECT_ROLES, PROJECT_LABELS, legacy_project_role
         overrides = {grant.project: grant.role for grant in row.project_access.all()}
         legacy = scope.portal_role if scope else ''
         row.project_access_configured = scope is not None or bool(overrides)
-        row.project_access_label = ' · '.join(PROJECT_LABELS[project] + ': ' + role for project, allowed in PROJECT_ROLES.items() if (role := overrides.get(project, legacy if legacy in allowed else ''))) or 'Нет доступа'
+        row.project_access_label = ' · '.join(PROJECT_LABELS[project] + ': ' + role for project, allowed in PROJECT_ROLES.items() if (role := overrides.get(project, legacy_project_role(legacy,project) or ''))) or 'Нет доступа'
         if project:
             row.project_access_label = PROJECT_LABELS[project] + ': ' + group_roles(row)[project]
         row.reporting_branches = sorted({(branch.merged_into or branch).subdivision_key for branch in scope.subdivisions.all()}) if scope else []

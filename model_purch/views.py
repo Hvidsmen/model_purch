@@ -1068,9 +1068,11 @@ def export_to_excel(request):
     """
     current_scenario, _ = get_current_scenario(request)
 
+    from base.access import role_for,ANALYST
+    readonly=role_for(request.user,'purchases')==ANALYST
     if current_scenario:
         from .services.pricing import reprice_goods
-        reprice_goods(current_scenario)
+        if not readonly:reprice_goods(current_scenario)
         queryset = PGGoods.objects.filter(scenario_plan=current_scenario).select_related('kind_purch')
     else:
         queryset = PGGoods.objects.none()
@@ -1131,7 +1133,13 @@ def export_to_excel(request):
     for col_num, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_num)].width = width
 
+    if readonly:
+        from .services.pricing import apply_price
+        from .goods_identity import planning_group_key
+        readonly_freight=Freight.objects.filter(scenario=current_scenario).first() if current_scenario else None
+        readonly_suppliers=dict(Purch.objects.values_list('name_key','supply_type'))
     for row_num, item in enumerate(queryset, 2):
+        if readonly:apply_price(item,readonly_freight,supply_type=readonly_suppliers.get(planning_group_key(item.purch or '')))
         data = [
             item.id,
             item.scenario_plan.name if item.scenario_plan else '',

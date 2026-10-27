@@ -1,6 +1,6 @@
 """Independent project grants shared by user and group editors."""
 from django import forms
-from .access import ADMIN, PROJECT_ROLES, PROJECT_LABELS
+from .access import ADMIN, PROJECT_ROLES, PROJECT_LABELS, legacy_project_role
 from .models import UserProjectAccess, GroupProjectAccess
 
 INHERIT = 'inherit'
@@ -21,7 +21,7 @@ def initialize(form, owner, group=False):
         if owner and owner.pk:
             from .access import role_for
             legacy = getattr(getattr(owner, 'portal_scope', None), 'portal_role', '') if group else None
-            current = (saved.get(project, legacy if legacy in PROJECT_ROLES[project] else '') if group else role_for(owner, project)) or 'Нет доступа'
+            current = (saved.get(project, legacy_project_role(legacy,project) or '') if group else role_for(owner, project)) or 'Нет доступа'
             form.fields[field].choices = [(INHERIT, 'Наследовать · сейчас: ' + current), *list(form.fields[field].choices)[1:]]
         form.fields[field].widget.attrs['data-project-role'] = project
         form.fields[field].help_text = 'Персональное назначение имеет приоритет над группами.' if not group else 'Роль действует только в этом проекте.'

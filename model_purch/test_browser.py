@@ -254,6 +254,50 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         expect(self.page.locator(f'tr[data-row-id="{self.good.pk}"]')).to_be_visible()
         self.assertEqual(self.errors, [])
 
+    def test_purchase_analyst_can_view_and_download_without_edit_controls(self):
+        from django.conf import settings
+        from django.contrib.auth.models import User
+        from base.models import UserProjectAccess
+        from playwright.sync_api import expect
+        def login():
+            user=User.objects.create_user('browser-purchase-analyst')
+            UserProjectAccess.objects.create(user=user,project='purchases',role='Аналитик')
+            self.client.force_login(user)
+        self.db(login)
+        self.page.context.clear_cookies()
+        self.page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
+        self.visit('pggoods_list');self.select(self.source)
+        expect(self.page.get_by_role('status').filter(has_text='Аналитик')).to_be_visible()
+        expect(self.page.locator('#saveAllBtn')).to_have_count(0)
+        expect(self.page.locator('#refreshGoodsDirectoryForm')).to_have_count(0)
+        expect(self.page.get_by_role('link',name='Импорт из Excel',exact=True)).not_to_be_visible()
+        row=self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
+        expect(row.locator('[name=exw_usd]')).to_be_disabled()
+        expect(row.locator('[name=planning_sales]')).to_be_disabled()
+        expect(row.get_by_role('button',name='Удалить',exact=True)).not_to_be_visible()
+        search=self.page.locator('input[name=search]')
+        expect(search).to_be_enabled()
+        search.fill('Group')
+        with self.page.expect_navigation():search.press('Enter')
+        expect(row).to_be_visible()
+        with self.page.expect_download() as event:
+            self.page.get_by_role('link',name='Экспорт в Excel',exact=True).click()
+        self.assertTrue(event.value.suggested_filename.endswith('.xlsx'))
+        self.page.screenshot(path='/tmp/purchase-analyst-goods.png',full_page=True)
+        self.visit('scenario_list')
+        expect(self.page.get_by_role('link',name='Создать сценарий',exact=True)).not_to_be_visible()
+        expect(self.page.locator('#bulk-export-form')).not_to_be_visible()
+        self.visit('goods_groups')
+        expect(self.page.get_by_role('heading',name='Группы и пошлины',exact=True)).to_be_visible()
+        expect(self.page.locator('.purchases-readonly form[method=post]')).to_have_count(0)
+        self.page.goto(self.live_server_url+reverse('purch_edit',args=[self.purchase.pk]))
+        expect(self.page.locator('[name=lag_income]')).to_be_disabled()
+        expect(self.page.locator('#submitBtn')).not_to_be_visible()
+        self.visit('results_page')
+        expect(self.page.locator('button[onclick="startAlgorithm()"]').first).not_to_be_visible()
+        expect(self.page.locator('button[onclick="startAlgorithm()"]').nth(1)).not_to_be_visible()
+        self.assertEqual(self.errors,[])
+
     def test_fact_fields_and_weighted_ddp_follow_price_edits(self):
         self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(
             plan_quantity=100, stock_quantity=25, stock_ddp_usd=80, fact_ddp_usd=90, fact_volume=.3))

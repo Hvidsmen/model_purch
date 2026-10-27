@@ -2,7 +2,7 @@
 from copy import copy
 from urllib.parse import urlencode
 from django.urls import reverse
-from .access import PROJECT_LABELS, PROJECT_ROLES, ADMIN, role_for
+from .access import PROJECT_LABELS, PROJECT_ROLES, ADMIN, role_for, legacy_project_role
 
 
 def group_roles(group):
@@ -12,7 +12,7 @@ def group_roles(group):
     if legacy == ADMIN:
         return {project: ADMIN for project in PROJECT_ROLES}
     return {project: role for project, allowed in PROJECT_ROLES.items()
-            if (role := assignments.get(project, legacy)) in allowed}
+            if (role := assignments.get(project, legacy_project_role(legacy,project))) in allowed}
 
 
 def assigned_roles(user):

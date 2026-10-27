@@ -2,7 +2,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER, motivation_viewer_read_request, FINANCIER, financier_read_request, DIRECTOR, MODELER
+from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER, motivation_viewer_read_request, FINANCIER, financier_read_request, DIRECTOR, MODELER, ANALYST
 
 
 class PortalAccessMiddleware:
@@ -48,6 +48,11 @@ class PortalAccessMiddleware:
             if json_request:
                 return JsonResponse({'error': 'Ваша роль не разрешает доступ к этому разделу.'}, status=403)
             return render(request, 'base/forbidden.html', status=403)
+        if project=='purchases' and role_for(request.user,'purchases')==ANALYST:
+            from .purchases_access import read_request
+            if not read_request(request):
+                if json_request:return JsonResponse({'error':'Аналитик модели закупок: доступны только просмотр и скачивание Excel.'},status=403)
+                return render(request,'base/forbidden.html',{'readonly_reason':'Аналитик модели закупок: доступны только просмотр и скачивание Excel.'},status=403)
         if project == 'motivation':
             role = role_for(request.user, 'motivation')
             name = match.url_name if match else None
