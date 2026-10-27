@@ -43,6 +43,8 @@
  CROSS APPLY DataWH.erp.t_Даичи_ПервичнаяСебестоимостьOnDate(dates.DateFrom) s
  INNER JOIN DataWH.erp.[Справочники.Номенклатура] n ON s.Номенклатура = n.Наименование
  INNER JOIN DataWH.dbo.ModelCodeERP mce ON n.Наименование = mce.ModelCode
+ -- Stock price, quantity and volume use only outdoor units.
+ WHERE mce.FlagAccountingQtyBA = 1
  GROUP BY n.Даичи_ГруппаПланирования
  HAVING SUM(s.Количество * mce.FlagAccountingQtyBA) > 0
 )
