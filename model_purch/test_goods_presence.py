@@ -12,6 +12,8 @@ from .services.goods_presence import check_goods_presence, SOURCES
 
 class GoodsPresenceTests(TestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         authorize_test_case(self)
         self.scenario = ScenarioModel.objects.create(name='Plan', date_start_plan='2027-01-01', date_end_plan='2027-11-30')
         ScenarioPlanSales.objects.create(scenario_model=self.scenario, name="Plan '2027'", flag_order_in_purch=True)
@@ -72,11 +74,11 @@ class GoodsPresenceTests(TestCase):
         self.assertContains(response,'Ожидаемые поступления')
         self.assertContains(response,'Есть данные в источниках')
         self.assertContains(response,'не история появления строки')
-        self.assertNotContains(response,reverse('delete_pggoods',args=[self.good.pk]))
+        self.assertContains(response,reverse('delete_pggoods',args=[self.good.pk]))
         self.assertEqual(self.client.post(self.url).status_code,405)
         with patch('model_purch.views_goods_presence.check_goods_presence',side_effect=RuntimeError('SECRET')):
             with self.assertLogs('model_purch.views_goods_presence',level='ERROR'):
-                response = self.client.get(self.url,{'check':'1'})
+                response = self.client.get(self.url,{'check':'1','fresh':'1'})
         self.assertContains(response,'Отсутствие товара не подтверждено')
         self.assertNotContains(response,'SECRET')
 
@@ -99,3 +101,32 @@ class GoodsPresenceTests(TestCase):
         self.assertEqual(response.context['workspace_scenario'].pk,self.scenario.pk)
         self.assertEqual(response.context['workspace_selection_url'],reverse('pggoods_list'))
         self.assertEqual(self.client.get(self.url,{'scenario':other.pk}).status_code,404)
+
+    def test_fast_check_skips_cost_function_and_marks_it_unchecked(self):
+        result = check_goods_presence(self.good,self.connector,include_cost=False)
+        self.assertNotIn('t_Даичи_ПервичнаяСебестоимостьOnDate',self.cursor.execute.call_args.args[0])
+        self.assertFalse(result['rows'][2]['checked'])
+        self.assertFalse(result['complete'])
+
+    def test_cached_open_is_fast_but_repeat_always_fetches_fresh(self):
+        with patch('model_purch.views_goods_presence.check_goods_presence',return_value=self.check()) as check:
+            self.client.get(self.url,{'check':'1'})
+            self.client.get(self.url,{'check':'1'})
+            self.assertEqual(check.call_count,1)
+            self.client.get(self.url,{'check':'1','fresh':'1'})
+            self.assertEqual(check.call_count,2)
+
+    def test_delete_from_diagnostic_is_scoped_and_analyst_cannot_delete(self):
+        user = User.objects.create_user('delete-presence-analyst')
+        UserProjectAccess.objects.create(user=user,project='purchases',role='Аналитик')
+        delete = reverse('delete_pggoods',args=[self.good.pk])
+        self.client.force_login(user)
+        self.assertNotContains(self.client.get(self.url),'Удалить товар из сценария')
+        self.assertEqual(self.client.post(delete,{'scenario':self.scenario.pk}).status_code,403)
+        authorize_test_case(self)
+        other = ScenarioModel.objects.create(name='Delete scope',date_start_plan='2028-01-01',date_end_plan='2028-12-31')
+        self.assertEqual(self.client.post(delete,{'scenario':other.pk}).status_code,404)
+        self.assertTrue(PGGoods.objects.filter(pk=self.good.pk).exists())
+        response = self.client.post(delete,{'scenario':self.scenario.pk})
+        self.assertEqual(response.status_code,302)
+        self.assertFalse(PGGoods.objects.filter(pk=self.good.pk).exists())

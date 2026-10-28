@@ -95,9 +95,15 @@ STEP_FUNCTIONS = {
 # ==============================================================================
 
 def results_page(request):
-    from .services.preflight import batch_readiness, validation_errors
+    from .services.preflight import batch_readiness, validation_errors, fingerprint
     scenario, _ = get_current_scenario(request)
     errors, parameters, checks = batch_readiness()
+    pending_transfers = []
+    for check in checks:
+        check['needs_transfer'] = check['export'] is None or fingerprint(check['parameters']) != check['export'].fingerprint
+        if check['needs_transfer']: pending_transfers.append(check['scenario'])
+    validation_ready = bool(checks) and all(not validation_errors(check['scenario']) for check in checks)
+    active_runs = AlgorithmRun.objects.filter(status='running').select_related('scenario').order_by('-started_at')
     runs = AlgorithmRun.objects.select_related('scenario_export').order_by('-started_at')[:5]
     for run in runs:
         run.parameters_display = json.dumps(run.parameters, ensure_ascii=False, indent=2)
@@ -107,6 +113,8 @@ def results_page(request):
         purchases = list(Purch.objects.all()) if check['errors'] else []
         goods = list(PGGoods.objects.filter(scenario_plan=checked)) if check['errors'] else []
         for error in check['errors']:
+            if error.startswith(('Сначала экспортируйте выбранный сценарий', 'Параметры изменились после экспорта.')):
+                continue  # Transfer readiness has its own action immediately before calculation.
             url = f"{reverse('pggoods_list')}?scenario={checked.pk}"
             for purchase in purchases:
                 if error.startswith(purchase.name + ':'):
@@ -121,7 +129,7 @@ def results_page(request):
             if error.startswith('Фрахт:'):
                 url = f"{reverse('pggoods_list')}?scenario={checked.pk}#freight-settings"
             elif 'экспорт' in error.lower():
-                url = reverse('scenario_list')
+                url = reverse('results_page') + '#calculation-data-transfer'
             elif error.startswith(('Дата', 'Название')):
                 url = reverse('scenario_edit', args=[checked.pk])
             elif 'MS_SQL_CONN_STR' in error:
@@ -133,10 +141,12 @@ def results_page(request):
         'current_scenario': scenario, 'readiness_errors': errors, 'readiness_issues': issues,
         'scenario_checks': checks,
         'data_ready': bool(checks) and all(check['parameters'].get('goods') for check in checks),
-        'validation_ready': bool(checks) and all(not validation_errors(check['scenario']) for check in checks),
-        'export_ready': bool(checks) and all(check['export'] and not any('экспорт' in error.lower() for error in check['errors']) for check in checks),
+        'validation_ready': validation_ready,
+        'pending_transfers': pending_transfers,
+        'can_prepare_data': validation_ready and isinstance(MS_SQL_CONN_STR, str) and bool(MS_SQL_CONN_STR.strip()) and not active_runs.exists(),
+        'export_ready': bool(checks) and not pending_transfers,
         'recent_runs': runs,
-        'active_runs': AlgorithmRun.objects.filter(status='running').select_related('scenario').order_by('-started_at'),
+        'active_runs': active_runs,
     })
 
 
@@ -342,6 +352,29 @@ def export_scenario_to_sql(request, pk):
 
 
 @require_POST
+def prepare_calculation_data(request):
+    """Export only absent/stale snapshots immediately before calculation, never start it."""
+    from .services.preflight import batch_readiness, validation_errors, fingerprint
+    if AlgorithmRun.objects.filter(status='running').exists():
+        messages.error(request, 'Подготовка данных недоступна: есть незавершённый расчёт.')
+        return redirect('results_page')
+    _, _, checks = batch_readiness()
+    if not checks or not isinstance(MS_SQL_CONN_STR, str) or not MS_SQL_CONN_STR.strip() or any(validation_errors(check['scenario']) for check in checks):
+        messages.error(request, 'Данные не перенесены. Сначала исправьте ошибки подготовки на странице расчёта.')
+        return redirect('results_page')
+    pending = [check['scenario'] for check in checks if check['export'] is None or fingerprint(check['parameters']) != check['export'].fingerprint]
+    if not pending:
+        messages.info(request, 'Данные MS SQL уже актуальны. Повторная выгрузка не нужна.')
+        return redirect('results_page')
+    succeeded = sum(_export_scenario_to_sql(request, scenario) for scenario in pending)
+    if succeeded == len(pending):
+        messages.success(request, f'Данные подготовлены для расчёта: обновлено сценариев {succeeded}. Проверьте готовность и запустите расчёт.')
+    else:
+        messages.warning(request, f'Подготовка данных не завершена: успешно {succeeded} из {len(pending)}. Расчёт не запускался; проверьте ошибки.')
+    return redirect('results_page')
+
+
+@require_POST
 def bulk_export_scenarios(request):
     form = ScenarioBulkExportForm(request.POST)
     if not form.is_valid():
@@ -386,10 +419,10 @@ def copy_pggoods_from_scenario(request):
         source_scenario = form.cleaned_data['source_scenario_id']
 
         from .services.copying import copy_goods
-        created_count, updated_count = copy_goods(source_scenario, current_scenario)
+        updated_count, skipped_count = copy_goods(source_scenario, current_scenario)
 
         messages.success(request,
-                         f'✅ Обработано товаров из "{source_scenario.name}": создано {created_count}, обновлено {updated_count}.')
+                         f'Параметры из «{source_scenario.name}»: обновлено {updated_count}; без совпадения в текущем сценарии пропущено {skipped_count}. Новые товары не создавались.')
         return redirect(f"{reverse('pggoods_list')}?scenario={current_scenario.id}")
 
     return redirect('pggoods_list')
@@ -995,11 +1028,11 @@ def delete_pggoods(request, pk):
     goods = get_object_or_404(PGGoods, pk=pk, scenario_plan=current_scenario)
 
     if request.method == 'POST':
-        name = goods.group_goods
+        name = goods.planning_group
         goods.delete()
         messages.success(request, f'Запись «{name}» удалена из сценария "{current_scenario.name}".')
         logger.info(f"Пользователь {request.user} удалил PGGoods ID={pk} из сценария '{current_scenario.name}'")
-    return redirect('pggoods_list')
+    return redirect(reverse('pggoods_list') + f'?scenario={current_scenario.pk}')
 
 
 @require_POST
@@ -1382,7 +1415,7 @@ def purch_edit(request, pk=None):
                 invalid = reprice_goods(strict=False)
                 if invalid:
                     messages.warning(request, f'Не пересчитаны товары с некорректными исходными данными: {len(invalid)}.')
-            messages.success(request, f'Закупка «{purch.name}» сохранена в общем справочнике. Повторите экспорт сценариев в MS SQL.')
+            messages.success(request, f'Закупка «{purch.name}» сохранена в общем справочнике. Подготовьте изменённые данные на странице расчёта.')
             return redirect('purch_list')
     else:
         initial = {'name': request.GET.get('name', '')} if not pk else None
@@ -1399,7 +1432,7 @@ def purch_delete(request, pk):
     if request.method == 'POST':
         name = purch.name
         purch.delete()
-        messages.success(request, f'Закупка «{name}» удалена из общего справочника. Повторите экспорт сценариев в MS SQL.')
+        messages.success(request, f'Закупка «{name}» удалена из общего справочника. Подготовьте изменённые данные на странице расчёта.')
     return redirect('purch_list')
 
 
@@ -1451,7 +1484,7 @@ def goods_groups(request):
                 raise ValidationError('Подтвердите замену индивидуальных значений товаров.')
             ids = [int(value) for value in request.POST.getlist('group_ids')]
             count = apply_group_parameters(ids, request.POST.get('parameter'))
-            messages.success(request, f'Параметры применены к {count} товарам во всех сценариях. Стоимости пересчитаны. Повторите экспорт в MS SQL.')
+            messages.success(request, f'Параметры применены к {count} товарам во всех сценариях. Стоимости пересчитаны. Подготовьте изменённые данные на странице расчёта.')
         except (ValidationError, ValueError) as error:
             messages.error(request, 'Применение отменено: ' + str(error))
         return redirect('goods_groups')
@@ -1464,7 +1497,7 @@ def goods_groups(request):
         except ValidationError as error:
             messages.error(request, 'Пошлина не применена: ' + ' '.join(error.messages))
         else:
-            messages.success(request, f'Коэффициент пошлины {group.duty_rate} применён к {count} товарам во всех сценариях. DDP и KDDP пересчитаны. Повторите экспорт изменённых сценариев в MS SQL.')
+            messages.success(request, f'Коэффициент пошлины {group.duty_rate} применён к {count} товарам во всех сценариях. DDP и KDDP пересчитаны. Подготовьте изменённые данные на странице расчёта.')
         return redirect('goods_groups')
     form = GoodsGroupForm(request.POST if request.method == 'POST' else None, instance=group)
     if request.method == 'POST' and form.is_valid():

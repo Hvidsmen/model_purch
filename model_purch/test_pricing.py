@@ -329,6 +329,9 @@ class ProductPricingTests(TestCase):
         from .services.copying import copy_goods
         target = ScenarioModel.objects.create(name='Target costs', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
         Freight.objects.create(scenario=target, price_per_container=2000, customs_rate=20, warehouse_delivery_cost=1000)
+        seed = PGGoods.objects.get(pk=self.good.pk)
+        seed.pk = None; seed.scenario_plan = target; seed.container_volume = 65; seed.duty_rate = 0; seed.exw_usd = 1
+        seed.save()
         copy_goods(self.scenario, target)
         copied = PGGoods.objects.get(scenario_plan=target)
         self.assertAlmostEqual(copied.ddp_usd, 257.8)

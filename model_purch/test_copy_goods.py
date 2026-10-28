@@ -39,6 +39,7 @@ class CopyGoodsTests(TestCase):
                 self.assertEqual(getattr(copy, field.attname), getattr(self.source_goods, field.attname), field.name)
 
     def test_selected_post_target_is_used_instead_of_latest_scenario(self):
+        self.make_goods(self.target, exw_usd=1)
         original_source = dict(PGGoods.objects.filter(pk=self.source_goods.pk).values().get())
         response = self.copy()
         self.assertRedirects(response, f'{reverse("pggoods_list")}?scenario={self.target.pk}', fetch_redirect_response=False)
@@ -48,6 +49,7 @@ class CopyGoodsTests(TestCase):
         self.assertEqual(PGGoods.objects.filter(pk=self.source_goods.pk).values().get(), original_source)
 
     def test_post_target_takes_precedence_over_conflicting_query_string(self):
+        self.make_goods(self.target, exw_usd=1)
         response = self.client.post(f'{self.url}?scenario={self.other.pk}', {
             'scenario': self.target.pk, 'source_scenario_id': self.source.pk,
         })
@@ -63,8 +65,9 @@ class CopyGoodsTests(TestCase):
         self.copy()
         target_goods.refresh_from_db()
         self.assert_same_goods_values(target_goods)
-        self.assertEqual(PGGoods.objects.filter(scenario_plan=self.target).count(), 3)
+        self.assertEqual(PGGoods.objects.filter(scenario_plan=self.target).count(), 2)
         self.assertTrue(PGGoods.objects.filter(pk=unrelated.pk).exists())
+        self.assertFalse(PGGoods.objects.filter(scenario_plan=self.target,planning_group='PG2').exists())
 
     def test_copy_preserves_exw_and_all_volume_parameters_for_new_and_existing_goods(self):
         values = dict(exw_usd=127.941234, volume=.231234, container_volume=66,
@@ -76,10 +79,14 @@ class CopyGoodsTests(TestCase):
             if not existing:
                 PGGoods.objects.filter(scenario_plan=self.target).delete()
             else:
+                self.make_goods(self.target, exw_usd=1)
                 PGGoods.objects.filter(scenario_plan=self.target).update(exw_usd=0, volume=0, container_volume=65,
                     plan_volume=None, fact_volume=None, stock_volume=None)
             response = self.copy()
             self.assertEqual(response.status_code, 302)
+            if not existing:
+                self.assertFalse(PGGoods.objects.filter(scenario_plan=self.target).exists())
+                continue
             copied = PGGoods.objects.get(scenario_plan=self.target)
             for name, value in values.items():
                 self.assertEqual(getattr(copied, name), value, name)

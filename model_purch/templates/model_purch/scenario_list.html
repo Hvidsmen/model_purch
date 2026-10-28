@@ -236,16 +236,10 @@
 </div>
 
 {% if scenarios %}
-    <form data-purchases-write id="bulk-export-form" method="post" action="{% url 'bulk_export_scenarios' %}" class="mb-3">
-        {% csrf_token %}
-        <button id="bulk-export-button" class="btn btn-success" type="submit">Экспортировать выбранные в MS SQL</button>
-        <span class="text-muted ms-2">Выберите сценарии галочками. Существующие данные будут обновлены.</span>
-    </form>
     <div class="table-responsive">
         <table class="table table-scenarios">
             <thead>
                 <tr>
-                    <th data-purchases-write><input id="select-all-scenarios" type="checkbox" class="form-check-input" aria-label="Выбрать все сценарии"></th>
                     <th class="col-id">#</th>
                     <th>Название сценария</th>
                     <th class="col-date">Дата начала</th>
@@ -257,7 +251,6 @@
             <tbody>
                 {% for scenario in scenarios %}
                     <tr>
-                        <td data-purchases-write><input type="checkbox" class="form-check-input scenario-export-checkbox" name="scenarios" value="{{ scenario.pk }}" form="bulk-export-form" aria-label="Выбрать сценарий {{ scenario.name }}"></td>
                         <td class="col-id">{{ scenario.id }}</td>
                         <td class="col-name">
                             {{ scenario.name }}
@@ -282,15 +275,7 @@
                                title="{% if portal_purchases_readonly %}Посмотреть параметры{% else %}Редактировать{% endif %}">
                                 <i aria-hidden="true" class="bi bi-pencil-square"></i>
                             </a>
-
-                            <!-- Кнопка экспорта в SQL (открывает модальное окно) -->
-                            <button type="button"
-                                    data-purchases-write class="btn-action btn-export"
-                                    data-bs-toggle="modal"
-                                    data-bs-target="#exportSqlModal{{ scenario.pk }}"
-                                    title="Экспорт в SQL и расчет">
-                                <i aria-hidden="true" class="bi bi-database"></i>
-                            </button>
+                            <a href="{% url 'results_page' %}" class="btn-action btn-export" title="Расчёт"><i aria-hidden="true" class="bi bi-calculator"></i></a>
 
                             <!-- Кнопка удаления -->
                             <a data-purchases-write href="{% url 'scenario_delete' scenario.pk %}"
@@ -301,57 +286,6 @@
                         </td>
                     </tr>
 
-                    <!-- Модальное окно экспорта в SQL -->
-                    <div class="modal fade" id="exportSqlModal{{ scenario.pk }}" tabindex="-1" aria-hidden="true">
-                        <div class="modal-dialog modal-dialog-centered">
-                            <div class="modal-content border-0 shadow">
-                                <div class="modal-header bg-success text-white">
-                                    <h5 class="modal-title">
-                                        <i aria-hidden="true" class="bi bi-database"></i> Экспорт в MS SQL
-                                    </h5>
-                                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
-                                </div>
-                                <div class="modal-body p-4">
-                                    <div class="alert alert-info d-flex align-items-start gap-2">
-                                        <i aria-hidden="true" class="bi bi-info-circle-fill fs-5"></i>
-                                        <div class="small">
-                                            <strong>Сценарий:</strong> {{ scenario.name }}<br>
-                                            <strong>Период:</strong> {{ scenario.date_start_plan|date:"d.m.Y" }} — {{ scenario.date_end_plan|date:"d.m.Y" }}
-                                        </div>
-                                    </div>
-
-                                    <p class="mb-3">
-                                        Вы действительно хотите экспортировать этот сценарий в базу данных MS SQL Server (схема <code>portal</code>)?
-                                    </p>
-
-                                    <div class="card bg-light border-0 mb-3">
-                                        <div class="card-body py-2">
-                                            <h6 class="small fw-semibold mb-2">Будут экспортированы:</h6>
-                                            <ul class="small mb-0 ps-3">
-                                                <li>Закупки (Purch) и графики платежей</li>
-                                                <li>Товары (PGGoods) со всеми параметрами</li>
-                                                <li>Планы продаж</li>
-                                            </ul>
-                                        </div>
-                                    </div>
-
-                                    <div class="alert alert-warning small mb-0">
-                                        <i aria-hidden="true" class="bi bi-exclamation-triangle"></i>
-                                        Существующие записи с такими же ключами будут обновлены
-                                    </div>
-                                </div>
-                                <div class="modal-footer bg-light">
-                                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                                        <i aria-hidden="true" class="bi bi-x-lg"></i> Отмена
-                                    </button>
-                                    <a href="{% url 'export_scenario_to_sql' scenario.pk %}"
-                                       class="btn btn-success">
-                                        <i aria-hidden="true" class="bi bi-check-lg"></i> Экспортировать
-                                    </a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 {% endfor %}
             </tbody>
         </table>
@@ -366,31 +300,4 @@
         </a>
     </div>
 {% endif %}
-{% endblock %}
-{% block extra_js %}
-<script>
-(() => {
-    const all = document.getElementById('select-all-scenarios');
-    const form = document.getElementById('bulk-export-form');
-    if (!all || !form) return;
-    const boxes = [...document.querySelectorAll('.scenario-export-checkbox')];
-    const button = document.getElementById('bulk-export-button');
-    function update() {
-        const count = boxes.filter(box => box.checked).length;
-        all.checked = count === boxes.length;
-        all.indeterminate = count > 0 && count < boxes.length;
-        button.disabled = count === 0;
-        button.textContent = `Экспортировать выбранные в MS SQL (${count})`;
-    }
-    all.addEventListener('change', () => { boxes.forEach(box => box.checked = all.checked); update(); });
-    boxes.forEach(box => box.addEventListener('change', update));
-    form.addEventListener('submit', event => {
-        if (!boxes.some(box => box.checked)) { event.preventDefault(); return; }
-        button.disabled = true;
-        button.textContent = 'Экспорт выполняется…';
-    });
-    window.addEventListener('pageshow', update);
-    update();
-})();
-</script>
 {% endblock %}

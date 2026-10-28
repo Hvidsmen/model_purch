@@ -81,7 +81,7 @@
             </a>
         </div>
 
-        <p class="text-muted">Настройки общие для всех сценариев. После изменения повторите экспорт сценариев в MS SQL.</p>
+        <p class="text-muted">Настройки общие для всех сценариев. После изменения подготовьте изменённые данные на странице расчёта.</p>
         <form method="post" id="purchForm" novalidate>{% if portal_purchases_readonly %}<fieldset disabled class="purchases-viewer-fields">{% endif %}
             {% csrf_token %}
             {{ formset.management_form }}

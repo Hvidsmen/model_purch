@@ -14,7 +14,7 @@ def workspace(request):
     export_state, export_label = 'stale', 'Сценарий не выбран'
     if scenario:
         export = scenario.exports.first()
-        export_label = 'Не экспортирован в MS SQL'
+        export_label = 'Подготовка данных — перед расчётом'
         if export:
             from .services.preflight import snapshot, fingerprint
             try:
@@ -22,7 +22,7 @@ def workspace(request):
             except (ValueError, TypeError):
                 current = False
             export_state = 'current' if current else 'stale'
-            export_label = 'Экспорт актуален' if current else 'Изменён после экспорта'
+            export_label = 'Данные для расчёта актуальны' if current else 'Данные изменены — подготовка перед расчётом'
     route = request.resolver_match.url_name if request.resolver_match else ''
     target = 'purch_list' if route in {'purch_create', 'purch_edit', 'purch_delete'} else 'pggoods_list' if route in {'edit_pggoods', 'delete_pggoods', 'goods_presence'} else None
     return {'workspace_export_state': export_state, 'workspace_export_label': export_label,

@@ -18,6 +18,8 @@ BROWSER_ENABLED = os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.
 @skipUnless(BROWSER_ENABLED, 'Enable RUN_BROWSER_TESTS=1 and install requirements-test.txt to run Chromium checks.')
 class PurchaseBrowserTests(StaticLiveServerTestCase):
     def setUp(self):
+        from django.core.cache import cache
+        cache.clear()
         authorize_test_case(self)
         self.source = ScenarioModel.objects.create(name='Source', date_start_plan='2026-01-01', date_end_plan='2026-12-31')
         self.target = ScenarioModel.objects.create(name='Target', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
@@ -118,7 +120,15 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertIn('77', self.page.locator(f'#purchase-{self.purchase.pk}').inner_text())
         self.assertEqual(self.errors, [], self.asset_events)
 
+    def seed_target(self, scenario):
+        def create():
+            good = PGGoods.objects.get(pk=self.good.pk)
+            good.pk = None; good.scenario_plan = scenario; good.exw_usd = 1
+            good.save()
+        self.db(create)
+
     def test_copy_goods_through_modal_and_preserve_selected_scenario(self):
+        self.seed_target(self.target)
         self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=127.94, volume=.23, container_volume=66, plan_volume=.22, fact_volume=.24))
         self.visit('pggoods_list')
         self.select(self.target)
@@ -153,23 +163,31 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertEqual(self.db(lambda: str(Freight.objects.get(scenario=self.target).volume_per_container)), '65.000')
         self.assertEqual(self.errors, [], self.asset_events)
 
-    def test_bulk_export_select_all_and_submit_selected_scenarios(self):
-        self.visit('scenario_list')
-        button = self.page.locator('#bulk-export-button')
-        self.assertFalse(button.is_enabled())
-        self.page.locator('#select-all-scenarios').check()
-        self.assertTrue(button.is_enabled())
-        with patch('model_purch.views.MS_SQL_CONN_STR', 'test'), patch(
-            'model_purch.views._export_scenario_to_sql', return_value=True,
-        ) as export:
+    @override_settings(MS_SQL_CONN_STR='test')
+    def test_prepare_sql_data_is_part_of_calculation_and_only_shown_when_needed(self):
+        from playwright.sync_api import expect
+        self.seed_target(self.target)
+        def transfer(request, scenario):
+            params = snapshot(scenario)
+            ScenarioExport.objects.create(scenario=scenario,parameters=params,fingerprint=fingerprint(params))
+            return True
+        with patch('model_purch.views.MS_SQL_CONN_STR','test'), patch('model_purch.views._export_scenario_to_sql',side_effect=transfer) as export:
+            self.visit('scenario_list')
+            expect(self.page.locator('#bulk-export-form, [id^=exportSqlModal]')).to_have_count(0)
+            self.visit('results_page')
+            expect(self.page.locator('#prepare-calculation-data-form button')).to_be_enabled()
+            self.page.screenshot(path='/tmp/calculation-prepare-data.png',full_page=True)
             with self.page.expect_navigation():
-                button.click()
-            self.assertEqual({call.args[1].pk for call in export.call_args_list}, {self.source.pk, self.target.pk})
-        self.assertIn('Успешно: 2 из 2', self.page.locator('#messagesContainer').inner_text())
-        self.assertEqual(self.errors, [], self.asset_events)
+                self.page.locator('#prepare-calculation-data-form button').click()
+            expect(self.page.locator('#prepare-calculation-data-form')).to_have_count(0)
+            expect(self.page.get_by_role('button',name='Запустить',exact=True)).to_be_enabled()
+            self.assertEqual(export.call_count,2)
+            self.assertFalse(self.db(lambda: AlgorithmRun.objects.exists()))
+        self.assertEqual(self.errors,[])
 
     @override_settings(MS_SQL_CONN_STR='test')
     def test_calculation_start_includes_all_scenarios_and_saved_exports(self):
+        self.seed_target(self.target)
         from .services.copying import copy_goods
         self.db(lambda: copy_goods(self.source, self.target))
         target_parameters = self.db(lambda: snapshot(self.target))
@@ -255,7 +273,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
 
     def test_new_scenario_opens_goods_with_actionable_setup_recommendations(self):
         from playwright.sync_api import expect
-        with patch('model_purch.views.sync_purch_data'), patch('model_purch.views.sync_pggoods_data_for_scenario'):
+        with patch('model_purch.views.sync_purch_data'), patch('model_purch.views.sync_pggoods_data_for_scenario',side_effect=lambda scenario: PGGoods.objects.create(scenario_plan=scenario,planning_group='Group',planning_sales='Sales',group_goods='Goods',purch='Supplier',kind_purch=self.good.kind_purch,volume=1,exw_usd=0,stock_cnt_day=0,percent_stock_end=0)):
             self.page.goto(self.live_server_url + reverse('scenario_create'))
             self.page.locator('#id_name').fill('Guided scenario')
             self.page.locator('#id_date_start_plan').fill('2027-01-01')
@@ -272,7 +290,7 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         panel.get_by_role('link',name='Скопировать из сценария',exact=True).click()
         expect(self.page.locator('#freight-settings')).to_have_attribute('open','')
         expect(self.page.locator('#freight-source')).to_be_focused()
-        panel.get_by_role('button',name='Скопировать товары',exact=True).click()
+        panel.get_by_role('button',name='Скопировать параметры',exact=True).click()
         expect(self.page.locator('#copyPggoodsModal')).to_be_visible()
         self.page.locator('#copyPggoodsModal [name=source_scenario_id]').select_option(str(self.source.pk))
         with self.page.expect_navigation():
@@ -298,8 +316,8 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         from .services.goods_presence import SOURCES
         rows = [{'key':key, 'label':value[0], 'note':value[1], 'found':key=='income', 'qualifies':key=='income',
                  'quantity':10 if key=='income' else None,'accounting_quantity':10 if key=='income' else None,
-                 'amount':None,'ddp':None} for key,value in SOURCES.items()]
-        with patch('model_purch.views_goods_presence.check_goods_presence',return_value={'rows':rows,'supported':True,'plans':['Plan'],'checked_at':timezone.now()}) as check:
+                 'amount':None,'ddp':None,'checked':key!='stock_cost'} for key,value in SOURCES.items()]
+        with patch('model_purch.views_goods_presence.check_goods_presence',return_value={'rows':rows,'supported':True,'plans':['Plan'],'checked_at':timezone.now(),'complete':False}) as check:
             self.page.goto(self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}')
             with self.page.expect_navigation():
                 self.page.locator(f'tr[data-row-id="{self.good.pk}"]').get_by_role('link',name='Проверить источники').click()
@@ -311,6 +329,13 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
             self.page.set_viewport_size({'width':390,'height':844})
             self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),390)
             self.page.screenshot(path='/tmp/goods-presence-mobile.png',full_page=True)
+            self.page.once('dialog',lambda dialog:dialog.dismiss())
+            self.page.get_by_role('button',name='Удалить товар из сценария',exact=True).click()
+            self.assertTrue(self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).exists()))
+            self.page.once('dialog',lambda dialog:dialog.accept())
+            with self.page.expect_navigation():
+                self.page.get_by_role('button',name='Удалить товар из сценария',exact=True).click()
+            self.assertFalse(self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).exists()))
             self.assertEqual(self.errors,[])
 
     def test_product_filters_order_search_and_two_decimal_price_display(self):

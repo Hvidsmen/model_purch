@@ -5,6 +5,7 @@ from . import views_plan_parameters
 from . import views_goods_directory, views_goods_presence, views_scenario_setup
 from . import views_purchase_excel
 urlpatterns = [
+    path('calculations/prepare-data/', views.prepare_calculation_data, name='prepare_calculation_data'),
     path('scenarios/<int:scenario_id>/dismiss-setup/', views_scenario_setup.dismiss_setup, name='dismiss_scenario_setup'),
     path('pggoods/<int:pk>/sources/', views_goods_presence.goods_presence, name='goods_presence'),
     path('pggoods/<int:scenario_id>/refresh-directory/', views_goods_directory.refresh_directory, name='refresh_goods_directory'),

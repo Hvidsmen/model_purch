@@ -5,7 +5,8 @@ from django.shortcuts import get_object_or_404, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_GET
 from .models import PGGoods
-from .services.goods_presence import check_goods_presence
+from .services.goods_presence import check_goods_presence, presence_cache_key
+from django.core.cache import cache
 
 logger = logging.getLogger(__name__)
 
@@ -24,13 +25,19 @@ def goods_presence(request, pk):
             raise Http404('Товар не относится к выбранному сценарию.')
     from .services.scenarios import remember_scenario
     remember_scenario(request, good.scenario_plan)
-    result, error = None, ''
+    result, error, from_cache = None, '', False
+    include_cost = request.GET.get('detailed') == '1'
     if request.GET.get('check') == '1':
         try:
-            result = check_goods_presence(good)
+            key = presence_cache_key(good, include_cost)
+            result = None if request.GET.get('fresh') == '1' else cache.get(key)
+            from_cache = result is not None
+            if result is None:
+                result = check_goods_presence(good, include_cost=include_cost)
+                cache.set(presence_cache_key(good, include_cost, result['plans']), result, timeout=120)
         except ValidationError as exception:
             error = ' '.join(exception.messages)
         except Exception:
             logger.exception('Goods presence check failed for goods %s', pk)
             error = 'Не удалось проверить источники. Отсутствие товара не подтверждено. Подробности ошибки записаны в журнал сервера.'
-    return render(request, 'model_purch/goods_presence.html', {'good': good, 'result': result, 'error': error})
+    return render(request, 'model_purch/goods_presence.html', {'good': good, 'result': result, 'error': error, 'include_cost': include_cost, 'from_cache': from_cache})

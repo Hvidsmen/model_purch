@@ -256,17 +256,17 @@
 <ol class="checklist" aria-label="Подготовка к расчёту">
     <li class="{% if data_ready %}done{% else %}needs-action{% endif %}"><strong>1. Данные</strong><span class="d-block small">{% if data_ready %}Товары заполнены во всех сценариях{% else %}Добавьте товары{% endif %}</span><a href="{% url 'pggoods_list' %}">Открыть товары</a></li>
     <li class="{% if validation_ready %}done{% else %}needs-action{% endif %}"><strong>2. Проверки</strong><span class="d-block small">{% if validation_ready %}Параметры корректны{% else %}Исправьте ошибки ниже{% endif %}</span><a href="{% url 'purch_list' %}">Открыть закупки</a></li>
-    <li class="{% if export_ready %}done{% else %}needs-action{% endif %}"><strong>3. Экспорт</strong><span class="d-block small">{% if export_ready %}Данные актуальны{% else %}Экспортируйте все сценарии{% endif %}</span><a href="{% url 'scenario_list' %}">Открыть экспорт</a></li>
+    <li class="{% if export_ready %}done{% else %}needs-action{% endif %}"><strong>3. Подготовка данных</strong><span class="d-block small">{% if export_ready %}Данные MS SQL актуальны{% else %}Нужны данные для расчёта{% endif %}</span>{% if pending_transfers %}<a href="#calculation-data-transfer">Подготовить перед запуском</a>{% endif %}</li>
     <li class="{% if not readiness_errors and not active_runs %}done{% else %}needs-action{% endif %}"><strong>4. Расчёт</strong><span class="d-block small">{% if active_runs %}Другой запуск не завершён{% elif not readiness_errors %}Можно запускать{% else %}Завершите подготовку{% endif %}</span><a href="#controlPanel">Перейти к запуску</a></li>
 </ol>
 <div class="card card-body mb-3">
     <p>Область расчёта: <strong>Все сценарии</strong>. Выбор сценария в верхней панели используется для редактирования данных и не ограничивает расчёт.</p>
     <div class="table-responsive mb-3"><table class="table table-sm">
-        <thead><tr><th>Сценарий</th><th>Последний экспорт</th><th>Готовность</th></tr></thead>
+        <thead><tr><th>Сценарий</th><th>Последняя подготовка MS SQL</th><th>Готовность</th></tr></thead>
         <tbody>{% for check in scenario_checks %}<tr><td>{{ check.scenario.name }}</td><td>{{ check.export.exported_at|date:"d.m.Y H:i:s"|default:"не выполнялся" }}</td><td>{% if check.errors %}Требует подготовки{% else %}Готов{% endif %}</td></tr>{% empty %}<tr><td colspan="3">Создайте сценарии для расчёта.</td></tr>{% endfor %}</tbody>
     </table></div>
     <details class="text-muted small mb-3"><summary>Как выполняется расчёт</summary><p>Все сценарии из подготовленных данных MS SQL рассчитываются за один запуск. Таблица поступлений заменяется общим результатом, как в исходном алгоритме. Подготовка данных, обновление таблиц и запуск OLAP выполняются общими SQL-процедурами. Фрахт экспортируется; его использование внешними процедурами требует их настройки.</p></details>
-    {% if readiness_errors %}<div class="alert alert-warning"><strong>До запуска исправьте:</strong><ul>{% for issue in readiness_issues %}<li>{{ issue.message }} {% if issue.url %}<a href="{{ issue.url }}">Открыть данные</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
+    {% if readiness_issues %}<div class="alert alert-warning"><strong>До запуска исправьте:</strong><ul>{% for issue in readiness_issues %}<li>{{ issue.message }} {% if issue.url %}<a href="{{ issue.url }}">Открыть данные</a>{% endif %}</li>{% endfor %}</ul></div>{% endif %}
     {% if active_runs %}
         <div class="alert alert-info">
             <p>Есть незавершённые расчёты. Перед новым запуском завершите их или отмените остановленные, в том числе после перезагрузки сервера:</p>
@@ -287,6 +287,7 @@
 <!-- Панель управления -->
 <div class="control-panel" id="controlPanel">
     <div id="startSection">
+        {% if pending_transfers %}<section id="calculation-data-transfer" class="card card-body mb-3 border-warning" aria-labelledby="transfer-heading"><h5 id="transfer-heading">Перед расчётом нужно подготовить данные MS SQL</h5><p>Перенесём только новые или изменённые сценарии — {{ pending_transfers|length }}. Уже актуальные данные повторно не выгружаются. Область расчёта: все действующие сценарии.</p><details class="mb-3"><summary>Какие сценарии будут обновлены</summary><ul>{% for scenario in pending_transfers %}<li>{{ scenario.name }}</li>{% endfor %}</ul></details>{% if not portal_purchases_readonly %}<form method="post" action="{% url 'prepare_calculation_data' %}" id="prepare-calculation-data-form">{% csrf_token %}<button class="btn btn-primary" type="submit" {% if not can_prepare_data %}disabled{% endif %}>Подготовить данные в MS SQL</button></form>{% endif %}{% if not validation_ready %}<p class="small text-muted mt-2 mb-0">Сначала исправьте ошибки в исходных данных выше.</p>{% elif active_runs %}<p class="small text-muted mt-2 mb-0">Дождитесь завершения текущего расчёта.</p>{% endif %}<p class="small text-muted mt-2 mb-0">Подготовка не запускает расчёт автоматически. После успешной передачи станет доступен запуск.</p></section>{% endif %}
         <h5 class="mb-3">Запуск расчета</h5>
         <p class="text-muted mb-4">
             Нажмите кнопку ниже, чтобы запустить алгоритм расчета.
@@ -359,6 +360,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>document.addEventListener('DOMContentLoaded',()=>{const form=document.getElementById('prepare-calculation-data-form');form?.addEventListener('submit',()=>{const button=form.querySelector('button');button.disabled=true;button.textContent='Подготовка данных…';});});</script>
 <script>
     let currentRunId = null;
     let isAutoRunning = false;

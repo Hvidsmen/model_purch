@@ -68,7 +68,7 @@ class BulkScenarioExportTests(TestCase):
 
     def test_page_contains_selection_and_post_form(self):
         response = self.client.get(reverse('scenario_list'))
-        self.assertContains(response, 'id="select-all-scenarios"')
-        self.assertContains(response, 'name="scenarios"', count=3)
-        self.assertContains(response, f'action="{self.url}"')
-        self.assertContains(response, 'form="bulk-export-form"', count=3)
+        self.assertNotContains(response, 'id="select-all-scenarios"')
+        self.assertNotContains(response, 'bulk-export-form')
+        self.assertNotContains(response, 'exportSqlModal')
+        self.assertContains(response, reverse('results_page'))

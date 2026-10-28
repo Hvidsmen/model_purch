@@ -29,7 +29,7 @@ class ScenarioSetupTests(TestCase):
         page = self.client.get(response.url)
         for label in ('Общие параметры закупок','Параметры товаров','Плановые и фактические показатели','Обновить план, факт и сток'):
             self.assertContains(page,label)
-        self.assertNotContains(page,'data-bs-target="#copyPggoodsModal">Скопировать товары')
+        self.assertNotContains(page,'data-bs-target="#copyPggoodsModal">Скопировать параметры')
         self.assertContains(self.client.get(reverse('pggoods_list'),{'scenario':scenario.pk}),'id="scenario-setup"')
 
     def test_sync_failure_still_opens_goods_and_does_not_expose_connection_details(self):
@@ -57,7 +57,7 @@ class ScenarioSetupTests(TestCase):
         self.assertNotContains(self.client.get(reverse('pggoods_list'),{'scenario':scenario.pk}),'id="scenario-setup"')
         page = self.client.get(reverse('pggoods_list'),{'scenario':scenario.pk,'setup':'1'})
         self.assertContains(page,'id="scenario-setup"')
-        self.assertContains(page,'data-bs-target="#copyPggoodsModal">Скопировать товары')
+        self.assertContains(page,'data-bs-target="#copyPggoodsModal">Скопировать параметры')
         self.assertIn(scenario.pk,self.client.session[KEY])
         analyst = User.objects.create_user('setup-analyst')
         UserProjectAccess.objects.create(user=analyst,project='purchases',role='Аналитик')

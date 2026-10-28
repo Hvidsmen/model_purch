@@ -126,6 +126,10 @@ class ScenarioReliabilityTests(TestCase):
 
     def record_export(self):
         from .services.copying import copy_goods
+        if not PGGoods.objects.filter(scenario_plan=self.other).exists():
+            seed = PGGoods.objects.get(pk=self.good.pk)
+            seed.pk = None; seed.scenario_plan = self.other; seed.exw_usd = 1
+            seed.save()
         copy_goods(self.scenario, self.other)
         other_parameters = snapshot(self.other)
         ScenarioExport.objects.create(scenario=self.other, parameters=other_parameters, fingerprint=fingerprint(other_parameters))
@@ -255,3 +259,71 @@ class ScenarioReliabilityTests(TestCase):
         self.assertContains(response, 'старый запуск без сценария')
         self.assertContains(response, f'cancelRun({legacy.pk})')
         self.assertEqual(self.client.post(reverse('cancel_algorithm_api', args=[legacy.pk])).json()['status'], 'cancelled')
+
+    @patch('model_purch.views.MS_SQL_CONN_STR', 'test')
+    def test_calculation_page_prepares_only_stale_data_and_hides_step_when_current(self):
+        self.record_export()
+        PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=12)
+        page = self.client.get(reverse('results_page'))
+        self.assertEqual([item.pk for item in page.context['pending_transfers']],[self.scenario.pk])
+        self.assertContains(page,'prepare-calculation-data-form')
+        def transfer(request, scenario):
+            params = snapshot(scenario)
+            ScenarioExport.objects.create(scenario=scenario,parameters=params,fingerprint=fingerprint(params))
+            return True
+        with patch('model_purch.views._export_scenario_to_sql',side_effect=transfer) as export:
+            response = self.client.post(reverse('prepare_calculation_data'))
+        self.assertEqual(response.url,reverse('results_page'))
+        self.assertEqual([call.args[1].pk for call in export.call_args_list],[self.scenario.pk])
+        self.assertFalse(AlgorithmRun.objects.exists())
+        page = self.client.get(reverse('results_page'))
+        self.assertNotContains(page,'id="prepare-calculation-data-form"')
+        self.assertEqual(page.context['readiness_errors'],[])
+
+    @patch('model_purch.views.MS_SQL_CONN_STR', 'test')
+    def test_prepare_data_skips_current_and_blocks_invalid_or_active_runs(self):
+        self.record_export()
+        url = reverse('prepare_calculation_data')
+        with patch('model_purch.views._export_scenario_to_sql') as export:
+            self.client.post(url)
+            export.assert_not_called()
+            PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=12)
+            active = AlgorithmRun.objects.create(status='running')
+            self.client.post(url)
+            export.assert_not_called()
+            active.delete()
+            PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=0)
+            self.client.post(url)
+            export.assert_not_called()
+        self.assertFalse(AlgorithmRun.objects.exists())
+        self.assertEqual(self.client.get(url).status_code,405)
+
+    def test_prepare_data_requires_csrf_and_is_not_available_to_analyst(self):
+        from django.contrib.auth.models import User
+        from base.models import UserProjectAccess
+        url = reverse('prepare_calculation_data')
+        csrf = Client(enforce_csrf_checks=True)
+        csrf.force_login(self.client.session and User.objects.get(pk=self.client.session['_auth_user_id']))
+        self.assertEqual(csrf.post(url).status_code,403)
+        analyst = User.objects.create_user('prepare-readonly')
+        UserProjectAccess.objects.create(user=analyst,project='purchases',role='Аналитик')
+        self.client.force_login(analyst)
+        self.assertEqual(self.client.post(url).status_code,403)
+
+    @patch('model_purch.views.MS_SQL_CONN_STR', 'test')
+    def test_partial_preparation_does_not_allow_calculation_and_retry_keeps_only_failed(self):
+        self.record_export()
+        ScenarioExport.objects.all().delete()
+        def transfer(request, scenario):
+            if scenario.pk == self.scenario.pk:
+                return False
+            params = snapshot(scenario)
+            ScenarioExport.objects.create(scenario=scenario,parameters=params,fingerprint=fingerprint(params))
+            return True
+        with patch('model_purch.views._export_scenario_to_sql',side_effect=transfer) as export:
+            self.client.post(reverse('prepare_calculation_data'))
+        self.assertEqual(export.call_count,2)
+        page = self.client.get(reverse('results_page'))
+        self.assertEqual([item.pk for item in page.context['pending_transfers']],[self.scenario.pk])
+        self.assertEqual(self.start().status_code,400)
+        self.assertFalse(AlgorithmRun.objects.exists())

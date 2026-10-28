@@ -128,6 +128,9 @@ class GoodsEditorTests(TestCase):
         self.good.refresh_from_db()
         self.assertEqual(self.good.container_volume, 70)
         target = ScenarioModel.objects.create(name='Copy', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        seed = PGGoods.objects.get(pk=self.good.pk)
+        seed.pk = None; seed.scenario_plan = target; seed.container_volume = 65; seed.duty_rate = 0; seed.exw_usd = 1
+        seed.save()
         copy_goods(self.scenario, target)
         self.assertEqual(PGGoods.objects.get(scenario_plan=target).container_volume, 70)
         response = self.client.get(reverse('export_pggoods'), {'scenario': self.scenario.pk})
@@ -194,6 +197,9 @@ class GoodsEditorTests(TestCase):
         self.good.refresh_from_db()
         self.assertEqual(self.good.duty_rate, Decimal('12.50'))
         target = ScenarioModel.objects.create(name='Duty copy', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        seed = PGGoods.objects.get(pk=self.good.pk)
+        seed.pk = None; seed.scenario_plan = target; seed.container_volume = 65; seed.duty_rate = 0; seed.exw_usd = 1
+        seed.save()
         copy_goods(self.scenario, target)
         self.assertEqual(PGGoods.objects.get(scenario_plan=target).duty_rate, Decimal('12.50'))
         self.client.post(self.url, self.data)

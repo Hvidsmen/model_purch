@@ -420,13 +420,13 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
                 {% csrf_token %}
                 <input type="hidden" name="scenario" value="{{ current_scenario.id }}">
                 <div class="modal-header bg-primary text-white">
-                    <h5 class="modal-title" id="copyPggoodsModalLabel"><i aria-hidden="true" class="bi bi-files"></i> Копирование товаров</h5>
+                    <h5 class="modal-title" id="copyPggoodsModalLabel"><i aria-hidden="true" class="bi bi-files"></i> Копирование параметров товаров</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
-                        Скопирует все товары из выбранного сценария в "<strong>{{ current_scenario.name }}</strong>": EXW, объёмы товара и контейнера, плановые, фактические и складские значения. Расчётный DDP пересчитается по настройкам текущего сценария. План и факт копируются как сохранённые значения источника; для периода текущего сценария обновите их из MS SQL.
-                        <br><span class="text-info"><i aria-hidden="true" class="bi bi-info-circle"></i> Если товар с такой плановой группой уже существует (без учёта регистра), его данные будут <strong>обновлены</strong> (дубликаты не создаются).</span>
+                        Скопирует параметры только тех товаров, которые уже есть в «<strong>{{ current_scenario.name }}</strong>» и совпадают по плановой группе. Новые товары из источника не добавляются; состав текущего сценария сохраняется.
+                        <br>Совпадающие строки получат EXW, объёмы, пошлину, поставщика, запас и сохранённые показатели источника. DDP пересчитается по настройкам текущего сценария. После копирования обновите план, факт и сток за период текущего сценария.
                     </p>
                     <label class="form-label fw-semibold">Сценарий-источник:</label>
                     <select name="source_scenario_id" class="form-select" required>

@@ -22,7 +22,7 @@ def import_purchases(request):
         if request.POST.get('confirm') != 'yes':
             raise ValidationError('Подтвердите обновление общего справочника закупок и графиков платежей.')
         count, invalid = import_workbook(request.FILES.get('file'))
-        messages.success(request, f'Загружено закупок: {count}. Графики платежей заменены по файлу. Повторите экспорт сценариев в MS SQL.')
+        messages.success(request, f'Загружено закупок: {count}. Графики платежей заменены по файлу. Подготовьте изменённые данные на странице расчёта.')
         if invalid:
             messages.warning(request, f'Не пересчитаны товары с некорректными исходными данными: {invalid}.')
     except ValidationError as error:
