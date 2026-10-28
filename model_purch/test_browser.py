@@ -62,8 +62,11 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
     def test_goods_directory_refresh_button_updates_metadata_and_guards_unsaved_edits(self):
         from unittest.mock import Mock
         from playwright.sync_api import expect
+        from .models import ScenarioPlanSales
+        self.db(lambda: ScenarioPlanSales.objects.create(scenario_model=self.source,name='New goods plan',flag_order_in_purch=True))
         connection, cursor = Mock(), Mock()
-        cursor.fetchall.return_value = [('group', 'New sales', 'New goods', 'New brand', 'PG1')]
+        cursor.fetchall.side_effect = [[('group', 'New sales', 'New goods', 'New brand', 'PG1')],
+            [('New group', 'New sales', 'New goods', 'New brand', 'PG2', 'Supplier', 1.5)]]
         with patch('model_purch.services.goods_directory.connect_database', return_value=(connection, cursor)):
             self.page.goto(self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}')
             self.page.screenshot(path='/tmp/goods-directory-toolbar.png', full_page=True)
@@ -78,6 +81,9 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
             with self.page.expect_navigation():
                 button.click()
             expect(self.page.locator('.alert-success')).to_contain_text('Изменено: 1')
+            expect(self.page.locator('.alert-success')).to_contain_text('Добавлено: 1')
+            expect(self.page.locator('.alert-info')).to_contain_text('EXW = 0')
+            expect(self.page.locator('.pricing-row')).to_have_count(2)
             row = self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
             self.assertEqual(row.locator('[name="planning_sales"]').input_value(), 'New sales')
             self.assertEqual(row.locator('[name="group_goods"]').input_value(), 'New goods')

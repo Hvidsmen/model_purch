@@ -5,8 +5,8 @@ from django.test import Client, TestCase
 from django.urls import reverse
 
 from base.testing import authorize_test_case
-from .models import Freight, GoodsGroup, KindPurch, PGGoods, ScenarioModel
-from .services.goods_directory import REBUILD_SQL, SQL, refresh_goods_directory
+from .models import Freight, GoodsGroup, KindPurch, PGGoods, ScenarioModel, ScenarioPlanSales
+from .services.goods_directory import REBUILD_SQL, SQL, NEW_GOODS_SQL, refresh_goods_directory
 
 
 class GoodsDirectoryTests(TestCase):
@@ -31,7 +31,7 @@ class GoodsDirectoryTests(TestCase):
         other_good.scenario_plan = self.other
         other_good.save()
         before = PGGoods.objects.values().get(pk=self.good.pk)
-        self.assertEqual(self.refresh(), {'updated': 1, 'unchanged': 0, 'missing': 0})
+        self.assertEqual(self.refresh(), {'added': 0, 'updated': 1, 'unchanged': 0, 'missing': 0})
         after = PGGoods.objects.values().get(pk=self.good.pk)
         self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand'})
         self.assertEqual((after['planning_sales'], after['group_goods'], after['brand'], after['purch']),
@@ -42,7 +42,7 @@ class GoodsDirectoryTests(TestCase):
         self.assertEqual(PGGoods.objects.count(), 2)
         self.connection.close.assert_called_once()
         self.connector.assert_called_once_with('vm-dwh', 'ModelPurch')
-        self.assertEqual(self.refresh(), {'updated': 0, 'unchanged': 1, 'missing': 0})
+        self.assertEqual(self.refresh(), {'added': 0, 'updated': 0, 'unchanged': 1, 'missing': 0})
 
     def test_source_rebuild_precedes_read_and_commits_transaction(self):
         events = []
@@ -77,7 +77,7 @@ class GoodsDirectoryTests(TestCase):
     def test_unmatched_goods_preserved_new_source_goods_not_created(self):
         self.cursor.fetchall.return_value = [('Missing', 'Sales', 'Goods', 'Brand', 'PG2')]
         before = PGGoods.objects.values().get(pk=self.good.pk)
-        self.assertEqual(self.refresh(), {'updated': 0, 'unchanged': 0, 'missing': 1})
+        self.assertEqual(self.refresh(), {'added': 0, 'updated': 0, 'unchanged': 0, 'missing': 1})
         self.assertEqual(PGGoods.objects.values().get(pk=self.good.pk), before)
         self.assertEqual(PGGoods.objects.count(), 1)
 
@@ -148,7 +148,7 @@ class GoodsDirectoryTests(TestCase):
         self.assertFalse(GoodsGroup.objects.filter(name='New goods').exists())
 
     def test_empty_scenario_skips_connection(self):
-        self.assertEqual(refresh_goods_directory(self.other, connector=self.connector), {'updated': 0, 'unchanged': 0, 'missing': 0})
+        self.assertEqual(refresh_goods_directory(self.other, connector=self.connector), {'added': 0, 'updated': 0, 'unchanged': 0, 'missing': 0})
         self.connector.assert_not_called()
 
     def test_post_action_shows_counts_and_toolbar_button(self):
@@ -175,3 +175,89 @@ class GoodsDirectoryTests(TestCase):
                 response = self.client.post(self.url, follow=True)
             self.assertContains(response, 'Изменения не сохранены')
             self.assertNotContains(response, 'SECRET')
+
+    def attach_plan(self, scenario=None):
+        return ScenarioPlanSales.objects.create(scenario_model=scenario or self.scenario, name="Plan 'quoted'", flag_order_in_purch=True)
+
+    def test_new_planned_goods_added_with_group_defaults_without_rewriting_existing_inputs(self):
+        plan = self.attach_plan()
+        ScenarioModel.objects.filter(pk=self.scenario.pk).update(overwrite_existing=True)
+        GoodsGroup.objects.create(name='New goods', duty_rate=.1, container_volume=54)
+        self.cursor.fetchall.side_effect = [
+            [('Group', 'New sales', 'New goods', 'New brand', 'PG1')],
+            [(' New group ', 'Sales 2', 'New goods', 'Brand 2', 'PG2', 'Supplier 2', 1.25),
+             ('NEW GROUP', 'Sales 2', 'New goods', 'Brand 2', 'PG2', 'Supplier 2', 1.25)]]
+        before = PGGoods.objects.values().get(pk=self.good.pk)
+        self.scenario.refresh_from_db()
+        counts = self.refresh()
+        self.assertEqual(counts, {'added': 1, 'updated': 1, 'unchanged': 0, 'missing': 0})
+        new = PGGoods.objects.get(scenario_plan=self.scenario, planning_group__iexact='New group')
+        self.assertEqual((new.exw_usd, new.volume, new.purch, new.duty_rate, new.container_volume), (0, 1.25, 'Supplier 2', .1, 54))
+        self.assertEqual(new.kind_purch.name, 'Закупается')
+        after = PGGoods.objects.values().get(pk=self.good.pk)
+        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales','group_goods','brand'})
+        query = self.cursor.execute.call_args_list[-1].args
+        self.assertEqual(query[1:], (self.scenario.date_start_plan, self.scenario.date_end_plan, plan.name))
+        self.assertNotIn(plan.name, query[0])
+        self.assertIn('p.Сценарий IN (?)', query[0])
+        self.assertFalse(PGGoods.objects.filter(scenario_plan=self.other).exists())
+        self.cursor.fetchall.side_effect = [
+            [('Group', 'New sales', 'New goods', 'New brand', 'PG1'), ('New group', 'Sales 2', 'New goods', 'Brand 2', 'PG2')],
+            [('New group', 'Sales 2', 'New goods', 'Brand 2', 'PG2', 'Supplier 2', 1.25)]]
+        self.assertEqual(self.refresh(), {'added': 0, 'updated': 0, 'unchanged': 2, 'missing': 0})
+        self.assertEqual(PGGoods.objects.filter(scenario_plan=self.scenario).count(), 2)
+
+    def test_empty_scenario_can_be_populated_from_attached_plan(self):
+        self.attach_plan(self.other)
+        self.cursor.fetchall.side_effect = [[], [('New', None, None, None, None, None, None)]]
+        counts = refresh_goods_directory(self.other, connector=self.connector)
+        self.assertEqual(counts['added'], 1)
+        new = PGGoods.objects.get(scenario_plan=self.other)
+        self.assertEqual((new.planning_group, new.exw_usd, new.volume, new.purch), ('New', 0, 0, None))
+        self.assertEqual((new.planning_sales, new.group_goods, new.brand), ('', '', None))
+        self.assertIn('LEFT JOIN ModelPurch.dbo.PlanningGroupOZP', NEW_GOODS_SQL)
+
+    def test_invalid_new_goods_roll_back_all_local_changes_and_source_transaction(self):
+        self.attach_plan()
+        for volume in (-1, float('nan'), float('inf'), 'bad'):
+            with self.subTest(volume=volume):
+                self.cursor.fetchall.side_effect = [[('Group', 'Changed', 'Goods', 'Brand', 'PG1')],
+                    [('New', 'Sales', 'Goods', 'Brand', 'PG2', 'Supplier', volume)]]
+                with self.assertRaises(ValidationError): self.refresh()
+                self.good.refresh_from_db()
+                self.assertEqual(self.good.planning_sales, 'Sales')
+                self.assertEqual(PGGoods.objects.filter(scenario_plan=self.scenario).count(), 1)
+        self.connection.commit.assert_not_called()
+
+    def test_failure_during_creation_rolls_back_metadata_and_group_creation(self):
+        self.attach_plan()
+        self.cursor.fetchall.side_effect = [[('Group', 'Changed', 'New goods', 'Brand', 'PG1')],
+                    [('New', 'Sales', 'New goods', 'Brand', 'PG2', 'Supplier', 1)]]
+        with patch('model_purch.services.goods_directory.PGGoods.objects.get_or_create', side_effect=ValidationError('Creation failed')):
+            with self.assertRaises(ValidationError): self.refresh()
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.planning_sales, 'Sales')
+        self.assertFalse(GoodsGroup.objects.filter(name='New goods').exists())
+        self.assertEqual(PGGoods.objects.count(), 1)
+
+    def test_changed_plan_configuration_during_fetch_cancels_local_update(self):
+        plan = self.attach_plan()
+        def fetch():
+            if self.cursor.fetchall.call_count == 1:
+                return [('Group', 'Changed', 'Goods', 'Brand', 'PG1')]
+            ScenarioPlanSales.objects.filter(pk=plan.pk).update(name='Changed plan')
+            return [('New', 'Sales', 'Goods', 'Brand', 'PG2', 'Supplier', 1)]
+        self.cursor.fetchall.side_effect = fetch
+        with self.assertRaisesMessage(ValidationError, 'изменились во время загрузки'):
+            self.refresh()
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.planning_sales, 'Sales')
+        self.assertEqual(PGGoods.objects.count(), 1)
+
+    def test_invalid_creation_defaults_for_existing_goods_do_not_overwrite_or_block_refresh(self):
+        self.attach_plan()
+        self.cursor.fetchall.side_effect = [[('Group', 'Sales', 'Goods', 'Brand', 'PG1')],
+            [('Group', 'Sales', 'Goods', 'Brand', 'PG1', 'Other supplier', -10)]]
+        before = PGGoods.objects.values().get(pk=self.good.pk)
+        self.assertEqual(self.refresh(), {'added': 0, 'updated': 0, 'unchanged': 1, 'missing': 0})
+        self.assertEqual(PGGoods.objects.values().get(pk=self.good.pk), before)
