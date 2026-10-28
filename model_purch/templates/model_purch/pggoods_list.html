@@ -84,6 +84,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
 {% endblock %}
 
 {% block content %}
+{% if show_scenario_setup and not portal_purchases_readonly %}{% include 'model_purch/_scenario_setup.html' %}{% endif %}
 {% if current_scenario %}{% include 'model_purch/_freight_settings.html' %}{% endif %}
 {% include "model_purch/_pricing_options.html" %}
 {% if incomplete_goods %}
@@ -111,6 +112,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
         </div>
 
         <div class="page-actions d-flex flex-wrap justify-content-end gap-2 align-items-center">
+            {% if current_scenario and not portal_purchases_readonly and not show_scenario_setup %}<a class="btn btn-outline-secondary" href="?scenario={{ current_scenario.pk }}&amp;setup=1#scenario-setup">Рекомендации по настройке</a>{% endif %}
             {% if current_scenario and not portal_purchases_readonly %}
             <form method="post" action="{% url 'refresh_goods_directory' current_scenario.pk %}" id="refreshGoodsDirectoryForm" class="m-0">
                 {% csrf_token %}
@@ -319,7 +321,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
 <div data-purchases-write class="hint-text mb-2"><i aria-hidden="true" class="bi bi-info-circle"></i> <span class="editable-number-label">Зелёные заголовки — числа, которые можно менять.</span> Изменяйте значения прямо в ячейках. Жёлтая подсветка — есть несохранённые изменения. <kbd>Esc</kbd> — отмена.</div>
 
 <div class="card shadow-sm">
-    <div class="goods-guide"><span><strong>Ввод:</strong> зелёные поля</span><span><strong>Расчёт:</strong> значения без рамки</span><span><strong>Пошлина:</strong> введите 10 для 10%</span><span><strong>Стоимость:</strong> USD за единицу товара</span></div>
+    <div class="goods-guide" id="goods-editor-table"><span><strong>Ввод:</strong> зелёные поля</span><span><strong>Расчёт:</strong> значения без рамки</span><span><strong>Пошлина:</strong> введите 10 для 10%</span><span><strong>Стоимость:</strong> USD за единицу товара</span></div>
     <div id="goods-save-status" role="status" aria-live="polite" class="small text-muted mb-2"></div>
     {% if not portal_purchases_readonly %}<button type="button" id="discard-goods-changes" class="btn btn-sm btn-outline-secondary mb-2" hidden>Отменить изменения</button>{% endif %}
     <div class="table-responsive">
@@ -460,12 +462,14 @@ document.addEventListener('DOMContentLoaded', function () {
     const changes = {};
     const refreshDirectoryBtn = document.getElementById('refreshGoodsDirectoryBtn');
     const refreshDirectoryTitle = refreshDirectoryBtn?.title;
+    const setupRefreshBtn = document.querySelector('[data-setup-refresh]');
     document.getElementById('refreshGoodsDirectoryForm')?.addEventListener('submit', (event) => {
         if (Object.keys(changes).length) {
             event.preventDefault();
             return;
         }
         refreshDirectoryBtn.disabled = true;
+        if (setupRefreshBtn) { setupRefreshBtn.disabled = true; setupRefreshBtn.textContent = 'Обновление справочника…'; }
         refreshDirectoryBtn.textContent = 'Обновление справочника…';
     });
 
@@ -476,6 +480,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     function updateSaveButton() {
         const count = Object.keys(changes).length;
+        if (setupRefreshBtn) setupRefreshBtn.disabled = count > 0;
         document.getElementById('goods-save-status').textContent = count ? `Изменено товаров: ${count}. Расчёт предварительный — сохраните изменения.` : 'Все изменения сохранены.';
         document.getElementById('discard-goods-changes').hidden = !count;
         if (refreshDirectoryBtn) {

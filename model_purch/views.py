@@ -687,10 +687,14 @@ def scenario_create(request):
                 sync_purch_data()
                 sync_pggoods_data_for_scenario(scenario)
                 messages.success(request, f'Сценарий "{scenario.name}" создан, данные синхронизированы!')
-            except Exception as e:
-                logger.error(f"Ошибка синхронизации: {e}")
-                messages.warning(request, f'Сценарий создан, но ошибка загрузки данных MS SQL: {e}')
-            return redirect('scenario_list')
+            except Exception:
+                logger.exception('Scenario initial synchronization failed for %s', scenario.pk)
+                messages.warning(request, 'Сценарий создан, но загрузка данных из MS SQL не завершилась. Проверьте список товаров и повторите обновление справочника; подробности записаны в журнал сервера.')
+            from .services.scenario_setup import begin_setup
+            from .services.scenarios import remember_scenario
+            begin_setup(request, scenario)
+            remember_scenario(request, scenario)
+            return redirect(reverse('pggoods_list') + f'?scenario={scenario.pk}&setup=1#scenario-setup')
     else:
         scenario_form = ScenarioModelForm()
         plan_formset = ScenarioPlanSalesFormSet(prefix='plans')
@@ -916,7 +920,9 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     from .forms import FreightForm
     if freight_form is None:
         freight_form = FreightForm(instance=Freight.objects.filter(scenario=current_scenario).first() if current_scenario else None)
+    from .services.scenario_setup import show_setup
     return render(request, 'model_purch/pggoods_list.html', {
+        'show_scenario_setup': show_setup(request, current_scenario),
         **pricing_context(current_scenario),
         'incomplete_goods': incomplete,
         'plan_threshold': plan_threshold,

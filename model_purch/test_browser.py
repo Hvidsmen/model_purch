@@ -253,6 +253,45 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertTrue(row.locator('[name=brand]').is_visible())
         self.assertEqual(self.errors, [])
 
+    def test_new_scenario_opens_goods_with_actionable_setup_recommendations(self):
+        from playwright.sync_api import expect
+        with patch('model_purch.views.sync_purch_data'), patch('model_purch.views.sync_pggoods_data_for_scenario'):
+            self.page.goto(self.live_server_url + reverse('scenario_create'))
+            self.page.locator('#id_name').fill('Guided scenario')
+            self.page.locator('#id_date_start_plan').fill('2027-01-01')
+            self.page.locator('#id_date_end_plan').fill('2027-11-30')
+            self.page.locator('[name="plans-0-name"]').fill('Plan 2027')
+            with self.page.expect_navigation():
+                self.page.locator('button[type=submit]').filter(has_text='Сохранить').click()
+        target = self.db(lambda: ScenarioModel.objects.get(name='Guided scenario').pk)
+        expect(self.page).to_have_url(self.live_server_url + reverse('pggoods_list') + f'?scenario={target}&setup=1#scenario-setup')
+        panel = self.page.locator('#scenario-setup')
+        expect(panel).to_be_visible()
+        expect(panel.locator('article')).to_have_count(3)
+        self.page.locator('#freight-settings').evaluate('(panel) => panel.open = false')
+        panel.get_by_role('link',name='Скопировать из сценария',exact=True).click()
+        expect(self.page.locator('#freight-settings')).to_have_attribute('open','')
+        expect(self.page.locator('#freight-source')).to_be_focused()
+        panel.get_by_role('button',name='Скопировать товары',exact=True).click()
+        expect(self.page.locator('#copyPggoodsModal')).to_be_visible()
+        self.page.locator('#copyPggoodsModal [name=source_scenario_id]').select_option(str(self.source.pk))
+        with self.page.expect_navigation():
+            self.page.locator('#copyPggoodsModal button[type=submit]').click()
+        expect(panel).to_be_visible()
+        expect(self.page.locator('.pricing-row')).to_have_count(1)
+        self.page.screenshot(path='/tmp/scenario-setup-desktop.png',full_page=True)
+        self.page.set_viewport_size({'width':390,'height':844})
+        self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),390)
+        panel.get_by_role('link',name='Обновить план, факт и сток').click()
+        expect(self.page.locator('body')).to_contain_text('Plan 2027')
+        self.page.go_back()
+        expect(panel).to_be_visible()
+        with self.page.expect_navigation():
+            panel.get_by_role('button',name='Скрыть рекомендации').click()
+        expect(panel).to_have_count(0)
+        expect(self.page.get_by_role('link',name='Рекомендации по настройке')).to_be_visible()
+        self.assertEqual(self.errors,[])
+
     def test_goods_source_check_explains_incoming_only_presence(self):
         from django.utils import timezone
         from playwright.sync_api import expect
