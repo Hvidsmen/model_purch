@@ -10,7 +10,7 @@
  INNER JOIN DataWH.erp.[Справочники.СтруктураПредприятия] sub ON p.ПодразделениеСсылка = sub.Ссылка
  INNER JOIN work_days d ON YEAR(CAST(p.Период AS date)) = d.CalendarYear
   AND MONTH(CAST(p.Период AS date)) = d.MonthNumberOfYear
- WHERE d.FullDateAlternateKey BETWEEN ? AND ? AND p.Сценарий IN (/*SCENARIOS*/)
+ WHERE d.FullDateAlternateKey BETWEEN CONVERT(date, ?, 23) AND CONVERT(date, ?, 23) AND p.Сценарий IN (/*SCENARIOS*/)
  GROUP BY n.Даичи_ГруппаПланирования
  HAVING SUM(p.Количество * d.Weight * mce.FlagAccountingQtyBA) > 0
 )

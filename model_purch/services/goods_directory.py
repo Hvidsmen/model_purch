@@ -55,8 +55,10 @@ def refresh_goods_directory(scenario, connector=None):
                 source[key] = values
         new_goods, new_ranks = {}, {}
         if sources:
+            # Legacy Windows {SQL Server} ODBC cannot bind Python date as SQL_TYPE_DATE.
+            # Bind ISO text and convert in SQL; keep every value parameterized.
             cursor.execute(NEW_GOODS_SQL.replace('/*SCENARIOS*/', ','.join('?' for _ in sources)),
-                           scenario.date_start_plan, scenario.date_end_plan, *sources)
+                           scenario.date_start_plan.isoformat(), scenario.date_end_plan.isoformat(), *sources)
             for group, sales, goods_group, brand, planning_key, supplier, volume in cursor.fetchall():
                 group = str(group or '').strip()
                 if not group or len(group) > 255:

@@ -197,7 +197,7 @@ class GoodsDirectoryTests(TestCase):
         after = PGGoods.objects.values().get(pk=self.good.pk)
         self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales','group_goods','brand'})
         query = self.cursor.execute.call_args_list[-1].args
-        self.assertEqual(query[1:], (self.scenario.date_start_plan, self.scenario.date_end_plan, plan.name))
+        self.assertEqual(query[1:], (self.scenario.date_start_plan.isoformat(), self.scenario.date_end_plan.isoformat(), plan.name))
         self.assertNotIn(plan.name, query[0])
         self.assertIn('p.Сценарий IN (?)', query[0])
         self.assertFalse(PGGoods.objects.filter(scenario_plan=self.other).exists())
@@ -261,3 +261,20 @@ class GoodsDirectoryTests(TestCase):
         before = PGGoods.objects.values().get(pk=self.good.pk)
         self.assertEqual(self.refresh(), {'added': 0, 'updated': 0, 'unchanged': 1, 'missing': 0})
         self.assertEqual(PGGoods.objects.values().get(pk=self.good.pk), before)
+
+    def test_legacy_sql_server_driver_receives_text_dates_not_python_dates(self):
+        from datetime import date, datetime
+        self.attach_plan()
+        def legacy_execute(sql, *parameters):
+            if any(isinstance(value, (date, datetime)) for value in parameters):
+                raise RuntimeError('HYC00 SQLBindParameter: SQL_TYPE_DATE unsupported')
+            if 'plan_groups' in sql:
+                self.assertEqual(parameters[:2], ('2026-01-01', '2026-12-31'))
+                self.assertIn('CONVERT(date, ?, 23)', sql)
+                self.assertEqual(sql.count('?'), len(parameters))
+        self.cursor.execute.side_effect = legacy_execute
+        self.cursor.fetchall.side_effect = [[('Group', 'Sales', 'Goods', 'Brand', 'PG1')],
+            [('New', 'Sales', 'Goods', 'Brand', 'PG2', 'Supplier', 1)]]
+        self.assertEqual(self.refresh()['added'], 1)
+        self.connection.commit.assert_called_once()
+        self.connection.rollback.assert_not_called()

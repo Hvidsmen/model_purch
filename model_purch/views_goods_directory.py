@@ -31,5 +31,5 @@ def refresh_directory(request, scenario_id):
         messages.error(request, '; '.join(error.messages))
     except Exception:
         logger.exception('Goods directory refresh failed for scenario %s', scenario.pk)
-        messages.error(request, 'Не удалось обновить справочник товаров. Проверьте подключение MS_SQL_CONN_STR и журнал сервера. Изменения не сохранены.')
+        messages.error(request, 'Не удалось обновить справочник товаров. Подробности ошибки записаны в журнал сервера. Изменения не сохранены.')
     return redirect(reverse('pggoods_list') + f'?scenario={scenario.pk}')
