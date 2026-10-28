@@ -250,20 +250,23 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         field.fill('20')
         field.press('Escape')
         self.assertEqual(field.input_value(), '10')
-        self.page.locator('#goods-all-fields').click()
         self.assertTrue(row.locator('[name=brand]').is_visible())
         self.assertEqual(self.errors, [])
 
     def test_product_filters_order_search_and_two_decimal_price_display(self):
         from playwright.sync_api import expect
-        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=1234.567, cif_usd=1234.567))
+        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=1234.567, cif_usd=1234.567, stock_ddp_usd=987.654))
         self.visit('pggoods_list')
         self.select(self.source)
         names = self.page.locator('.filters-card [name]').evaluate_all('(fields) => fields.map(field => field.name).filter(name => name !== "scenario")')
         self.assertEqual(names, ['search', 'planning_group', 'planning_sales', 'group_goods', 'brand', 'purch', 'kind_purch', 'plan_warning', 'ddp_threshold'])
         row = self.page.locator(f'tr[data-row-id="{self.good.pk}"]')
         self.assertEqual(row.locator('[name="exw_usd"]').input_value(), '1234.57')
-        self.page.locator('#toggle-ddp-details').click()
+        for name in ('planning_sales', 'brand', 'kind_purch', 'plan_volume', 'fact_volume', 'plan_ddp_usd', 'fact_ddp_usd', 'stock_ddp_usd', 'kddp', 'freight_usd', 'cif_usd', 'customs_payment_usd', 'warehouse_delivery_usd', 'foreign_delivery_usd', 'nr_customs_vat_usd'):
+            expect(row.locator(f'[name="{name}"]')).to_be_visible()
+        expect(self.page.locator('#goods-all-fields, #toggle-ddp-details')).to_have_count(0)
+        expect(row.locator('[name=stock_ddp_usd]')).to_have_value('987.65')
+        self.assertTrue(row.locator('[name=stock_ddp_usd]').evaluate('(input) => input.readOnly'))
         self.assertEqual(row.locator('[name="cif_usd"]').input_value(), '1253.56')
         self.assertEqual(row.locator('select[name="planning_sales"]').count(), 1)
         self.assertEqual(row.locator('select[name="group_goods"]').count(), 1)
