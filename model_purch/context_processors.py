@@ -24,7 +24,7 @@ def workspace(request):
             export_state = 'current' if current else 'stale'
             export_label = 'Экспорт актуален' if current else 'Изменён после экспорта'
     route = request.resolver_match.url_name if request.resolver_match else ''
-    target = 'purch_list' if route in {'purch_create', 'purch_edit', 'purch_delete'} else 'pggoods_list' if route in {'edit_pggoods', 'delete_pggoods'} else None
+    target = 'purch_list' if route in {'purch_create', 'purch_edit', 'purch_delete'} else 'pggoods_list' if route in {'edit_pggoods', 'delete_pggoods', 'goods_presence'} else None
     return {'workspace_export_state': export_state, 'workspace_export_label': export_label,
             'workspace_selection_url': reverse(target) if target else request.path,
             'active_database': str(settings.DATABASES['default']['NAME']),

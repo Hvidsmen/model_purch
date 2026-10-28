@@ -1,0 +1,25 @@
+{% extends 'model_purch/base.html' %}{% load custom_filters tz %}
+{% block title %}Проверка источников товара{% endblock %}
+{% block content %}
+<style>.goods-presence-table{max-height:none!important}.goods-presence-table table{table-layout:fixed;min-width:900px}.goods-presence-table th:first-child{width:220px}.goods-presence-table th:nth-child(2){width:200px}.goods-presence-table thead th{white-space:normal!important}.goods-presence-table td.text-end{white-space:nowrap}</style>
+<section class="card card-body mb-3">
+<a href="{% url 'pggoods_list' %}?scenario={{ good.scenario_plan_id }}">← Товары сценария</a>
+<h1 class="h4 mt-3">Почему товар присутствует в сценарии</h1>
+<p class="mb-1"><strong>{{ good.planning_group }}</strong> · №{{ good.pk }}</p>
+<p class="text-muted">{{ good.scenario_plan.name }} · {{ good.scenario_plan.date_start_plan|date:'d.m.Y' }} — {{ good.scenario_plan.date_end_plan|date:'d.m.Y' }}</p>
+<form method="get"><input type="hidden" name="check" value="1"><button type="submit" class="btn btn-primary">{% if result %}Проверить повторно{% else %}Проверить источники{% endif %}</button></form>
+<p class="small text-muted mt-2 mb-0">Проверка только читает источники. Товары, цены и параметры сценария не меняются.</p>
+</section>
+{% if error %}<div class="alert alert-danger" role="alert">{{ error }}</div>{% endif %}
+{% if result %}
+<div class="alert {% if result.supported %}alert-success{% else %}alert-warning{% endif %}" role="status">
+<strong>{% if result.supported %}Есть данные в источниках за период сценария{% else %}Текущие источники не подтверждают наличие товара{% endif %}</strong>
+<p class="mb-0 mt-1">{% if result.supported %}Ниже отмечено, в каких источниках выполнены условия включения. Это может объяснять присутствие строки.{% else %}Строка могла остаться от предыдущей загрузки, копирования или ручного импорта. Проверка сама её не удаляет.{% endif %}</p>
+</div>
+<p class="small text-muted">Проверено {% timezone 'Europe/Moscow' %}{{ result.checked_at|date:'d.m.Y H:i:s' }}{% endtimezone %} МСК. Планы: {% for name in result.plans %}{{ name }}{% if not forloop.last %}; {% endif %}{% empty %}не привязаны — плановые источники не подтверждают наличие; сток и поступления проверены{% endfor %}.</p>
+<div class="table-responsive goods-presence-table border rounded mb-3"><table class="table table-hover align-middle mb-0"><thead><tr><th>Источник</th><th>Результат</th><th class="text-end">Количество без флага</th><th class="text-end">Количество × флаг</th><th class="text-end">Сумма DDP, USD</th><th class="text-end">DDP / учётную единицу, USD</th></tr></thead><tbody>
+{% for row in result.rows %}<tr><th scope="row" style="min-width:210px;font-weight:500">{{ row.label }}<small class="d-block text-muted mt-1">{{ row.note }}</small></th><td>{% if row.qualifies %}<strong class="text-success">Есть основание для включения</strong>{% elif row.found %}Строки есть, положительное количество не подтверждено{% else %}Не найдено{% endif %}</td><td class="text-end">{% if row.quantity != None %}{{ row.quantity|format_money:2 }}{% else %}—{% endif %}</td><td class="text-end">{% if row.accounting_quantity != None %}{{ row.accounting_quantity|format_money:2 }}{% else %}—{% endif %}</td><td class="text-end">{% if row.amount != None %}{{ row.amount|format_money:2 }}{% else %}—{% endif %}</td><td class="text-end">{% if row.ddp != None %}{{ row.ddp|format_money:2 }}{% else %}—{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+{% endif %}
+<details class="card card-body"><summary>Как понимать результат</summary><p class="mt-3">Это проверка текущих источников, а не история появления строки. Источник и время первоначального добавления товара раньше не сохранялись.</p><p>Количество учётных единиц считается как сумма количества, умноженного на <code>FlagAccountingQtyBA</code>. В сумму стоимости стока входят все блоки; она делится на учётное количество. При неположительном учётном количестве DDP единицы не определяется.</p><p>Первоначальная загрузка могла включить товар из наличия, товара в пути или ожидаемых поступлений. Новая кнопка справочника добавляет отсутствующие товары из прикреплённых планов. Строки из прежних загрузок автоматически не удаляются.</p><p class="mb-0">Последняя загрузка параметров в сценарий: {% if good.scenario_plan.plan_parameters_loaded_at %}{% timezone 'Europe/Moscow' %}{{ good.scenario_plan.plan_parameters_loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК{% else %}не зарегистрирована{% endif %}. Проверка источников не обновляет эти сохранённые параметры.</p></details>
+{% endblock %}

@@ -253,6 +253,27 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.assertTrue(row.locator('[name=brand]').is_visible())
         self.assertEqual(self.errors, [])
 
+    def test_goods_source_check_explains_incoming_only_presence(self):
+        from django.utils import timezone
+        from playwright.sync_api import expect
+        from .services.goods_presence import SOURCES
+        rows = [{'key':key, 'label':value[0], 'note':value[1], 'found':key=='income', 'qualifies':key=='income',
+                 'quantity':10 if key=='income' else None,'accounting_quantity':10 if key=='income' else None,
+                 'amount':None,'ddp':None} for key,value in SOURCES.items()]
+        with patch('model_purch.views_goods_presence.check_goods_presence',return_value={'rows':rows,'supported':True,'plans':['Plan'],'checked_at':timezone.now()}) as check:
+            self.page.goto(self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}')
+            with self.page.expect_navigation():
+                self.page.locator(f'tr[data-row-id="{self.good.pk}"]').get_by_role('link',name='Проверить источники').click()
+            expect(self.page.get_by_role('heading',name='Почему товар присутствует в сценарии')).to_be_visible()
+            expect(self.page.get_by_role('status')).to_contain_text('Есть данные в источниках')
+            expect(self.page.locator('tbody tr').last).to_contain_text('Есть основание для включения')
+            self.assertEqual(check.call_count,1)
+            self.page.screenshot(path='/tmp/goods-presence-desktop.png',full_page=True)
+            self.page.set_viewport_size({'width':390,'height':844})
+            self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'),390)
+            self.page.screenshot(path='/tmp/goods-presence-mobile.png',full_page=True)
+            self.assertEqual(self.errors,[])
+
     def test_product_filters_order_search_and_two_decimal_price_display(self):
         from playwright.sync_api import expect
         self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(exw_usd=1234.567, cif_usd=1234.567, stock_ddp_usd=987.654))

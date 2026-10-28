@@ -2,9 +2,10 @@ from django.urls import path
 from . import views, views_freight
 from . import  views_graph
 from . import views_plan_parameters
-from . import views_goods_directory
+from . import views_goods_directory, views_goods_presence
 from . import views_purchase_excel
 urlpatterns = [
+    path('pggoods/<int:pk>/sources/', views_goods_presence.goods_presence, name='goods_presence'),
     path('pggoods/<int:scenario_id>/refresh-directory/', views_goods_directory.refresh_directory, name='refresh_goods_directory'),
     path('purch/export/', views_purchase_excel.export_purchases, name='export_purchases'),
     path('purch/import/', views_purchase_excel.import_purchases, name='import_purchases'),
