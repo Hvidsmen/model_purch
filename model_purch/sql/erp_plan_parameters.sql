@@ -1,5 +1,5 @@
 ;WITH parameters AS (
- SELECT CAST(? AS date) AS DateFrom, CAST(? AS date) AS DateTo
+ SELECT CONVERT(date, ?, 23) AS DateFrom, CONVERT(date, ?, 23) AS DateTo
 ), work_days AS (
  SELECT FullDateAlternateKey, CalendarYear, MonthNumberOfYear,
   1.0 / COUNT(*) OVER (PARTITION BY CalendarYear, MonthNumberOfYear) AS P_
@@ -43,8 +43,7 @@
  CROSS APPLY DataWH.erp.t_Даичи_ПервичнаяСебестоимостьOnDate(dates.DateFrom) s
  INNER JOIN DataWH.erp.[Справочники.Номенклатура] n ON s.Номенклатура = n.Наименование
  INNER JOIN DataWH.dbo.ModelCodeERP mce ON n.Наименование = mce.ModelCode
- -- Stock price, quantity and volume use only outdoor units.
- WHERE mce.FlagAccountingQtyBA = 1
+ -- Include the full stock cost/volume; the flag applies only to unit quantity.
  GROUP BY n.Даичи_ГруппаПланирования
  HAVING SUM(s.Количество * mce.FlagAccountingQtyBA) > 0
 )

@@ -25,7 +25,7 @@ def update_parameters(scenario, sources=None, connector=None):
     connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
     try:
         connection.timeout = 120
-        cursor.execute(SQL.replace('/*SCENARIOS*/', ','.join('?' for _ in sources)), scenario.date_start_plan, scenario.date_end_plan, *sources)
+        cursor.execute(SQL.replace('/*SCENARIOS*/', ','.join('?' for _ in sources)), str(scenario.date_start_plan), str(scenario.date_end_plan), *sources)
         totals = {}
         fields = ['plan_ddp_usd', 'plan_volume', 'plan_quantity',
                   'stock_ddp_usd', 'stock_volume', 'stock_quantity',
