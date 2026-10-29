@@ -483,3 +483,22 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
             self.page.locator('#saveAllBtn').click()
         self.assertAlmostEqual(self.db(lambda: PGGoods.objects.get(pk=self.good.pk).ddp_usd), 174.7)
         self.assertEqual(self.errors, [])
+
+    def test_missing_purchase_selection_can_be_saved_and_persists(self):
+        from playwright.sync_api import expect
+        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(purch=''))
+        url = self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}&missing_purchase=1#missing-purchase'
+        self.page.goto(url)
+        field = self.page.locator('.pricing-row select[name=purch]')
+        expect(field).to_be_focused()
+        field.select_option('Supplier')
+        button = self.page.locator('#saveAllBtn')
+        expect(button).to_be_enabled()
+        expect(button).to_contain_text('(1)')
+        with self.page.expect_response(lambda response: response.request.method == 'POST' and response.request.resource_type == 'fetch'):
+            button.click()
+        expect(button).to_be_disabled()
+        self.assertEqual(self.db(lambda: PGGoods.objects.get(pk=self.good.pk).purch), 'Supplier')
+        self.page.reload()
+        expect(self.page.locator('.pricing-row')).to_have_count(0)
+        self.assertEqual(self.errors, [])

@@ -495,9 +495,7 @@ document.addEventListener('DOMContentLoaded', function () {
             saveAllText.textContent = `Сохранить изменения (${count})`;
             saveAllBtn.classList.add('has-changes');
         } else {
-            const suspect = updates.map(update => document.querySelector(`tr[data-row-id="${update.id}"]`)).filter(row => row?.dataset.dutyWarning);
-        if (suspect.length && !confirm(`Проверьте пошлину у ${suspect.length} товаров:\n` + suspect.slice(0, 10).map(row => row.dataset.dutyWarning).join('\n') + '\nСохранить указанные ставки?')) return;
-        saveAllBtn.disabled = true;
+            saveAllBtn.disabled = true;
             saveAllText.textContent = 'Сохранить изменения (0)';
             saveAllBtn.classList.remove('has-changes');
         }
@@ -563,6 +561,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         inputs.forEach(input => {
+            input.addEventListener('change', checkChanges);
             input.addEventListener('input', () => {
                 checkChanges();
                 if (input.name === 'exw_usd' || input.name === 'ddp_usd') recalcKddp();
@@ -589,6 +588,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (invalid) { invalid.reportValidity(); return; }
         const updates = Object.values(changes);
         if (updates.length === 0) return;
+            const suspect = updates.map(update => document.querySelector(`tr[data-row-id="${update.id}"]`)).filter(row => row?.dataset.dutyWarning);
+        if (suspect.length && !confirm(`Проверьте пошлину у ${suspect.length} товаров:\n` + suspect.slice(0, 10).map(row => row.dataset.dutyWarning).join('\n') + '\nСохранить указанные ставки?')) return;
+
 
         saveAllBtn.disabled = true;
         saveAllText.textContent = '⏳ Сохранение...';
