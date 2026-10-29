@@ -33,7 +33,7 @@ def calc_purch(scenario_name=None, scenario_names=None):
             AND i.СценарийМодели = g.scenario_name
 
              WHERE СценарийМодели = ?
-           --  AND g.Kind_purch IN ('Закупается', 'Заказное оборудование')
+             AND g.Kind_purch IN ('Закупается', 'Заказное оборудование')
              --AND PlanningGroupOZP = 'Kent Spl (o/f-0) (Kumo) [MRAC]'
              """
 
