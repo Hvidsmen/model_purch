@@ -896,14 +896,27 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
         request.session['ddp_threshold'] = str(plan_threshold)
     warning_filter = request.GET.get('plan_warning', '')
     warning_counts = dict.fromkeys(['ddp', 'volume', 'fact_ddp', 'fact_volume', 'missing', 'duty_small', 'duty_group', 'any'], 0)
+    from .services.warning_reviews import warning_details
+    from .models import GoodsWarningReview
+    reviews = {}
+    for review in GoodsWarningReview.objects.filter(good__scenario_plan=current_scenario).select_related('reviewed_by'):
+        reviews.setdefault(review.good_id, {})[review.kind] = review
+    review_status = request.GET.get('review_status', '')
     warning_map = {}
+    detail_map = {}
     for good in queryset:
-        checks = plan_warnings(good, plan_threshold) + duty_warnings(good, group_duties)
+        details = warning_details(good, plan_threshold, group_duties, reviews.get(good.pk))
+        detail_map[good.pk] = details
+        checks = [(item['kind'], item['message']) for item in details
+                  if not review_status or (review_status == 'reviewed' and item['reviewed'])
+                  or (review_status == 'pending' and not item['reviewed'])]
         warning_map[good.pk] = checks
         if checks:
             warning_counts['any'] += 1
         for kind, _ in checks:
             warning_counts[kind] += 1
+    if review_status in ('reviewed', 'pending'):
+        queryset = queryset.filter(pk__in=[pk for pk, checks in warning_map.items() if checks])
     if warning_filter in warning_counts:
         queryset = queryset.filter(pk__in=[pk for pk, checks in warning_map.items()
             if checks and (warning_filter == 'any' or any(kind == warning_filter for kind, _ in checks))])
@@ -938,6 +951,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     for good in page_obj:
         good.purchase_missing = bool((good.purch or '').strip()) and planning_group_key(good.purch) not in known_purchases
         good.plan_warnings = warning_map.get(good.pk, [])
+        good.warning_details = detail_map.get(good.pk, [])
 
     # --- Уникальные значения для фильтров (только для текущего сценария!) ---
     planning_sales_list = queryset.exclude(planning_sales__isnull=True).exclude(planning_sales='').values_list(
@@ -970,6 +984,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
         'missing_purchase': missing_purchase,
         'plan_threshold': plan_threshold,
         'warning_filter': warning_filter,
+        'review_status': review_status,
         'warning_counts': warning_counts,
         'freight_form': freight_form,
         'freight_sources': all_scenarios.exclude(pk=current_scenario.pk) if current_scenario else all_scenarios.none(),

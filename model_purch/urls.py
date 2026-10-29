@@ -1,10 +1,12 @@
 from django.urls import path
+from . import views_warning_reviews
 from . import views, views_freight
 from . import  views_graph
 from . import views_plan_parameters
 from . import views_goods_directory, views_goods_presence, views_scenario_setup
 from . import views_purchase_excel
 urlpatterns = [
+    path('pggoods/<int:pk>/review-warning/', views_warning_reviews.review_warning, name='review_goods_warning'),
     path('calculations/prepare-data/', views.prepare_calculation_data, name='prepare_calculation_data'),
     path('scenarios/<int:scenario_id>/dismiss-setup/', views_scenario_setup.dismiss_setup, name='dismiss_scenario_setup'),
     path('pggoods/<int:pk>/sources/', views_goods_presence.goods_presence, name='goods_presence'),

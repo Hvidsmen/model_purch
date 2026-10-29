@@ -502,3 +502,24 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.page.reload()
         expect(self.page.locator('.pricing-row')).to_have_count(0)
         self.assertEqual(self.errors, [])
+
+    def test_warning_review_is_grey_persistent_and_filterable(self):
+        from playwright.sync_api import expect
+        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(plan_ddp_usd=100))
+        url = self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}'
+        self.page.goto(url)
+        warning = self.page.locator('[data-plan-warning=ddp]')
+        expect(warning).to_have_class(__import__('re').compile('.*bg-warning-subtle.*'))
+        with self.page.expect_navigation():
+            warning.get_by_role('button', name='Проверено, всё верно').click()
+        warning = self.page.locator('[data-plan-warning=ddp]')
+        expect(warning).to_have_class(__import__('re').compile('.*bg-light.*'))
+        expect(warning).to_contain_text('✓ Проверено')
+        self.page.goto(url + '&review_status=reviewed&plan_warning=ddp')
+        expect(self.page.locator('.pricing-row')).to_have_count(1)
+        self.db(lambda: PGGoods.objects.filter(pk=self.good.pk).update(plan_ddp_usd=101))
+        self.page.reload()
+        expect(self.page.locator('.pricing-row')).to_have_count(0)
+        self.page.goto(url + '&review_status=pending&plan_warning=ddp')
+        expect(self.page.locator('[data-plan-warning=ddp]')).to_have_class(__import__('re').compile('.*bg-warning-subtle.*'))
+        self.assertEqual(self.errors, [])

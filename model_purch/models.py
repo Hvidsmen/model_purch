@@ -441,3 +441,14 @@ class ScenarioExport(models.Model):
         ordering = ['-exported_at', '-pk']
         verbose_name = 'Экспорт сценария'
         verbose_name_plural = 'История экспорта сценариев'
+
+
+class GoodsWarningReview(models.Model):
+    good = models.ForeignKey(PGGoods, on_delete=models.CASCADE, related_name='warning_reviews')
+    kind = models.CharField(max_length=32)
+    fingerprint = models.CharField(max_length=64)
+    reviewed_at = models.DateTimeField(auto_now=True)
+    reviewed_by = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['good', 'kind'], name='unique_goods_warning_review')]

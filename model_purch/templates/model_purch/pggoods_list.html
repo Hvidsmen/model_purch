@@ -307,6 +307,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
                     <option value="missing" {% if warning_filter == 'missing' %}selected{% endif %}>Нет плановых значений ({{ warning_counts.missing }})</option>
                 </select>
             </div>
+            <div class="col-6 col-lg-2"><label class="form-label small text-muted mb-1">Статус проверки</label><select name="review_status" class="form-select form-select-sm"><option value="">Все статусы</option><option value="pending" {% if review_status == 'pending' %}selected{% endif %}>Требует проверки</option><option value="reviewed" {% if review_status == 'reviewed' %}selected{% endif %}>Проверено</option></select></div>
             <div class="col-4 col-lg-2">
                 <label class="form-label small text-muted mb-1" title="Для DDP и объёма: абсолютная разница / модуль планового значения × 100">Порог отклонения, %</label>
                 <input type="number" name="ddp_threshold" min="0" step="any" value="{{ plan_threshold|unlocalize }}" class="form-control form-control-sm">
@@ -357,7 +358,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
                         <td class="text-muted">{{ item.id }}</td>
                         <td class="product-planning-group"><input {% if portal_purchases_readonly %}disabled{% endif %} type="text" class="inline-input" value="{{ item.planning_group }}" title="{{ item.planning_group }}" readonly>
                         <a class="small d-block mt-1" href="{% url 'goods_presence' item.id %}?check=1">Проверить источники →</a>
-                        {% for kind, warning in item.plan_warnings %}<div class="small mt-1 px-2 py-1 rounded {% if kind == 'missing' %}bg-light text-secondary border{% else %}bg-warning-subtle text-warning-emphasis border border-warning-subtle{% endif %}" data-plan-warning="{{ kind }}">⚠ {{ warning }}</div>{% endfor %}</td>
+                        {% for warning in item.warning_details %}<div class="small mt-1 px-2 py-1 rounded border {% if warning.reviewed %}bg-light text-secondary{% else %}bg-warning-subtle text-warning-emphasis border-warning-subtle{% endif %}" data-plan-warning="{{ warning.kind }}">{% if warning.reviewed %}✓ Проверено{% else %}⚠{% endif %} {{ warning.message }}{% if warning.reviewed %}<br><small>{{ warning.review.reviewed_by.get_full_name|default:warning.review.reviewed_by.username }} · {{ warning.review.reviewed_at|date:"d.m.Y H:i" }}</small>{% endif %}{% if not portal_purchases_readonly %}<form method="post" action="{% url 'review_goods_warning' item.pk %}" data-warning-review>{% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}"><input type="hidden" name="kind" value="{{ warning.kind }}"><input type="hidden" name="token" value="{{ warning.token }}"><input type="hidden" name="query" value="{{ clean_query_string }}"><button type="submit" name="action" value="{% if warning.reviewed %}reset{% else %}review{% endif %}" class="btn btn-sm btn-link p-0">{% if warning.reviewed %}Снять отметку{% else %}Проверено, всё верно{% endif %}</button></form>{% endif %}</div>{% endfor %}</td>
                         <td class="product-classification"><label class="product-classification-field"><span>Группа планов продаж</span><select {% if portal_purchases_readonly %}disabled{% endif %} class="inline-input editable-field" name="planning_sales" aria-label="Группа планов продаж" data-original="{{ item.planning_sales|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.planning_sales %}<option value="{{ value }}" {% if value == item.planning_sales %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Группа товаров</span><select {% if portal_purchases_readonly %}disabled{% endif %} class="inline-input editable-field" name="group_goods" aria-label="Группа товаров" data-original="{{ item.group_goods|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.group_goods %}<option value="{{ value }}" {% if value == item.group_goods %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span>Марка</span><select {% if portal_purchases_readonly %}disabled{% endif %} class="inline-input editable-field" name="brand" aria-label="Марка" data-original="{{ item.brand|default:'' }}"><option value="">— Не выбрано —</option>{% for value in classification_options.brand %}<option value="{{ value }}" {% if value == item.brand %}selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label class="product-classification-field"><span><a href="{% url 'purch_list' %}" data-purchase-link target="_blank" rel="noopener" title="Открыть закупку в новой вкладке">Закупка ↗</a></span><select {% if portal_purchases_readonly %}disabled{% endif %} class="inline-input editable-field" name="purch" aria-label="Закупка" data-original="{{ item.purch|default:'' }}"><option value="">— Не выбрано —</option>{% if item.purch %}<option value="{{ item.purch }}" selected>{{ item.purch }}{% if item.purchase_missing %} — нет в справочнике{% endif %}</option>{% endif %}{% for purchase in purchase_options %}{% if purchase.name != item.purch %}<option value="{{ purchase.name }}">{{ purchase.name }}</option>{% endif %}{% endfor %}</select></label><label class="product-classification-field"><span>Вид закупки</span><select {% if portal_purchases_readonly %}disabled{% endif %} class="inline-input editable-field" name="kind_purch" aria-label="Вид закупки" data-original="{{ item.kind_purch.id|default:'' }}">
                                 <option value="">— Не выбран —</option>
                                 {% for kp in kind_purch_list %}
@@ -475,6 +476,13 @@ document.addEventListener('DOMContentLoaded', function () {
         if (setupRefreshBtn) { setupRefreshBtn.disabled = true; setupRefreshBtn.textContent = 'Обновление справочника…'; }
         refreshDirectoryBtn.textContent = 'Обновление справочника…';
     });
+
+    document.querySelectorAll('[data-warning-review]').forEach(form => form.addEventListener('submit', event => {
+        if (Object.keys(changes).length) {
+            event.preventDefault();
+            alert('Сначала сохраните или отмените изменения товаров, затем отметьте предупреждение как проверенное.');
+        }
+    }));
 
     function getCsrfToken() {
         const csrfInput = document.querySelector('[name=csrfmiddlewaretoken]');
@@ -627,6 +635,8 @@ const scenarioId = document.querySelector('input[name="scenario"]')?.value ||
                 });
                 rows.forEach(row => row.querySelector('[name="duty_rate"]').dispatchEvent(new Event('input', {bubbles:true})));
                 updateSaveButton();
+                // Rebuild warning fingerprints and status filters after source values change.
+                if (!Object.keys(changes).length && document.querySelector('[data-warning-review]')) location.reload();
             } else {
                 throw new Error(result.message || 'Ошибка сохранения');
             }
