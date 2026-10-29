@@ -49,6 +49,14 @@
     });
     const focusHash = () => {
         const id = location.hash.slice(1);
+        if (id === 'missing-purchase') {
+            const input = [...document.querySelectorAll('.pricing-row [name=purch]')].find(field => !field.value.trim());
+            if (input) {
+                input.classList.add('border-warning');
+                reveal(input,input);
+            } else reveal(document.getElementById('missing-purchase'));
+            return;
+        }
         if (id === 'goods-editor-table') { fillTable(); return; }
         const fields = {
             'plan-parameters-load':'input[name=confirm]:not(:disabled)',

@@ -124,6 +124,8 @@ def results_page(request):
                 if error.startswith(good.planning_group + ':'):
                     url = f"{reverse('edit_pggoods', args=[good.pk])}?scenario={checked.pk}"
                     break
+            if error.startswith('Не заполнена колонка «Закупка»'):
+                url = f"{reverse('pggoods_list')}?scenario={checked.pk}&missing_purchase=1#missing-purchase"
             if error.startswith('Закупка «'):
                 url = reverse('purch_list')
             if error.startswith('Фрахт:'):
@@ -814,6 +816,9 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     if freight_scenario is not None:
         current_scenario = freight_scenario
         queryset = PGGoods.objects.filter(scenario_plan=current_scenario).select_related('kind_purch')
+    missing_purchase = request.GET.get('missing_purchase') == '1'
+    if missing_purchase:
+        queryset = queryset.filter(pk__in=[good.pk for good in queryset if not (good.purch or '').strip()])
     # --- Обработка inline-редактирования (POST) ---
     if request.method == 'POST' and freight_scenario is None:
         record_id = request.POST.get('record_id')
@@ -929,7 +934,9 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
 
     paginator = Paginator(queryset, 25)
     page_obj = paginator.get_page(page_number)
+    known_purchases = set(Purch.objects.values_list('name_key', flat=True))
     for good in page_obj:
+        good.purchase_missing = bool((good.purch or '').strip()) and planning_group_key(good.purch) not in known_purchases
         good.plan_warnings = warning_map.get(good.pk, [])
 
     # --- Уникальные значения для фильтров (только для текущего сценария!) ---
@@ -960,6 +967,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
         'show_scenario_setup': show_setup(request, current_scenario),
         **pricing_context(current_scenario),
         'incomplete_goods': incomplete,
+        'missing_purchase': missing_purchase,
         'plan_threshold': plan_threshold,
         'warning_filter': warning_filter,
         'warning_counts': warning_counts,

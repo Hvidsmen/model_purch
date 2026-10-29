@@ -245,3 +245,25 @@ class GoodsEditorTests(TestCase):
         self.good.exw_usd = 100
         self.good.save()
         self.assertEqual(incomplete_goods(self.scenario), [])
+
+    def test_missing_purchase_link_filters_goods_in_selected_scenario(self):
+        self.good.purch = '   '
+        self.good.save()
+        other = ScenarioModel.objects.create(name='Other', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        PGGoods.objects.create(scenario_plan=other, planning_group='Other blank', kind_purch=self.good.kind_purch,
+                              volume=.01, exw_usd=10, ddp_usd=10, kddp=1, stock_cnt_day=0, percent_stock_end=0)
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk, 'missing_purchase': '1'})
+        self.assertEqual([good.pk for good in page.context['page_obj']], [self.good.pk])
+        self.assertContains(page, 'Показаны только товары без закупки')
+        results = self.client.get(reverse('results_page'))
+        self.assertContains(results, f'scenario={self.scenario.pk}&amp;missing_purchase=1#missing-purchase')
+        self.good.purch = 'Supplier'
+        self.good.save()
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk, 'missing_purchase': '1'})
+        self.assertEqual(page.context['page_obj'].paginator.count, 0)
+
+    def test_purchase_editor_is_directory_select_and_preserves_unknown_value(self):
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk})
+        self.assertContains(page, 'name="purch" aria-label="Закупка"')
+        self.assertContains(page, '<option value="Supplier" selected>Supplier — нет в справочнике</option>', html=True)
+        self.assertNotContains(page, 'list="purchase-options"')
