@@ -877,7 +877,9 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     if request.GET.get('incomplete') == '1':
         queryset = queryset.filter(pk__in=[row['id'] for row in incomplete])
 
-    from .services.plan_validation import plan_warnings
+    from .services.plan_validation import plan_warnings, duty_warnings
+    from .models import GoodsGroup
+    group_duties = {group.name_key: group.duty_rate for group in GoodsGroup.objects.all()}
     import math
     try:
         plan_threshold = float(str(request.GET.get('ddp_threshold', request.session.get('ddp_threshold', 10))).replace(',', '.'))
@@ -888,10 +890,10 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     if request.session.get('ddp_threshold') != str(plan_threshold):
         request.session['ddp_threshold'] = str(plan_threshold)
     warning_filter = request.GET.get('plan_warning', '')
-    warning_counts = dict.fromkeys(['ddp', 'volume', 'fact_ddp', 'fact_volume', 'missing', 'any'], 0)
+    warning_counts = dict.fromkeys(['ddp', 'volume', 'fact_ddp', 'fact_volume', 'missing', 'duty_small', 'duty_group', 'any'], 0)
     warning_map = {}
     for good in queryset:
-        checks = plan_warnings(good, plan_threshold)
+        checks = plan_warnings(good, plan_threshold) + duty_warnings(good, group_duties)
         warning_map[good.pk] = checks
         if checks:
             warning_counts['any'] += 1
@@ -1355,6 +1357,13 @@ def import_from_excel(request):
                 for error in errors[:5]:
                     messages.warning(request, f'⚠️ {error}')
 
+            from .services.plan_validation import duty_warnings
+            from .models import GoodsGroup
+            import_duties = {group.name_key: group.duty_rate for group in GoodsGroup.objects.all()}
+            suspicious = [good.planning_group for good in PGGoods.objects.filter(scenario_plan=current_scenario)
+                          if duty_warnings(good, import_duties)]
+            if suspicious:
+                messages.warning(request, f'Проверьте пошлину: {len(suspicious)} товаров. Откройте фильтры «Пошлина меньше 1%» и «Пошлина отличается от группы». Значения автоматически не исправлены.')
             messages.success(request, result_msg)
             logger.info(
                 f"Импорт в сценарий '{current_scenario.name}': создано={created_count}, обновлено={updated_count}")

@@ -32,10 +32,33 @@
                 field('duty_rate').dispatchEvent(new Event('input', {bubbles:true}));
             });
         }
+        const setDuty = value => {
+            field('duty_rate').value = String(value);
+            percent.value = String(Number(value) * 100);
+            field('duty_rate').dispatchEvent(new Event('input', {bubbles:true}));
+        };
+        row.querySelector('[data-duty-fix]')?.addEventListener('click', () => setDuty(0.1));
+        row.querySelector('[data-duty-group]')?.addEventListener('click', () => setDuty(duties.get(key(field('group_goods')?.value))));
         function calculate() {
             if (percent && document.activeElement !== percent) percent.value = String(Number((numeric('duty_rate') * 100).toPrecision(15)));
             const source = row.querySelector('[data-duty-source]');
             if (source) source.textContent = duties.has(key(field('group_goods')?.value)) && Number(duties.get(key(field('group_goods')?.value))) === numeric('duty_rate') ? 'Совпадает с группой' : 'Ставка товара';
+            const rate = numeric('duty_rate');
+            const groupRate = duties.get(key(field('group_goods')?.value));
+            const small = rate > 0 && rate < 0.01;
+            const differs = groupRate !== undefined && Math.abs(Number(groupRate) - rate) > 1e-9;
+            const notices = [];
+            if (small) notices.push(`Вы указали ${rate * 100}%. Возможно, имелось в виду 10%?`);
+            if (differs) notices.push(`Для группы установлено ${Number(groupRate) * 100}%, у товара — ${rate * 100}%.`);
+            row.dataset.dutyWarning = notices.join(' ');
+            const meaning = row.querySelector('[data-duty-meaning]');
+            if (meaning) meaning.textContent = `${Number((rate * 100).toPrecision(10))}% от таможенной стоимости`;
+            const warning = row.querySelector('[data-duty-warning]');
+            if (warning) warning.textContent = notices.join(' ');
+            const fix = row.querySelector('[data-duty-fix]');
+            if (fix) fix.hidden = !small;
+            const groupButton = row.querySelector('[data-duty-group]');
+            if (groupButton) groupButton.hidden = !differs;
             if (purchaseLink) {
                 purchaseLink.href = purchaseUrls.get(key(field('purch')?.value)) || purchaseListUrl;
             }

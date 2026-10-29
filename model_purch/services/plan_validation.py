@@ -38,3 +38,16 @@ def plan_warnings(good, threshold=10):
     if missing:
         warnings.append(('missing', 'Не загружены плановые значения: ' + ', '.join(missing)))
     return warnings
+
+
+def duty_warnings(good, group_duties):
+    """Advisory only: coefficients are stored, percentages are shown."""
+    from ..goods_identity import planning_group_key
+    rate = float(good.duty_rate or 0)
+    warnings = []
+    if 0 < rate < 0.01:
+        warnings.append(('duty_small', f'Пошлина {rate * 100:g}%. Возможно, имелось в виду 10%? Проверьте ставку.'))
+    group_rate = group_duties.get(planning_group_key(good.group_goods or ''))
+    if group_rate is not None and not math.isclose(rate, float(group_rate), rel_tol=1e-9, abs_tol=1e-9):
+        warnings.append(('duty_group', f'Пошлина товара {rate * 100:g}%, для группы — {float(group_rate) * 100:g}%. Отличие может быть обоснованным.'))
+    return warnings
