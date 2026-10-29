@@ -116,8 +116,9 @@ class ScenarioPlanSalesForm(forms.ModelForm):
         fields = ['name', 'flag_order_in_purch']
         labels = {
             'name': _('Название плана'),
-            'flag_order_in_purch': _('Заказ в закупке'),
+            'flag_order_in_purch': _('Использовать для расчёта стока на конец года'),
         }
+        help_texts = {'flag_order_in_purch': _('Сток на конец года рассчитывается на основе выбранного плана продаж.')}
         widgets = {
             'name': forms.TextInput(attrs={'class': 'form-control', 'placeholder': 'Название плана продаж'}),
             'flag_order_in_purch': forms.CheckboxInput(attrs={'class': 'form-check-input'}),

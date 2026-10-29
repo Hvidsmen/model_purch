@@ -124,9 +124,10 @@
                                     <div class="form-check">
                                         {{ form.flag_order_in_purch }}
                                         <label class="form-check-label" for="{{ form.flag_order_in_purch.id_for_label }}">
-                                            Заказ в закупке
+                                            {{ form.flag_order_in_purch.label }}
                                         </label>
                                     </div>
+                                    <div class="form-text small">{{ form.flag_order_in_purch.help_text }}</div>
                                     {% if form.flag_order_in_purch.errors %}
                                         <div class="text-danger small">{{ form.flag_order_in_purch.errors }}</div>
                                     {% endif %}
