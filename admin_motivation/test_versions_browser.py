@@ -1161,12 +1161,26 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         filters = [{'name': name, 'label': label, 'multiple': multiple,
                     'options': [{'value': 'Политики' if name == 'type' else 'A' if name == 'subdivision' else 'Иванов', 'selected': not multiple}]}
                    for name, _, label, _, multiple in FILTERS['deals']]
+        def options(kind, values, **kwargs):
+            from copy import deepcopy
+            result = deepcopy(filters)
+            for item, (_, parameter, _, _, multiple) in zip(result, FILTERS['deals']):
+                selected = values.get(parameter) or []
+                selected = selected if isinstance(selected, list) else [selected]
+                if item['name'] == 'subdivision':
+                    item['options'] = [{'value': value, 'selected': value in selected or not selected and value == 'A'} for value in ('A', 'B')]
+                elif item['name'] == 'author':
+                    item['options'] = [{'value': value, 'selected': value in selected} for value in (('Иванов', 'Петров') if values.get('Division') != 'B' else ('Другой менеджер',))]
+                else:
+                    for option in item['options']:
+                        option['selected'] = option['value'] in selected or not multiple and not selected
+            return result
         def load(*args, **kwargs):
             result = deal_payload()
             result['page'] = kwargs.get('page', 1)
             result['offset'] = (result['page'] - 1) * 50
             return result
-        with patch('admin_motivation.reports_next_deals.choices', return_value=filters), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.reports_next_deals.load_report', side_effect=load) as loaded:
+        with patch('admin_motivation.reports_next_deals.choices', side_effect=options) as lookups, patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.reports_next_deals.load_report', side_effect=load) as loaded:
             self.page.set_viewport_size({'width':1440,'height':1000})
             self.page.goto(self.live_server_url + reverse('motivation_reports_next'))
             self.page.get_by_role('link', name='Факт закрытых сделок', exact=False).click()
@@ -1186,6 +1200,30 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.get_by_role('link', name='Далее →', exact=True).click()
             self.assertEqual(loaded.call_args.kwargs['page'], 2)
             expect(self.page.locator('.nr-pagination')).to_contain_text('Страница 2 из 3')
+            self.page.locator('.nr-filter-panel > summary').click()
+            expect(self.page.get_by_role('button', name='Обновить списки', exact=True)).to_have_count(0)
+            author = self.page.locator('.manager-multi-field').filter(has=self.page.locator('select[name=author]'))
+            author.locator('summary').click()
+            first_label = author.locator('.manager-multi-options label').first
+            self.assertEqual(first_label.evaluate('(el) => getComputedStyle(el).flexDirection'), 'row')
+            self.page.screenshot(path='/tmp/deal-multiselect-clean.png', full_page=True)
+            first_label.locator('input').check()
+            before = loaded.call_count
+            with self.page.expect_response(lambda response: '_choices=1' in response.url):
+                author.get_by_role('button', name='Готово', exact=True).click()
+            expect(self.page.locator('[data-deal-filter-status]')).to_have_text('Списки обновлены.')
+            self.assertEqual(loaded.call_count, before)
+            self.assertEqual(lookups.call_args.args[1]['ManagerName'], ['Иванов'])
+            with self.page.expect_response(lambda response: '_choices=1' in response.url):
+                self.page.locator('select[name=subdivision]').select_option('B')
+            expect(self.page.locator('select[name=subdivision]')).to_have_value('B')
+            expect(self.page.locator('[data-deal-filter-status]')).to_contain_text('Зависимый выбор сброшен')
+            self.assertEqual(lookups.call_args.args[1]['ManagerName'], [])
+            self.assertEqual(loaded.call_count, before)
+            expect(self.page.locator('[data-report-pending]')).to_be_visible()
+            self.page.locator('[data-report-revert]').click()
+            expect(self.page.locator('select[name=subdivision]')).to_have_value('A')
+            expect(self.page.locator('[data-report-pending]')).to_be_hidden()
             self.page.screenshot(path='/tmp/new-closed-deals-desktop.png', full_page=True)
             self.page.set_viewport_size({'width':390,'height':844})
             self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 390)

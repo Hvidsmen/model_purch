@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=deals-executive-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=deal-filters-20261103">
 <section class="content native-report nr-page nr-deals-page">
 {% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
 <a class="nr-back" href="{% url 'motivation_reports_next' %}">← Новые отчёты</a>
@@ -10,8 +10,9 @@
 <details class="nr-filter-panel" {% if data == None %}open{% endif %}><summary>{% if data == None %}Настроить отчёт{% else %}Изменить условия отчёта{% endif %}</summary>
 <form method="get" class="next-filter" id="native-report-filters" data-kind="deals" data-ux-submit="Загружаем закрытые сделки…">
 <label>Дата закрытия: с<input type="date" name="start" value="{{ query.start }}" required></label><label>По дату<input type="date" name="end" value="{{ query.end }}" required></label>
-{% for filter in filters %}{% if filter.locked %}<label>{{ filter.label }}<input value="{{ filter.locked_value }}" readonly aria-readonly="true"><input type="hidden" name="{{ filter.name }}" value="{{ filter.locked_value }}"></label>{% elif filter.multiple %}{% include 'admin_motivation/reports/_manager_multiselect.html' %}{% else %}<label>{{ filter.label }}<select name="{{ filter.name }}" required><option value="">Выберите значение</option>{% for option in filter.options %}<option value="{{ option.value }}" {% if option.selected %}selected{% endif %}>{{ option.value }}</option>{% endfor %}</select></label>{% endif %}{% endfor %}
-<div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button><button class="btn btn-outline-secondary" name="refresh_choices" value="1" formnovalidate>Обновить списки</button><a href="{{ reset_url }}">Сбросить фильтры</a></div><p class="nr-muted">Пустой выбор в списках с галочками означает «Все». Даты относятся к закрытию сделки.</p>
+<div class="nr-deal-filter-fields" data-deal-filter-fields>{% include "admin_motivation/reports_next/_deal_filter_fields.html" %}</div>
+<div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button><a href="{{ reset_url }}">Сбросить фильтры</a></div><p class="nr-muted">Списки обновляются автоматически. Пустой выбор означает «Все». Даты относятся к закрытию сделки.</p>
+<p class="nr-deal-filter-status" data-deal-filter-status role="status" aria-live="polite"></p>
 </form></details>
 <div class="nr-filter-pending" data-report-pending role="status" hidden><div><strong>Условия изменены — отчёт ещё не обновлён</strong><p>Нажмите «Показать». Итоги и CSV пока относятся к предыдущим условиям.</p></div><button type="button" data-report-revert>Вернуть условия отчёта</button></div>
 {% for error in errors %}<div class="next-error" role="alert">{{ error }}</div>{% endfor %}
@@ -22,7 +23,7 @@
 <article class="nr-kpi nr-kpi-primary"><span>Возможная мотивация</span><strong>{{ data.totals.possible|report_cash }}</strong><small>USD · до условий выполнения</small></article>
 <article class="nr-kpi"><span>Квартальная / годовая</span><strong>{{ data.totals.quarterly|report_cash }} / {{ data.totals.annual|report_cash }}</strong><small>USD · две части возможной мотивации</small></article>
 </div>
-<p class="nr-note">Возможная мотивация рассчитана на фактических отгрузках. Она не означает премию к выплате: процент выполнения и условия выплаты проверяются в отчётах по премиям.</p>
+<p class="nr-note">Возможная мотивация рассчитана на фактических отгрузках. Сделки I–III кварталов дают только годовую часть; сделки IV квартала — квартальную и годовую. Квартал определяется датой закрытия сделки. Она не означает премию к выплате: процент выполнения и условия выплаты проверяются в отчётах по премиям.</p>
 <div class="nr-section-title"><h2>По авторам сделок</h2><span>Итоги по всему отчёту</span></div>
 <div class="nr-table-wrap"><table class="nr-table"><thead><tr><th>Автор сделки</th><th class="num">Отгрузки, USD</th><th class="num">Квартальная мотивация, USD</th><th class="num">Годовая мотивация, USD</th><th class="num">Всего возможная мотивация, USD</th></tr></thead><tbody>{% for row in data.summary %}<tr><td>{{ row.author }}</td><td class="num">{{ row.shipments|report_cash }}</td><td class="num">{{ row.quarterly|report_cash }}</td><td class="num">{{ row.annual|report_cash }}</td><td class="num nr-total-cell">{{ row.possible|report_cash }}</td></tr>{% empty %}<tr><td colspan="5">Нет сделок по выбранным условиям.</td></tr>{% endfor %}</tbody><tfoot><tr><th>Итого</th><td class="num">{{ data.totals.shipments|report_cash }}</td><td class="num">{{ data.totals.quarterly|report_cash }}</td><td class="num">{{ data.totals.annual|report_cash }}</td><td class="num nr-total-cell">{{ data.totals.possible|report_cash }}</td></tr></tfoot></table></div>
 <div class="nr-section-title"><h2>Закрытые сделки</h2><span>По 50 строк на странице</span></div>
@@ -33,4 +34,4 @@
 <nav class="nr-pagination" aria-label="Страницы закрытых сделок"><span>Страница {{ data.page }} из {{ data.pages }} · {{ data.totals.count|report_money }} строк. Итоги — по всем страницам.</span><span>{% if data.page > 1 %}<a href="{{ data.previous_url }}">← Назад</a>{% endif %} {% if data.page < data.pages %}<a href="{{ data.next_url }}">Далее →</a>{% endif %}</span></nav>
 {% elif not errors %}<div class="nr-empty"><strong>Выберите подразделение и вид мотивации</strong>Укажите период закрытия сделок и нажмите «Показать».</div>{% endif %}
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/reports.js' %}?v=closed-deals-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=closed-deals-20261103" defer></script><script src="{% static 'admin_motivation/manager_multiselect.js' %}?v=group-report-scope-20261021" defer></script>{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/reports.js' %}?v=closed-deals-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=closed-deals-20261103" defer></script><script src="{% static 'admin_motivation/deal_filters.js' %}?v=auto-20261103" defer></script>{% endblock %}

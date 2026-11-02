@@ -2,11 +2,14 @@
 import logging
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.shortcuts import render
+from django.http import JsonResponse
+from django.template.loader import render_to_string
 from django.urls import reverse
 from base.access import role_for, REPORT_ROLES
 from base.report_access import politician_scope, scoped_query, scoped_values, identity_choices
 from .models import MotivationExecution
-from .services.reports import FILTERS, parameters, choices, load_report
+from .services.reports import FILTERS, parameters, load_report
+from .services.deal_filter_choices import choices
 from .services.deal_presentation import prepare, page_csv
 from .services.versions import today
 
@@ -18,6 +21,7 @@ def report(request):
     if role_for(request.user, 'motivation') in REPORT_ROLES and not scope:
         raise PermissionDenied
     query = scoped_query(request.GET, scope, 'deals') if scope else request.GET.copy()
+    choices_only = query.pop('_choices', None) == ['1']
     query.pop('execution', None)
     for field in ('type', 'subdivision'):
         if query.getlist(field):
@@ -33,7 +37,7 @@ def report(request):
         if scope:
             values = scoped_values('deals', values, scope)
         filters = choices('deals', values, refresh=query.get('refresh_choices') == '1', **({'access_scope': scope} if scope else {}))
-        if query.get('run') == '1' or query.get('export') == 'csv':
+        if not choices_only and (query.get('run') == '1' or query.get('export') == 'csv'):
             try:
                 page = max(1, int(query.get('page', '1')))
             except (ValueError, TypeError):
@@ -61,6 +65,10 @@ def report(request):
         for item in filters:
             if item['name'] in fixed:
                 item.update(fixed[item['name']])
+    if choices_only:
+        if errors:
+            return JsonResponse({'errors': errors}, status=400)
+        return JsonResponse({'html': render_to_string('admin_motivation/reports_next/_deal_filter_fields.html', {'filters': filters}, request=request)})
     csv_query = query.copy()
     csv_query['export'], csv_query['run'] = 'csv', '1'
     return render(request, 'admin_motivation/reports_next/deals.html', {

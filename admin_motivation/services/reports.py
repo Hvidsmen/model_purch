@@ -408,14 +408,15 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                    "ELSE LEFT(LTRIM([КварталМотивации]),1) END IN (" + ','.join('?' for _ in periods) + ')')
             args.extend(periods)
         if kind == 'deals':
+            from .deal_amounts import QUARTERLY_SQL, ANNUAL_SQL, POSSIBLE_SQL, detail_projection
             source = '(' + sql + ') AS report_source'
-            sums = 'SUM([СуммаОтгрузокUSD]) AS shipments, SUM([СуммаКвМотивацииUSD]) AS quarterly, SUM([СуммаМотивацииUSDГод]) AS annual, SUM([СуммаМотивацииUSD]) AS possible'
+            sums = f'SUM([СуммаОтгрузокUSD]) AS shipments, SUM({QUARTERLY_SQL}) AS quarterly, SUM({ANNUAL_SQL}) AS annual, SUM({POSSIBLE_SQL}) AS possible'
             summary = fetch(cursor, 'SELECT [АвторСделки] AS author,COUNT_BIG(*) AS count,'+sums+' FROM '+source+' GROUP BY [АвторСделки] ORDER BY [АвторСделки]', args)
             totals = {key: total(summary, key) for key in ['count','shipments','quarterly','annual','possible']}
             count = int(totals['count'])
             pages = max(1, (count+49)//50)
             page = min(max(1, page), pages)
-            details = fetch(cursor, 'SELECT * FROM '+source+' ORDER BY [ДатаЗакрытияСделки] DESC,[Номер],[Модель],[АвторСделки] OFFSET ? ROWS FETCH NEXT 50 ROWS ONLY', [*args, (page-1)*50], 50)
+            details = fetch(cursor, 'SELECT '+detail_projection()+' FROM '+source+' ORDER BY [ДатаЗакрытияСделки] DESC,[Номер],[Модель],[АвторСделки] OFFSET ? ROWS FETCH NEXT 50 ROWS ONLY', [*args, (page-1)*50], 50)
             return {'summary': summary, 'totals': totals, 'details': details, 'page': page, 'pages': pages, 'offset': (page-1)*50}
         if kind == 'manager-detail':
             from .manager_detail import grouped_sql, manager_detail_report

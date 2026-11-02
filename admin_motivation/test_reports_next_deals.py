@@ -90,3 +90,21 @@ class ClosedDealsNextTests(TestCase):
         with patch('admin_motivation.reports_next_deals.choices', return_value=[]), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.reports_next_deals.load_report', return_value={'summary': [], 'totals': {'count': 0, 'shipments': 0, 'quarterly': 0, 'annual': 0, 'possible': 0}, 'details': [], 'page': 1, 'pages': 1, 'offset': 0}):
             response = self.client.get(self.url, self.query)
         self.assertContains(response, 'Нет сделок по выбранным условиям.')
+
+    def test_async_filter_refresh_returns_only_fields_without_loading_report(self):
+        filters = [{'name': 'subdivision', 'label': 'Подразделение', 'multiple': False, 'options': [{'value': 'A', 'selected': True}]}]
+        with patch('admin_motivation.reports_next_deals.choices', return_value=filters) as lookup, patch('admin_motivation.reports_next_deals.load_report') as load:
+            response = self.client.get(self.url, {**self.query, '_choices': '1', 'export': 'csv'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response['Content-Type'], 'application/json')
+        self.assertIn('name="subdivision"', response.json()['html'])
+        self.assertNotIn('Фактические отгрузки', response.json()['html'])
+        self.assertEqual(lookup.call_args.args[1]['Division'], 'A')
+        load.assert_not_called()
+
+    def test_async_filter_errors_keep_json_safe(self):
+        with patch('admin_motivation.reports_next_deals.choices', side_effect=RuntimeError('secret driver text')):
+            response = self.client.get(self.url, {**self.query, '_choices': '1'})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('errors', response.json())
+        self.assertNotIn('secret driver text', response.content.decode())
