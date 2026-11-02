@@ -25,6 +25,7 @@ def copy_goods(source, target):
                     'purch': sg.purch,
                     'kind_purch': sg.kind_purch,
                     'volume': sg.volume,
+                    'weight_kg': sg.weight_kg,
                     'container_volume': sg.container_volume,
                     'duty_rate': sg.duty_rate,
                     'exw_usd': sg.exw_usd,

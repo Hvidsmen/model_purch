@@ -523,3 +523,25 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.page.goto(url + '&review_status=pending&plan_warning=ddp')
         expect(self.page.locator('[data-plan-warning=ddp]')).to_have_class(__import__('re').compile('.*bg-warning-subtle.*'))
         self.assertEqual(self.errors, [])
+
+    def test_weight_missing_highlight_and_saved_value(self):
+        from playwright.sync_api import expect
+        url = self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}'
+        self.page.goto(url)
+        field = self.page.locator('.pricing-row [name=weight_kg]')
+        expect(field).to_have_value('0.0')
+        expect(field).to_have_class(__import__('re').compile('.*goods-value-missing.*'))
+        field.fill('5')
+        field.press('Escape')
+        expect(field).to_have_class(__import__('re').compile('.*goods-value-missing.*'))
+        field.fill('12.345')
+        expect(field).not_to_have_class(__import__('re').compile('.*goods-value-missing.*'))
+        save = self.page.locator('#saveAllBtn')
+        expect(save).to_be_enabled()
+        with self.page.expect_response(lambda response: response.request.method == 'POST' and response.request.resource_type == 'fetch'):
+            save.click()
+        expect(save).to_be_disabled()
+        self.assertEqual(self.db(lambda: PGGoods.objects.get(pk=self.good.pk).weight_kg), 12.345)
+        self.page.reload()
+        expect(self.page.locator('.pricing-row [name=weight_kg]')).to_have_value('12.345')
+        self.assertEqual(self.errors, [])

@@ -283,7 +283,7 @@ class ProductPricingTests(TestCase):
         self.assertAlmostEqual(self.good.ddp_usd, 285.2)
         self.assertAlmostEqual(self.good.kddp, 1.426)
         response = self.client.get(reverse('edit_pggoods', args=[self.good.pk]) + f'?scenario={self.scenario.pk}')
-        self.assertEqual(set(response.context['form'].fields), {'purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch', 'volume', 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day'})
+        self.assertEqual(set(response.context['form'].fields), {'purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch', 'volume', 'weight_kg', 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day'})
 
     def test_group_duty_default_and_explicit_override(self):
         group = GoodsGroup.objects.create(name='New group', duty_rate=.12)

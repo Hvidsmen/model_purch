@@ -17,7 +17,7 @@
         highlightTimer = setTimeout(() => region.classList.remove('purchases-setup-target'),5000);
     };
     const fillTable = () => {
-        const inputs = [...document.querySelectorAll('.pricing-row input[name=exw_usd]:not(:disabled), .pricing-row input[name=volume]:not(:disabled)')];
+        const inputs = [...document.querySelectorAll('.pricing-row input[name=exw_usd]:not(:disabled), .pricing-row input[name=volume]:not(:disabled), .pricing-row input[name=weight_kg]:not(:disabled)')];
         const target = inputs.find(input => !input.readOnly && (!Number.isFinite(Number(input.value.replace(',','.'))) || Number(input.value.replace(',','.')) <= 0))
             || inputs.find(input => input.name === 'exw_usd' && !input.readOnly);
         if (target) reveal(target.closest('label') || target, target);

@@ -189,6 +189,7 @@ class PGGoods(models.Model):
     kind_purch = models.ForeignKey(KindPurch,on_delete=models.CASCADE)
 
     volume = models.FloatField()
+    weight_kg = models.FloatField('Вес за единицу, кг', default=0, validators=[MinValueValidator(0)])
     container_volume = models.FloatField('Объём контейнера, м³', default=65, validators=[MinValueValidator(0.001)])
     duty_rate = models.FloatField('Пошлина, коэффициент', default=0, help_text='0,1 = 10%. Вводите коэффициент без знака процента.',
                                     validators=[MinValueValidator(Decimal('0')), MaxValueValidator(Decimal('100'))])
@@ -261,7 +262,7 @@ class PGGoods(models.Model):
         from .services.pricing import number
         errors = {}
         for name, label, positive in [('volume', 'Объём', True), ('container_volume', 'Объём контейнера', True),
-                                      ('exw_usd', 'EXW', False), ('stock_cnt_day', 'Запас в днях', False)]:
+                                      ('weight_kg', 'Вес', False), ('exw_usd', 'EXW', False), ('stock_cnt_day', 'Запас в днях', False)]:
             try:
                 number(getattr(self, name), label, positive=positive)
             except ValidationError as error:

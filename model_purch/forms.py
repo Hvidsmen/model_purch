@@ -30,10 +30,10 @@ class PGGoodsEditForm(forms.ModelForm):
     class Meta:
         model = PGGoods
         fields = ['purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch',
-                  'volume', 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day']
+                  'volume', 'weight_kg', 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day']
         labels = {'purch': _('Закупка'), 'planning_sales': _('Группа планов продаж'),
                   'group_goods': _('Группа товаров'), 'brand': _('Бренд'), 'kind_purch': _('Вид закупки'),
-                  'volume': _('Объём'), 'container_volume': _('Объём контейнера, м³'),
+                  'volume': _('Объём'), 'weight_kg': _('Вес за единицу, кг'), 'container_volume': _('Объём контейнера, м³'),
                   'duty_rate': _('Пошлина, коэффициент (0,1 = 10%)'), 'exw_usd': _('Цена EXW (USD)'), 'stock_cnt_day': _('Запас в днях')}
         widgets = {
             'purch': forms.TextInput(attrs={'class': 'form-control', 'list': 'purchase-options'}),
@@ -44,6 +44,7 @@ class PGGoodsEditForm(forms.ModelForm):
             'volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.000001', 'class': 'form-control'}),
             'container_volume': forms.NumberInput(attrs={'step': 'any', 'min': '0.001', 'class': 'form-control'}),
             'duty_rate': forms.NumberInput(attrs={'step': 'any', 'min': '0', 'max': '100', 'class': 'form-control'}),
+            'weight_kg': forms.NumberInput(attrs={'step': 'any', 'min': '0', 'class': 'form-control'}),
             'exw_usd': forms.NumberInput(attrs={'step': 'any', 'min': '0', 'class': 'form-control'}),
             'stock_cnt_day': forms.NumberInput(attrs={'min': '0', 'class': 'form-control'}),
         }
@@ -68,7 +69,7 @@ class PGGoodsEditForm(forms.ModelForm):
             if self.add_prefix(name) not in self.data:
                 cleaned[name] = getattr(self.instance, name)
         for name, label, positive in [('volume', 'Объём', True), ('container_volume', 'Объём контейнера', True),
-                                      ('exw_usd', 'Цена EXW', False), ('stock_cnt_day', 'Запас в днях', False)]:
+                                      ('weight_kg', 'Вес', False), ('exw_usd', 'Цена EXW', False), ('stock_cnt_day', 'Запас в днях', False)]:
             value = cleaned.get(name)
             if value is not None and (value <= 0 if positive else value < 0):
                 self.add_error(name, f'{label} должен быть больше нуля.' if positive else f'{label} не может быть отрицательным.')

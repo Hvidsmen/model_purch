@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from ..goods_identity import planning_group_key
 
 CALCULATED_FIELDS = ('freight_usd', 'cif_usd', 'customs_payment_usd', 'warehouse_delivery_usd', 'foreign_delivery_usd', 'nr_customs_vat_usd', 'ddp_usd', 'kddp')
-INPUT_FIELDS = ('purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch', 'volume',
+INPUT_FIELDS = ('purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch', 'volume', 'weight_kg',
                 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day')
 
 

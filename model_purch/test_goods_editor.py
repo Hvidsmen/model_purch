@@ -235,6 +235,8 @@ class GoodsEditorTests(TestCase):
                 PGGoods.objects.filter(pk=self.good.pk).update(duty_rate=value)
 
     def test_completeness_warning_and_filter(self):
+        self.good.weight_kg = 1
+        self.good.save()
         from .services.preflight import incomplete_goods, validation_errors
         rows = incomplete_goods(self.scenario)
         self.assertEqual(rows[0]['missing'], 'EXW')
@@ -267,3 +269,43 @@ class GoodsEditorTests(TestCase):
         self.assertContains(page, 'name="purch" aria-label="Закупка"')
         self.assertContains(page, '<option value="Supplier" selected>Supplier — нет в справочнике</option>', html=True)
         self.assertNotContains(page, 'list="purchase-options"')
+
+    def test_weight_default_bulk_validation_and_excel_round_trip(self):
+        self.assertEqual(self.good.weight_kg, 0)
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk, 'incomplete': '1'})
+        self.assertContains(page, 'aria-label="Вес за единицу, кг"')
+        self.assertContains(page, 'goods-value-missing')
+        from .services.preflight import incomplete_goods
+        self.assertIn('Вес', incomplete_goods(self.scenario)[0]['missing'])
+        url = reverse('bulk_update_pggoods') + f'?scenario={self.scenario.pk}'
+        import json
+        result = self.client.post(url, json.dumps({'updates': [{'id': self.good.pk, 'weight_kg': 12.345}]}), content_type='application/json').json()
+        self.assertEqual(result['updated'], 1)
+        self.assertEqual(result['rows'][0]['values']['weight_kg'], 12.345)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.weight_kg, 12.345)
+        invalid = self.client.post(url, json.dumps({'updates': [{'id': self.good.pk, 'weight_kg': -1}]}), content_type='application/json').json()
+        self.assertEqual(invalid['updated'], 0)
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.weight_kg, 12.345)
+        from io import BytesIO
+        from openpyxl import load_workbook
+        response = self.client.get(reverse('export_pggoods'), {'scenario': self.scenario.pk})
+        workbook = load_workbook(BytesIO(response.content))
+        self.assertEqual(workbook.active.cell(1, 24).value, 'Вес за единицу, кг')
+        self.assertEqual(workbook.active.cell(2, 24).value, 12.345)
+        output = BytesIO()
+        workbook.active.cell(2, 24).value = 25.125
+        workbook.save(output)
+        workbook.close()
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.client.post(reverse('import_from_excel') + f'?scenario={self.scenario.pk}', {'excel_file': SimpleUploadedFile('weight.xlsx', output.getvalue())})
+        self.good.refresh_from_db()
+        self.assertEqual(self.good.weight_kg, 25.125)
+        from .services.copying import copy_goods
+        target = ScenarioModel.objects.create(name='Weight copy', date_start_plan='2027-01-01', date_end_plan='2027-12-31')
+        copied = PGGoods.objects.create(scenario_plan=target, planning_group=self.good.planning_group,
+            kind_purch=self.good.kind_purch, volume=1, exw_usd=10, stock_cnt_day=0, percent_stock_end=0)
+        self.assertEqual(copy_goods(self.scenario, target), (1, 0))
+        copied.refresh_from_db()
+        self.assertEqual(copied.weight_kg, 25.125)

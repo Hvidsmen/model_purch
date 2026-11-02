@@ -926,7 +926,7 @@ def pggoods_list(request, freight_form=None, freight_scenario=None):
     sort_dir = request.GET.get('dir', 'asc')
     allowed_sort_fields = {
         'id', 'planning_group', 'planning_sales', 'group_goods',
-        'brand', 'purch', 'volume', 'container_volume', 'duty_rate', 'exw_usd', 'ddp_usd', 'kddp',
+        'brand', 'purch', 'volume', 'weight_kg', 'container_volume', 'duty_rate', 'exw_usd', 'ddp_usd', 'kddp',
         'stock_cnt_day', 'percent_stock_end',
     }
 
@@ -1171,7 +1171,7 @@ def export_to_excel(request):
     header_fill = PatternFill(start_color='4472C4', end_color='4472C4', fill_type='solid')
     editable_number_fill = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
     editable_number_font = Font(name='Calibri', size=11, bold=True, color='065F46')
-    editable_number_headers = {'Объём', 'EXW USD', 'Запас (дни)', 'Объём контейнера, м³', 'Пошлина, %'}
+    editable_number_headers = {'Объём', 'EXW USD', 'Запас (дни)', 'Объём контейнера, м³', 'Пошлина, %', 'Вес за единицу, кг'}
     header_alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
     thin_border = Border(
         left=Side(style='thin'), right=Side(style='thin'),
@@ -1181,7 +1181,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD', 'Вес за единицу, кг'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1193,7 +1193,7 @@ def export_to_excel(request):
         cell.alignment = header_alignment
         cell.border = thin_border
 
-    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14, 22, 18, 24, 24, 32, 30, 20]
+    column_widths = [8, 25, 20, 20, 30, 20, 20, 20, 12, 12, 12, 12, 12, 12, 24, 14, 22, 18, 24, 24, 32, 30, 20, 22]
     for col_num, width in enumerate(column_widths, 1):
         ws.column_dimensions[get_column_letter(col_num)].width = width
 
@@ -1223,6 +1223,7 @@ def export_to_excel(request):
             item.duty_rate,
             item.freight_usd, item.cif_usd, item.customs_payment_usd, item.warehouse_delivery_usd, item.foreign_delivery_usd, item.nr_customs_vat_usd,
             item.weighted_ddp_usd,
+            item.weight_kg,
         ]
 
         for col_num, value in enumerate(data, 1):
@@ -1350,6 +1351,11 @@ def import_from_excel(request):
                                 if not math.isfinite(duty_value) or not 0 <= duty_value <= 100:
                                     raise ValueError('Коэффициент пошлины должен быть конечным числом от 0 до 100; 0,1 = 10%.')
                                 defaults['duty_rate'] = duty_value
+                            if len(row) > 23 and row[23] is not None:
+                                weight = float(str(row[23]).replace(',', '.'))
+                                if not math.isfinite(weight) or weight < 0:
+                                    raise ValueError('Вес должен быть конечным числом не меньше нуля.')
+                                defaults['weight_kg'] = weight
                             if container_volume is not None:
                                 container_value = float(str(container_volume).replace(',', '.'))
                                 if not math.isfinite(container_value) or container_value < 0.001:
