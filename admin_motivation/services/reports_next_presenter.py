@@ -84,6 +84,8 @@ def present(kind, data, ledger=None, period='all'):
     def possible_total(rows):
         values = [row.get('possible') for row in rows]
         return sum(values, ZERO) if values and all(value is not None for value in values) else None
+    for group in [*employees.values(), *registry.values()]:
+        group['possible'] = possible_total(group['rows'])
     result['possible'] = possible_total(ledger['rows'])
     result['team_sections'] = []
     for index, item in enumerate(result['type_totals']):

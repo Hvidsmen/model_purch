@@ -507,6 +507,9 @@ class ReportsNextTests(TestCase):
                 self.assertContains(response, '<table class="nr-table">', count=3, html=False)
                 self.assertContains(response, 'Сколько бы выплатили')
                 self.assertContains(response, 'nr-kpi-types', count=3)
+                self.assertContains(response, 'Сколько бы выплатили, ' + currency, count=3)
+                self.assertContains(response, 'class="num nr-possible-cell"', count=9)
+                self.assertTrue(all(row['possible'] == expected / 6 for section in presentation['team_sections'] for row in section['rows']))
                 exported = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency, 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
