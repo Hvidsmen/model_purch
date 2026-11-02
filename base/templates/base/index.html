@@ -5,6 +5,7 @@
 <section class="portal-welcome">
 <h1>DA портал</h1><p>Выберите проект, чтобы продолжить работу.</p>
 <div class="portal-cards">
+{% if portal_is_admin %}<a class="portal-project-card" href="{% url 'sales_planning_index' %}"><h2>Модель планирования продаж</h2><span>Split · справочники каналов продаж и номенклатуры из DataWH.</span></a>{% endif %}
 {% if portal_can_purchases %}<a class="portal-project-card" href="{% url 'scenario_list' %}"><h2>Модель закупок</h2><span>Сценарии, товары, закупки, фрахт и расчёты.</span></a>{% endif %}
 {% if portal_can_motivation %}<a class="portal-project-card" href="{% url 'index_admin_motivation' %}"><h2>Мотивация</h2><span>{% if portal_reports_only %}Отчёты по мотивации и сделкам в рамках вашего доступа.{% else %}Коэффициенты, версии, планы продаж и сравнение мотивации.{% endif %}</span></a>{% endif %}
 {% if portal_can_dashboards %}<a class="portal-project-card" href="{% url 'dashboards_index' %}"><h2>Дашборды</h2><span>Динамика дилерской базы, сегменты, перетоки и продажи.</span></a>{% endif %}

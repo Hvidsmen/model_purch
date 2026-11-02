@@ -1,0 +1,26 @@
+{% extends 'base/portal_shell.html' %}
+{% block title %}Split · Модель планирования продаж · DA портал{% endblock %}
+{% block project_name %}Модель планирования продаж{% endblock %}
+{% block module_navigation %}<nav class="portal-section-nav" aria-label="Модель планирования продаж"><a href="{% url 'sales_planning_split' %}" aria-current="page">Split</a></nav>{% endblock %}
+{% block content %}
+<section class="portal-welcome">
+    <h1>Split</h1>
+    <p>Модель планирования продаж. Первоначальная загрузка справочников из DataWH.</p>
+    <section class="admin-panel" aria-labelledby="source-title">
+        <h2 id="source-title">Источник данных · DataWH</h2>
+        <p role="status"><strong>Источник не настроен</strong></p>
+        <p>Для загрузки каналов продаж и номенклатуры нужны SQL-запросы к DataWH. После настройки источника станет доступна первоначальная загрузка.</p>
+        <button class="admin-button" type="button" disabled aria-describedby="load-reason">Загрузить справочники из DataWH</button>
+        <p id="load-reason" class="admin-muted">Загрузка недоступна: SQL-запросы ещё не предоставлены.</p>
+    </section>
+    <div class="portal-cards">
+    {% for directory in directories %}
+        <section class="portal-project-card" aria-labelledby="directory-{{ forloop.counter }}">
+            <h2 id="directory-{{ forloop.counter }}">{{ directory }}</h2>
+            <p><strong>Источник не настроен</strong></p>
+            <p>Данные не загружены.</p>
+        </section>
+    {% endfor %}
+    </div>
+</section>
+{% endblock %}

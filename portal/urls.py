@@ -14,7 +14,7 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from base import identity_views, group_views, user_views, update_views, admin_views, sales_planning_preview
+from base import identity_views, group_views, user_views, update_views, admin_views, sales_planning_preview, sales_planning
 from django.contrib import admin
 from django.contrib.auth.views import LoginView, LogoutView
 
@@ -23,6 +23,8 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = ([
+                   path('sales-planning/', sales_planning.index, name='sales_planning_index'),
+                   path('sales-planning/split/', sales_planning.split, name='sales_planning_split'),
                    path('accounts/administration/sales-planning-preview/', sales_planning_preview.preview, name='sales_planning_preview'),
                    path('accounts/administration/', admin_views.dashboard, name='portal_administration'),
                    path('accounts/windows/', identity_views.windows_login, name='portal_windows_login'),
