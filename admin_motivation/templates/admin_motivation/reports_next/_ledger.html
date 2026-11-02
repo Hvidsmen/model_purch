@@ -1,4 +1,4 @@
-{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_team_ledger.html' %}{% else %}
+{% if kind == 'team' or kind == 'registry' %}{% include 'admin_motivation/reports_next/_team_ledger.html' %}{% else %}
 {% load report_format %}
 {% if kind == 'team' %}<div class="nr-section-title"><h2>Итого по видам мотивации</h2><span>По всем сотрудникам и страницам</span></div><div class="nr-type-totals">{% for item in presentation.type_totals %}<article><span>{{ item.kind }}</span><strong>{{ item.total|report_cash }} {{ ledger.currency }}</strong><small>Премия {{ item.amount|report_cash }} · годовая доплата {{ item.bonus|report_cash }}</small></article>{% endfor %}</div>{% endif %}
 <div class="nr-section-title"><h2>{% if kind == 'team' %}Сотрудники и премии{% else %}Реестр рассчитанных премий{% endif %}</h2><span>{% if kind == 'team' %}{{ presentation.people }} сотрудников{% else %}{{ ledger_page.paginator.count }} строк{% endif %}</span></div>

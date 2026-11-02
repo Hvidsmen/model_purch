@@ -1,4 +1,3 @@
-import csv
 import logging
 from time import perf_counter
 from django.core.exceptions import ValidationError, PermissionDenied
@@ -85,28 +84,10 @@ def report_page(request, kind):
             if item['name'] in fixed:
                 item.update(fixed[item['name']])
     if kind == 'deals' and data:
-        columns = [('АвторСделки','Автор сделки','text'), ('Канал','Канал','text'), ('Подразделение','Подразделение','text'),
-            ('ДатаЗакрытияСделки','Дата закрытия','date'), ('ДатаОтгрузки','Дата отгрузки','date'), ('Партнер','Партнёр','text'),
-            ('Номер','Номер','text'), ('ГруппаПлановПродаж','Группа планов продаж','text'), ('ГруппаТоваров','Группа товаров','text'),
-            ('Марка','Марка','text'), ('Модель','Модель','text'), ('ТипСкидки','Тип скидки','text'),
-            ('ПроцентСкидки','% скидки','raw_percent'), ('СегментСкидки','Сегмент скидки','text'),
-            ('КоэфициентМотивации','Коэффициент мотивации','percent'), ('СуммаОтгрузокUSD','Отгрузки, USD','money'),
-            ('СуммаКвМотивацииUSD','Возможная квартальная мотивация, USD','money'), ('СуммаМотивацииUSDГод','Возможная годовая мотивация, USD','money')]
-        data['columns'] = [{'title': title, 'type': type_, 'detail': key in {'Канал','Подразделение','ДатаОтгрузки','ГруппаПлановПродаж','ГруппаТоваров','Марка','СегментСкидки'}} for key,title,type_ in columns]
-        data['display_rows'] = [{'number': data['offset']+index+1, 'cells': [{'value': row.get(key), 'type': type_, 'detail': data['columns'][i]['detail']} for i,(key,_,type_) in enumerate(columns)]} for index,row in enumerate(data['details'])]
-        for page_key, number in [('previous_url', data['page']-1), ('next_url', data['page']+1)]:
-            target = query.copy(); target['page']=number; target['run']='1'; target.pop('export',None)
-            data[page_key] = '?' + target.urlencode()
+        from .services.deal_presentation import prepare, page_csv
+        prepare(data, query)
         if query.get('export') == 'csv':
-            response = HttpResponse(content_type='text/csv; charset=utf-8')
-            response['Content-Disposition']='attachment; filename="closed-deals-page.csv"'
-            response.write('\ufeff'); writer = csv.writer(response, delimiter=';')
-            writer.writerow(['№', *[title for _,title,_ in columns]])
-            for row in data['display_rows']:
-                values = [cell['value'] for cell in row['cells']]
-                values = ["'"+value if isinstance(value,str) and value.lstrip().startswith(('=','+','-','@')) else value for value in values]
-                writer.writerow([row['number'],*values])
-            return response
+            return page_csv(data)
     selected_parameters = []
     if kind == 'manager-detail' and data:
         for name, parameter, caption, dataset, multiple in FILTERS[kind]:

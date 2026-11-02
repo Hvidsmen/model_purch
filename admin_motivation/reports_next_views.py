@@ -28,7 +28,7 @@ def report_navigation(user, kind, query):
     if query.get('run') == '1':
         shared['run'] = '1'
     captions = {'mine': 'Моя премия', 'team': 'Команда', 'registry': 'Реестр',
-                'executive': 'Сравнение плана', 'detail': 'Детальный расчёт'}
+                'executive': 'Сравнение плана', 'detail': 'Детальный расчёт', 'deals': 'Сделки'}
     return [{'key': key, 'label': captions[key], 'active': key == kind,
              'url': reverse('motivation_report_next', args=[key]) + ('?' + shared.urlencode() if shared else '')}
             for key in reports.available(user)]
@@ -53,10 +53,13 @@ def workbook(kind, data, metadata, query=None):
         sheet.append(cells)
     append([reports.CATALOG[kind][0]])
     if kind == 'executive':
-        append(['Подразделение / вид мотивации / директор', 'План: глобальные коэффициенты, USD', 'План: коэффициенты подразделений, USD', 'Разница, USD', 'Разница, %'])
+        append(['Подразделение / вид мотивации / директор', 'План: глобальные коэффициенты, USD', 'План: коэффициенты подразделений, USD', 'Разница, USD', 'Разница, %', 'План продаж, USD', 'DDP, USD', 'Глобальная мотивация, % от плана', 'Мотивация подразделений, % от плана', 'Наценка глобальная', 'Наценка подразделений', 'Отклонение наценки'])
         def write(nodes, indent=0):
             for node in nodes:
-                append(['  ' * indent + node['name'], node['global'], node['local'], node['difference'], node.get('difference_percent')])
+                append(['  ' * indent + node['name'], node['global'], node['local'], node['difference'], node.get('difference_percent'), node.get('plan'), node.get('ddp'),
+                        node.get('global_percent') / 100 if node.get('global_percent') is not None else None,
+                        node.get('local_percent') / 100 if node.get('local_percent') is not None else None,
+                        node.get('global_markup'), node.get('local_markup'), node.get('markup_difference')], percent_columns=(4, 7, 8))
                 write(node.get('children', []), indent + 1)
         write(data)
     elif kind in ('team', 'registry'):
@@ -70,7 +73,7 @@ def workbook(kind, data, metadata, query=None):
                     row['bonus'], row['total'], *row['period_values'],
                     'Не распределено' if row['unallocated'] else 'Рассчитано; выплата не подтверждена',
                     sum((item['possible'] for item in row['rows']), Decimal(0)) if all(item.get('possible') is not None for item in row['rows']) else None])
-        if kind == 'team':
+        if kind in ('team', 'registry'):
             sheet = book.create_sheet('Итого по видам')
             append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта', 'Сколько бы выплатили · без процента выполнения'])
             for row in display['type_totals']:
@@ -150,6 +153,9 @@ def report(request, kind):
         raise Http404
     if kind not in reports.available(request.user):
         raise PermissionDenied
+    if kind == 'deals':
+        from .reports_next_deals import report as deals_report
+        return deals_report(request)
     query = request.GET.copy()
     query.pop('execution', None)
     report_user = request.user
@@ -271,7 +277,7 @@ def report(request, kind):
     ledger_page = Paginator(presentation['registry_rows'], 100).get_page(query.get('page')) if data is not None and kind not in ('executive', 'detail') else None
     employee_page = Paginator(presentation['employees'], 50).get_page(query.get('page')) if kind == 'team' else None
     for section in presentation.get('team_sections', []):
-        section['page'] = Paginator(section['rows'], 50).get_page(query.get(section['page_parameter']))
+        section['page'] = Paginator(section['rows'], 100 if kind == 'registry' else 50).get_page(query.get(section['page_parameter']))
     page_query = query.copy()
     page_query.pop('page', None)
     page_query.pop('export', None)

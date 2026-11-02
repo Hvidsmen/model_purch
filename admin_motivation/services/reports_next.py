@@ -13,6 +13,7 @@ CATALOG = {
     'team': ('Премии команды', 'Премии сотрудников доступных подразделений.'),
     'registry': ('Реестр премий к выплате', 'Рассчитанные суммы по сотрудникам и периодам для проверки финансистом.'),
     'executive': ('Сводный отчёт: план премий', 'Глобальные коэффициенты и коэффициенты подразделений на одинаковом плане.'),
+    'deals': ('Факт закрытых сделок', 'Фактические отгрузки, авторы сделок и возможная мотивация.'),
     'detail': ('Детальный расчёт', 'Отгрузки, ставки K0–K4, условия выполнения и итоговая премия.'),
 }
 PERIODS = [('all', 'Все доступные периоды'), ('4', '4 квартал'), ('5', 'Год')]
@@ -20,7 +21,7 @@ PERIODS = [('all', 'Все доступные периоды'), ('4', '4 ква�
 
 def available(user):
     role = role_for(user, 'motivation')
-    keys = ['detail']
+    keys = ['detail', 'deals']
     if role in (*PERSONAL_ROLES, ADMIN):
         keys.insert(0, 'mine')
     if role not in PERSONAL_ROLES:
@@ -214,7 +215,10 @@ def planned_budget(execution, scenario, query):
         raise ValidationError('В запуске нет корректного распределения квартальной и годовой премии.')
     quarter_share, annual_share = quarter_share / 100, annual_share / 100
     selected_subdivisions = query.getlist('subdivision')
-    for day, original, pg, group, brand, amount, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'segment_amounts').iterator(chunk_size=2000):
+    for field, model_field in [('planning', 'planning_group_sales'), ('goods', 'group'), ('brand', 'brand')]:
+        if query.getlist(field):
+            lines = lines.filter(**{model_field + '__in': query.getlist(field)})
+    for day, original, pg, group, brand, amount, ddp, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
         share = (annual_share if '5' in periods else Decimal(0)) + (quarter_share if '4' in periods else Decimal(0))
         sub = canonical(original, aliases)
         if not included(original, aliases) or selected_subdivisions and sub not in selected_subdivisions:
@@ -227,7 +231,7 @@ def planned_budget(execution, scenario, query):
         amounts = [number(segments[f'O{i}']) for i in range(5)]
         bucket = buckets.setdefault(sub, empty_bucket())
         bucket['plan'] += amount
-        bucket['ddp'] = None
+        bucket['ddp'] = add(bucket['ddp'], ddp)
         for kind, target in kinds.items():
             if target not in included_kinds or target == 'directors':
                 continue
@@ -243,14 +247,19 @@ def planned_budget(execution, scenario, query):
             bucket['global']['directors'] += global_amount * len(staff)
             bucket['local']['directors'] += sum(staff.values(), Decimal(0)) * share
             for employee, value in staff.items():
-                entry = bucket['staff'].setdefault(employee, {'plan': Decimal(0), 'ddp': None, 'global': Decimal(0), 'local': Decimal(0)})
+                entry = bucket['staff'].setdefault(employee, {'plan': Decimal(0), 'ddp': Decimal(0), 'global': Decimal(0), 'local': Decimal(0)})
                 entry['plan'] += amount
+                entry['ddp'] = add(entry['ddp'], ddp)
                 entry['global'] += global_amount
                 entry['local'] += value * share
     company = empty_bucket()
-    company['ddp'] = None
     for bucket in buckets.values():
         company['plan'] += bucket['plan']
+        company['ddp'] = add(company['ddp'], bucket['ddp'])
+        for employee, values in bucket['staff'].items():
+            staff = company['staff'].setdefault(employee, {'plan': Decimal(0), 'ddp': Decimal(0), 'global': Decimal(0), 'local': Decimal(0)})
+            for key in staff:
+                staff[key] = add(staff[key], values[key])
         for side in ('global', 'local'):
             for kind in included_kinds:
                 company[side][kind] += bucket[side][kind]

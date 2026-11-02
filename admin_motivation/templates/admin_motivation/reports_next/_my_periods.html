@@ -1,0 +1,13 @@
+{% load report_format %}
+<div class="nr-section-title"><h2 id="my-premium-periods" tabindex="-1">Ваша премия по периодам</h2><span>С учётом условий выполнения</span></div>
+<div class="nr-card-grid nr-with-total nr-personal-cards">
+{% for card in presentation.period_cards %}
+<article class="nr-period"><div class="nr-period-head"><span>{% if card.label == "Год" %}Годовая премия{% else %}Премия за {{ card.label }}{% endif %}</span><span class="nr-status">Рассчитано</span></div>
+<strong>{{ card.amount|report_cash }} {{ ledger.currency }}</strong>
+<div class="nr-period-actions">{% for type,url in card.links.items %}<a href="{{ url }}">Как рассчитано →{% if card.links|length > 1 %} {{ type }}{% endif %}</a>{% endfor %}
+{% if card.explanation %}<details class="nr-card-explanation"><summary>Почему премия равна нулю</summary><p>{{ card.explanation }}</p></details>{% endif %}</div></article>
+{% empty %}<div class="nr-empty"><strong>Начислений не найдено</strong>Проверьте период и параметры личного доступа.</div>{% endfor %}
+{% if presentation.period_cards %}<article class="nr-period nr-summary-card" aria-label="Итого за выбранные периоды"><div class="nr-period-head"><span>Итого за выбранные периоды</span><span class="nr-status">Итого</span></div>
+<strong class="next-total">{{ presentation.total|report_cash }} {{ ledger.currency }}</strong>
+<details class="nr-card-explanation"><summary>Состав суммы</summary><div class="nr-period-line"><span>Премии по расчёту, без годовой доплаты</span><b>{{ presentation.base|report_cash }} {{ ledger.currency }}</b></div><div class="nr-period-line"><span>Годовая доплата за кварталы</span><b>{{ presentation.bonus|report_cash }} {{ ledger.currency }}</b></div><p>Пилот: 4 квартал и годовая премия. Доплата за кварталы не предусмотрена — 0.</p></details></article>{% endif %}
+</div>

@@ -112,7 +112,10 @@
  expandTree(2);
  document.getElementById('manager-detail-expand').addEventListener('click', () => expandTree());
  document.getElementById('manager-detail-collapse').addEventListener('click', () => target.querySelectorAll('details').forEach(element => element.open = false));
- const updateColumns = () => root.style.setProperty('--report-columns', 6 + (expanded['period-input'] ? 2 : 0) + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
+ const updateColumns = () => {
+  root.style.setProperty('--report-columns', 6 + (expanded['period-input'] ? 2 : 0) + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
+  root.classList.toggle('manager-expanded-columns', extra.checked || Object.values(expanded).some(Boolean));
+ };
  root.addEventListener('click', event => {
   const button = event.target.closest('[data-manager-reveal]');
   if (!button) return;

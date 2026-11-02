@@ -38,10 +38,12 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             rows = [row for row in source if not values.get('DealAuthor') or row['АвторСделки'] in values['DealAuthor']]
             if kwargs.get('summary_only'):
                 return {'currency': 'USD', 'period_summary': period_motivation_summary(rows)}
-            return manager_detail_report(rows, performance_rows=detail_rows())
-        budget = [{'name': label, 'global': 24000, 'local': 27000, 'difference': 3000, 'difference_percent': .125,
-                   'children': [{'name': 'Политики', 'global': 24000, 'local': 27000, 'difference': 3000, 'children': []}]}
-                  for label in ('Компания', 'Д-Москва')]
+            return manager_detail_report(rows, performance_rows=[dict(row, КварталМотивации='4 Квартал(1-4 кв)' if row['КварталМотивации'] != 'Год' else 'Год') for row in detail_rows()])
+        from .services.plan_summary import row as budget_row
+        budget = [{**budget_row(label, 200000, 24000, 27000, ddp=100000,
+                   children=[budget_row(name, 200000, global_value, local_value, ddp=100000)
+                             for name, global_value, local_value in [('Политика', 12000, 15000), ('Продажи', 8000, 8000), ('Директор', 4000, 4000)]]),
+                   'difference_percent': .125} for label in ('Компания', 'Д-Москва')]
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', side_effect=load), patch('admin_motivation.services.reports_next.planned_budget', return_value=budget):
             self.page.set_viewport_size({'width':1440,'height':1000})
             self.page.goto(self.live_server_url + reverse('index_admin_motivation'))
@@ -80,6 +82,57 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(self.page.locator('#next-deep-calculation')).to_have_attribute('open', '')
             expect(self.page.locator('#manager-detail-extra')).to_be_checked()
             expect(self.page.locator('.manager-detail-cards')).to_have_count(0)
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['detail']) + '?run=1&type=Политики')
+            expect(self.page.locator('#next-deep-calculation')).to_have_attribute('open', '')
+            expect(self.page.locator('#manager-detail-panel')).to_be_visible()
+            expect(self.page.locator('#manager-detail-extra')).not_to_be_checked()
+            self.assertTrue(self.page.locator('#manager-detail-scroll').evaluate('(el) => el.scrollWidth <= el.clientWidth + 1'))
+            expect(self.page.locator('#manager-detail-scroll-top')).to_be_hidden()
+            self.page.screenshot(path='/tmp/detail-report-fit-desktop.png', full_page=True)
+            self.page.locator('#manager-detail-extra').check()
+            expect(self.page.locator('#manager-detail-report')).to_have_class('manager-expanded-columns')
+            expect(self.page.locator('#manager-detail-scroll-top')).to_be_visible()
+            self.page.locator('#manager-detail-extra').uncheck()
+            self.assertTrue(self.page.locator('#manager-detail-scroll').evaluate('(el) => el.scrollWidth <= el.clientWidth + 1'))
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['mine']) + f'?run=1&preview_user={employee}&type=Политики')
+            # Personal cards stay compact with amounts visible and explanations folded.
+            period_cards = self.page.locator('.nr-personal-cards').first.locator(':scope > article')
+            self.assertLess(period_cards.first.bounding_box()['height'], 210)
+            self.assertLess(self.page.locator('.nr-personal-cards .nr-goal').first.bounding_box()['height'], 450)
+            expect(self.page.locator('.nr-goal-explanation').first).not_to_have_attribute('open', '')
+            self.page.locator('.nr-goal-explanation > summary').first.click()
+            expect(self.page.locator('.nr-target-reward').first).to_be_visible()
+            self.page.locator('.nr-goal-explanation > summary').first.click()
+            for row in source:
+                row['VariationCalculate'] = 'Подразделение(Глобально)'
+            self.page.reload()
+            formula = self.page.locator('.nr-matrix-formula').first
+            expect(formula.locator(':scope > summary')).to_contain_text('Подразделение(Глобально)')
+            children = formula.locator(':scope > .nr-matrix-children')
+            expect(children).to_be_hidden()
+            expect(self.page.locator('.nr-matrix-total').first).to_be_visible()
+            formula.locator(':scope > summary').click()
+            expect(children).to_be_visible()
+            child = children.locator('.nr-matrix-node').first
+            child.locator(':scope > summary').click()
+            expect(child.locator(':scope > .nr-matrix-children')).to_be_visible()
+            formula.locator(':scope > summary').click()
+            expect(children).to_be_hidden()
+            expect(child.locator(':scope > .nr-matrix-children')).to_be_hidden()
+            expect(self.page.locator('.nr-matrix-division').first).to_be_visible()
+            formula.locator(':scope > summary').focus()
+            self.page.keyboard.press('Enter')
+            expect(children).to_be_visible()
+            self.page.locator('[data-matrix-details]').uncheck()
+            expect(formula.locator(':scope > summary .nr-matrix-execution').first).to_be_hidden()
+            expect(formula.locator(':scope > summary .nr-matrix-calculated').first).to_be_visible()
+            self.page.locator('[data-matrix-details]').check()
+            formula.locator(':scope > summary').click()
+            self.page.screenshot(path='/tmp/my-premium-compact-global-desktop.png', full_page=True)
+            self.page.set_viewport_size({'width':390,'height':844})
+            self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 390)
+            self.page.screenshot(path='/tmp/my-premium-compact-global-mobile.png', full_page=True)
+            self.page.set_viewport_size({'width':1440,'height':1000})
 
             self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['team']) + '?run=1')
             expect(self.page.locator('.nr-table')).to_have_count(3)
@@ -109,9 +162,19 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(self.page.locator('.nr-table tbody tr')).to_have_count(3)
             expect(self.page.locator('.nr-table thead')).to_contain_text('Год')
             self.page.screenshot(path='/tmp/new-reports-registry-pivot.png', full_page=True)
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['registry']) + '?run=1')
+            expect(self.page.locator('.nr-table')).to_have_count(3)
+            expect(self.page.locator('.nr-kpi-types')).to_have_count(3)
+            self.page.screenshot(path='/tmp/registry-types-desktop.png', full_page=True)
 
             self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['executive']) + '?run=1')
-            expect(self.page.locator('.nr-bars')).to_be_visible()
+            expect(self.page.locator('.nr-exec-scroll')).to_be_visible()
+            expect(self.page.locator('.nr-exec-header')).to_contain_text('DDP, USD')
+            expect(self.page.locator('.nr-kpi-types')).to_have_count(3)
+            self.page.locator('[data-executive-expand]').click()
+            expect(self.page.locator('.nr-exec-children').first).to_be_visible()
+            self.page.locator('[data-executive-collapse]').click()
+            expect(self.page.locator('.nr-exec-children').first).to_be_hidden()
             self.page.locator('.nr-filter-panel > summary').click()
             self.page.locator('.next-types > summary').click()
             self.page.locator('[data-type-all]').click()
@@ -169,7 +232,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.select_option('select[name=plan]', str(alternate))
             self.page.locator('.next-periods > summary').click()
             self.page.locator('[data-period-all]').click()
-            expect(self.page.locator('.next-periods input:checked')).to_have_count(5)
+            expect(self.page.locator('.next-periods input:checked')).to_have_count(2)
             self.page.locator('[data-period-clear]').click()
             expect(self.page.locator('.next-periods input:checked')).to_have_count(0)
             self.page.locator('input[name=period][value="4"]').check()
@@ -181,10 +244,10 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.assertEqual(comparison.call_args.args[1].pk, alternate)
             self.assertEqual(comparison.call_args.args[2].getlist('period'), ['4', '5'])
             self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['team']) + '?run=1&type=Политики&period=5')
-            expect(self.page.locator('.next-total')).to_contain_text('95,00 USD')
+            expect(self.page.locator('.next-total')).to_contain_text('90,00 USD')
             self.page.get_by_role('link', name='Как рассчитано →', exact=True).first.click()
             expect(self.page.get_by_role('heading', name='Как получилась сумма')).to_be_visible()
-            self.page.locator('#next-deep-calculation > summary').click()
+            expect(self.page.locator('#next-deep-calculation')).to_have_attribute('open', '')
             expect(self.page.locator('#manager-detail-panel')).to_be_visible()
             expect(self.page.locator('.manager-detail-cards')).to_have_count(0)
             expect(self.page.locator('#manager-detail-nodes')).to_contain_text('Иванов')
@@ -1082,6 +1145,51 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         with self.page.expect_navigation():
             self.page.locator('[name=action_button][value=apply_sub]').click()
         self.assertEqual(self.db(lambda: list(SubdivisionDirectorCoeff.objects.values_list('subdivision_id', 'employee_id'))), [(branches[0], employees[0])])
+        self.assertEqual(self.errors, [])
+
+    def test_new_closed_deals_preserves_fields_filters_and_csv(self):
+        from contextlib import nullcontext
+        from uuid import uuid4
+        from django.utils import timezone
+        from playwright.sync_api import expect
+        from .models import MotivationExecution
+        from .services.reports import FILTERS
+        from .test_reports_next_deals import deal_payload
+        def prepare():
+            MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year': 2026})
+        self.db(prepare)
+        filters = [{'name': name, 'label': label, 'multiple': multiple,
+                    'options': [{'value': 'Политики' if name == 'type' else 'A' if name == 'subdivision' else 'Иванов', 'selected': not multiple}]}
+                   for name, _, label, _, multiple in FILTERS['deals']]
+        def load(*args, **kwargs):
+            result = deal_payload()
+            result['page'] = kwargs.get('page', 1)
+            result['offset'] = (result['page'] - 1) * 50
+            return result
+        with patch('admin_motivation.reports_next_deals.choices', return_value=filters), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.reports_next_deals.load_report', side_effect=load) as loaded:
+            self.page.set_viewport_size({'width':1440,'height':1000})
+            self.page.goto(self.live_server_url + reverse('motivation_reports_next'))
+            self.page.get_by_role('link', name='Факт закрытых сделок', exact=False).click()
+            expect(self.page.get_by_role('heading', name='Факт закрытых сделок', exact=True)).to_be_visible()
+            self.page.get_by_role('button', name='Показать', exact=True).click()
+            expect(self.page.locator('.nr-deal-kpis')).to_contain_text('1 000,00')
+            expect(self.page.locator('#deal-scroll [data-deal-detail]').first).to_be_hidden()
+            self.page.locator('#deal-detail-toggle').check()
+            expect(self.page.locator('#deal-scroll [data-deal-detail]').first).to_be_visible()
+            expect(self.page.locator('#deal-scroll thead th')).to_have_count(19)
+            expect(self.page.locator('#deal-scroll tbody')).to_contain_text('30.10.2026')
+            with self.page.expect_download() as download:
+                self.page.get_by_role('link', name='Скачать страницу CSV', exact=True).click()
+            download.value.save_as('/tmp/new-closed-deals.csv')
+            from pathlib import Path
+            self.assertIn('Дата отгрузки', Path('/tmp/new-closed-deals.csv').read_text(encoding='utf-8-sig'))
+            self.page.get_by_role('link', name='Далее →', exact=True).click()
+            self.assertEqual(loaded.call_args.kwargs['page'], 2)
+            expect(self.page.locator('.nr-pagination')).to_contain_text('Страница 2 из 3')
+            self.page.screenshot(path='/tmp/new-closed-deals-desktop.png', full_page=True)
+            self.page.set_viewport_size({'width':390,'height':844})
+            self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 390)
+            self.page.screenshot(path='/tmp/new-closed-deals-mobile.png', full_page=True)
         self.assertEqual(self.errors, [])
 
     def setUp(self):

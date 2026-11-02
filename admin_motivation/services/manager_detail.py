@@ -169,12 +169,24 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
             grouped[period(row)].append(row)
         return [execution_metrics(grouped[name], metrics(grouped[name], currency, coefficients=coefficients), context=subset, target_period=name) for name in periods] + [
             execution_metrics(subset, metrics(subset, currency, overall=True, coefficients=coefficients), overall=True)]
+    def formula_groups(subset):
+        # Keep the existing product tree for exports and detailed reports. The
+        # personal matrix can additionally collapse all products of one formula.
+        if not any(str(row.get('VariationCalculate') or '').strip() for row in subset):
+            return []
+        grouped = defaultdict(list)
+        for row in subset:
+            grouped[str(row.get('VariationCalculate') or '').strip() or 'Без способа расчёта'].append(row)
+        return [{'label': label, 'level': 1, 'values': blocks(items), 'children': nodes(items, 2)}
+                for label, items in sorted(grouped.items())]
+
     def nodes(subset, level=0):
         grouped = defaultdict(list)
         for row in subset:
             grouped[row.get(DIMENSIONS[level]) or '—'].append(row)
         return [{'label': label, 'level': level, 'unallocated': level == 1 and unallocated_author(label), 'values': blocks(items),
-                 'children': nodes(items, level + 1) if level + 1 < len(DIMENSIONS) else []}
+                 'children': nodes(items, level + 1) if level + 1 < len(DIMENSIONS) else [],
+                 'formula_groups': formula_groups(items) if level == 1 else []}
                 for label, items in sorted(grouped.items())]
     cards = []
     for label, paid_key, bonus_key in [('USD', 'СуммаМотивацииUSDУчетПроцента', 'Остаток'),

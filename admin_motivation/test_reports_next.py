@@ -417,7 +417,7 @@ class ReportsNextTests(TestCase):
 
 
     def test_all_new_report_filters_keep_multiple_types_and_periods(self):
-        for kind in reports_next.CATALOG:
+        for kind in (key for key in reports_next.CATALOG if key != 'deals'):
             response = self.client.get(reverse('motivation_report_next', args=[kind]), {'type': ['Политики', 'Продажи'], 'period': ['4', '5']})
             self.assertEqual(response.status_code, 200)
             self.assertContains(response, 'next-types')
@@ -487,7 +487,7 @@ class ReportsNextTests(TestCase):
                 self.assertNotIn(name, values)
         employee = User.objects.create_user('nav-employee')
         employee.groups.add(Group.objects.get(name=POLITICIAN))
-        self.assertEqual({item['key'] for item in report_navigation(employee, 'mine', query)}, {'mine', 'detail'})
+        self.assertEqual({item['key'] for item in report_navigation(employee, 'mine', query)}, {'mine', 'detail', 'deals'})
 
     def test_team_possible_uses_fact_before_percentage_in_usd_and_rub(self):
         for currency, expected in [('USD', Decimal(600)), ('RUB', Decimal(60000))]:
@@ -535,7 +535,7 @@ class ReportsNextTests(TestCase):
         # A newer failed or still-running attempt cannot be selected as successful.
         for state in ('failed', 'running'):
             MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state=state, started_at=timezone.now())
-        for kind in reports_next.CATALOG:
+        for kind in (key for key in reports_next.CATALOG if key != 'deals'):
             for requested in (str(older.pk), '99999999', 'invalid'):
                 response = self.client.get(reverse('motivation_report_next', args=[kind]), {'execution': requested})
                 self.assertEqual(response.status_code, 200)
@@ -557,3 +557,89 @@ class ReportsNextTests(TestCase):
         response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1'})
         self.assertContains(response, 'Нет подтверждённых завершённых расчётов.')
         self.assertIsNone(response.context['execution'])
+
+    def test_personal_matrix_formula_level_keeps_global_execution_and_personal_pay(self):
+        from .services.reports_next_presenter import personal_details
+        rows = [dict(detail_rows()[1], VariationCalculate='Подразделение(Глобально)',
+                     ГруппаПлановПродаж=label, СуммаМотивацииUSD=possible, СуммаМотивацииUSDУчетПроцента=0)
+                for label, possible in [('RAC', 100), ('VRF', 250)]]
+        performance = [dict(detail_rows()[1], СуммаПланUSD=1000, СуммаОтгрузокUSD=640)]
+        source = manager_detail_report(rows, performance_rows=performance)
+        ledger = {'sections': [{'kind': 'Политики', 'data': source}], 'payout_threshold': Decimal('.8')}
+        display = personal_details(ledger, QueryDict('year=2026&period=5'))
+        group = display['product_sections'][0]['groups'][0]
+        formula = group['formula_groups'][0]
+        self.assertEqual(formula['label'], 'Подразделение(Глобально)')
+        self.assertEqual([node['label'] for node in formula['children']], ['RAC', 'VRF'])
+        self.assertEqual(formula['total_metrics']['possible'], Decimal(350))
+        self.assertEqual(formula['total_metrics']['remaining'], Decimal(360))
+        self.assertEqual(formula['total_metrics']['ratio'], Decimal('.64'))
+        self.assertEqual(formula['total_metrics']['calculated'], Decimal(0))
+        self.assertEqual(formula['total'], group['total'])
+        # Branch targets are reused once; they must never be added per product.
+        self.assertTrue(all(node['total_metrics']['remaining'] == Decimal(360) for node in formula['children']))
+
+    def test_personal_matrix_separates_formulae_without_merging_same_product(self):
+        from .services.reports_next_presenter import personal_details
+        rows = [dict(detail_rows()[1], VariationCalculate=label, СуммаМотивацииUSD=value)
+                for label, value in [('Подразделение(Глобально)', 100), ('Группа товаров', 250)]]
+        source = manager_detail_report(rows, performance_rows=[detail_rows()[1]])
+        display = personal_details({'sections': [{'kind': 'Продажи', 'data': source}]}, QueryDict('year=2026&period=5'))
+        group = display['product_sections'][0]['groups'][0]
+        formulas = group['formula_groups']
+        self.assertEqual([node['label'] for node in formulas], ['Группа товаров', 'Подразделение(Глобально)'])
+        self.assertEqual([node['total_metrics']['possible'] for node in formulas], [Decimal(250), Decimal(100)])
+        self.assertEqual(sum(node['total'] for node in formulas), group['total'])
+        self.assertTrue(all(len(node['children']) == 1 for node in formulas))
+
+    def test_registry_splits_types_with_card_totals_and_keeps_unallocated_visible(self):
+        source = manager_detail_report([dict(detail_rows()[1], АвторСделки=name) for name in ('Employee', 'Политики')])
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source):
+            response = self.client.get(reverse('motivation_report_next', args=['registry']), {'run': '1'})
+        self.assertContains(response, '<table class="nr-table">', count=3)
+        self.assertContains(response, 'nr-kpi-types', count=3)
+        self.assertContains(response, 'Не распределено', count=3)
+        self.assertNotContains(response, 'data-next-unallocated hidden')
+        self.assertContains(response, 'ещё не подтверждены к выплате')
+        sections = response.context['presentation']['team_sections']
+        self.assertEqual([section['kind'] for section in sections], ['Политики', 'Продажи', 'Директора'])
+        self.assertEqual(sum(section['total'] for section in sections), response.context['presentation']['total'])
+        self.assertEqual([section['total'] for section in sections], [Decimal(180)] * 3)
+
+    def test_detail_calculation_is_open_without_drilldown_hash(self):
+        source = manager_detail_report([detail_rows()[1]])
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source):
+            response = self.client.get(reverse('motivation_report_next', args=['detail']), {'run': '1', 'type': 'Политики'})
+        self.assertContains(response, '<details class="nr-deep" id="next-deep-calculation" open>', html=False)
+
+    def test_executive_restores_ddp_markup_percentages_and_type_cards(self):
+        from .services.reports_next_presenter import present
+        self.fixture.scenario.lines.filter(subdivision='A').update(amount_ddp_usd=600)
+        self.fixture.scenario.lines.filter(subdivision='B').update(amount_ddp_usd=400)
+        data = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('year=2026'))
+        root = data[0]
+        self.assertEqual(root['ddp'], Decimal(1000))
+        self.assertEqual(root['global_markup'], root['plan'] / (root['ddp'] + root['global']))
+        self.assertEqual(root['local_markup'], root['plan'] / (root['ddp'] + root['local']))
+        self.assertEqual(root['markup_difference'], root['local_markup'] - root['global_markup'])
+        self.assertEqual(root['global_percent'], root['global'] / root['plan'] * 100)
+        display = present('executive', data)
+        self.assertEqual([item['kind'] for item in display['executive_types']], ['Политики', 'Продажи', 'Директора'])
+        self.assertEqual(sum(item['global'] for item in display['executive_types']), root['global'])
+        response = self.client.get(reverse('motivation_report_next', args=['executive']), {'run': '1'})
+        for label in ('DDP, USD', 'Наценка глобальная', 'Наценка подразделений', 'Отклонение наценки'):
+            self.assertContains(response, label)
+        self.assertContains(response, 'nr-kpi-types', count=3)
+        exported = self.client.get(reverse('motivation_report_next', args=['executive']), {'export': 'xlsx'})
+        from io import BytesIO
+        book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
+        sheet = book['Премии']
+        self.assertEqual(sheet['G3'].value, 1000)
+        self.assertAlmostEqual(sheet['J3'].value, float(root['global_markup']))
+        self.assertEqual(sheet['H3'].number_format, '0.00%')
+        book.close(); exported.close()
+        self.fixture.scenario.lines.filter(subdivision='B').update(amount_ddp_usd=None)
+        missing = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('year=2026'))
+        self.assertIsNone(missing[0]['ddp'])
+        self.assertIsNone(missing[0]['global_markup'])
+        self.assertIsNotNone(next(row for row in missing if row['name'] == 'A')['global_markup'])

@@ -41,6 +41,8 @@
  document.querySelectorAll('details.next-branches').forEach(menu => menu.addEventListener('keydown', event => {
   if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
  }));
+ document.querySelector('[data-executive-expand]')?.addEventListener('click', () => document.querySelectorAll('.nr-exec-node').forEach(node => { node.open = true; }));
+ document.querySelector('[data-executive-collapse]')?.addEventListener('click', () => document.querySelectorAll('.nr-exec-node').forEach(node => { node.open = false; }));
  const form = document.getElementById('native-report-filters');
  if (form) {
   const snapshot = () => JSON.stringify([...new FormData(form).entries()].filter(([key]) => key !== 'run').sort(([a, av], [b, bv]) => a.localeCompare(b) || String(av).localeCompare(String(bv))));

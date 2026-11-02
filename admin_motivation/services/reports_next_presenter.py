@@ -15,7 +15,10 @@ def present(kind, data, ledger=None, period='all'):
             return result
         root = data[0]
         result.update(global_plan=root['global'], local_plan=root['local'], difference=root['difference'],
-                      difference_percent=root.get('difference_percent'), branches=max(0, len(data) - 1))
+                      difference_percent=root.get('difference_percent'), branches=max(0, len(data) - 1),
+                      plan=root.get('plan'), ddp=root.get('ddp'), global_markup=root.get('global_markup'),
+                      local_markup=root.get('local_markup'), markup_difference=root.get('markup_difference'),
+                      executive_types=[{**item, 'kind': {'Политика': 'Политики', 'Директор': 'Директора'}.get(item['name'], item['name'])} for item in root.get('children', [])])
         scale = max([abs(row[side] or ZERO) for row in data[1:] for side in ('global', 'local')] + [Decimal(1)])
         for row in sorted(data[1:], key=lambda row: abs(row['difference'] or ZERO), reverse=True):
             result['budget_rows'].append({'node': row, 'global_width': abs(row['global'] or ZERO) / scale * 100,
@@ -165,7 +168,7 @@ def personal_details(ledger, query):
                 link = deals.copy()
                 link['start'] = date(year, start, 1).isoformat()
                 link['end'] = date(year, end, monthrange(year, end)[1]).isoformat()
-                deal_links.append({'label': 'Год' if selected == '5' else selected + ' кв.', 'url': reverse('motivation_report', args=['deals']) + '?' + link.urlencode()})
+                deal_links.append({'label': 'Год' if selected == '5' else selected + ' кв.', 'url': reverse('motivation_report_next', args=['deals']) + '?' + link.urlencode()})
             return {'label': node['label'], 'level': level,
                 'values': [block[19] for block in node['values']], **matrix_metrics(node['values']),
                 'detail_url': detail_url,
@@ -177,7 +180,8 @@ def personal_details(ledger, query):
                 if author.get('unallocated'):
                     continue
                 groups.append({'branch': branch['label'], 'author': author['label'], **matrix_metrics(author['values']),
-                    'children': [matrix(node, branch['label'], author['label']) for node in author['children']]})
+                    'children': [matrix(node, branch['label'], author['label']) for node in author['children']],
+                    'formula_groups': [matrix(node, branch['label'], author['label']) for node in author.get('formula_groups', [])]})
         sections.append({'kind': kind, 'periods': data['periods'], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
                          'metric_columns': len(data['periods']) * 4 + 6, 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
     # Premium components are additive; cumulative sales targets are not.
@@ -201,7 +205,7 @@ def new_detail_labels(data):
     data = dict(data)
     data['headers'] = [dict(header) for header in data['headers']]
     for index, label, explanation in [
-        (13, 'Возможная премия на текущих отгрузках', 'Премия по уже совершённым отгрузкам до применения условий выплаты; это не прогноз премии при 100% плана.'),
+        (13, 'Возможная премия', 'Премия по уже совершённым отгрузкам до применения условий выплаты; это не прогноз премии при 100% плана.'),
         (17, 'Премия по расчёту', 'Премия с учётом условий выполнения плана. Не подтверждает фактическую выплату.'),
         (18, 'Годовая доплата за кварталы', 'Годовая корректировка квартальных премий. Не сама годовая премия.'),
         (19, 'Всего по расчёту', 'Премия по расчёту плюс годовая доплата за кварталы.')]:
