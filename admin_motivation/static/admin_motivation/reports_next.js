@@ -77,13 +77,6 @@
    matrix.style.setProperty('--nr-matrix-metrics', count * (matrixDetails.checked ? 4 : 2) + (matrixDetails.checked ? 6 : 4));
   });
  });
- const execution = document.querySelector('.next-filter select[name=execution]');
- execution?.addEventListener('change', () => {
-  const year = document.querySelector('.next-filter input[name=year]');
-  if (year) year.value = execution.selectedOptions[0]?.dataset.year || '';
-  const plan = document.querySelector('.next-filter select[name=plan]');
-  if (plan) plan.value = '';
- });
  const preview = document.querySelector('.next-filter select[name=preview_user]');
  preview?.addEventListener('change', () => {
   typeChecks.forEach(input => { input.checked = false; });

@@ -81,6 +81,7 @@ def period_motivation_summary(rows, currency='USD', pilot=False):
                             'title': ', '.join(sorted(captions.get(key, ())))})
             keys.append(key)
     paid_key = 'СуммаМотивацииRURУчетПроцента' if currency == 'RUB' else 'СуммаМотивацииUSDУчетПроцента'
+    possible_key = 'СуммаМотивацииRUR' if currency == 'RUB' else 'СуммаМотивацииUSD'
     bonus_key = 'ОстатокRUR' if currency == 'RUB' else 'Остаток'
     def summary(subset):
         grouped = defaultdict(list)
@@ -90,6 +91,7 @@ def period_motivation_summary(rows, currency='USD', pilot=False):
         bonus = total(subset, bonus_key)
         return {'currency': currency,
                 'values': [total(grouped[key], paid_key) if key in grouped else None for key in keys],
+                'possible_values': [total(grouped[key], possible_key) if key in grouped else None for key in keys],
                 'remainder': bonus, 'total': total(subset, paid_key) + bonus}
     authors = defaultdict(list)
     for row in rows:

@@ -1,0 +1,1 @@
+{% load report_format %}<div class="nr-kpi-types" aria-label="По видам мотивации">{% for item in presentation.type_totals %}<div><span>{{ item.kind }}</span><b>{% if metric == 'possible' %}{{ item.possible|report_cash }}{% elif metric == 'amount' %}{{ item.amount|report_cash }}{% else %}{{ item.total|report_cash }}{% endif %}</b></div>{% endfor %}</div>

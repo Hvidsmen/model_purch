@@ -78,6 +78,18 @@ def present(kind, data, ledger=None, period='all'):
     result['type_totals'] = [{**types[kind], 'people': len(types[kind]['people'])} if kind in types else
         {'kind': kind, 'amount': None, 'bonus': None, 'total': None, 'people': 0}
         for kind in dict.fromkeys([*ledger.get('kinds', []), *types])]
+    def possible_total(rows):
+        values = [row.get('possible') for row in rows]
+        return sum(values, ZERO) if values and all(value is not None for value in values) else None
+    result['possible'] = possible_total(ledger['rows'])
+    result['team_sections'] = []
+    for index, item in enumerate(result['type_totals']):
+        rows = [row for row in ledger['rows'] if row['kind'] == item['kind']]
+        item['possible'] = possible_total(rows)
+        result['team_sections'].append({**item,
+            'rows': [row for row in result['registry_rows'] if row['kind'] == item['kind']],
+            'period_totals': [sum((row['amount'] for row in rows if row['code'] == code), ZERO) for code in codes],
+            'page_parameter': {'Политики': 'page_policies', 'Продажи': 'page_sales', 'Директора': 'page_directors'}.get(item['kind'], f'page_type_{index}')})
     result['people'] = sum(not row['unallocated'] for row in result['employees'])
     result['branches'] = len({row['subdivision'] for row in result['employees']})
     result['period_cards'] = [card for code, card in sorted(periods.items())]

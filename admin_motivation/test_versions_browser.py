@@ -81,6 +81,18 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             expect(self.page.locator('#manager-detail-extra')).to_be_checked()
             expect(self.page.locator('.manager-detail-cards')).to_have_count(0)
 
+            self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['team']) + '?run=1')
+            expect(self.page.locator('.nr-table')).to_have_count(3)
+            expect(self.page.locator('.nr-kpi-types')).to_have_count(3)
+            expect(self.page.locator('.nr-kpi').filter(has_text='Сколько бы выплатили')).to_contain_text('1 800,00')
+            expect(self.page.locator('select[name=execution]')).to_have_count(0)
+            for label in ('Политики', 'Продажи', 'Директора'):
+                expect(self.page.get_by_role('heading', name=label, exact=True)).to_be_visible()
+            self.page.screenshot(path='/tmp/new-reports-team-types-desktop.png', full_page=True)
+            self.page.set_viewport_size({'width':390,'height':844})
+            self.assertLessEqual(self.page.evaluate('document.documentElement.scrollWidth'), 390)
+            self.page.screenshot(path='/tmp/new-reports-team-types-mobile.png', full_page=True)
+            self.page.set_viewport_size({'width':1440,'height':1000})
             self.page.goto(self.live_server_url + reverse('motivation_report_next', args=['team']) + '?run=1&type=Политики')
             expect(self.page.locator('.nr-table tbody tr')).to_have_count(3)
             expect(self.page.get_by_role('heading', name='Итого по видам мотивации')).to_be_visible()

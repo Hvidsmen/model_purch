@@ -137,7 +137,8 @@ def actual_reports(user, execution, query, *, detailed=False):
                     continue
                 ledger.append({'subdivision': item['subdivision'], 'author': item['author'], 'unallocated': item.get('unallocated', False),
                     'kind': kind, 'period': column['label'], 'code': period_code(column['label']), 'amount': amount,
-                    'bonus': Decimal(0), 'currency': currency})
+                    'bonus': Decimal(0), 'currency': currency,
+                    'possible': item.get('possible_values', [None] * len(summary['columns']))[index]})
             # Current Q4/year pilot has no catch-up payments, including exports.
     for item in ledger:
         item['total'] = item['amount'] + item['bonus']

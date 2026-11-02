@@ -488,3 +488,72 @@ class ReportsNextTests(TestCase):
         employee = User.objects.create_user('nav-employee')
         employee.groups.add(Group.objects.get(name=POLITICIAN))
         self.assertEqual({item['key'] for item in report_navigation(employee, 'mine', query)}, {'mine', 'detail'})
+
+    def test_team_possible_uses_fact_before_percentage_in_usd_and_rub(self):
+        for currency, expected in [('USD', Decimal(600)), ('RUB', Decimal(60000))]:
+            source = [dict(detail_rows()[1], АвторСделки=name, КварталМотивации='4 Квартал(1-4 кв)',
+                           СуммаМотивацииUSDУчетПроцента=0, СуммаМотивацииRURУчетПроцента=0)
+                      for name in ('Same employee', 'Политики')]
+            data = manager_detail_report(source, currency)
+            with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=data):
+                response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency})
+                presentation = response.context['presentation']
+                self.assertEqual(presentation['total'], 0)
+                self.assertEqual(presentation['possible'], expected)
+                self.assertEqual([item['possible'] for item in presentation['type_totals']], [expected / 3] * 3)
+                self.assertEqual([section['kind'] for section in presentation['team_sections']], ['Политики', 'Продажи', 'Директора'])
+                self.assertEqual([len(section['rows']) for section in presentation['team_sections']], [2, 2, 2])
+                self.assertEqual([section['people'] for section in presentation['team_sections']], [1, 1, 1])
+                self.assertContains(response, '<table class="nr-table">', count=3, html=False)
+                self.assertContains(response, 'Сколько бы выплатили')
+                self.assertContains(response, 'nr-kpi-types', count=3)
+                exported = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency, 'export': 'xlsx'})
+            from io import BytesIO
+            book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
+            summary = list(book['Итого по видам'].values)
+            self.assertEqual(sum(row[-1] for row in summary[1:]), expected)
+            self.assertEqual(sum(row[3] for row in summary[1:]), 0)
+            book.close(); exported.close()
+
+    def test_team_tables_have_independent_pagination_and_full_type_totals(self):
+        source = manager_detail_report([dict(detail_rows()[1], АвторСделки=f'Person {i:03}') for i in range(55)])
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source):
+            response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'page_sales': '2'})
+        sections = response.context['presentation']['team_sections']
+        self.assertEqual([section['page'].number for section in sections], [1, 2, 1])
+        self.assertEqual([len(section['page']) for section in sections], [50, 5, 50])
+        self.assertEqual([section['total'] for section in sections], [Decimal(4950)] * 3)
+        self.assertEqual([section['possible'] for section in sections], [Decimal(5500)] * 3)
+        self.assertTrue(all(all(row['kind'] == section['kind'] for row in section['rows']) for section in sections))
+        self.assertEqual(sections[1]['page'][0]['author'], 'Person 050')
+
+    def test_all_reports_always_select_latest_success_and_drop_execution_filter(self):
+        from copy import deepcopy
+        older = self.run
+        newer = MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed',
+            started_at=timezone.now(), completed_at=timezone.now(), parameters=deepcopy(older.parameters), export_snapshot=deepcopy(older.export_snapshot))
+        # A newer failed or still-running attempt cannot be selected as successful.
+        for state in ('failed', 'running'):
+            MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state=state, started_at=timezone.now())
+        for kind in reports_next.CATALOG:
+            for requested in (str(older.pk), '99999999', 'invalid'):
+                response = self.client.get(reverse('motivation_report_next', args=[kind]), {'execution': requested})
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.context['execution'], newer)
+                self.assertNotIn('execution', response.context['query'])
+                self.assertNotContains(response, 'name="execution"')
+                self.assertNotIn('execution=', response.context['export_url'])
+                self.assertTrue(all('execution=' not in item['url'] for item in response.context['report_navigation']))
+        # Actual calculation calls and Excel use the same automatic selection.
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()) as guard, patch('admin_motivation.services.reports_next.load_report', return_value=manager_detail_report([detail_rows()[1]])):
+            response = self.client.get(reverse('motivation_report_next', args=['team']), {'execution': older.pk, 'run': '1', 'type': 'Политики'})
+            self.assertEqual(response.status_code, 200)
+            guard.assert_called_once_with(newer)
+        with patch('admin_motivation.services.reports_next.planned_budget', return_value=[]) as plan:
+            response = self.client.get(reverse('motivation_report_next', args=['executive']), {'execution': older.pk, 'run': '1', 'plan': self.fixture.scenario.pk})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(plan.call_args.args[0], newer)
+        MotivationExecution.objects.filter(state='completed').delete()
+        response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1'})
+        self.assertContains(response, 'Нет подтверждённых завершённых расчётов.')
+        self.assertIsNone(response.context['execution'])

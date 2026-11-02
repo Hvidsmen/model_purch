@@ -1,3 +1,4 @@
+{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_team_ledger.html' %}{% else %}
 {% load report_format %}
 {% if kind == 'team' %}<div class="nr-section-title"><h2>Итого по видам мотивации</h2><span>По всем сотрудникам и страницам</span></div><div class="nr-type-totals">{% for item in presentation.type_totals %}<article><span>{{ item.kind }}</span><strong>{{ item.total|report_cash }} {{ ledger.currency }}</strong><small>Премия {{ item.amount|report_cash }} · годовая доплата {{ item.bonus|report_cash }}</small></article>{% endfor %}</div>{% endif %}
 <div class="nr-section-title"><h2>{% if kind == 'team' %}Сотрудники и премии{% else %}Реестр рассчитанных премий{% endif %}</h2><span>{% if kind == 'team' %}{{ presentation.people }} сотрудников{% else %}{{ ledger_page.paginator.count }} строк{% endif %}</span></div>
@@ -10,3 +11,5 @@
 </tbody><tfoot><tr><th scope="row">Итого по всему отчёту<small>Все страницы, включая нераспределённое</small></th><td></td><td class="num">{{ presentation.base|report_cash }}</td><td class="num">{{ presentation.bonus|report_cash }}</td><td class="num nr-total-cell">{{ presentation.total|report_cash }}</td>{% for amount in presentation.period_totals %}<td class="num">{{ amount|report_cash }}</td>{% endfor %}<td></td></tr></tfoot></table></div>
 {% if kind == 'team' %}{% include 'admin_motivation/reports_next/_pagination.html' with page=employee_page %}{% else %}{% include 'admin_motivation/reports_next/_pagination.html' with page=ledger_page %}{% endif %}
 {% if ledger.has_unallocated %}<p class="nr-muted">Нераспределённая сумма: {{ presentation.unallocated|report_cash }} {{ ledger.currency }}. Включена в общий итог и Excel.</p>{% endif %}
+
+{% endif %}

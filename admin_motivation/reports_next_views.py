@@ -1,4 +1,5 @@
 """New report tab; no redirects or replacements of the legacy report pages."""
+from decimal import Decimal
 from tempfile import TemporaryFile
 from zoneinfo import ZoneInfo
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -21,7 +22,7 @@ def report_navigation(user, kind, query):
     """Carry shared conditions only; personal/product drilldowns stay on their report."""
     from django.http import QueryDict
     shared = QueryDict(mutable=True)
-    for field in ('execution', 'year', 'period', 'type', 'subdivision', 'currency'):
+    for field in ('year', 'period', 'type', 'subdivision', 'currency'):
         if query.getlist(field):
             shared.setlist(field, query.getlist(field))
     if query.get('run') == '1':
@@ -63,16 +64,17 @@ def workbook(kind, data, metadata, query=None):
         display = present(kind, data, data, query.getlist('period') or ['all'] if query is not None else 'all')
         append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта', 'Премия по расчёту',
                 'Годовая доплата за кварталы', 'Всего по расчёту',
-                *[column['label'] + ' · без годовой доплаты' for column in display['period_columns']], 'Статус'])
+                *[column['label'] + ' · без годовой доплаты' for column in display['period_columns']], 'Статус', 'Сколько бы выплатили · без процента выполнения'])
         for row in display['employees' if kind == 'team' else 'registry_rows']:
             append([row['subdivision'], row['author'], ', '.join(row['kinds']), data['currency'], row['amount'],
                     row['bonus'], row['total'], *row['period_values'],
-                    'Не распределено' if row['unallocated'] else 'Рассчитано; выплата не подтверждена'])
+                    'Не распределено' if row['unallocated'] else 'Рассчитано; выплата не подтверждена',
+                    sum((item['possible'] for item in row['rows']), Decimal(0)) if all(item.get('possible') is not None for item in row['rows']) else None])
         if kind == 'team':
             sheet = book.create_sheet('Итого по видам')
-            append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта'])
+            append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта', 'Сколько бы выплатили · без процента выполнения'])
             for row in display['type_totals']:
-                append([row['kind'], row['amount'], row['bonus'], row['total'], data['currency']])
+                append([row['kind'], row['amount'], row['bonus'], row['total'], data['currency'], row['possible']])
     else:
         append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Период', 'Валюта', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Статус'])
         for row in data['rows']:
@@ -149,6 +151,7 @@ def report(request, kind):
     if kind not in reports.available(request.user):
         raise PermissionDenied
     query = request.GET.copy()
+    query.pop('execution', None)
     report_user = request.user
     preview_accounts, preview_user = [], None
     admin_preview = role_for(request.user, 'motivation') == ADMIN and kind in ('mine', 'detail')
@@ -169,8 +172,8 @@ def report(request, kind):
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
         return HttpResponseBadRequest(' '.join(exc.messages))
-    runs = MotivationExecution.objects.filter(state='completed').order_by('-started_at', '-pk')
-    selected = get_object_or_404(runs, pk=query['execution']) if query.get('execution', '').isdigit() else runs.first()
+    runs = MotivationExecution.objects.filter(state='completed').order_by('-completed_at', '-started_at', '-pk')
+    selected = runs.first()
     plans = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).order_by('-loaded_at', '-pk')
     original_plan = reports.default_plan(selected) if selected else None
     plan = get_object_or_404(plans, pk=query['plan']) if query.get('plan', '').isdigit() else original_plan
@@ -253,7 +256,7 @@ def report(request, kind):
     export_query = query.copy()
     export_query['export'] = 'xlsx'
     reset_query = query.copy()
-    for field in ('period', 'type', 'subdivision', 'author', 'planning', 'goods', 'brand', 'page', 'export', 'table', 'search'):
+    for field in ('period', 'type', 'subdivision', 'author', 'planning', 'goods', 'brand', 'page', 'export', 'table', 'search', 'page_policies', 'page_sales', 'page_directors'):
         reset_query.pop(field, None)
     branch_label = ', '.join(selected_subs) if len(selected_subs) <= 2 else f'Подразделений: {len(selected_subs)}'
     from .services.reports_next_presenter import present
@@ -267,6 +270,8 @@ def report(request, kind):
                 card['explanation'] = ('Порог выплаты не достигнут. Остаток до порога показан в целях ниже.' if all(goal['under_threshold'] for goal in goals) else 'На выбранных отгрузках возможная премия равна 0.' if all(not goal['possible'] for goal in goals) else 'Результат расчёта — 0. Проверьте ставки и условия в детализации.')
     ledger_page = Paginator(presentation['registry_rows'], 100).get_page(query.get('page')) if data is not None and kind not in ('executive', 'detail') else None
     employee_page = Paginator(presentation['employees'], 50).get_page(query.get('page')) if kind == 'team' else None
+    for section in presentation.get('team_sections', []):
+        section['page'] = Paginator(section['rows'], 50).get_page(query.get(section['page_parameter']))
     page_query = query.copy()
     page_query.pop('page', None)
     page_query.pop('export', None)
@@ -274,7 +279,7 @@ def report(request, kind):
     all_types = [all_types] if isinstance(all_types, str) else all_types
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.CATALOG[kind][0],
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
-        'current_execution_id': runs.first().pk if runs.exists() else None, 'runs': runs, 'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
+        'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
         'reset_url': '?' + reset_query.urlencode(), 'branch_label': branch_label or 'Все доступные подразделения', 'selected_branches': selected_subs, 'all_types': all_types, 'type_choices': [{'value': value, 'selected': value in query.getlist('type')} for value in all_types], 'type_label': ', '.join(query.getlist('type')) or 'Все доступные виды',
         'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
         'report_navigation': report_navigation(request.user, kind, query),
