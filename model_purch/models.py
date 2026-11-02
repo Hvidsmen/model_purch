@@ -90,6 +90,7 @@ class ScenarioModel(models.Model):
     all_objects = models.Manager()
     archived_at = models.DateTimeField('В архиве с', null=True, blank=True, editable=False)
 
+    check_weight_completeness = models.BooleanField('Проверять заполненность веса', default=True, editable=False)
     erp_sales_plan_sources = models.JSONField(default=list, blank=True, editable=False)
     plan_parameters_loaded_at = models.DateTimeField(null=True, blank=True, editable=False)
     id = models.AutoField(primary_key=True)

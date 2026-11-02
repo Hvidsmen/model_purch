@@ -309,3 +309,16 @@ class GoodsEditorTests(TestCase):
         self.assertEqual(copy_goods(self.scenario, target), (1, 0))
         copied.refresh_from_db()
         self.assertEqual(copied.weight_kg, 25.125)
+
+    def test_legacy_scenario_does_not_require_weight(self):
+        self.scenario.check_weight_completeness = False
+        self.scenario.save()
+        self.good.exw_usd = 10
+        self.good.save()
+        from .services.preflight import incomplete_goods
+        self.assertEqual(incomplete_goods(self.scenario), [])
+        page = self.client.get(reverse('pggoods_list'), {'scenario': self.scenario.pk})
+        self.assertContains(page, 'data-completeness-optional')
+        self.assertNotContains(page, 'Не заполнены EXW')
+        self.scenario.check_weight_completeness = True
+        self.assertIn('Вес', incomplete_goods(self.scenario)[0]['missing'])

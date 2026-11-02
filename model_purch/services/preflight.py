@@ -141,8 +141,11 @@ def incomplete_goods(scenario):
     rows = []
     if scenario is None:
         return rows
+    fields = [('exw_usd', 'EXW'), ('volume', 'Объём товара')]
+    if scenario.check_weight_completeness:
+        fields.append(('weight_kg', 'Вес'))
     for good in PGGoods.objects.filter(scenario_plan=scenario).only('id', 'planning_group', 'exw_usd', 'volume', 'weight_kg').order_by('planning_group'):
-        missing = [label for field, label in [('exw_usd', 'EXW'), ('volume', 'Объём товара'), ('weight_kg', 'Вес')]
+        missing = [label for field, label in fields
                    if not valid_number(getattr(good, field), strictly_positive=True)]
         if missing:
             rows.append({'id': good.pk, 'name': good.planning_group, 'missing': ', '.join(missing)})

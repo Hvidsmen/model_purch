@@ -545,3 +545,16 @@ class PurchaseBrowserTests(StaticLiveServerTestCase):
         self.page.reload()
         expect(self.page.locator('.pricing-row [name=weight_kg]')).to_have_value('12.345')
         self.assertEqual(self.errors, [])
+
+    def test_legacy_weight_zero_is_not_highlighted(self):
+        from playwright.sync_api import expect
+        self.db(lambda: ScenarioModel.all_objects.filter(pk=self.source.pk).update(check_weight_completeness=False))
+        self.page.goto(self.live_server_url + reverse('pggoods_list') + f'?scenario={self.source.pk}')
+        weight = self.page.locator('.pricing-row [name=weight_kg]')
+        expect(weight).not_to_have_class(__import__('re').compile('.*goods-value-missing.*'))
+        expect(weight).to_have_attribute('data-completeness-optional', '')
+        expect(self.page.get_by_text('Показать проблемные товары')).to_have_count(0)
+        weight.fill('5')
+        weight.fill('0')
+        expect(weight).not_to_have_class(__import__('re').compile('.*goods-value-missing.*'))
+        self.assertEqual(self.errors, [])
