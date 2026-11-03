@@ -104,6 +104,8 @@ def present(kind, data, ledger=None, period='all'):
                                for item in result['type_totals']]
     if 'plan_fact' in ledger:
         result['performance_matrix'] = performance_matrix(ledger['plan_fact'], result['period_columns'])
+    if 'department_plan_fact' in ledger:
+        result['department_performance_matrix'] = performance_matrix(ledger['department_plan_fact'], result['period_columns'])
     from .annual_accrual import enrich
     enrich(result, ledger)
     return result
@@ -121,8 +123,9 @@ def performance_matrix(items, period_columns):
         code = '__total__' if str(item['period']).strip().casefold() == 'итого' else period_code(item['period'])
         if code not in codes and code != '__total__':
             continue
-        global_base = str(item.get('formula') or '').strip().casefold() == 'подразделение(глобально)'
-        fields = ('subdivision', 'year', 'formula', 'scope_author') if global_base else ('subdivision', 'year', 'kind', 'formula', 'scope_author')
+        global_base = (str(item.get('formula') or '').strip().casefold() == 'подразделение(глобально)'
+                       or item.get('kind') == 'Всё подразделение')
+        fields = ('subdivision', 'year', 'kind', 'formula', 'scope_author')
         key = tuple(str(item.get(field) or '').strip().casefold() for field in fields)
         # Preserve distinct source entries if a period occurs more than once.
         # Never sum cumulative targets or silently overwrite a source value.
@@ -139,8 +142,6 @@ def performance_matrix(items, period_columns):
         if row is None:
             row = {field: item.get(field) for field in ('subdivision', 'year', 'kind', 'formula', 'scope_author')}
             row['_periods'] = {}
-            if global_base:
-                row['kind'] = 'Общая база подразделения'
             candidates.append(row)
         row['_periods'][code] = item
     rows = []

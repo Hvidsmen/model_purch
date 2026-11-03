@@ -131,13 +131,16 @@ def actual_reports(user, execution, query, *, detailed=False):
     currency = query.get('currency', 'USD')
     if currency not in ('USD', 'RUB'):
         raise ValidationError('Выберите USD или RUB.')
-    results, ledger = [], []
+    results, ledger, plan_fact, department = [], [], [], []
     for kind in kinds:
         values = {'TypeCoeff_': kind, 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'),
                   'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand'), 'Years': [year], 'Currency': currency}
         if scope:
             values = scoped_values('manager-detail', values, scope)
-        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed)
+        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed, include_performance=not detailed)
+        from .motivation_performance import presentation_rows, DEPARTMENT
+        plan_fact.extend(presentation_rows(data.get('motivation_performance', []), kind))
+        department.extend(presentation_rows(data.get('department_performance', []), DEPARTMENT))
         if detailed:
             results.append({'kind': kind, 'data': data})
         summary = data['period_summary']
@@ -153,7 +156,7 @@ def actual_reports(user, execution, query, *, detailed=False):
             # Current Q4/year pilot has no catch-up payments, including exports.
     for item in ledger:
         item['total'] = item['amount'] + item['bonus']
-    return {'payout_threshold': number(execution.parameters['payout_threshold']) if execution.parameters.get('payout_threshold') is not None else None, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in ledger), 'sections': results, 'rows': ledger, 'total': sum((item['total'] for item in ledger), Decimal(0)), 'currency': currency}
+    return {'payout_threshold': number(execution.parameters['payout_threshold']) if execution.parameters.get('payout_threshold') is not None else None, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in ledger), 'sections': results, 'rows': ledger, 'total': sum((item['total'] for item in ledger), Decimal(0)), 'currency': currency, 'plan_fact': plan_fact, 'department_plan_fact': department}
 
 
 def frozen_versions(execution):

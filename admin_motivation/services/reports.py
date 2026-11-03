@@ -364,7 +364,7 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main'):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False):
     if access_scope:
         from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
@@ -437,9 +437,11 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                     from .reports_next import period_code
                     rows = [row for row in rows if period_code(row.get('КварталМотивации')) in period_codes]
                 result = {'period_summary': period_motivation_summary(rows, values.get('Currency', 'USD'), pilot=pilot), 'currency': values.get('Currency', 'USD')}
+                if calculation_variant == 'all_2026' or include_performance:
+                    from .motivation_performance import grouped_sql as performance_sql, department_sql
+                    result['motivation_performance'] = fetch(cursor, performance_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant), args)
+                    result['department_performance'] = fetch(cursor, department_sql(sql, calculation_variant), args)
                 if calculation_variant == 'all_2026':
-                    from .motivation_performance import grouped_sql as performance_sql
-                    result['motivation_performance'] = fetch(cursor, performance_sql(sql, coefficient_type=values.get('TypeCoeff_')), args)
                     from .annual_accrual import grouped_sql as annual_sql
                     annual_query, annual_args = bind_sql(annual_sql(annual_source_sql, values.get('Currency', 'USD')), values)
                     result['annual_accrual'] = fetch(cursor, annual_query, annual_args)

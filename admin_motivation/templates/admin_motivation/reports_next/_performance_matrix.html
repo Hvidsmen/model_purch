@@ -1,15 +1,17 @@
-{% load report_format %}
+{% load report_format %}{% with matrix=matrix|default:presentation.performance_matrix %}
 <div class="nr-table-wrap nr-period-scroll" data-period-scroll>
 <table class="nr-table nr-performance-table nr-aligned-period-table" style="--nr-periods:{{ presentation.period_columns|length }}" aria-label="План и факт по периодам премий">
 {% include 'admin_motivation/reports_next/_period_colgroup.html' with performance=True %}
 <thead>
-<tr><th rowspan="2" scope="col">Подразделение / база</th>{% for column in presentation.performance_matrix.columns %}<th colspan="3" scope="colgroup" class="nr-performance-period" data-period="{{ column.code }}">{{ column.label }}</th>{% endfor %}<th colspan="3" scope="colgroup" class="nr-performance-period nr-performance-total" data-period="total">Итого</th></tr>
-<tr>{% for column in presentation.performance_matrix.columns %}<th scope="col" class="num">План, USD</th><th scope="col" class="num">Факт, USD</th><th scope="col" class="num">Выполнение</th>{% endfor %}<th scope="col" class="num nr-performance-total">План, USD</th><th scope="col" class="num nr-performance-total">Факт, USD</th><th scope="col" class="num nr-performance-total">Выполнение</th></tr>
+<tr><th rowspan="2" scope="col">Подразделение / база</th>{% for column in matrix.columns %}<th colspan="3" scope="colgroup" class="nr-performance-period" data-period="{{ column.code }}">{{ column.label }}</th>{% endfor %}<th colspan="3" scope="colgroup" class="nr-performance-period nr-performance-total" data-period="total">Итого</th></tr>
+<tr>{% for column in matrix.columns %}<th scope="col" class="num">План, USD</th><th scope="col" class="num">Факт, USD</th><th scope="col" class="num">Выполнение</th>{% endfor %}<th scope="col" class="num nr-performance-total">План, USD</th><th scope="col" class="num nr-performance-total">Факт, USD</th><th scope="col" class="num nr-performance-total">Выполнение</th></tr>
 </thead>
 <tbody>
-{% for row in presentation.performance_matrix.rows %}
+{% for row in matrix.rows %}
 <tr><td>{{ row.subdivision }}<small>{{ row.year }} · {{ row.kind }}</small><small>{{ row.formula }} · {{ row.scope_author }}</small></td>{% for cell in row.cells %}<td class="num nr-performance-start" title="{{ cell.period }}">{{ cell.plan|report_cash }}</td><td class="num" title="{{ cell.period }}">{{ cell.fact|report_cash }}</td><td class="num" title="{{ cell.period }}">{{ cell.ratio|report_percent }}</td>{% endfor %}<td class="num nr-performance-start nr-performance-total">{{ row.total.plan|report_cash }}</td><td class="num nr-performance-total">{{ row.total.fact|report_cash }}</td><td class="num nr-performance-total">{{ row.total.ratio|report_percent }}</td></tr>
-{% empty %}<tr><td colspan="{{ presentation.performance_matrix.colspan }}">Показатели плана и факта отсутствуют в результатах расчёта.</td></tr>{% endfor %}
+{% empty %}<tr><td colspan="{{ matrix.colspan }}">Показатели плана и факта отсутствуют в результатах расчёта.</td></tr>{% endfor %}
 </tbody>
 </table>
 </div>
+
+{% endwith %}

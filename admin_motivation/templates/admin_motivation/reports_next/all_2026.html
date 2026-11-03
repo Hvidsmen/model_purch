@@ -25,9 +25,7 @@
 {% if data != None %}<div class="nr-kpis"><article class="nr-kpi nr-kpi-primary"><span>Премии за выбранные периоды</span><strong>{{ presentation.total|report_cash }} {{ ledger.currency }}</strong></article><article class="nr-kpi"><span>Сколько бы выплатили</span><strong>{{ presentation.possible|report_cash }} {{ ledger.currency }}</strong><small>До условий выполнения плана</small></article><article class="nr-kpi"><span>Сотрудники</span><strong>{{ presentation.people }}</strong></article><article class="nr-kpi"><span>Периоды</span><strong>{{ presentation.period_columns|length }}</strong></article></div>
 {% include 'admin_motivation/reports_next/_quarter_totals.html' %}
 {% if presentation.has_annual_accrual %}<p class="nr-muted">«В годовую премию» — годовая часть, сформированная отгрузками соответствующего квартала, с годовым поправочным коэффициентом. Показана до проверки годового условия выплаты и не прибавляется к квартальной премии. В итог этой части входят только выбранные кварталы, каждый один раз.</p>{% endif %}
-<div class="nr-section-title"><h2>План-факт мотивации подразделений</h2><span>План и факт — USD</span></div>
-<p class="nr-muted">Периоды идут в том же порядке, что и в таблицах премий сотрудников ниже. В каждом периоде показаны план, факт и выполнение базы мотивации. В «Итого» каждый квартал учтён один раз, даже если он входит в несколько накопительных периодов. Разные базы расчёта не складываются. Повторяющиеся окна по товарам и сотрудникам учитываются один раз. Премия сотрудника также зависит от его формулы и условий выплаты.</p>
-{% include 'admin_motivation/reports_next/_performance_matrix.html' %}
+{% include 'admin_motivation/reports_next/_performance_sections.html' %}
 
 {% include 'admin_motivation/reports_next/_all_2026_tables.html' %}
 {% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
