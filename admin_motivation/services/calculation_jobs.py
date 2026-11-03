@@ -169,7 +169,7 @@ def prepare(cursor, variant='main'):
     from .calculation_performance import patch as scope_preparation, MARKER as performance_marker
     changed = scope_preparation(changed)
     from .calculation_sales_isolation import patch as isolate_sales
-    changed = isolate_sales(changed)
+    changed = isolate_sales(changed, cursor=cursor)
     import logging
     logging.getLogger(__name__).info('Calculation preparation scoped to fact year: %s; variant: %s', performance_marker in changed, variant)
     cursor.execute(changed)
