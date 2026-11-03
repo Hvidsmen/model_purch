@@ -19,7 +19,7 @@ def grouped_sql(source):
         'MAX([СуммаПланUSD]) AS Plan_,MAX([СуммаОтгрузокUSD]) AS Fact_'
         " FROM input_rows WHERE COALESCE([VariationCalculate],N'')<>N'Подразделение(Глобально)'"
         ' GROUP BY ' + dimensions + ',' + keys + '), global_contexts AS ('
-        'SELECT DISTINCT ' + dimensions + ',[ТипКоэф] FROM input_rows'
+        'SELECT DISTINCT ' + dimensions + ' FROM input_rows'
         " WHERE [VariationCalculate]=N'Подразделение(Глобально)') "
         'SELECT ' + dimensions + ',ScopeAuthor,SUM(Plan_) AS Plan_,SUM(Fact_) AS Fact_'
         ' FROM personal_windows GROUP BY ' + dimensions + ',ScopeAuthor UNION ALL '
@@ -30,7 +30,9 @@ def grouped_sql(source):
         'ELSE pf.[СуммаПланUSD] END) AS Plan_,SUM(pf.[СуммаОтгрузокUSD]) AS Fact_ '
         'FROM global_contexts c JOIN ' + GLOBAL_PLAN_FACT + ' pf ON '
         'pf.[Подразделение]=c.[Подразделение] AND pf.[Год]=c.[Год] '
-        'AND LTRIM(RTRIM(pf.[ТипКоэф]))=c.[ТипКоэф] AND ('
+        # Sales contains the department's physical plan/fact once; director
+        # inputs repeat it for each assigned employee. This is a display base.
+        "AND LTRIM(RTRIM(pf.[ТипКоэф]))=N'Продажи' AND ("
         "(LOWER(c.[КварталМотивации]) LIKE N'1 кв%' AND pf.[Квартал]=1) OR "
         "(LOWER(c.[КварталМотивации]) LIKE N'2 кв%' AND pf.[Квартал] IN (1,2)) OR "
         "(LOWER(c.[КварталМотивации]) LIKE N'3 кв%' AND pf.[Квартал]=3) OR "

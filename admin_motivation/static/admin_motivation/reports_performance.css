@@ -3,7 +3,6 @@
 .nr-page .nr-performance-table thead tr:nth-child(2) th{top:38px;z-index:1;white-space:nowrap}
 .content-wrapper .nr-all-year-page .nr-performance-table thead tr:nth-child(2) th:first-child{left:auto;width:auto;min-width:100px;max-width:none;z-index:1;background:#f8f9fc}
 .nr-page .nr-performance-table :is(th,td).num{min-width:100px}
-.nr-page .nr-performance-table td:nth-child(2){min-width:230px;max-width:300px}
 .nr-page .nr-performance-table td small{display:block;font-size:11px;line-height:1.5;color:#64748b;margin-top:4px}
 .nr-page .nr-performance-table .nr-performance-start{border-left:1px solid #dce1ed}
 .nr-quarter-totals{grid-template-columns:repeat(auto-fit,minmax(240px,1fr));margin-bottom:24px}
@@ -12,3 +11,10 @@
 .nr-quarter-totals .nr-kpi-types{grid-template-columns:1fr;gap:5px;margin:0 0 10px}
 .nr-quarter-totals .nr-kpi-types>div{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px}
 .nr-quarter-totals .nr-kpi-types b{margin:0;white-space:nowrap;font-variant-numeric:tabular-nums}
+.nr-period-scroll{scrollbar-gutter:stable}
+.nr-page .nr-table.nr-aligned-period-table{table-layout:fixed;width:calc(600px + var(--nr-periods) * 270px);min-width:calc(600px + var(--nr-periods) * 270px)}
+.content-wrapper .nr-all-year-page .nr-aligned-period-table :is(th,td):first-child{width:240px;min-width:240px;max-width:240px}
+.nr-page .nr-aligned-period-table :is(th,td).num{min-width:0;max-width:none}
+.content-wrapper .nr-all-year-page .nr-performance-table thead tr:nth-child(2) th:first-child{width:90px;min-width:0;max-width:90px}
+.nr-page .nr-performance-table td.num{font-size:12px}
+.nr-page .nr-aligned-period-table .nr-period-spacer{background:#fff;border:0}
