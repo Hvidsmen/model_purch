@@ -19,3 +19,10 @@
 .nr-page .nr-performance-table td.num{font-size:12px}
 .nr-page .nr-aligned-period-table .nr-period-spacer{background:#fff;border:0}
 .nr-page .nr-aligned-period-table thead th[data-period]{text-align:center}
+.nr-page .nr-performance-table .nr-performance-total{background:#f4f1ff;font-weight:600;color:#514383}
+.nr-quarter-scroll{overflow:auto;max-width:100%;margin-bottom:20px}
+.nr-quarter-totals.nr-quarter-aligned{grid-template-columns:240px repeat(var(--nr-periods),270px) 360px;width:calc(600px + var(--nr-periods) * 270px);gap:0;margin:0 0 10px}
+.nr-quarter-aligned .nr-period{margin:0 6px;padding:14px 10px}
+.nr-quarter-aligned .nr-period>strong{font-size:21px}
+.nr-quarter-label{display:flex;flex-direction:column;justify-content:center;gap:8px;padding:16px;color:#64748b;font-size:13px}
+.nr-quarter-aligned .nr-quarter-grand-total{background:#f6f3ff;border-color:#ded5f3}

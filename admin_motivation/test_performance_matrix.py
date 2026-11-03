@@ -61,6 +61,20 @@ class PerformanceMatrixTests(SimpleTestCase):
         self.assertEqual(matrix['rows'][0]['kind'], 'Общая база подразделения')
         self.assertEqual([cell['plan'] for cell in matrix['rows'][0]['cells']], [100, 100])
 
+    def test_float_noise_and_identical_source_duplicates_do_not_repeat_display_rows(self):
+        items = [performance('3 Квартал', plan=Decimal('14430562.93000001'), fact=Decimal('9530330.00000001')),
+                 performance('3 Квартал', kind='Продажи', plan=Decimal('14430562.92999999'), fact=Decimal('9530329.99999999'), ratio=Decimal('.6600000000001')),
+                 performance('3 Квартал', kind='Директора', plan=Decimal('14430562.93'), fact=Decimal('9530330'))]
+        items += items[:1]
+        matrix = performance_matrix(items, [{'code':'3'}])
+        self.assertEqual(len(matrix['rows']), 1)
+        total = performance('Итого', plan=Decimal(300), fact=Decimal(150), ratio=Decimal('.5'))
+        matrix = performance_matrix([*items,total], [{'code':'3'}])
+        self.assertEqual(matrix['rows'][0]['total'], total)
+        html = render_to_string('admin_motivation/reports_next/_performance_matrix.html', {'presentation': {'period_columns':[{'code':'3'}], 'performance_matrix':matrix}})
+        self.assertIn('Итого', html)
+        self.assertIn('50,00%', html)
+
     def test_plan_fact_and_employee_tables_share_exact_period_column_boundaries(self):
         class Columns(HTMLParser):
             def __init__(self):
