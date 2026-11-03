@@ -1,4 +1,4 @@
-import json
+from xml.etree.ElementTree import fromstring
 from types import SimpleNamespace
 from unittest.mock import patch
 from django.test import SimpleTestCase
@@ -21,14 +21,27 @@ class ActiveDirectorTests(SimpleTestCase):
             self.assertEqual(active.coefficient_rows([current, removed, foreign]), [current])
 
     def test_roster_is_parameterized_and_empty_roster_is_not_all(self):
-        name = "O'Brien =1"
+        name = "Иван O'Brien <директор> & =1"
         with patch.object(active, 'bindings', return_value=[{'employee_id': 1, 'subdivision': 'A', 'full_name': name}]), patch.object(active, 'mapping', return_value={}):
             roster = active.report_roster()
-        self.assertEqual(json.loads(roster), [{'subdivision': 'A', 'author': name}])
+        records = fromstring(roster).findall('director')
+        self.assertEqual([(row.findtext('subdivision'), row.findtext('author')) for row in records], [('A', name)])
         with patch('admin_motivation.services.subdivision_aliases.mapping', return_value={}):
             sql, args = bind_sql('SELECT * FROM result WHERE ' + active.REPORT_CONDITION, {'PortalDirectorRoster': roster})
         self.assertNotIn(name, sql)
         self.assertEqual(args, [roster])
-        self.assertIn('OPENJSON(?)', sql)
+        self.assertNotIn('OPENJSON', sql)
+        self.assertIn('CAST(? AS xml)', sql)
+        self.assertIn(".nodes('/roster/director')", sql)
+        self.assertIn('roster.Subdivision=[Подразделение]', sql)
+        self.assertIn('LTRIM(RTRIM(roster.Author))=LTRIM(RTRIM([АвторСделки]))', sql)
         with patch.object(active, 'bindings', return_value=[]), patch.object(active, 'mapping', return_value={}):
-            self.assertEqual(active.report_roster(), '[]')
+            self.assertEqual(fromstring(active.report_roster()).findall('director'), [])
+
+    def test_roster_preserves_branch_aliases_and_deduplicates_assignments(self):
+        assignments = [{'employee_id': 1, 'subdivision': 'A', 'full_name': 'Директор'}] * 2
+        with patch.object(active, 'bindings', return_value=assignments), patch.object(active, 'mapping', return_value={'Old': 'A'}):
+            records = fromstring(active.report_roster()).findall('director')
+        self.assertEqual([(row.findtext('subdivision'), row.findtext('author')) for row in records],
+                         [('A', 'Директор'), ('Old', 'Директор')])
+
