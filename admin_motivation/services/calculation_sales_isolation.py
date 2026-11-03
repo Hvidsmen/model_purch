@@ -9,9 +9,42 @@ WORKING_TABLE = '#portal_motivation_sales'
 SALES = r'(?:(?:\[?DataWH\]?)\s*\.\s*)?\[?dbo\]?\s*\.\s*\[?Sales\]?(?!\w)'
 
 
-def patch(definition):
+def expand_preparation(definition, cursor):
+    """Inline the supported parameterless helper before isolating its writes."""
+    mask = mask_sql(definition)
+    name = r'(?:(?:\[?DataWH\]?)\s*\.\s*)?\[?motivation\]?\s*\.\s*\[?sp_PrepareSales\]?'
+    calls = list(re.finditer(r'\bEXEC(?:UTE)?\s+' + name + r'\s*;', mask, re.I))
+    if not calls:
+        return definition
+    if len(calls) != 1 or cursor is None:
+        raise ValidationError('Не удалось прочитать подготовку motivation.sp_PrepareSales для изолированного расчёта.')
+    cursor.execute("SELECT OBJECT_DEFINITION(OBJECT_ID(N'motivation.sp_PrepareSales'))")
+    row = cursor.fetchone()
+    source = row[0] if row else None
+    if not isinstance(source, str) or not source.strip():
+        raise ValidationError('Нет определения motivation.sp_PrepareSales или права VIEW DEFINITION. Расчёт отменён.')
+    header = re.match(r'\s*(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)PROC(?:EDURE)?\s+' + name + r'\s+AS\b',
+                      mask_sql(source), re.I)
+    if header is None:
+        raise ValidationError('Не распознана процедура sp_PrepareSales без параметров. Расчёт отменён.')
+    body = source[header.end():]
+    body_mask = mask_sql(body)
+    wrapper = re.match(r'\s*BEGIN\b(?!\s+(?:TRY|CATCH|TRAN))', body_mask, re.I)
+    wrapper_end = re.search(r'\bEND\s*;?\s*$', body_mask, re.I)
+    if wrapper and wrapper_end:
+        body = body[wrapper.end():wrapper_end.start()]
+    if re.search(r'\b(?:EXEC(?:UTE)?|RETURN|BEGIN\s+TRAN(?:SACTION)?|COMMIT|ROLLBACK)\b', mask_sql(body), re.I):
+        raise ValidationError('Неподдерживаемое управление выполнением в sp_PrepareSales. Расчёт отменён.')
+    call = calls[0]
+    expanded = definition[:call.start()] + '\n' + body + '\n' + definition[call.end():]
+    from .calculation_performance import patch as optimize
+    return optimize(expanded)
+
+
+def patch(definition, cursor=None):
     if MARKER in definition:
         return definition
+    definition = expand_preparation(definition, cursor)
     mask = mask_sql(definition)
     if re.search(r'\b(?:FROM|JOIN|UPDATE|INTO)\s+\[?Sales\]?(?!\w)', mask, re.I):
         raise ValidationError('Не распознана схема таблицы Sales. Изолированный расчёт не запущен.')
@@ -50,3 +83,4 @@ WHERE ClosedDealDate>=DATEFROMPARTS(@FactYear,1,1) AND YEAR(ClosedDealDate)=@Fac
     for start, stop, value in sorted(edits, reverse=True):
         definition = definition[:start] + value + definition[stop:]
     return definition
+

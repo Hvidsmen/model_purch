@@ -2,6 +2,7 @@ import re
 import sqlite3
 from datetime import date
 from pathlib import Path
+from unittest.mock import Mock
 from django.core.exceptions import ValidationError
 from django.test import SimpleTestCase
 from .services.calculation_sales_isolation import patch, WORKING_TABLE, MARKER
@@ -11,6 +12,69 @@ from .test_calculation_performance import source
 
 
 class SalesIsolationTests(SimpleTestCase):
+    def delegated(self):
+        preparation, fact = source().split(';WITH fact', 1)
+        body = preparation.split(' AS\n', 1)[1]
+        helper = 'CREATE PROCEDURE [motivation].[sp_PrepareSales] AS\n' + body
+        procedure = ('CREATE PROCEDURE motivation.sp_CalcBySub @FactYear int AS\n'
+                     'EXEC [DataWH].[motivation].[sp_PrepareSales];\n;WITH fact' + fact)
+        return procedure, helper
+
+    def test_delegated_preparation_is_inlined_and_isolated_for_both_variants(self):
+        procedure, helper = self.delegated()
+        for sql in (procedure, isolate(procedure)):
+            cursor = Mock()
+            cursor.fetchone.return_value = (helper,)
+            result = patch(sql, cursor=cursor)
+            cursor.execute.assert_called_once_with("SELECT OBJECT_DEFINITION(OBJECT_ID(N'motivation.sp_PrepareSales'))")
+            self.assertNotIn('EXEC [DataWH].[motivation].[sp_PrepareSales]', result)
+            self.assertEqual(result.count('FROM DataWH.dbo.Sales'), 1)
+            self.assertEqual(result.count('FROM '+WORKING_TABLE+' s LEFT JOIN'), 2)
+            self.assertIn(';WITH fact AS (SELECT * FROM '+WORKING_TABLE+')', result)
+            self.assertEqual(patch(result), result)
+
+    def test_missing_unknown_or_nested_helper_is_rejected_without_execution(self):
+        procedure, helper = self.delegated()
+        with self.assertRaises(ValidationError):
+            patch(procedure)
+        for definition in (None, helper.replace(' AS\n', ' @Year int AS\n'),
+                           helper + '\nEXEC other_procedure;', helper + '\nRETURN;'):
+            cursor = Mock()
+            cursor.fetchone.return_value = (definition,)
+            with self.assertRaises(ValidationError):
+                patch(procedure, cursor=cursor)
+            self.assertEqual(cursor.execute.call_count, 1)
+
+    def test_outer_begin_end_does_not_separate_update_from_year_filter(self):
+        procedure, helper = self.delegated()
+        helper = helper.replace(' AS\n', ' AS\nBEGIN\n') + '\nEND;'
+        cursor = Mock()
+        cursor.fetchone.return_value = (helper,)
+        result = patch(procedure, cursor=cursor)
+        self.assertEqual(result.count('WHERE YEAR(s.ClosedDealDate)=@FactYear'), 2)
+        self.assertNotIn('END;', result)
+
+    def test_full_procedure_pipeline_with_delegated_preparation(self):
+        path = Path(__file__).parent / 'sql/review/sp_CalcBySub.refactored.sql'
+        if not path.exists():
+            self.skipTest('Optional SQL review snapshot unavailable')
+        sql = path.read_text()
+        start = sql.index("IF OBJECT_ID('tempdb..#document_sales')")
+        end = sql.index(';WITH fact')
+        helper = 'CREATE PROCEDURE motivation.sp_PrepareSales AS\n' + sql[start:end]
+        sql = sql[:start] + 'EXEC [DataWH].[motivation].[sp_PrepareSales];\n' + sql[end:]
+        sql = sql.replace('] AS', '] @FactYear int AS').replace('@Year int', '@FactYear int')
+        from .services.pilot_formula import patch_calculation
+        from .services.payout_threshold import parameterize
+        sql = parameterize(patch_calculation(sql))
+        for variant in (sql, isolate(sql)):
+            cursor = Mock()
+            cursor.fetchone.return_value = (helper,)
+            result = patch(optimize(variant), cursor=cursor)
+            self.assertIn(MARKER, result)
+            self.assertNotIn('EXEC [DataWH].[motivation].[sp_PrepareSales]', result)
+            self.assertEqual(result.count('FROM DataWH.dbo.Sales'), 1)
+
     def test_main_and_extra_read_enriched_private_sales_only(self):
         for sql in (source(), isolate(source()), optimize(source())):
             with self.subTest(optimized='portal_sales_keys' in sql):
@@ -65,3 +129,4 @@ class SalesIsolationTests(SimpleTestCase):
             changed = patch(optimize(sql))
             self.assertIn(MARKER, changed)
             self.assertEqual(changed.count('FROM DataWH.dbo.Sales'), 1)
+
