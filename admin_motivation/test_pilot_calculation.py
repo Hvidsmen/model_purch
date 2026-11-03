@@ -71,3 +71,25 @@ class PilotCalculationTests(SimpleTestCase):
         fixed = normalize_q4_rur(sql)
         self.assertEqual(fixed.count('IIF(Квартал=3,СуммаМотивацииRUR,0)'), 1)
         self.assertEqual(fixed.count('IIF(Квартал=4,СуммаМотивацииRUR,0)'), 1)
+
+
+    def test_annual_q4_patch_preserves_manager_correction_statements(self):
+        from .services.manager_correction import SQL
+        from .services.calculation_variants import full_year_patch
+        sql = procedure().replace('INSERT INTO DataWH.motivation.ReportMotivationByDealAuthor',
+                                  SQL + 'INSERT INTO DataWH.motivation.ReportMotivationByDealAuthor')
+        changed = patch(sql)
+        self.assertIn(SQL, changed)
+        self.assertNotIn('f.IIF(', changed)
+        self.assertNotIn('SET IIF(', changed)
+        self.assertEqual(changed.count('IIF(Квартал=4,СуммаМотивацииUSDГод,0)'), 1)
+        self.assertEqual(changed.count('IIF(Квартал=4,СуммаМотивацииRURГод,0)'), 1)
+        extra = full_year_patch(sql)
+        self.assertIn(SQL, extra)
+        self.assertNotIn('IIF(Квартал=4,СуммаМотивацииUSDГод,0)', extra)
+
+    def test_missing_annual_source_fails_closed(self):
+        sql = procedure().replace('FROM #pf_base WHERE Квартал IN(1,2,3,4);',
+                                  'FROM #unknown WHERE Квартал IN(1,2,3,4);')
+        with self.assertRaisesMessage(ValidationError, 'граница годовой'):
+            patch(sql)

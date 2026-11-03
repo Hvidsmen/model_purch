@@ -54,7 +54,14 @@ def patch(definition):
         raise ValidationError('Не распознана годовая доплата. Расчёт не запущен.')
     # Restrict annual money, not the window inputs used for plan execution.
     # Q4 eligibility still uses the existing cumulative plan/fact conditions.
-    annual_start, annual_end = projections[3].end(), carry[0].start()
+    # The manager-correction patch inserts standalone SELECT/UPDATE statements
+    # before the carry INSERT. Never rewrite their column targets or aliases.
+    # Stop at the annual UNION's own FROM, before those later statements.
+    annual_start = projections[3].end()
+    annual_sources = list(re.finditer(r'\bFROM\s+\[?#pf_base\]?\b', mask[projections[4].end():carry[0].start()], re.I))
+    if len(annual_sources) != 1:
+        raise ValidationError('Не найдена однозначная граница годовой суммы премии. Расчёт не запущен.')
+    annual_end = projections[4].end() + annual_sources[0].start()
     for field in ('СуммаМотивацииUSDГод', 'СуммаМотивацииRURГод'):
         references = list(re.finditer(r'(?<![\w])\[?' + field + r'\]?(?![\w])', mask[annual_start:annual_end], re.I))
         if not references:
