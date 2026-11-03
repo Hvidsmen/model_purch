@@ -22,6 +22,9 @@ def closing(mask, start):
 
 
 def department_window(sql, with_year=False):
+    # Zero-plan fact rows add no plan; do not add one unit per sale/employee.
+    sql = re.sub(r'SUM\s*\(\s*IIF\s*\(\s*(\[?\w+\]?)\s*=\s*0\s*,\s*1\s*,\s*\1\s*\)\s*\)',
+                 r'SUM(\1)', sql, flags=re.I)
     def replace(match):
         columns = [value.strip() for value in match[1].split(',')]
         columns = [value for value in columns if value.strip('[] ').casefold() != 'авторсделки']
@@ -61,6 +64,9 @@ def patch_calculation(definition):
             raise ValidationError('Не распознана формула подразделения по автору. Пилотный расчёт не запущен.')
         window_cases += 1
         global_expression = department_window(expression, with_year=True)
+        if '/' in global_expression:
+            numerator, denominator = global_expression.split('/', 1)
+            global_expression = f'{numerator} / NULLIF(({denominator.strip()}),0)\n '
         replacement = f"WHEN VariationCalculate = N'{GLOBAL_SUBDIVISION}' THEN\n {global_expression}\n " + definition[start:end]
         definition = definition[:start] + replacement + definition[end:]
     if not window_cases:
@@ -82,8 +88,11 @@ def patch_calculation(definition):
             if end >= case_end:
                 enclosing.append((function.start(), end + 1))
         if not enclosing:
-            raise ValidationError('Не найдены границы расчёта выплаты. Пилотный расчёт не запущен.')
+            # Projected plan/fact CASE expressions are not payout conditions.
+            continue
         regions.append(enclosing[-1])
+    if not regions:
+        raise ValidationError('Не найдены границы расчёта выплаты. Пилотный расчёт не запущен.')
     edits = []
     for over in re.finditer(r'\bOVER\s*\(', mask, re.I):
         end = closing(mask, over.end() - 1) + 1
@@ -116,6 +125,48 @@ def patch_calculation(definition):
         edits.append((aggregate_start, end, f"IIF(VariationCalculate=N'{GLOBAL_SUBDIVISION}',{global_total},{original})"))
     for start, end, text in reversed(edits):
         definition = definition[:start] + text + definition[end:]
+    return global_payout_guards(definition)
+
+
+def global_payout_guards(definition):
+    """Global mode has one department gate, independent of personal gates."""
+    mask = mask_sql(definition)
+    edits = []
+    for function in re.finditer(r'\bIIF\s*\(', mask, re.I):
+        opening = function.end() - 1
+        end = closing(mask, opening)
+        depth, commas = 0, []
+        for index in range(opening + 1, end):
+            if mask[index] == '(':
+                depth += 1
+            elif mask[index] == ')':
+                depth -= 1
+            elif mask[index] == ',' and depth == 0:
+                commas.append(index)
+        if len(commas) != 2:
+            continue
+        start, stop = opening + 1, commas[0]
+        condition = definition[start:stop]
+        yes = mask[commas[0] + 1:commas[1]].strip()
+        no = mask[commas[1] + 1:end].strip()
+        if not (yes == '0' or (yes == '1' and no == '0')):
+            continue
+        branch = re.search(r"WHEN\s+VariationCalculate\s*=\s*N?'" + re.escape(GLOBAL_SUBDIVISION) +
+                           r"'\s+THEN\s+(.*?)\s+WHEN\b", condition, re.I | re.S)
+        if not branch or '/' not in branch[1]:
+            continue
+        threshold = re.search(r'\bEND\s*<\s*(@PayoutThreshold|0?\.80*)\b', condition, re.I)
+        if threshold is None:
+            raise ValidationError('Не распознан порог глобальной выплаты.')
+        ratio = branch[1].strip()
+        numerator, denominator = ratio.split('/', 1)
+        ratio = f'COALESCE(({numerator}) / NULLIF(({denominator}),0),0)'
+        mode = f"VariationCalculate=N'{GLOBAL_SUBDIVISION}'"
+        replacement = (f'(({mode} AND {ratio} < {threshold[1]}) OR '
+                       f'(CASE WHEN {mode} THEN 1 ELSE 0 END=0 AND ({condition})))')
+        edits.append((start, stop, replacement))
+    for start, stop, replacement in reversed(edits):
+        definition = definition[:start] + replacement + definition[stop:]
     return definition
 
 
