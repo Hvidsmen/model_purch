@@ -98,7 +98,39 @@ def present(kind, data, ledger=None, period='all'):
     result['people'] = sum(not row['unallocated'] for row in result['employees'])
     result['branches'] = len({row['subdivision'] for row in result['employees']})
     result['period_cards'] = [card for code, card in sorted(periods.items())]
+    if 'plan_fact' in ledger:
+        result['performance_matrix'] = performance_matrix(ledger['plan_fact'], result['period_columns'])
     return result
+
+
+def performance_matrix(items, period_columns):
+    """Use the employee table's period axis without combining different bases."""
+    from .reports_next import period_code
+    columns = [{'code': column['code'], 'label': 'Год' if column['code'] == '5' else column['code'] + ' кв.'}
+               for column in period_columns]
+    codes = {column['code'] for column in columns}
+    groups = {}
+    for item in items:
+        code = period_code(item['period'])
+        if code not in codes:
+            continue
+        key = tuple(item.get(field) for field in ('subdivision', 'year', 'kind', 'formula', 'scope_author'))
+        # Preserve distinct source entries if a period occurs more than once.
+        # Never sum cumulative targets or silently overwrite a source value.
+        candidates = groups.setdefault(key, [])
+        row = next((row for row in candidates if code not in row['_periods']), None)
+        if row is None:
+            row = {field: item.get(field) for field in ('subdivision', 'year', 'kind', 'formula', 'scope_author')}
+            row['_periods'] = {}
+            candidates.append(row)
+        row['_periods'][code] = item
+    rows = []
+    for candidates in groups.values():
+        for row in candidates:
+            row['cells'] = [row['_periods'].get(column['code']) for column in columns]
+            del row['_periods']
+            rows.append(row)
+    return {'columns': columns, 'rows': rows, 'colspan': 2 + 3 * len(columns)}
 
 
 def personal_details(ledger, query):

@@ -1,0 +1,14 @@
+{% load report_format %}
+<div class="nr-table-wrap">
+<table class="nr-table nr-performance-table" aria-label="План и факт по периодам премий">
+<thead>
+<tr><th rowspan="2" scope="col">Подразделение</th><th rowspan="2" scope="col">Вид мотивации / база</th>{% for column in presentation.performance_matrix.columns %}<th colspan="3" scope="colgroup" class="nr-performance-period" data-period="{{ column.code }}">{{ column.label }}</th>{% endfor %}</tr>
+<tr>{% for column in presentation.performance_matrix.columns %}<th scope="col" class="num">План, USD</th><th scope="col" class="num">Факт, USD</th><th scope="col" class="num">Выполнение</th>{% endfor %}</tr>
+</thead>
+<tbody>
+{% for row in presentation.performance_matrix.rows %}
+<tr><td>{{ row.subdivision }}<small>{{ row.year }}</small></td><td>{{ row.kind }}<small>{{ row.formula }} · {{ row.scope_author }}</small></td>{% for cell in row.cells %}<td class="num nr-performance-start" title="{{ cell.period }}">{{ cell.plan|report_cash }}</td><td class="num" title="{{ cell.period }}">{{ cell.fact|report_cash }}</td><td class="num" title="{{ cell.period }}">{{ cell.ratio|report_percent }}</td>{% endfor %}</tr>
+{% empty %}<tr><td colspan="{{ presentation.performance_matrix.colspan }}">Показатели плана и факта отсутствуют в результатах расчёта.</td></tr>{% endfor %}
+</tbody>
+</table>
+</div>
