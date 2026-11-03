@@ -26,3 +26,13 @@
 .nr-quarter-aligned .nr-period>strong{font-size:21px}
 .nr-quarter-label{display:flex;flex-direction:column;justify-content:center;gap:8px;padding:16px;color:#64748b;font-size:13px}
 .nr-quarter-aligned .nr-quarter-grand-total{background:#f6f3ff;border-color:#ded5f3}
+.nr-type-select{position:relative;min-width:0;color:#334155}
+.nr-type-select>summary{height:36px;display:flex;align-items:center;padding:7px 9px;border:1px solid #dce1ed;border-radius:6px;background:#fff;cursor:pointer;list-style:none;gap:8px}
+.nr-type-select>summary::-webkit-details-marker{display:none}
+.nr-type-select>summary:after{content:'▾';margin-left:auto;flex-shrink:0}
+.nr-type-select>summary>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nr-type-menu{position:absolute;z-index:30;top:calc(100% + 4px);left:0;width:100%;min-width:240px;max-width:calc(100vw - 48px);padding:10px;border:1px solid #dce1ed;border-radius:8px;background:#fff;box-shadow:0 8px 24px #26334b22}
+.nr-page .next-filter .nr-type-menu label{display:flex;flex-direction:row;align-items:center;gap:9px;padding:8px;margin:0;cursor:pointer;color:#334155}
+.nr-type-menu input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#6951c2}
+.nr-type-actions{display:flex;justify-content:space-between;gap:12px;padding:0 4px 6px}
+.nr-type-actions button{border:0;background:none;color:#6951c2;padding:4px;cursor:pointer;font:inherit}

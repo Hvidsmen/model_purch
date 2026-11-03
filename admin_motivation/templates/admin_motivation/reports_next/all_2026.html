@@ -2,7 +2,7 @@
 {% block title %}Все кварталы 2026 · DA портал{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-period-columns-20261103">
-<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=period-totals-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=motivation-multi-20261103">
 <section class="content nr-page nr-all-year-page">
 <div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>Все кварталы 2026</h1><p class="nr-subtitle">Премии за I, II, III и IV кварталы и годовая премия по всему 2026 году.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
 <p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
@@ -17,7 +17,7 @@
 {% if execution %}<p class="nr-context">Последний успешный дополнительный расчёт: {% timezone 'Europe/Moscow' %}{{ execution.completed_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% endif %}
 <form method="get" id="native-report-filters" class="next-filter nr-filter-panel"><input type="hidden" name="year" value="2026">
 <label>Подразделение<select name="subdivision"><option value="">Все доступные</option>{% for branch in branches %}<option {% if query.subdivision == branch %}selected{% endif %}>{{ branch }}</option>{% endfor %}</select></label>
-<label>Вид мотивации<select name="type"><option value="">Все доступные</option>{% for type in kinds %}<option {% if query.type == type %}selected{% endif %}>{{ type }}</option>{% endfor %}</select></label>
+{% include 'admin_motivation/reports_next/_motivation_types.html' %}
 <label>Сотрудник<input name="author" value="{{ query.author }}" placeholder="Точное ФИО · пусто — все доступные"></label>
 <label>Валюта<select name="currency"><option {% if query.currency != 'RUB' %}selected{% endif %}>USD</option><option {% if query.currency == 'RUB' %}selected{% endif %}>RUB</option></select></label>
 <div class="nr-field" style="grid-column:1/-1">Периоды<div class="nr-controls-row">{% for choice in periods %}<label><input type="checkbox" name="period" value="{{ choice.code }}" {% if choice.selected %}checked{% endif %}> {{ choice.label }}</label>{% endfor %}<small>Пустой выбор — все пять периодов.</small></div></div>
@@ -31,5 +31,4 @@
 {% include 'admin_motivation/reports_next/_all_2026_tables.html' %}
 {% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=period-totals-20261103"></script><script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
-
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_type_filter.js' %}?v=motivation-multi-20261103"></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=motivation-multi-20261103"></script><script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}

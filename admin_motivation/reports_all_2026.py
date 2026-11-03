@@ -174,5 +174,5 @@ def report(request):
         'kind': 'registry', 'all_2026_report': True, 'query': query, 'form': form, 'can_start': can_start, 'error': error,
         'job': job, 'pending': pending, 'execution': execution, 'data': data, 'ledger': data,
         'presentation': presentation, 'periods': [{'code': code, 'label': label, 'selected': not query.getlist('period') or code in query.getlist('period')} for code, label in [('1','I квартал'),('2','II квартал'),('3','III квартал'),('4','IV квартал'),('5','Год')]],
-        'branches': branches, 'kinds': kinds, 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
+        'branches': branches, 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
     })
