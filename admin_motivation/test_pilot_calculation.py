@@ -7,13 +7,13 @@ from .services.pilot_calculation import patch,MARKER
 def procedure():
     # A small public fixture, independent of private SQL review snapshots.
     return '''CREATE PROC motivation.sp_CalcBySub AS
-SELECT '1 Квартал' КварталМотивации, 0 Остаток, 0 ОстатокRUR
+SELECT '1 Квартал' КварталМотивации, 0 Остаток, 0 ОстатокRUR,0 AmountUSD,0 AmountRUR
 INTO DataWH.motivation.ReportMotivationByDealAuthor FROM #pf_base WHERE Квартал=1
-UNION ALL SELECT '2 Квартал(1-2 кв)' КварталМотивации,0,0 FROM #pf_base WHERE Квартал IN(1,2)
-UNION ALL SELECT '3 Квартал' КварталМотивации,0,0 FROM #pf_base WHERE Квартал IN(3)
-UNION ALL SELECT '4 Квартал(1-4 кв)' КварталМотивации,0,0 FROM #pf_base WHERE Квартал IN(1,2,3,4)
-UNION ALL SELECT 'Год' КварталМотивации,0,0 FROM #pf_base WHERE Квартал IN(1,2,3,4);
-INSERT INTO DataWH.motivation.ReportMotivationByDealAuthor SELECT 'Год' КварталМотивации,1,1
+UNION ALL SELECT '2 Квартал(1-2 кв)' КварталМотивации,0,0,0,0 FROM #pf_base WHERE Квартал IN(1,2)
+UNION ALL SELECT '3 Квартал' КварталМотивации,0,0,0,0 FROM #pf_base WHERE Квартал IN(3)
+UNION ALL SELECT '4 Квартал(1-4 кв)' КварталМотивации,0,0,0,0 FROM #pf_base WHERE Квартал IN(1,2,3,4)
+UNION ALL SELECT 'Год' КварталМотивации,0,0,СуммаМотивацииUSDГод,СуммаМотивацииRURГод FROM #pf_base WHERE Квартал IN(1,2,3,4);
+INSERT INTO DataWH.motivation.ReportMotivationByDealAuthor SELECT 'Год' КварталМотивации,1,1,0,0
 FROM DataWH.motivation.ReportMotivationByDealAuthor WHERE КварталМотивации <> N'Год';'''
 
 
@@ -44,12 +44,16 @@ class PilotCalculationTests(SimpleTestCase):
         prefix=patch(procedure()).split(MARKER)[0].split(' AS\n',1)[1]
         prefix=prefix.replace('INTO DataWH.motivation.ReportMotivationByDealAuthor','')
         with sqlite3.connect(':memory:') as db:
-            db.execute('CREATE TABLE pf_base (Квартал)')
-            db.executemany('INSERT INTO pf_base VALUES (?)',[(quarter,) for quarter in (1,2,3,4)])
+            db.execute('CREATE TABLE pf_base (Квартал, СуммаМотивацииUSDГод, СуммаМотивацииRURГод)')
+            db.executemany('INSERT INTO pf_base VALUES (?,?,?)',[(quarter,100,10000) for quarter in (1,2,3,4)])
             rows=db.execute(prefix.replace('#pf_base','pf_base')).fetchall()
         self.assertEqual(len(rows),8)
         self.assertEqual({row[0] for row in rows},{'4 Квартал(1-4 кв)','Год'})
-        self.assertTrue(all(row[1:]==(0,0) for row in rows))
+        self.assertTrue(all(row[1:3]==(0,0) for row in rows))
+        annual = [row for row in rows if row[0] == 'Год']
+        self.assertEqual(sum(row[3] for row in annual), 100)
+        self.assertEqual(sum(row[4] for row in annual), 10000)
+        self.assertEqual(sum(row[3] == 0 for row in annual), 3)
 
     def test_cumulative_q4_uses_q4_subdivision_correction(self):
         import sqlite3,re
@@ -60,3 +64,10 @@ class PilotCalculationTests(SimpleTestCase):
             db.execute('CREATE TABLE rows ([КварталМотивации])')
             db.executemany('INSERT INTO rows VALUES (?)',[(value,) for value in ('4 Квартал','4 Квартал(1-4 кв)','Год','40 Квартал')])
             self.assertEqual([row[0] for row in db.execute('SELECT '+expression+' FROM rows r')],[4,4,5,None])
+
+    def test_q4_possible_rub_uses_q4_without_changing_q3(self):
+        from .services.pilot_calculation import normalize_q4_rur
+        sql = "SELECT IIF(Квартал=3,СуммаМотивацииRUR,0), '3 Квартал' КварталМотивации UNION ALL SELECT IIF(Квартал=3,СуммаМотивацииRUR,0), '4 Квартал(1-4 кв)' КварталМотивации UNION ALL SELECT СуммаМотивацииRURГод, 'Год' КварталМотивации"
+        fixed = normalize_q4_rur(sql)
+        self.assertEqual(fixed.count('IIF(Квартал=3,СуммаМотивацииRUR,0)'), 1)
+        self.assertEqual(fixed.count('IIF(Квартал=4,СуммаМотивацииRUR,0)'), 1)

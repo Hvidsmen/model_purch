@@ -1,0 +1,128 @@
+from contextlib import nullcontext
+from datetime import date
+from decimal import Decimal
+from io import BytesIO
+from uuid import uuid4
+from unittest.mock import Mock, patch
+from django.contrib.auth.models import User, Group
+from django.test import TestCase, SimpleTestCase
+from django.urls import reverse
+from django.utils import timezone
+from django.core.exceptions import ValidationError
+from openpyxl import load_workbook
+from base.access import POLITICIAN
+from base.models import MotivationReportAccess
+from .models import MotivationCalculationSchedule, MotivationExecution, SalesPlanScenario, Chanel, Subdivision
+from .services.calculation_variants import ALL_2026, isolate, full_year_patch, main_runs
+from .services.calculation_jobs import calculation_command
+from .services.execution_tracking import parameters
+from .services.manager_detail import manager_detail_report
+from .test_manager_detail import detail_rows
+from .test_pilot_calculation import procedure
+
+
+class All2026SqlTests(SimpleTestCase):
+    def test_extra_sql_keeps_all_periods_and_isolates_all_persistent_results(self):
+        sql = procedure() + "\nIF OBJECT_ID('DataWH.motivation.Fact') IS NOT NULL DROP TABLE DataWH.motivation.Fact; SELECT 1 INTO DataWH.motivation.Fact; SELECT * INTO [DataWH].[motivation].[PlanFact] FROM DataWH.motivation.Fact;"
+        changed = isolate(full_year_patch(sql))
+        self.assertIn('FactAll2026', changed)
+        self.assertIn('PlanFactAll2026', changed)
+        self.assertIn('ReportMotivationByDealAuthorAll2026', changed)
+        import re
+        self.assertNotRegex(changed, r'\bmotivation\.(?:Fact|PlanFact|ReportMotivationByDealAuthor)\b')
+        self.assertNotIn('WHERE 1=0 AND', changed)
+        self.assertNotIn('IIF(Квартал=4,СуммаМотивацииUSDГод,0)', changed)
+        self.assertIn('IF 1=0\nINSERT', changed)
+
+    def test_all_five_periods_keep_full_year_annual_amounts(self):
+        import sqlite3
+        prefix = full_year_patch(procedure()).split('-- Separate 2026 variant:')[0].split(' AS\n', 1)[1]
+        prefix = prefix.replace('INTO DataWH.motivation.ReportMotivationByDealAuthor', '').replace('#pf_base', 'pf_base')
+        with sqlite3.connect(':memory:') as db:
+            db.execute('CREATE TABLE pf_base (Квартал, СуммаМотивацииUSDГод, СуммаМотивацииRURГод)')
+            db.executemany('INSERT INTO pf_base VALUES (?,?,?)', [(quarter, 20, 2000) for quarter in range(1, 5)])
+            rows = db.execute(prefix).fetchall()
+        self.assertEqual({row[0] for row in rows}, {'1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', '4 Квартал(1-4 кв)', 'Год'})
+        self.assertEqual(sum(row[3] for row in rows if row[0] == 'Год'), 80)
+
+    def test_extra_job_is_fixed_to_2026_and_has_independent_procedure_and_audit(self):
+        job = MotivationCalculationSchedule(variant=ALL_2026, fact_year=2026, plan_version='Plan', quarter_share=80, year_share=20, payout_threshold='.8')
+        command = calculation_command(job)
+        self.assertIn('EXEC motivation.PortalCalcAll2026 @FactYear=2026', command)
+        self.assertNotIn('EXEC motivation.PortalCalcBySub ', command)
+        self.assertEqual(parameters(job)['premium_periods'], list('12345'))
+        self.assertEqual(parameters(job)['premium_amount_quarters'], [1,2,3,4])
+        job.fact_year = 2025
+        with self.assertRaises(ValidationError): calculation_command(job)
+
+
+class All2026ViewTests(TestCase):
+    def setUp(self):
+        self.admin = User.objects.create_superuser('all-year-admin')
+        self.client.force_login(self.admin)
+        self.url = reverse('motivation_report_all_2026')
+        self.plan = SalesPlanScenario.objects.create(title='Plan 2026', source_version='Plan', loaded_at=timezone.now())
+        self.execution = MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'variant': ALL_2026, 'fact_year': 2026})
+
+    def source(self, author='Employee', branch='A'):
+        return manager_detail_report([dict(detail_rows()[1], АвторСделки=author, Подразделение=branch, КварталМотивации=period)
+                                      for period in ('1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', '4 Квартал(1-4 кв)', 'Год')])
+
+    def test_extra_report_has_five_periods_and_independent_excel_and_source(self):
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=self.source()) as load:
+            response = self.client.get(self.url, {'run':'1', 'type':'Политики'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(len(response.context['presentation']['period_columns']), 5)
+            self.assertNotContains(response, 'value="[]"')
+            self.assertEqual(response.context['presentation']['total'], 450)
+            self.assertTrue(all(call.kwargs['calculation_variant'] == ALL_2026 for call in load.call_args_list))
+            exported = self.client.get(self.url, {'export':'xlsx', 'type':'Политики'})
+        book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
+        self.assertEqual(book['Премии']['A1'].value, 'Все кварталы 2026')
+        book.close(); exported.close()
+        self.assertNotIn(self.execution, main_runs())
+
+    def test_missing_extra_results_never_fall_back_to_main(self):
+        self.execution.delete()
+        MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year':2026})
+        with patch('admin_motivation.services.reports_next.load_report') as load:
+            response = self.client.get(self.url, {'run':'1'})
+        self.assertContains(response, 'Результаты основного варианта здесь не используются.')
+        load.assert_not_called()
+
+    def test_sql_report_reads_only_extra_result_table_and_keeps_early_periods(self):
+        from .services.reports import load_report
+        row = dict(detail_rows()[0])
+        fields = ['Подразделение', 'АвторСделки', 'Год', 'КварталМотивации', 'СуммаМотивацииUSD', 'СуммаМотивацииUSDУчетПроцента', 'Остаток', 'СуммаМотивацииRUR', 'СуммаМотивацииRURУчетПроцента', 'ОстатокRUR']
+        connection, cursor = Mock(), Mock()
+        cursor.description = [(field,) for field in fields]
+        cursor.fetchmany.return_value = [tuple(row[field] for field in fields)]
+        values = {'TypeCoeff_':'Политики', 'Subdivision':['A'], 'DealAuthor':[], 'Years':['2026'], 'gp_sales':[], 'GPGoods':[], 'Brend':[], 'Currency':'USD'}
+        with patch('admin_motivation.services.reports.connect_database', return_value=(connection,cursor)):
+            result = load_report('manager-detail', values, summary_only=True, calculation_variant=ALL_2026)
+        sql = cursor.execute.call_args.args[0]
+        self.assertIn('ReportMotivationByDealAuthorAll2026', sql)
+        self.assertNotIn("LIKE N'4 кв%'", sql)
+        self.assertEqual(result['period_summary']['rows'][0]['values'][0], 90)
+
+    def test_start_creates_separate_manual_job_and_cannot_override_year_or_mode(self):
+        with patch('admin_motivation.services.calculation_jobs.start_job') as start, patch('admin_motivation.services.execution_tracking.observe', return_value=None):
+            response = self.client.post(self.url, {'plan_version':'Plan', 'quarter_share':'80', 'year_share':'20', 'payout_threshold':'.8', 'fact_year':'2025', 'variant':'main', 'mode':'daily'})
+        self.assertEqual(response.status_code, 302)
+        job = start.call_args.args[0]
+        self.assertEqual((job.variant, job.fact_year, job.mode, job.enabled), (ALL_2026, 2026, 'manual', False))
+        self.assertTrue(MotivationCalculationSchedule.objects.filter(pk=job.pk, variant=ALL_2026).exists())
+
+    def test_personal_read_access_and_export_never_expand_scope(self):
+        channel = Chanel.objects.create(chanel_name='All-year')
+        branch = Subdivision.objects.create(subdivision_key='A', subdivision_name='A', subdivision_global='A', chanel=channel)
+        user = User.objects.create_user('all-year-policy'); user.groups.add(Group.objects.get(name=POLITICIAN))
+        MotivationReportAccess.objects.create(user=user, subdivision=branch, deal_author='Own')
+        self.client.force_login(user)
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=self.source('Own')) as load:
+            response = self.client.get(self.url, {'run':'1', 'author':'Foreign'})
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Own'])
+            self.assertEqual(load.call_args.args[1]['Subdivision'], ['A'])
+        self.assertEqual(self.client.get(self.url, {'run':'1', 'subdivision':'Foreign'}).status_code, 403)
+        self.assertEqual(self.client.post(self.url, {'plan_version':'Plan'}).status_code, 403)

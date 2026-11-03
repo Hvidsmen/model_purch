@@ -1273,6 +1273,40 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.assertTrue(all(set(call.args[1]['Subdivision']) <= {'Allowed-A', 'Allowed-B'} for call in loaded.call_args_list))
         self.assertEqual(self.errors, [])
 
+    def test_extra_2026_opens_independent_window_with_all_five_periods(self):
+        from contextlib import nullcontext
+        from uuid import uuid4
+        from django.utils import timezone
+        from playwright.sync_api import expect
+        from .models import MotivationExecution, SalesPlanScenario
+        from .services.manager_detail import manager_detail_report
+        from .test_manager_detail import detail_rows
+        def prepare():
+            SalesPlanScenario.objects.create(title='План 2026', source_version='Plan2026', loaded_at=timezone.now())
+            MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'variant':'all_2026','fact_year':2026})
+        self.db(prepare)
+        source = manager_detail_report([dict(detail_rows()[1], КварталМотивации=period) for period in ('1 Квартал','2 Квартал(1-2 кв)','3 Квартал','4 Квартал(1-4 кв)','Год')])
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source) as load:
+            self.page.goto(self.live_server_url + reverse('motivation_reports_next'))
+            with self.page.expect_popup() as opened:
+                self.page.get_by_role('link', name='Дополнительный расчёт · Все кварталы 2026', exact=False).click()
+            extra = opened.value
+            self.addCleanup(extra.close)
+            expect(extra.get_by_role('heading', name='Все кварталы 2026', exact=True)).to_be_visible()
+            extra.get_by_role('button', name='Показать', exact=True).click()
+            expect(extra.locator('.nr-table').first.locator('thead')).to_contain_text('Премия за 1 кв.')
+            expect(extra.locator('.nr-table').first.locator('thead')).to_contain_text('Премия за 4 кв.')
+            expect(extra.locator('.nr-table').first.locator('thead')).to_contain_text('Годовая премия')
+            self.assertEqual(load.call_args.kwargs['calculation_variant'], 'all_2026')
+            with extra.expect_download() as event:
+                extra.get_by_role('link', name='↓ Excel', exact=True).click()
+            event.value.save_as('/tmp/all-2026.xlsx')
+            extra.screenshot(path='/tmp/all-quarters-2026-desktop.png', full_page=True)
+            extra.set_viewport_size({'width':390,'height':844})
+            self.assertLessEqual(extra.evaluate('document.documentElement.scrollWidth'), 390)
+            extra.screenshot(path='/tmp/all-quarters-2026-mobile.png', full_page=True)
+        self.assertEqual(self.errors, [])
+
     def setUp(self):
         authorize_test_case(self)
         self.first, _ = GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001, 1, 1))

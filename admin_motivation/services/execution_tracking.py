@@ -18,9 +18,11 @@ IF OBJECT_ID(N'motivation.PortalMotivationRun',N'U') IS NULL
 
 def parameters(job):
     from .pilot_calculation import PERIODS
+    from .calculation_variants import variant_of, ALL_2026
+    variant = variant_of(job)
     return {'fact_year':job.fact_year,'plan_version':job.plan_version,
             'quarter_share':str(job.quarter_share),'year_share':str(job.year_share),
-            'payout_threshold':str(job.payout_threshold), 'premium_periods':list(PERIODS), 'quarter_catchup':False}
+            'payout_threshold':str(job.payout_threshold), 'premium_periods':list('12345') if variant == ALL_2026 else list(PERIODS), 'quarter_catchup':False, 'premium_amount_quarters':[1,2,3,4] if variant == ALL_2026 else [4], 'variant':variant}
 
 
 def tracked_statement(job, statement):

@@ -1,0 +1,28 @@
+{% extends 'admin_motivation/base.html' %}{% load static report_format tz %}
+{% block title %}Все кварталы 2026 · DA портал{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-20261103">
+<section class="content nr-page nr-all-year-page">
+<div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>Все кварталы 2026</h1><p class="nr-subtitle">Премии за I, II, III и IV кварталы и годовая премия по всему 2026 году.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
+<p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
+{% for message in messages %}<p class="nr-note" role="status">{{ message }}</p>{% endfor %}
+{% if error %}<p class="next-error" role="alert">{{ error }}</p>{% endif %}
+{% if pending %}<p class="nr-note" data-all-year-pending role="status">Расчёт выполняется. Страница обновит статус автоматически.</p>{% endif %}
+{% if can_start %}<details class="nr-filter-panel" {% if not execution %}open{% endif %}><summary>Запустить дополнительный расчёт за 2026 год</summary>
+<form method="post" class="next-filter" data-ux-submit="Запускаем отдельный расчёт 2026…">{% csrf_token %}
+{% for field in form %}{% if field.name == 'plan_version' or field.name == 'quarter_share' or field.name == 'year_share' or field.name == 'payout_threshold' %}<label>{{ field.label }}{{ field }}{{ field.errors }}</label>{% endif %}{% endfor %}
+{{ form.non_field_errors }}<div class="nr-filter-actions"><button class="btn btn-primary" type="submit">Рассчитать все кварталы 2026</button></div></form></details>{% endif %}
+{% if job %}<p class="nr-muted">Задание: {{ job.name }}{% if job.error %} · {{ job.error }}{% endif %}. <a href="{% url 'motivation_report_all_2026' %}?run=1">Обновить результат</a></p>{% endif %}
+{% if execution %}<p class="nr-context">Последний успешный дополнительный расчёт: {% timezone 'Europe/Moscow' %}{{ execution.completed_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% endif %}
+<form method="get" id="native-report-filters" class="next-filter nr-filter-panel"><input type="hidden" name="year" value="2026">
+<label>Подразделение<select name="subdivision"><option value="">Все доступные</option>{% for branch in branches %}<option {% if query.subdivision == branch %}selected{% endif %}>{{ branch }}</option>{% endfor %}</select></label>
+<label>Вид мотивации<select name="type"><option value="">Все доступные</option>{% for type in kinds %}<option {% if query.type == type %}selected{% endif %}>{{ type }}</option>{% endfor %}</select></label>
+<label>Сотрудник<input name="author" value="{{ query.author }}" placeholder="Точное ФИО · пусто — все доступные"></label>
+<label>Валюта<select name="currency"><option {% if query.currency != 'RUB' %}selected{% endif %}>USD</option><option {% if query.currency == 'RUB' %}selected{% endif %}>RUB</option></select></label>
+<div class="nr-field" style="grid-column:1/-1">Периоды<div class="nr-controls-row">{% for choice in periods %}<label><input type="checkbox" name="period" value="{{ choice.code }}" {% if choice.selected %}checked{% endif %}> {{ choice.label }}</label>{% endfor %}<small>Пустой выбор — все пять периодов.</small></div></div>
+<div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button>{% if data != None %}<a href="{{ export_url }}">↓ Excel</a>{% endif %}</div></form>
+{% if data != None %}<div class="nr-kpis"><article class="nr-kpi nr-kpi-primary"><span>Премии за выбранные периоды</span><strong>{{ presentation.total|report_cash }} {{ ledger.currency }}</strong></article><article class="nr-kpi"><span>Сколько бы выплатили</span><strong>{{ presentation.possible|report_cash }} {{ ledger.currency }}</strong><small>До условий выполнения плана</small></article><article class="nr-kpi"><span>Сотрудники</span><strong>{{ presentation.people }}</strong></article><article class="nr-kpi"><span>Периоды</span><strong>{{ presentation.period_columns|length }}</strong></article></div>
+{% include 'admin_motivation/reports_next/_all_2026_tables.html' %}
+{% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
+</section>{% endblock %}
+{% block module_js %}{{ block.super }}<script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}

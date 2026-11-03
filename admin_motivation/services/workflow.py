@@ -33,10 +33,11 @@ def export_snapshot():
 def context():
     snapshot = export_snapshot()
     exported = MotivationExportLog.objects.order_by('-pk').first()
-    execution = MotivationExecution.objects.order_by('-started_at').first()
+    from .calculation_variants import main_runs
+    execution = main_runs().order_by('-started_at').first()
     current = bool(exported and exported.fingerprint == snapshot['fingerprint'])
     complete = bool(execution and execution.state == 'completed')
-    calculated_current = bool(complete and current and execution.export_snapshot.get('fingerprint') == snapshot['fingerprint'] and execution.parameters.get('premium_periods')==['4','5'] and execution.parameters.get('quarter_catchup') is False)
+    calculated_current = bool(complete and current and execution.export_snapshot.get('fingerprint') == snapshot['fingerprint'] and execution.parameters.get('premium_periods')==['4','5'] and execution.parameters.get('quarter_catchup') is False and execution.parameters.get('premium_amount_quarters')==[4])
     if not snapshot['versions']:
         next_label, next_route = 'Настройте и утвердите версию', 'global_coeff_admin_motivation'
     elif not current:

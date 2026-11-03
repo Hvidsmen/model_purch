@@ -18,6 +18,11 @@ logger = logging.getLogger(__name__)
 
 
 class JobForm(forms.ModelForm):
+    variant = forms.ChoiceField(label='Вариант расчёта', choices=[('main', 'Основной · IV квартал'), ('all_2026', 'Все кварталы 2026')], required=False, initial='main')
+
+    def clean_variant(self):
+        return self.cleaned_data.get('variant') or 'main'
+
     payout_threshold = forms.DecimalField(label='Порог выполнения плана для выплаты', min_value=0, max_value=1, max_digits=9, decimal_places=8, initial='0.8', help_text='Коэффициент: 0,8 = 80%. Это порог выплаты, а не квартальная доля.')
     fact_year = forms.IntegerField(label='Год факта', min_value=1, max_value=9999)
     plan_version = forms.ChoiceField(label='Загруженная версия плана продаж')
@@ -27,7 +32,7 @@ class JobForm(forms.ModelForm):
                                  widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'))
     class Meta:
         model = MotivationCalculationSchedule
-        fields = ['name', 'fact_year', 'plan_version', 'quarter_share', 'year_share', 'payout_threshold', 'mode', 'run_at', 'enabled']
+        fields = ['name', 'variant', 'fact_year', 'plan_version', 'quarter_share', 'year_share', 'payout_threshold', 'mode', 'run_at', 'enabled']
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -55,6 +60,8 @@ class JobForm(forms.ModelForm):
             self.add_error('run_at', 'Однократный запуск должен быть в будущем.')
         if values.get('quarter_share') is not None and values.get('year_share') is not None and values['quarter_share'] + values['year_share'] != 100:
             self.add_error(None, 'Квартальная и годовая доли должны в сумме составлять 100%.')
+        if values.get('variant') == 'all_2026' and values.get('fact_year') != 2026:
+            self.add_error('fact_year', 'Дополнительный вариант рассчитывается только за 2026 год.')
         return values
 
 
@@ -145,10 +152,13 @@ def calculation_monitor(request, job_id):
     if execution and execution.state == 'completed' and data.get('status') == 'Завершено':
         params = execution.parameters
         data['report_url'] = reverse('motivation_report',args=['manager-detail']) + '?' + urlencode({'year':params['fact_year'],'job':job.pk,'run':'1',**({'execution':execution.pk} if execution.pk else {})})
+        if job.variant == 'all_2026':
+            data['report_url'] = reverse('motivation_report_all_2026') + '?run=1'
+        rules_current = (params.get('variant') == 'all_2026' and params.get('premium_periods') == list('12345') and params.get('premium_amount_quarters') == [1,2,3,4] and params.get('quarter_catchup') is False) if job.variant == 'all_2026' else (params.get('premium_periods') == ['4','5'] and params.get('quarter_catchup') is False and params.get('premium_amount_quarters') == [4])
         data['execution'] = {'completed':execution.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S') if execution.completed_at else '',
             'year':params['fact_year'],'plan':params['plan_version'],
-            'pilot_current':params.get('premium_periods')==['4','5'] and params.get('quarter_catchup') is False,
-            'stale': not (params.get('premium_periods')==['4','5'] and params.get('quarter_catchup') is False and state['export_current'] and state['exported'] and state['exported'].fingerprint==execution.export_snapshot.get('fingerprint'))}
+            'pilot_current':rules_current,
+            'stale': not (rules_current and state['export_current'] and state['exported'] and state['exported'].fingerprint==execution.export_snapshot.get('fingerprint'))}
     else:
         data['report_url'] = None
     data['checked_at'] = timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%H:%M:%S')

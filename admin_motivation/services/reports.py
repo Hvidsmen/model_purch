@@ -364,13 +364,15 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main'):
     if access_scope:
         from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
         access_scope = worker_scope(access_scope, kind, values)
     from .report_periods import pilot_enabled, PILOT_SQL
-    pilot = pilot_enabled(kind, access_scope)
+    if calculation_variant not in ('main', 'all_2026') or calculation_variant == 'all_2026' and (kind != 'manager-detail' or list(values.get('Years') or []) != ['2026']):
+        raise ValidationError('Неизвестный источник дополнительного отчёта.')
+    pilot = pilot_enabled(kind, access_scope) and calculation_variant == 'main'
     if pilot and kind=='manager':
         from .report_periods import allowed_period,PILOT_QUARTER
         values={**values,'qm':values.get('qm') if allowed_period(values.get('qm')) else PILOT_QUARTER}
@@ -390,6 +392,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         connection, cursor = connect_database('vm-dwh', 'DataWH')
         connection.timeout = 60
         source_sql = (SQL_ROOT / f'{kind}.sql').read_text(encoding='utf-8')
+        if calculation_variant == 'all_2026':
+            source_sql = source_sql.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'DataWH.motivation.ReportMotivationByDealAuthorAll2026')
         from .subdivision_scope import sql_predicate
         source_sql = 'SELECT * FROM (' + source_sql.strip().rstrip(';') + ') AS included_source WHERE ' + sql_predicate('[Подразделение]')
         if kind == 'manager-detail' and period_condition:
@@ -435,6 +439,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                 # Multiple directors share the same subdivision sales/plan inputs.
                 dimensions = '[Подразделение],[Год],[КварталМотивации],[ГруппаПлановПродаж],[ГруппаТоваров],[Марка]'
                 performance_source = '(SELECT ' + dimensions + ',' + ','.join(f'MAX([{field}]) AS [{field}]' for field in performance_fields) + ' FROM ' + performance_source + ' GROUP BY ' + dimensions + ') AS director_inputs'
+            if calculation_variant == 'all_2026':
+                performance_source = performance_source.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'DataWH.motivation.ReportMotivationByDealAuthorAll2026')
             performance_sql, performance_args = bind_sql(
                 'SELECT [Подразделение],[Год],[КварталМотивации],' +
                 ','.join(f'SUM([{field}]) AS [{field}]' for field in performance_fields) +

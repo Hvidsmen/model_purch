@@ -17,14 +17,14 @@ class DealAmountsTests(SimpleTestCase):
         for day, quarterly, annual in [('2026-01-01', 80, 20), ('2026-03-31', 80, 20), ('2026-09-30', 80, 20), ('2026-10-01', 80, 20), ('2026-12-31', 80, 20), ('2026-10-02', -8, -2), ('2026-02-01', None, 5)]:
             connection.execute('INSERT INTO deals ([ДатаЗакрытияСделки],[СуммаКвМотивацииUSD],[СуммаМотивацииUSDГод]) VALUES (?,?,?)', (day, quarterly, annual))
         summary = connection.execute(f'SELECT SUM({QUARTERLY_SQL}),SUM({ANNUAL_SQL}),SUM({POSSIBLE_SQL}) FROM deals').fetchone()
-        self.assertEqual(summary, (152, 103, 255))
+        self.assertEqual(summary, (152, 38, 190))
         cursor = connection.execute('SELECT ' + detail_projection() + ' FROM deals ORDER BY [ДатаЗакрытияСделки]')
         rows = [dict(zip([column[0] for column in cursor.description], values)) for values in cursor.fetchall()]
         amounts = {row['ДатаЗакрытияСделки']: (row['СуммаКвМотивацииUSD'], row['СуммаМотивацииUSDГод'], row['СуммаМотивацииUSD']) for row in rows}
-        self.assertEqual(amounts['2026-09-30'], (0, 20, 20))
+        self.assertEqual(amounts['2026-09-30'], (0, 0, 0))
         self.assertEqual(amounts['2026-10-01'], (80, 20, 100))
         self.assertEqual(amounts['2026-10-02'], (-8, -2, -10))
-        self.assertEqual(amounts['2026-02-01'], (0, 5, 5))
+        self.assertEqual(amounts['2026-02-01'], (0, 0, 0))
         self.assertEqual(sum(row['СуммаМотивацииUSD'] for row in rows), summary[2])
         data = prepare({'details': rows, 'offset': 0, 'page': 1}, QueryDict())
         import csv, io

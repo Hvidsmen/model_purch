@@ -97,7 +97,8 @@ def report_page(request, kind):
         selected_parameters.append({'label': 'Валюта мотивации', 'value': data['currency']})
     from .models import MotivationExecution
     from .services.workflow import export_snapshot
-    latest_execution=MotivationExecution.objects.order_by('-started_at').first()
+    from .services.calculation_variants import main_runs
+    latest_execution=main_runs().order_by('-started_at').first()
     if role_for(request.user, 'motivation') in (MOTIVATION_VIEWER, FINANCIER) and str(query.get('job','')).isdigit():
         from .models import MotivationCalculationSchedule
         from .services.execution_tracking import observe

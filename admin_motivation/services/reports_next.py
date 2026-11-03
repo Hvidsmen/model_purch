@@ -105,7 +105,10 @@ def current_run(execution, connector=None):
         if not result or result[0] < 0:
             raise ValidationError('Выполняется расчёт. Дождитесь завершения и повторите запрос.')
         locked = True
-        cursor.execute('SELECT TOP (1) RunId,State_ FROM motivation.PortalMotivationRun ORDER BY StartedAt DESC')
+        variant = execution.parameters.get('variant', 'main')
+        if variant not in ('main', 'all_2026'):
+            raise ValidationError('Неизвестный вариант расчёта.')
+        cursor.execute("SELECT TOP (1) RunId,State_ FROM motivation.PortalMotivationRun WHERE COALESCE(JSON_VALUE(Parameters_,'$.variant'),N'main')=? ORDER BY StartedAt DESC", variant)
         latest = cursor.fetchone()
         if not latest or str(latest[0]).casefold() != str(execution.run_id).casefold() or latest[1] != 'completed':
             raise ValidationError('Таблица результатов относится к другому или незавершённому запуску. Выберите последний завершённый расчёт; архивные суммы пока не сохраняются.')
@@ -226,7 +229,7 @@ def planned_budget(execution, scenario, query):
         if query.getlist(field):
             lines = lines.filter(**{model_field + '__in': query.getlist(field)})
     for day, original, pg, group, brand, amount, ddp, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
-        share = (annual_share if '5' in periods else Decimal(0)) + (quarter_share if '4' in periods else Decimal(0))
+        share = ((annual_share if '5' in periods else Decimal(0)) + (quarter_share if '4' in periods else Decimal(0))) if day.month >= 10 else Decimal(0)
         sub = canonical(original, aliases)
         if not included(original, aliases) or selected_subdivisions and sub not in selected_subdivisions:
             continue

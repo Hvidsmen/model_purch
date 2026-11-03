@@ -39,7 +39,9 @@ def calculation_command(job):
     except (InvalidOperation, ValueError, TypeError):
         raise ValidationError('Порог выплаты должен быть от 0 до 1, не более 8 знаков после запятой.')
     escaped_plan = plan.replace("'", "''")
-    statement = (f"EXEC motivation.PortalCalcBySub @FactYear={job.fact_year}, "
+    from .calculation_variants import variant_of, procedure
+    proc = procedure(variant_of(job))
+    statement = (f"EXEC {proc} @FactYear={job.fact_year}, "
                  f"@PlanVersion=N'{escaped_plan}', "
                  f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f}, @PayoutThreshold={threshold:.8f};")
     from .execution_tracking import tracked_statement
@@ -47,7 +49,8 @@ def calculation_command(job):
 
 
 def validate_sql_parameters(cursor, job):
-    cursor.execute("SELECT name FROM sys.parameters WHERE object_id=OBJECT_ID(N'motivation.PortalCalcBySub')")
+    from .calculation_variants import variant_of, procedure
+    cursor.execute('SELECT name FROM sys.parameters WHERE object_id=OBJECT_ID(?)', procedure(variant_of(job)))
     names = {row[0].casefold() for row in cursor.fetchall()}
     if not {'@factyear', '@planversion', '@quartershare', '@yearshare', '@payoutthreshold'} <= names:
         raise ValidationError('Процедура MS SQL не поддерживает параметры года, версии плана и долей. Установите параметризованную версию sp_CalcBySub. Задание не изменено.')
@@ -64,8 +67,10 @@ def quote(name):
     return '[' + name.replace(']', ']]') + ']'
 
 
-def prepare(cursor):
-    cursor.execute("SELECT OBJECT_DEFINITION(OBJECT_ID(N'motivation.sp_CalcBySub')), OBJECT_ID(N'motivation.PortalCalcBySub')")
+def prepare(cursor, variant='main'):
+    from .calculation_variants import procedure, MAIN, ALL_2026, isolate, full_year_patch
+    proc = procedure(variant)
+    cursor.execute("SELECT OBJECT_DEFINITION(OBJECT_ID(N'motivation.sp_CalcBySub')), OBJECT_ID(?)", proc)
     definition, existing = cursor.fetchone()
     if not definition:
         raise ValidationError('Не найдена процедура motivation.sp_CalcBySub или нет права VIEW DEFINITION.')
@@ -86,7 +91,7 @@ def prepare(cursor):
                    ' FROM dbo.Subdivisions s LEFT JOIN motivation.PortalSubdivisionMerge m ON m.SourceName=s.SubdivisionName WHERE ' +
                    sql_predicate('s.SubdivisionName') + ' AND ' + sql_predicate('COALESCE(m.TargetName,s.SubdivisionName)') + ';')
     header = re.compile(r'\b(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)PROC(?:EDURE)?\s+(?:\[?motivation\]?\s*\.\s*)?(?:\[sp_CalcBySub\]|sp_CalcBySub\b)', re.I)
-    changed, count = header.subn(('ALTER' if existing else 'CREATE') + ' PROCEDURE motivation.PortalCalcBySub', definition, count=1)
+    changed, count = header.subn(('ALTER' if existing else 'CREATE') + ' PROCEDURE ' + proc, definition, count=1)
     if count != 1:
         raise ValidationError('Не удалось распознать определение sp_CalcBySub. Исходная процедура не изменена.')
     changed, references = re.subn(r'(?:(?:\[?DataWH\]?)\s*\.\s*)?\[?dbo\]?\s*\.\s*\[?Subdivisions\]?(?!\w)',
@@ -119,7 +124,7 @@ def prepare(cursor):
         from .manager_correction import patch
         changed = patch(changed)
     from .pilot_calculation import patch as pilot_patch
-    changed = pilot_patch(changed)
+    changed = pilot_patch(changed) if variant == MAIN else isolate(full_year_patch(changed))
     cursor.execute(changed)
 
 
@@ -136,7 +141,9 @@ def sync_job(job, connector=None):
         cursor.execute("""DECLARE @r int; EXEC @r=sys.sp_getapplock
           @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;
           IF @r < 0 THROW 50001,N'Дождитесь завершения расчёта мотивации',1;""")
-        prepare(cursor)
+        from .calculation_variants import variant_of, MAIN
+        variant = variant_of(job)
+        prepare(cursor) if variant == MAIN else prepare(cursor, variant)
         from .execution_tracking import DDL
         cursor.execute(DDL)
         validate_sql_parameters(cursor, job)

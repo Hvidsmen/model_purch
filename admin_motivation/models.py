@@ -704,6 +704,7 @@ class SubdivisionDirectorCoeff(DirectorCoefficientBase):
 
 
 class MotivationCalculationSchedule(models.Model):
+    variant = models.CharField('Вариант расчёта', max_length=20, default='main', choices=[('main', 'Основной · IV квартал'), ('all_2026', 'Все кварталы 2026')])
     payout_threshold = models.DecimalField('Порог выполнения плана для выплаты', max_digits=9, decimal_places=8, default=Decimal('0.8'))
     fact_year = models.PositiveSmallIntegerField('Год факта', null=True, blank=True)
     plan_version = models.CharField('Версия плана продаж в MS SQL', max_length=500, blank=True)

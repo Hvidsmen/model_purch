@@ -1,1 +1,1 @@
-<nav class="nr-report-nav" aria-label="Переключить отчёт">{% for item in report_navigation %}<a href="{{ item.url }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}</nav>
+<nav class="nr-report-nav" aria-label="Переключить отчёт">{% for item in report_navigation %}<a href="{{ item.url }}" {% if item.active %}aria-current="page"{% endif %}>{{ item.label }}</a>{% endfor %}<a href="{% url 'motivation_report_all_2026' %}" target="_blank" rel="noopener">Все кварталы 2026 ↗</a></nav>

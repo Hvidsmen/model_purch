@@ -335,16 +335,16 @@ class ReportsNextTests(TestCase):
         line.save()
         query = QueryDict('period=4&period=5')
         result = reports_next.planned_budget(self.run, self.fixture.scenario, query)
-        self.assertEqual(result[0]['global'], Decimal(375))  # Cumulative Q4 300 + annual 75.
-        self.assertEqual(result[0]['local'], Decimal(575))
+        self.assertEqual(result[0]['global'], Decimal(225))  # Only Q4 plan lines earn either premium share.
+        self.assertEqual(result[0]['local'], Decimal(345))
         only_quarters = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('period=4'))
-        self.assertEqual(only_quarters[0]['global'], Decimal(300))
+        self.assertEqual(only_quarters[0]['global'], Decimal(180))
         self.assertEqual(reports_next.period_label(query), 'Все доступные периоды')
         exported = self.client.get(reverse('motivation_report_next', args=['executive']),
             {'run': '1', 'period': ['4', '5'], 'plan': self.fixture.scenario.pk, 'export': 'xlsx'})
         from io import BytesIO
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-        self.assertEqual(book['Премии']['B3'].value, 375)
+        self.assertEqual(book['Премии']['B3'].value, 225)
         self.assertEqual(dict(book['Параметры'].values)['Период премии'], 'Все доступные периоды')
         book.close(); exported.close()
 

@@ -7,6 +7,7 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from base.access import role_for, REPORT_ROLES
 from base.report_access import politician_scope, scoped_query, scoped_values, identity_choices
+from .services.calculation_variants import main_runs
 from .models import MotivationExecution
 from .services.reports import FILTERS, parameters, load_report
 from .services.deal_filter_choices import choices
@@ -30,7 +31,7 @@ def report(request):
     query.pop('period', None)
     query.setdefault('start', today().replace(month=1, day=1).isoformat())
     query.setdefault('end', today().isoformat())
-    selected = MotivationExecution.objects.filter(state='completed').order_by('-completed_at', '-started_at', '-pk').first()
+    selected = main_runs().filter(state='completed').order_by('-completed_at', '-started_at', '-pk').first()
     data, errors, filters, values = None, [], [], {}
     try:
         values = parameters('deals', query, trusted_identity=bool(scope))

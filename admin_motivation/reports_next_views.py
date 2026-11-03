@@ -9,6 +9,7 @@ from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.http import require_GET
 from base.access import role_for, REPORT_ROLES, PERSONAL_ROLES, ADMIN, BRANCH_DIRECTOR, DEPUTY_DIRECTOR
+from .services.calculation_variants import main_runs
 from .models import MotivationExecution, SalesPlanScenario, Subdivision
 from .services import reports_next as reports
 
@@ -188,7 +189,7 @@ def report(request, kind):
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
         return HttpResponseBadRequest(' '.join(exc.messages))
-    runs = MotivationExecution.objects.filter(state='completed').order_by('-completed_at', '-started_at', '-pk')
+    runs = main_runs().filter(state='completed').order_by('-completed_at', '-started_at', '-pk')
     selected = runs.first()
     plans = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).order_by('-loaded_at', '-pk')
     original_plan = reports.default_plan(selected) if selected else None
@@ -307,6 +308,7 @@ def report(request, kind):
     all_types = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
     all_types = [all_types] if isinstance(all_types, str) else all_types
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.available(request.user)[kind][0],
+        'premium_rule_outdated': bool(kind != 'executive' and selected and selected.parameters.get('premium_amount_quarters') != [4]),
         'employee_report': employee_report, 'employee_filters': employee_filters, 'employee_authors': employee_authors,
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
