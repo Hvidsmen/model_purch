@@ -37,7 +37,7 @@ def selection(user, query):
 
 def data_for(user, execution, query):
     scope, kinds, periods = selection(user, query)
-    rows = []
+    rows, plan_fact = [], []
     for kind in kinds:
         values = {'TypeCoeff_': kind, 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'),
                   'gp_sales': [], 'GPGoods': [], 'Brend': [], 'Years': ['2026'], 'Currency': query.get('currency', 'USD')}
@@ -45,6 +45,14 @@ def data_for(user, execution, query):
             values = scoped_values('manager-detail', values, scope)
         data = reports_next.load_report('manager-detail', values, access_scope=scope, premium_period=periods,
                                         summary_only=True, calculation_variant=ALL_2026)
+        from .services.reports import number, ratio
+        for item in data.get('motivation_performance', []):
+            plan, fact = number(item.get('Plan_')), number(item.get('Fact_'))
+            plan_fact.append({'kind': kind, 'subdivision': item['Подразделение'],
+                              'year': item['Год'], 'period': item['КварталМотивации'],
+                              'formula': item.get('VariationCalculate') or 'Подразделение',
+                              'scope_author': item.get('ScopeAuthor') or 'Всё подразделение',
+                              'plan': plan, 'fact': fact, 'ratio': ratio(fact, plan)})
         summary = data['period_summary']
         for item in summary['rows']:
             for index, column in enumerate(summary['columns']):
@@ -59,7 +67,7 @@ def data_for(user, execution, query):
                     'amount': amount, 'bonus': Decimal(0), 'total': amount, 'currency': values['Currency'],
                     'possible': item.get('possible_values', [None] * len(summary['columns']))[index],
                     'detail_url': reverse('motivation_report_all_2026') + '?' + target.urlencode()})
-    return {'rows': rows, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in rows),
+    return {'rows': rows, 'plan_fact': plan_fact, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in rows),
             'total': sum((row['amount'] for row in rows), Decimal(0)), 'currency': query.get('currency', 'USD')}
 
 

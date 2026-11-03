@@ -78,7 +78,7 @@ class All2026ViewTests(TestCase):
             self.assertTrue(all(call.kwargs['calculation_variant'] == ALL_2026 for call in load.call_args_list))
             exported = self.client.get(self.url, {'export':'xlsx', 'type':'Политики'})
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-        self.assertEqual(book['Премии']['A1'].value, 'Все кварталы 2026')
+        self.assertEqual(book['Сводка']['A1'].value, 'Все кварталы 2026')
         book.close(); exported.close()
         self.assertNotIn(self.execution, main_runs())
 
@@ -126,3 +126,16 @@ class All2026ViewTests(TestCase):
             self.assertEqual(load.call_args.args[1]['Subdivision'], ['A'])
         self.assertEqual(self.client.get(self.url, {'run':'1', 'subdivision':'Foreign'}).status_code, 403)
         self.assertEqual(self.client.post(self.url, {'plan_version':'Plan'}).status_code, 403)
+
+
+    def test_plan_fact_is_read_from_additional_source(self):
+        source = self.source()
+        source['motivation_performance'] = [{
+            'Подразделение': 'A', 'Год': 2026, 'КварталМотивации': '3 Квартал',
+            'VariationCalculate': 'Подразделение(Глобально)', 'Plan_': 200, 'Fact_': 150}]
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source) as load:
+            response = self.client.get(self.url, {'run':'1', 'type':'Политики'})
+        self.assertContains(response, 'План-факт мотивации подразделений')
+        self.assertEqual(response.context['data']['plan_fact'][0]['plan'], 200)
+        self.assertEqual(response.context['data']['plan_fact'][0]['fact'], 150)
+        self.assertTrue(all(call.kwargs['summary_only'] is True for call in load.call_args_list))

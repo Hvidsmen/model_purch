@@ -38,6 +38,9 @@ def report_navigation(user, kind, query):
 
 
 def workbook(kind, data, metadata, query=None, title=None):
+    if kind in ('team', 'registry'):
+        from .services.presentation_excel import workbook as presentation_workbook
+        return presentation_workbook(kind, data, metadata, query=query, title=title)
     from openpyxl import Workbook
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE

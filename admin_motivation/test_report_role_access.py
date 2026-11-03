@@ -90,7 +90,7 @@ class ReportRoleAccessTests(TestCase):
                 self.assertEqual(load.call_args.args[1]['Subdivision'], ['Allowed-A'])
                 if export:
                     book = load_workbook(BytesIO(b''.join(response.streaming_content)))
-                    self.assertEqual(book['Премии']['B3'].value, 'Own policy')
+                    self.assertEqual(book['Политики']['B6'].value, 'Own policy')
                     book.close(); response.close()
             self.assertEqual(self.client.get(self.url('registry'), {'run': '1', 'type': 'Директора'}).status_code, 403)
         self.policy.motivation_report_access.delete()
