@@ -118,23 +118,36 @@ def performance_matrix(items, period_columns):
         code = period_code(item['period'])
         if code not in codes:
             continue
-        key = tuple(item.get(field) for field in ('subdivision', 'year', 'kind', 'formula', 'scope_author'))
+        global_base = item.get('formula') == 'Подразделение(Глобально)'
+        fields = ('subdivision', 'year', 'formula', 'scope_author') if global_base else ('subdivision', 'year', 'kind', 'formula', 'scope_author')
+        key = tuple(item.get(field) for field in fields)
         # Preserve distinct source entries if a period occurs more than once.
         # Never sum cumulative targets or silently overwrite a source value.
         candidates = groups.setdefault(key, [])
-        row = next((row for row in candidates if code not in row['_periods']), None)
+        def matches(row):
+            if code not in row['_periods']:
+                return True
+            old = row['_periods'][code]
+            return (global_base and item['kind'] not in row['_period_kinds'][code]
+                    and all(old.get(field) == item.get(field) for field in ('plan', 'fact', 'ratio')))
+        row = next((row for row in candidates if matches(row)), None)
         if row is None:
             row = {field: item.get(field) for field in ('subdivision', 'year', 'kind', 'formula', 'scope_author')}
             row['_periods'] = {}
+            row['_period_kinds'] = {}
+            if global_base:
+                row['kind'] = 'Общая база подразделения'
             candidates.append(row)
         row['_periods'][code] = item
+        row['_period_kinds'].setdefault(code, set()).add(item['kind'])
     rows = []
     for candidates in groups.values():
         for row in candidates:
             row['cells'] = [row['_periods'].get(column['code']) for column in columns]
             del row['_periods']
+            del row['_period_kinds']
             rows.append(row)
-    return {'columns': columns, 'rows': rows, 'colspan': 2 + 3 * len(columns)}
+    return {'columns': columns, 'rows': rows, 'colspan': 3 + 3 * len(columns)}
 
 
 def personal_details(ledger, query):

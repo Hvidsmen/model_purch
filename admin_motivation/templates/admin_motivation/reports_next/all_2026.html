@@ -2,7 +2,7 @@
 {% block title %}Все кварталы 2026 · DA портал{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-period-columns-20261103">
-<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=period-cards-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=aligned-periods-20261103">
 <section class="content nr-page nr-all-year-page">
 <div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>Все кварталы 2026</h1><p class="nr-subtitle">Премии за I, II, III и IV кварталы и годовая премия по всему 2026 году.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
 <p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
@@ -31,5 +31,5 @@
 {% include 'admin_motivation/reports_next/_all_2026_tables.html' %}
 {% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=aligned-periods-20261103"></script><script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
 

@@ -13,8 +13,8 @@ class MotivationPerformanceTests(SimpleTestCase):
             db.execute('CREATE TABLE input (' + ','.join('['+field+']' for field in fields) + ')')
             db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD)')
             db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [
-                ('A',2026,'Политики',3,'Dealer',100,75),
-                ('A',2026,'Политики',1,'Dealer',800,525)])
+                ('A',2026,'Продажи',3,'Dealer',100,75),
+                ('A',2026,'Продажи',1,'Dealer',800,525)])
             rows = [
                 ('A',2026,'3 Квартал','Подразделение(Глобально)','One','PG1','G','B',100,75),
                 ('A',2026,'3 Квартал','Подразделение(Глобально)','Two','PG2','H','C',100,75),
@@ -42,15 +42,16 @@ class MotivationPerformanceTests(SimpleTestCase):
             db.executemany('INSERT INTO input VALUES (?,?,?,?,?,?,?,?,?,?,?)', rows * 10)
             db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD)')
             db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [
-                ('A',2026,'Политики',1,'Dealer',100,60),
-                ('A',2026,'Политики',2,'Dealer',100,100),
-                ('A',2026,'Политики',3,'Dealer',100,60),
-                ('A',2026,'Политики',3,None,0,6),
-                ('A',2026,'Политики',4,'Dealer',200,100),
-                ('A',2026,'Политики',3,'ДПП',9999,9999),
-                ('A',2025,'Политики',3,'Dealer',9999,9999),
-                ('B',2026,'Политики',3,'Dealer',9999,9999),
-                ('A',2026,'Продажи',3,'Dealer',9999,9999)])
+                ('A',2026,'Продажи',1,'Dealer',100,60),
+                ('A',2026,'Продажи',2,'Dealer',100,100),
+                ('A',2026,'Продажи',3,'Dealer',100,60),
+                ('A',2026,'Продажи',3,None,0,6),
+                ('A',2026,'Продажи',4,'Dealer',200,100),
+                ('A',2026,'Продажи',3,'ДПП',9999,9999),
+                ('A',2025,'Продажи',3,'Dealer',9999,9999),
+                ('B',2026,'Продажи',3,'Dealer',9999,9999),
+                ('A',2026,'Директора',3,'Dealer',200,132),
+                ('A',2026,'Политики',3,'Dealer',9999,9999)])
             sql = grouped_sql('SELECT * FROM input WHERE АвторСделки=?')
             sql = sql.replace(GLOBAL_PLAN_FACT, 'plan_fact').replace("N'", "'")
             result = {row[2]: row[5:] for row in db.execute(sql, ['Selected'])}

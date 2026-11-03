@@ -1,5 +1,6 @@
 from copy import deepcopy
 from decimal import Decimal
+from html.parser import HTMLParser
 
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
@@ -45,9 +46,45 @@ class PerformanceMatrixTests(SimpleTestCase):
                  performance('3 Квартал', kind='Продажи'),
                  performance('3 Квартал', formula='Подразделение', scope_author='Сотрудник')]
         matrix = performance_matrix(items, [{'code': '3'}])
-        self.assertEqual(len(matrix['rows']), 3)
+        self.assertEqual(len(matrix['rows']), 2)
         self.assertTrue(all(len(row['cells']) == 1 and row['cells'][0]['plan'] == 100 for row in matrix['rows']))
 
     def test_duplicate_source_periods_are_preserved_without_summing_or_overwriting(self):
         matrix = performance_matrix([performance('3 Квартал'), performance('3 Квартал', plan=Decimal(200))], [{'code': '3'}])
         self.assertEqual([row['cells'][0]['plan'] for row in matrix['rows']], [100, 200])
+
+    def test_shared_global_base_is_displayed_once_across_types_and_periods(self):
+        items = [performance(period, kind=kind) for kind in ['Политики', 'Продажи', 'Директора']
+                 for period in ['1 Квартал', '3 Квартал']]
+        matrix = performance_matrix(items, [{'code': '1'}, {'code': '3'}])
+        self.assertEqual(len(matrix['rows']), 1)
+        self.assertEqual(matrix['rows'][0]['kind'], 'Общая база подразделения')
+        self.assertEqual([cell['plan'] for cell in matrix['rows'][0]['cells']], [100, 100])
+
+    def test_plan_fact_and_employee_tables_share_exact_period_column_boundaries(self):
+        class Columns(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.tables = []
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if tag == 'table':
+                    self.tables.append([])
+                if tag == 'col':
+                    self.tables[-1].append(int(attrs['style'].removeprefix('width:').removesuffix('px')))
+
+        for codes in (['1', '2', '3'], ['3'], ['1', '5']):
+            columns = [{'code': code, 'label': code} for code in codes]
+            matrix = performance_matrix([performance(code + ' Квартал') for code in codes], columns)
+            presentation = {'period_columns': columns, 'performance_matrix': matrix,
+                            'team_sections': [{'kind': 'Политики', 'people': 0, 'page': [], 'period_totals': []}]}
+            context = {'presentation': presentation, 'ledger': {'currency': 'USD'}}
+            parser = Columns()
+            for name in ['_performance_matrix.html', '_all_2026_tables.html']:
+                parser.feed(render_to_string('admin_motivation/reports_next/' + name, context))
+            upper, lower = parser.tables
+            self.assertEqual(sum(upper), sum(lower))
+            for index in range(len(codes)):
+                self.assertEqual(sum(upper[:1 + 3 * index]), sum(lower[:1 + index]))
+                self.assertEqual(sum(upper[:1 + 3 * (index + 1)]), sum(lower[:2 + index]))
