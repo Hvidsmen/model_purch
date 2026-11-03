@@ -1,0 +1,9 @@
+<div class="nr-field"><span>Вид мотивации</span>
+<details class="nr-type-select" data-motivation-types>
+<summary><span data-types-caption>{% if selected_types %}{{ selected_types|join:', ' }}{% else %}Все доступные{% endif %}</span></summary>
+<div class="nr-type-menu">
+<div class="nr-type-actions"><button type="button" data-types-all>Выбрать все</button><button type="button" data-types-clear>Снять все</button></div>
+{% for type in kinds %}<label><input type="checkbox" name="type" value="{{ type }}" {% if type in selected_types %}checked{% endif %}><span>{{ type }}</span></label>{% endfor %}
+</div>
+</details>
+</div>
