@@ -3,6 +3,7 @@ import re
 from django.core.exceptions import ValidationError
 from .pilot_formula import mask_sql
 from .calculation_performance import MARKER as PREPARATION_MARKER
+from .calculation_scope import VIEW as SUBDIVISION_VIEW
 
 MARKER = '-- Portal motivation: enrich a private sales working set.'
 WORKING_TABLE = '#portal_motivation_sales'
@@ -76,11 +77,11 @@ def patch(definition, cursor=None):
 IF OBJECT_ID('tempdb..{WORKING_TABLE}') IS NOT NULL DROP TABLE {WORKING_TABLE};
 SELECT * INTO {WORKING_TABLE}
 FROM DataWH.dbo.Sales
-WHERE ClosedDealDate>=DATEFROMPARTS(@FactYear,1,1) AND YEAR(ClosedDealDate)=@FactYear;
+WHERE ClosedDealDate>=DATEFROMPARTS(@FactYear,1,1) AND YEAR(ClosedDealDate)=@FactYear
+AND Subdivision IN (SELECT SubdivisionKey FROM {SUBDIVISION_VIEW});
 '''
     edits = [(reference.start(), reference.end(), WORKING_TABLE) for reference in references]
     edits.append((point, point, setup))
     for start, stop, value in sorted(edits, reverse=True):
         definition = definition[:start] + value + definition[stop:]
     return definition
-

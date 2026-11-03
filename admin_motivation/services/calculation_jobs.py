@@ -128,17 +128,19 @@ def prepare(cursor, variant='main'):
     cursor.execute("IF OBJECT_ID(N'motivation.PortalCalculationSubdivisions', N'V') IS NULL EXEC(N'CREATE VIEW motivation.PortalCalculationSubdivisions AS SELECT 1 AS placeholder');")
     projections = [f'COALESCE(m.TargetName,s.{quote(column)}) AS {quote(column)}' if column == 'SubdivisionName' else 's.' + quote(column) for column in columns]
     from .subdivision_scope import sql_predicate
+    from .calculation_scope import predicate as calculation_predicate
     cursor.execute('ALTER VIEW motivation.PortalCalculationSubdivisions AS SELECT ' + ','.join(projections) +
                    ' FROM dbo.Subdivisions s LEFT JOIN motivation.PortalSubdivisionMerge m ON m.SourceName=s.SubdivisionName WHERE ' +
-                   sql_predicate('s.SubdivisionName') + ' AND ' + sql_predicate('COALESCE(m.TargetName,s.SubdivisionName)') + ';')
+                   sql_predicate('s.SubdivisionName') + ' AND ' + sql_predicate('COALESCE(m.TargetName,s.SubdivisionName)') +
+                   ' AND ' + calculation_predicate('COALESCE(m.TargetName,s.SubdivisionName)') + ';')
     header = re.compile(r'\b(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)PROC(?:EDURE)?\s+(?:\[?motivation\]?\s*\.\s*)?(?:\[sp_CalcBySub\]|sp_CalcBySub\b)', re.I)
     changed, count = header.subn(('ALTER' if existing else 'CREATE') + ' PROCEDURE ' + proc, definition, count=1)
     if count != 1:
         raise ValidationError('Не удалось распознать определение sp_CalcBySub. Исходная процедура не изменена.')
     changed, references = re.subn(r'(?:(?:\[?DataWH\]?)\s*\.\s*)?\[?dbo\]?\s*\.\s*\[?Subdivisions\]?(?!\w)',
                                   'DataWH.motivation.PortalCalculationSubdivisions', changed, flags=re.I)
-    if config and not references:
-        raise ValidationError('В процедуре не найдена точка объединения подразделений. Расчёт не запущен.')
+    if not references:
+        raise ValidationError('В процедуре не найден справочник для ограничения расчёта подразделением Д-Москва. Расчёт не запущен.')
     from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff, GlobalCoeffVersion, MotivationExportLog
     from .formula_defaults import TABLE_SQL, patch_defaults
     from .pilot_formula import GLOBAL_SUBDIVISION, patch_calculation

@@ -82,6 +82,7 @@ class CalculationJobsTests(TestCase):
         view_sql = next(call.args[0] for call in self.cursor.execute.call_args_list if call.args[0].startswith('ALTER VIEW motivation.PortalCalculationSubdivisions'))
         self.assertIn("N'Вентиляция'",view_sql)
         self.assertIn('COALESCE(m.TargetName,s.SubdivisionName)',view_sql)
+        self.assertIn("COALESCE(m.TargetName,s.SubdivisionName)=N'Д-Москва'", view_sql)
         self.cursor.executemany.assert_called_once()
 
     @patch.object(jobs, 'rules', return_value=[('Old', 'New', 'target')])
@@ -90,6 +91,26 @@ class CalculationJobsTests(TestCase):
         self.cursor.fetchall.return_value = [('SubdivisionName',)]
         with self.assertRaises(ValidationError):
             jobs.prepare(self.cursor)
+
+    @patch.object(jobs, 'rules', return_value=[])
+    def test_both_variants_scope_plan_fact_and_sales_to_moscow(self, rules):
+        from pathlib import Path
+        source = (Path(__file__).parent / 'sql/review/sp_CalcBySub.refactored.sql').read_text()
+        source = source[source.index('CREATE OR ALTER PROCEDURE'):].replace('@Year', '@FactYear')
+        for variant in ('main', 'all_2026'):
+            with self.subTest(variant=variant):
+                self.cursor.reset_mock()
+                self.cursor.fetchone.return_value = (source, None)
+                self.cursor.fetchall.return_value = [('SubdivisionKey',), ('SubdivisionName',)]
+                jobs.prepare(self.cursor, variant)
+                view = next(call.args[0] for call in self.cursor.execute.call_args_list
+                            if call.args[0].startswith('ALTER VIEW motivation.PortalCalculationSubdivisions'))
+                self.assertIn("COALESCE(m.TargetName,s.SubdivisionName)=N'Д-Москва'", view)
+                procedure = self.cursor.execute.call_args.args[0]
+                self.assertIn('AND Subdivision IN (SELECT SubdivisionKey FROM DataWH.motivation.PortalCalculationSubdivisions)', procedure)
+                self.assertIn('motivation.PortalCalcBySub' if variant == 'main' else 'motivation.PortalCalcAll2026', procedure)
+                self.assertNotIn('JOIN DataWH.dbo.Subdivisions', procedure)
+                self.assertIn('JOIN DataWH.motivation.PortalCalculationSubdivisions', procedure)
 
     def test_running_status_comes_from_agent(self):
         self.cursor.fetchone.return_value = (datetime(2030, 1, 1), None, 1, 'Previous completed')
