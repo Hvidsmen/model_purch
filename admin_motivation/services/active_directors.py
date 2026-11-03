@@ -1,5 +1,5 @@
 """Current director assignments shared by reports and coefficient export."""
-import json
+from xml.etree.ElementTree import Element, SubElement, tostring
 from ..models import DirectorEmployee
 from .subdivision_aliases import mapping, canonical
 
@@ -29,14 +29,25 @@ def report_roster():
     names = mapping()
     records = {(branch, row['full_name']) for row in bindings()
                for branch in expand([row['subdivision']], names)}
-    return json.dumps([{'subdivision': sub, 'author': author}
-                       for sub, author in sorted(records)], ensure_ascii=False)
+    # XML methods work at DWH compatibility level 110; OPENJSON requires 130.
+    roster = Element('roster')
+    for sub, author in sorted(records):
+        record = SubElement(roster, 'director')
+        SubElement(record, 'subdivision').text = sub
+        SubElement(record, 'author').text = author
+    return tostring(roster, encoding='unicode')
 
 
 REPORT_CONDITION = """(
  [ТипКоэф] <> N'Директора' OR EXISTS (
- SELECT 1 FROM OPENJSON(@PortalDirectorRoster)
- WITH (Subdivision nvarchar(255) '$.subdivision', Author nvarchar(255) '$.author') roster
+ SELECT 1
+ FROM (SELECT CAST(@PortalDirectorRoster AS xml) AS document) roster_document
+ CROSS APPLY roster_document.document.nodes('/roster/director') AS roster_nodes(record)
+ CROSS APPLY (SELECT
+   roster_nodes.record.value('(subdivision/text())[1]', 'nvarchar(255)') AS Subdivision,
+   roster_nodes.record.value('(author/text())[1]', 'nvarchar(255)') AS Author
+ ) roster
  WHERE roster.Subdivision=[Подразделение]
  AND LTRIM(RTRIM(roster.Author))=LTRIM(RTRIM([АвторСделки]))
  ))"""
+
