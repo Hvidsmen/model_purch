@@ -1,0 +1,7 @@
+{% load report_format %}
+<div class="nr-kpis nr-mockup-summary">
+<article class="nr-kpi nr-kpi-primary"><span>Премия по расчёту</span><strong>{{ presentation.total|report_cash }} {{ ledger.currency }}</strong><small>Сколько бы выплатили: {{ presentation.possible|report_cash }} {{ ledger.currency }} · до условий выполнения</small><details class="nr-summary-types"><summary>По видам мотивации</summary>{% include 'admin_motivation/reports_next/_kpi_types.html' with metric='total' %}<p>Сколько бы выплатили по видам:</p>{% include 'admin_motivation/reports_next/_kpi_types.html' with metric='possible' %}</details></article>
+<article class="nr-kpi"><span>В годовую премию</span><strong>{{ presentation.annual_accrual|report_cash }} {{ ledger.currency }}</strong><small>За выбранные кварталы · до годового условия выплаты</small><details class="nr-summary-types"><summary>По видам мотивации</summary><div class="nr-kpi-types">{% for item in presentation.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.annual_accrual|report_cash }}</b></div>{% endfor %}</div></details></article>
+<article class="nr-kpi"><span>Сотрудники</span><strong>{{ presentation.people }}</strong><small>По выбранным условиям · все страницы</small></article>
+<article class="nr-kpi"><span>Периоды</span><strong>{{ presentation.period_columns|length }}</strong><small>Итоги без повторного учёта кварталов</small></article>
+</div>

@@ -1,0 +1,11 @@
+{% load report_format %}{% if presentation.period_cards %}
+<div class="nr-section-title"><h2>Итоги по периодам</h2><span>{{ ledger.currency }} · все страницы</span></div>
+<div class="nr-report-period-cards">
+{% for card in presentation.period_cards %}<article class="nr-report-period-card" data-period="{{ card.code }}">
+<h3>{% if card.code == '5' %}Годовая премия{% else %}{{ card.code }} квартал{% endif %}</h3>
+<div class="nr-report-period-values"><div><span>{% if card.code == '5' %}Премия по расчёту{% else %}Квартальная премия{% endif %}</span><strong>{{ card.total|report_cash }} {{ ledger.currency }}</strong></div>
+{% if card.code != '5' %}<div><span>В годовую премию</span><strong>{{ card.annual_accrual|report_cash }} {{ ledger.currency }}</strong></div>{% endif %}</div>
+<details class="nr-summary-types"><summary>{% for item in card.type_totals %}{{ item.kind }}{% if not forloop.last %} · {% endif %}{% endfor %}</summary><table class="nr-period-types"><thead><tr><th>Вид мотивации</th><th>Премия</th>{% if card.code != '5' %}<th>В год</th>{% endif %}</tr></thead><tbody>{% for item in card.type_totals %}<tr><td>{{ item.kind }}</td><td>{{ item.total|report_cash }}</td>{% if card.code != '5' %}<td>{{ item.annual_accrual|report_cash }}</td>{% endif %}</tr>{% endfor %}</tbody></table></details>
+</article>{% endfor %}
+</div><p class="nr-muted">Годовая часть показана до проверки годового условия выплаты. Она не прибавляется к квартальной премии. В годовой итог входят только выбранные кварталы, каждый один раз; «—» означает отсутствие данных.</p>
+{% endif %}
