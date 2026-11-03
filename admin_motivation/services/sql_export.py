@@ -58,6 +58,8 @@ def export_motivation(connector, manage_connection=True):
             coefficient_rows = [(date_from, row.subdivision.subdivision_key, row.goods.goods_key, row.type_coeff.type_coeff_name,
                                  row.segment.segment_name, row.variation_calculate.variation_name, row.motivation_coeff, None, None) for row in coeffs]
             directors = list(SubdivisionDirectorCoeff.objects.filter(version=version).select_related('subdivision', 'goods', 'employee', 'variation_calculate').order_by('subdivision_id', 'employee_id', 'goods_id'))
+            from .active_directors import coefficient_rows as active_director_rows
+            directors = active_director_rows(directors)
             coefficient_rows.extend(
                 (date_from, row.subdivision.subdivision_key, row.goods.goods_key, DIRECTOR_TYPE,
                  f'K{i}', (row.variation_calculate.variation_name if row.variation_calculate_id else version.fallback_variation or director_variation(row.goods)), getattr(row, f'k{i}'),

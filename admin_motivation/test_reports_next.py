@@ -156,11 +156,11 @@ class ReportsNextTests(TestCase):
             exported = self.client.get(url, {'run': '1', 'type': 'Политики', 'page': '2', 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-            self.assertEqual(book['Премии'].max_row, 127)
-            headers = [cell.value for cell in book['Премии'][2]]
+            self.assertEqual(book['Политики'].max_row, 131)
+            headers = [cell.value for cell in book['Политики'][5]]
             total_index = headers.index('Всего по расчёту')
-            self.assertLess(headers.index('Годовая премия · без годовой доплаты'), headers.index('Премия по расчёту'))
-            self.assertEqual(sum(row[total_index].value for row in book['Премии'].iter_rows(min_row=3)), 125 * 90)
+            self.assertLess(headers.index('Годовая премия'), headers.index('Премия по расчёту'))
+            self.assertEqual(sum(row[total_index].value for row in book['Политики'].iter_rows(min_row=6, max_row=130)), 125 * 90)
             book.close(); exported.close()
 
     def test_admin_can_preview_mine_but_must_choose_employee(self):
@@ -470,9 +470,9 @@ class ReportsNextTests(TestCase):
             exported = self.client.get(url, {'run': '1', 'type': 'Политики', 'search': 'Own 124', 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-            self.assertEqual(book['Премии']['B3'].value, 'Own 124')
-            self.assertEqual(book['Премии']['G3'].value, 90)
-            self.assertEqual(book['Премии'].max_row, 3)
+            self.assertEqual(book['Политики']['B6'].value, 'Own 124')
+            self.assertEqual(book['Политики']['F6'].value, 90)
+            self.assertEqual(book['Политики'].max_row, 7)
             book.close(); exported.close()
 
     def test_report_switcher_keeps_shared_filters_without_personal_drilldown(self):
@@ -516,9 +516,9 @@ class ReportsNextTests(TestCase):
                 exported = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency, 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-            summary = list(book['Итого по видам'].values)
-            self.assertEqual(sum(row[-1] for row in summary[1:]), expected)
-            self.assertEqual(sum(row[3] for row in summary[1:]), 0)
+            summary = list(book['Сводка'].iter_rows(min_row=6, max_row=8, values_only=True))
+            self.assertEqual(sum(row[-1] for row in summary), expected)
+            self.assertEqual(sum(row[-2] for row in summary), 0)
             book.close(); exported.close()
 
     def test_team_tables_have_independent_pagination_and_full_type_totals(self):

@@ -404,6 +404,10 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             source_sql = 'SELECT * FROM (' + source_sql + ') AS personal_source WHERE [АвторСделки] IN (@DealAuthor)'
         if pilot:
             source_sql = 'SELECT * FROM (' + source_sql + ') AS pilot_source WHERE ' + PILOT_SQL
+        if kind == 'manager-detail' and str(values.get('TypeCoeff_') or '').strip().casefold() == 'директора':
+            from .active_directors import REPORT_CONDITION, report_roster
+            values = {**values, 'PortalDirectorRoster': report_roster()}
+            source_sql += ' AND ' + REPORT_CONDITION
         sql, args = bind_sql(source_sql, values)
         if kind == 'subdivisions' and values.get('PremiumPeriods'):
             periods = values['PremiumPeriods']
@@ -430,11 +434,17 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                 if premium_period and premium_period != 'all':
                     from .reports_next import period_code
                     rows = [row for row in rows if period_code(row.get('КварталМотивации')) in period_codes]
-                return {'period_summary': period_motivation_summary(rows, values.get('Currency', 'USD'), pilot=pilot), 'currency': values.get('Currency', 'USD')}
+                result = {'period_summary': period_motivation_summary(rows, values.get('Currency', 'USD'), pilot=pilot), 'currency': values.get('Currency', 'USD')}
+                if calculation_variant == 'all_2026':
+                    from .motivation_performance import grouped_sql as performance_sql
+                    result['motivation_performance'] = fetch(cursor, performance_sql(sql), args)
+                return result
             performance_fields = ('СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал', 'СуммаПланUSD', 'СуммаОтгрузокUSD')
             performance_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE ' + sql_predicate('[Подразделение]') +
                 ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ AND [Год] IN (@Years)' +
                 (' AND ' + PILOT_SQL if pilot else '') + (' AND ' + period_condition if period_condition else ''))
+            if 'PortalDirectorRoster' in values:
+                performance_source += ' AND ' + REPORT_CONDITION
             if str(values.get('TypeCoeff_') or '').strip().casefold() == 'директора':
                 # Multiple directors share the same subdivision sales/plan inputs.
                 dimensions = '[Подразделение],[Год],[КварталМотивации],[ГруппаПлановПродаж],[ГруппаТоваров],[Марка]'

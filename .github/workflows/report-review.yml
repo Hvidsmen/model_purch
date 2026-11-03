@@ -1,0 +1,32 @@
+name: Report changes validation
+on:
+  push:
+    branches: [codex/report-review-20261103]
+permissions:
+  contents: read
+jobs:
+  reports:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python manage.py check --settings=portal.settings_local
+      - run: >-
+          python manage.py test
+          admin_motivation.test_active_directors
+          admin_motivation.test_presentation_excel
+          admin_motivation.test_motivation_performance
+          admin_motivation.test_reports_next
+          admin_motivation.test_all_2026
+          admin_motivation.test_shared_versions
+          admin_motivation.test_workflow_ux
+          admin_motivation.test_report_role_access
+          base.test_branch_roles base.test_financier
+          --settings=portal.settings_local --noinput

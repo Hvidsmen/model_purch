@@ -14,7 +14,9 @@ def export_snapshot():
     good_ids.update(pk for version in versions for pk in version.coefficients.values_list('goods_id',flat=True))
     from .subdivision_aliases import rules
     from .subdivision_scope import POLICY
+    from .active_directors import bindings
     payload = {
+        'active_directors': bindings(),
         'subdivision_policy': POLICY,
         'versions': [{'id':v.pk,'title':v.title,'from':v.effective_from.isoformat(),'revision':v.revision,'fallback_variation':v.fallback_variation} for v in versions],
         'aliases': sorted(rules()),
