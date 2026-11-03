@@ -54,9 +54,10 @@ def present(kind, data, ledger=None, period='all'):
         if not row['unallocated']:
             totals['people'].add(identity)
         period_key = row['code']
-        card = periods.setdefault(period_key, {'label': 'Год' if period_key == '5' else row['period'], 'amount': ZERO, 'bonus': ZERO, 'total': ZERO, 'links': {}})
+        card = periods.setdefault(period_key, {'code': period_key, 'label': 'Год' if period_key == '5' else row['period'], 'amount': ZERO, 'bonus': ZERO, 'total': ZERO, 'links': {}, 'kind_totals': {}})
         for name in ('amount', 'bonus', 'total'):
             card[name] += row[name]
+        card['kind_totals'][row['kind']] = card['kind_totals'].get(row['kind'], ZERO) + row['total']
         if row.get('detail_url'):
             card['links'].setdefault(row['kind'], row['detail_url'])
     def url_for_period(url, selected):
@@ -98,6 +99,9 @@ def present(kind, data, ledger=None, period='all'):
     result['people'] = sum(not row['unallocated'] for row in result['employees'])
     result['branches'] = len({row['subdivision'] for row in result['employees']})
     result['period_cards'] = [card for code, card in sorted(periods.items())]
+    for card in result['period_cards']:
+        card['type_totals'] = [{'kind': item['kind'], 'total': card['kind_totals'].get(item['kind'])}
+                               for item in result['type_totals']]
     if 'plan_fact' in ledger:
         result['performance_matrix'] = performance_matrix(ledger['plan_fact'], result['period_columns'])
     return result
