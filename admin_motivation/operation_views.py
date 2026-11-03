@@ -44,7 +44,11 @@ class JobForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         versions = kwargs.pop('plan_versions', None)
+        main_only = kwargs.pop('main_only', False)
         super().__init__(*args, **kwargs)
+        if main_only:
+            self.fields['variant'].choices = [('main', 'Основной · IV квартал')]
+            self.fields['variant'].initial = 'main'
         if versions is None:
             versions = loaded_plan_versions()
         self.fields['plan_version'].choices = [('', 'Выберите загруженную версию плана')] + [
@@ -82,10 +86,10 @@ def admin_required(request):
 def calculations(request):
     admin_required(request)
     plan_versions = loaded_plan_versions()
-    form = JobForm(plan_versions=plan_versions)
+    form = JobForm(plan_versions=plan_versions, main_only=True)
     edited_job_id = None
     if request.method == 'POST':
-        job = get_object_or_404(MotivationCalculationSchedule, pk=request.POST['job']) if request.POST.get('job') else None
+        job = get_object_or_404(MotivationCalculationSchedule.objects.filter(variant='main'), pk=request.POST['job']) if request.POST.get('job') else None
         edited_job_id = job.pk if job else None
         try:
             if request.POST.get('action') == 'run' and job:
@@ -94,7 +98,7 @@ def calculations(request):
                 job.save(update_fields=['synced', 'error'])
                 messages.success(request, 'Запуск задания принят сервером расчёта. Дождитесь статуса «Завершено», затем откройте результат. Статус обновляется автоматически.')
                 return redirect('motivation_calculations')
-            form = JobForm(request.POST, instance=job, auto_id=f'job_{job.pk}_%s' if job else 'id_%s', plan_versions=plan_versions)
+            form = JobForm(request.POST, instance=job, auto_id=f'job_{job.pk}_%s' if job else 'id_%s', plan_versions=plan_versions, main_only=True)
             if form.is_valid():
                 job = form.save(commit=False)
                 calculation_jobs.sync_job(job)
@@ -111,7 +115,7 @@ def calculations(request):
                 job.synced, job.error = False, text
                 job.save(update_fields=['synced', 'error'])
             messages.error(request, text)
-    jobs = list(MotivationCalculationSchedule.objects.order_by('pk'))
+    jobs = list(MotivationCalculationSchedule.objects.filter(variant='main').order_by('pk'))
     approved = GlobalCoeffVersion.objects.filter(status='approved').order_by('-effective_from', '-pk').first()
     # Keep the landing page independent of coefficient volume and plan lines.
     plan_ids = {}
@@ -120,7 +124,7 @@ def calculations(request):
     for job in jobs:
         job.coverage_version = approved
         job.coverage_plan_id = plan_ids.get(job.plan_version)
-        job.edit_form = form if edited_job_id == job.pk and form.is_bound else JobForm(instance=job, auto_id=f'job_{job.pk}_%s', plan_versions=plan_versions)
+        job.edit_form = form if edited_job_id == job.pk and form.is_bound else JobForm(instance=job, auto_id=f'job_{job.pk}_%s', plan_versions=plan_versions, main_only=True)
         job.edit_open = bool(edited_job_id == job.pk)
         if job.run_at:
             job.edit_form.initial['run_at'] = job.run_at.astimezone(ZoneInfo('Europe/Moscow')).replace(tzinfo=None)
@@ -136,7 +140,7 @@ def calculations(request):
         else:
             job.next_run_label=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M') if job.run_at>timezone.now() else 'Время прошло · проверьте историю'
         job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
-    return render(request, 'admin_motivation/calculations.html', {'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
+    return render(request, 'admin_motivation/calculations.html', {'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions, main_only=True) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
 
 
 @never_cache
