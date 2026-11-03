@@ -12,7 +12,7 @@ NAVY = '243650'
 PURPLE = '6850C8'
 PALE = 'F1EDFC'
 GREY = '64748B'
-NUMBER = '#,##0.00;[Red](#,##0.00);"—"'
+NUMBER = '#,##0.00;[Red](#,##0.00);0.00'
 ZERO = Decimal(0)
 
 
@@ -42,7 +42,7 @@ def workbook(kind, data, metadata, query=None, title=None):
             cell.alignment = Alignment(horizontal='right' if isinstance(value, (int, float, Decimal)) else 'left',
                                        vertical='center', wrap_text=style != 'title')
             if isinstance(value, (int, float, Decimal)):
-                cell.number_format = '0.00%' if index in percent_columns else NUMBER
+                cell.number_format = '0' if sheet.title == 'Сводка' and index == 1 else '0.00%' if index in percent_columns else NUMBER
             if style not in ('title', 'note', 'blank'):
                 cell.border = Border(bottom=Side(style='hair', color='DCE2EE'))
             cells.append(cell)

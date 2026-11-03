@@ -175,7 +175,9 @@ class BranchRoleTests(TestCase):
                     if kind != 'manager-detail' or index == 0:
                         self.assertIn('Волков Максим Игоревич', call.args[2])
                     else:
-                        self.assertNotIn('[АвторСделки]', call.args[1])
+                        # A roster EXISTS may reference the author, but department inputs
+                        # must never be restricted to the selected person's IN filter.
+                        self.assertNotIn('[АвторСделки] IN (', call.args[1])
                         self.assertNotIn('СуммаМотивацииUSD', call.args[1])
                     self.assertIn('Директора', call.args[2])
                     self.assertNotIn('Чужой директор', call.args[2])

@@ -29,7 +29,7 @@ class PresentationExcelTests(SimpleTestCase):
             self.assertTrue(book['Политики'].auto_filter.ref.startswith('A5:'))
             self.assertFalse(book['Политики'].sheet_view.showGridLines)
             self.assertEqual(book['План-факт']['H6'].value, .75)
-            self.assertEqual(book['План-факт']['F6'].number_format, '0.00%')
+            self.assertEqual(book['План-факт']['H6'].number_format, '0.00%')
             self.assertEqual(book['Параметры']['B6'].data_type, 's')
             self.assertEqual(book['Сводка']['A1'].value, 'Все кварталы 2026')
         finally:
