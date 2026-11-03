@@ -168,6 +168,8 @@ def prepare(cursor, variant='main'):
     changed = pilot_patch(changed) if variant == MAIN else isolate(full_year_patch(changed))
     from .calculation_performance import patch as scope_preparation, MARKER as performance_marker
     changed = scope_preparation(changed)
+    from .calculation_sales_isolation import patch as isolate_sales
+    changed = isolate_sales(changed)
     import logging
     logging.getLogger(__name__).info('Calculation preparation scoped to fact year: %s; variant: %s', performance_marker in changed, variant)
     cursor.execute(changed)
