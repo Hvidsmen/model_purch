@@ -2,7 +2,7 @@
 {% block title %}Все кварталы 2026 · DA портал{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-period-columns-20261103">
-<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=aligned-periods-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=period-totals-20261103">
 <section class="content nr-page nr-all-year-page">
 <div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>Все кварталы 2026</h1><p class="nr-subtitle">Премии за I, II, III и IV кварталы и годовая премия по всему 2026 году.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
 <p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
@@ -25,11 +25,11 @@
 {% if data != None %}<div class="nr-kpis"><article class="nr-kpi nr-kpi-primary"><span>Премии за выбранные периоды</span><strong>{{ presentation.total|report_cash }} {{ ledger.currency }}</strong></article><article class="nr-kpi"><span>Сколько бы выплатили</span><strong>{{ presentation.possible|report_cash }} {{ ledger.currency }}</strong><small>До условий выполнения плана</small></article><article class="nr-kpi"><span>Сотрудники</span><strong>{{ presentation.people }}</strong></article><article class="nr-kpi"><span>Периоды</span><strong>{{ presentation.period_columns|length }}</strong></article></div>
 {% include 'admin_motivation/reports_next/_quarter_totals.html' %}
 <div class="nr-section-title"><h2>План-факт мотивации подразделений</h2><span>План и факт — USD</span></div>
-<p class="nr-muted">Периоды идут в том же порядке, что и в таблицах премий сотрудников ниже. В каждом периоде показаны план, факт и выполнение базы мотивации. Кварталы и год, виды мотивации и разные способы расчёта не суммируются. Повторяющиеся окна по товарам и сотрудникам учитываются один раз. Премия сотрудника также зависит от его формулы и условий выплаты.</p>
+<p class="nr-muted">Периоды идут в том же порядке, что и в таблицах премий сотрудников ниже. В каждом периоде показаны план, факт и выполнение базы мотивации. В «Итого» каждый квартал учтён один раз, даже если он входит в несколько накопительных периодов. Разные базы расчёта не складываются. Повторяющиеся окна по товарам и сотрудникам учитываются один раз. Премия сотрудника также зависит от его формулы и условий выплаты.</p>
 {% include 'admin_motivation/reports_next/_performance_matrix.html' %}
 
 {% include 'admin_motivation/reports_next/_all_2026_tables.html' %}
 {% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=aligned-periods-20261103"></script><script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=period-totals-20261103"></script><script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
 

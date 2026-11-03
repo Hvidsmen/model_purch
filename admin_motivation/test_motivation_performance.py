@@ -57,5 +57,19 @@ class MotivationPerformanceTests(SimpleTestCase):
             result = {row[2]: row[5:] for row in db.execute(sql, ['Selected'])}
         self.assertEqual(result, {
             '1 Квартал': (60,60), '2 Квартал(1-2 кв)': (200,160),
-            '3 Квартал': (100,66), '4 Квартал(1-4 кв)': (500,326), 'Год': (500,326)})
+            '3 Квартал': (100,66), '4 Квартал(1-4 кв)': (500,326), 'Год': (500,326), 'Итого': (500,326)})
+        # The same query uses the union of selected windows, not their sum.
+        with sqlite3.connect(':memory:') as db:
+            db.create_function('LOWER', 1, lambda value: value.lower() if value else value)
+            db.execute('CREATE TABLE input (Подразделение,Год,КварталМотивации,VariationCalculate,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаПланUSD,СуммаОтгрузокUSD,ТипКоэф)')
+            db.executemany('INSERT INTO input VALUES (?,?,?,?,?,?,?,?,?,?,?)', rows)
+            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD)')
+            db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [('A',2026,'Продажи',q,'Dealer',100,50) for q in (1,2,3,4)])
+            for selected, expected in [(['1 Квартал'], (50,50)),
+                                       (['1 Квартал','2 Квартал(1-2 кв)','3 Квартал'], (300,150)),
+                                       (['2 Квартал(1-2 кв)','Год'], (400,200))]:
+                source = 'SELECT * FROM input WHERE КварталМотивации IN (' + ','.join('?' for _ in selected) + ')'
+                query = grouped_sql(source).replace(GLOBAL_PLAN_FACT, 'plan_fact').replace("N'", "'")
+                values = {row[2]:row[5:] for row in db.execute(query, selected)}
+                self.assertEqual(values['Итого'], expected)
 

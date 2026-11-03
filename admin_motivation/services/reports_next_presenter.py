@@ -110,17 +110,18 @@ def present(kind, data, ledger=None, period='all'):
 def performance_matrix(items, period_columns):
     """Use the employee table's period axis without combining different bases."""
     from .reports_next import period_code
+    from ..templatetags.report_format import report_cash, report_percent
     columns = [{'code': column['code'], 'label': 'Год' if column['code'] == '5' else column['code'] + ' кв.'}
                for column in period_columns]
     codes = {column['code'] for column in columns}
     groups = {}
     for item in items:
-        code = period_code(item['period'])
-        if code not in codes:
+        code = '__total__' if str(item['period']).strip().casefold() == 'итого' else period_code(item['period'])
+        if code not in codes and code != '__total__':
             continue
-        global_base = item.get('formula') == 'Подразделение(Глобально)'
+        global_base = str(item.get('formula') or '').strip().casefold() == 'подразделение(глобально)'
         fields = ('subdivision', 'year', 'formula', 'scope_author') if global_base else ('subdivision', 'year', 'kind', 'formula', 'scope_author')
-        key = tuple(item.get(field) for field in fields)
+        key = tuple(str(item.get(field) or '').strip().casefold() for field in fields)
         # Preserve distinct source entries if a period occurs more than once.
         # Never sum cumulative targets or silently overwrite a source value.
         candidates = groups.setdefault(key, [])
@@ -128,26 +129,26 @@ def performance_matrix(items, period_columns):
             if code not in row['_periods']:
                 return True
             old = row['_periods'][code]
-            return (global_base and item['kind'] not in row['_period_kinds'][code]
-                    and all(old.get(field) == item.get(field) for field in ('plan', 'fact', 'ratio')))
+            return (global_base
+                    and report_cash(old.get('plan')) == report_cash(item.get('plan'))
+                    and report_cash(old.get('fact')) == report_cash(item.get('fact'))
+                    and report_percent(old.get('ratio')) == report_percent(item.get('ratio')))
         row = next((row for row in candidates if matches(row)), None)
         if row is None:
             row = {field: item.get(field) for field in ('subdivision', 'year', 'kind', 'formula', 'scope_author')}
             row['_periods'] = {}
-            row['_period_kinds'] = {}
             if global_base:
                 row['kind'] = 'Общая база подразделения'
             candidates.append(row)
         row['_periods'][code] = item
-        row['_period_kinds'].setdefault(code, set()).add(item['kind'])
     rows = []
     for candidates in groups.values():
         for row in candidates:
             row['cells'] = [row['_periods'].get(column['code']) for column in columns]
+            row['total'] = row['_periods'].get('__total__')
             del row['_periods']
-            del row['_period_kinds']
             rows.append(row)
-    return {'columns': columns, 'rows': rows, 'colspan': 3 + 3 * len(columns)}
+    return {'columns': columns, 'rows': rows, 'colspan': 4 + 3 * len(columns)}
 
 
 def personal_details(ledger, query):

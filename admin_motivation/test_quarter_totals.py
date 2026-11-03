@@ -1,4 +1,5 @@
 from decimal import Decimal
+import re
 
 from django.template.loader import render_to_string
 from django.test import SimpleTestCase
@@ -21,7 +22,7 @@ class QuarterTotalTests(SimpleTestCase):
                 premium('1', 'Продажи', '20'), premium('1', 'Директора', '30'),
                 premium('3', 'Продажи', '0'), premium('3', 'Директора', '0'),
                 premium('5', 'Политики', '7'), premium('5', 'Продажи', '8'), premium('5', 'Директора', '9')]
-        ledger = {'rows': rows, 'total': Decimal(90), 'kinds': kinds, 'currency': 'RUB'}
+        ledger = {'rows': rows, 'total': Decimal(90), 'kinds': kinds, 'currency': 'RUB', 'plan_fact': []}
         result = present('registry', ledger, ledger, ['1', '3', '5'])
         cards = result['period_cards']
         self.assertEqual([card['code'] for card in cards], ['1', '3', '5'])
@@ -33,11 +34,17 @@ class QuarterTotalTests(SimpleTestCase):
                 self.assertEqual(item['kind'], section['kind'])
                 self.assertEqual(item['total'], section['period_totals'][index])
         html = render_to_string('admin_motivation/reports_next/_quarter_totals.html', {'presentation': result, 'ledger': ledger})
-        self.assertEqual(html.count('<article'), 3)
+        self.assertEqual(html.count('<article'), 4)
         self.assertIn('66,00 RUB', html)
         self.assertIn('0,00 RUB', html)
         self.assertIn('Годовая премия', html)
         self.assertNotIn('USD', html)
+        self.assertIn('Итого за выбранные периоды', html)
+        self.assertIn('90,00 RUB', html)
+        self.assertIn('data-period-scroll', html)
+        matrix_html = render_to_string('admin_motivation/reports_next/_performance_matrix.html', {'presentation': result})
+        self.assertEqual(re.findall(r'data-period="([^"]+)"', html),
+                         re.findall(r'data-period="([^"]+)"', matrix_html))
 
     def test_filtered_type_does_not_invent_other_types_or_periods(self):
         ledger = {'rows': [premium('2', 'Политики', '12.50')], 'total': Decimal('12.50'),
