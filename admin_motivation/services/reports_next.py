@@ -144,15 +144,20 @@ def actual_reports(user, execution, query, *, detailed=False):
         if detailed:
             results.append({'kind': kind, 'data': data})
         summary = data['period_summary']
+        from .annual_accrual import lookup
+        annual = lookup(data.get('annual_accrual', []))
         for item in summary['rows']:
             for index, column in enumerate(summary['columns']):
                 amount = item['values'][index]
                 if amount is None:
                     continue
-                ledger.append({'subdivision': item['subdivision'], 'author': item['author'], 'unallocated': item.get('unallocated', False),
+                entry = {'subdivision': item['subdivision'], 'author': item['author'], 'unallocated': item.get('unallocated', False),
                     'kind': kind, 'period': column['label'], 'code': period_code(column['label']), 'amount': amount,
                     'bonus': Decimal(0), 'currency': currency,
-                    'possible': item.get('possible_values', [None] * len(summary['columns']))[index]})
+                    'possible': item.get('possible_values', [None] * len(summary['columns']))[index]}
+                if not detailed:
+                    entry['annual_accrual'] = annual.get((item['subdivision'], item['author'], entry['code']))
+                ledger.append(entry)
             # Current Q4/year pilot has no catch-up payments, including exports.
     for item in ledger:
         item['total'] = item['amount'] + item['bonus']

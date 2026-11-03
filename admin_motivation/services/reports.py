@@ -441,7 +441,6 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                     from .motivation_performance import grouped_sql as performance_sql, department_sql
                     result['motivation_performance'] = fetch(cursor, performance_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant), args)
                     result['department_performance'] = fetch(cursor, department_sql(sql, calculation_variant), args)
-                if calculation_variant == 'all_2026':
                     from .annual_accrual import grouped_sql as annual_sql
                     annual_query, annual_args = bind_sql(annual_sql(annual_source_sql, values.get('Currency', 'USD')), values)
                     result['annual_accrual'] = fetch(cursor, annual_query, annual_args)
