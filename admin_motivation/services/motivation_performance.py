@@ -11,7 +11,7 @@ def period_coverage(context):
         f"(({period} LIKE N'4 кв%' OR {period}=N'год') AND pf.[Квартал] IN (1,2,3,4))")
 
 
-def grouped_sql(source):
+def grouped_sql(source, coefficient_type=None):
     # Personal formula windows remain independent. Global values come from the
     # physical Sales input set, which does not repeat the base per director.
     author = "CASE WHEN [VariationCalculate]=N'Подразделение(Глобально)' THEN N'' ELSE [АвторСделки] END"
@@ -20,9 +20,11 @@ def grouped_sql(source):
     brand = "CASE WHEN [VariationCalculate]=N'Марка(Бренд)' THEN [Марка] ELSE N'' END"
     dimensions = '[Подразделение],[Год],[КварталМотивации],[VariationCalculate]'
     keys = ','.join((author, planning, goods, brand))
-    base_filter = (
-        "(pf.[Канал] IS NULL OR pf.[Канал]<>N'ДПП') "
-        "AND pf.[Подразделение] NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг')")
+    base_filter = '1=1'
+    if str(coefficient_type or '').strip().casefold() != 'директора':
+        from .director_participation import EXCLUDED
+        excluded = ','.join("N'" + name.replace("'", "''") + "'" for name in EXCLUDED)
+        base_filter = "(pf.[Канал] IS NULL OR pf.[Канал]<>N'ДПП') AND pf.[Подразделение] NOT IN (" + excluded + ')'
     return (
         'WITH input_rows AS (' + source + '), personal_windows AS ('
         'SELECT ' + dimensions + ',' + author + ' AS ScopeAuthor,' + planning + ' AS ScopePlanning,'
