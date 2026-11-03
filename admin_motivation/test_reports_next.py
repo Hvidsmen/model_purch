@@ -157,7 +157,10 @@ class ReportsNextTests(TestCase):
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
             self.assertEqual(book['Премии'].max_row, 127)
-            self.assertEqual(sum(row[6].value for row in book['Премии'].iter_rows(min_row=3)), 125 * 90)
+            headers = [cell.value for cell in book['Премии'][2]]
+            total_index = headers.index('Всего по расчёту')
+            self.assertLess(headers.index('Годовая премия · без годовой доплаты'), headers.index('Премия по расчёту'))
+            self.assertEqual(sum(row[total_index].value for row in book['Премии'].iter_rows(min_row=3)), 125 * 90)
             book.close(); exported.close()
 
     def test_admin_can_preview_mine_but_must_choose_employee(self):

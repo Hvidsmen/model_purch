@@ -67,12 +67,15 @@ def workbook(kind, data, metadata, query=None, title=None):
     elif kind in ('team', 'registry'):
         from .services.reports_next_presenter import present
         display = present(kind, data, data, query.getlist('period') or ['all'] if query is not None else 'all')
-        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта', 'Премия по расчёту',
+        period_headers = [column['label'] + ' · без годовой доплаты' for column in display['period_columns']]
+        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта',
+                *(period_headers if kind == 'registry' else []), 'Премия по расчёту',
                 'Годовая доплата за кварталы', 'Всего по расчёту',
-                *[column['label'] + ' · без годовой доплаты' for column in display['period_columns']], 'Статус', 'Сколько бы выплатили · без процента выполнения'])
+                *(period_headers if kind != 'registry' else []), 'Статус', 'Сколько бы выплатили · без процента выполнения'])
         for row in display['employees' if kind == 'team' else 'registry_rows']:
-            append([row['subdivision'], row['author'], ', '.join(row['kinds']), data['currency'], row['amount'],
-                    row['bonus'], row['total'], *row['period_values'],
+            append([row['subdivision'], row['author'], ', '.join(row['kinds']), data['currency'],
+                    *(row['period_values'] if kind == 'registry' else []), row['amount'],
+                    row['bonus'], row['total'], *(row['period_values'] if kind != 'registry' else []),
                     'Не распределено' if row['unallocated'] else 'Рассчитано; выплата не подтверждена',
                     sum((item['possible'] for item in row['rows']), Decimal(0)) if all(item.get('possible') is not None for item in row['rows']) else None])
         if kind in ('team', 'registry'):

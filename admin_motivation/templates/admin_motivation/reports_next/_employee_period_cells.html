@@ -1,0 +1,1 @@
+{% load report_format %}{% for cell in row.period_cells %}<td class="num">{% if cell.links|length == 1 %}<a href="{{ cell.links.0.url }}">{{ cell.amount|report_cash }}</a>{% else %}{{ cell.amount|report_cash }}{% for link in cell.links %}<small class="nr-cell-type"><a href="{{ link.url }}">{{ link.label }}</a></small>{% endfor %}{% endif %}</td>{% endfor %}
