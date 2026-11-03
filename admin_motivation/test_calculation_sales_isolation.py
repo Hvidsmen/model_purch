@@ -98,9 +98,12 @@ class SalesIsolationTests(SimpleTestCase):
         with sqlite3.connect(':memory:') as db:
             db.create_function('YEAR',1,lambda value: date.fromisoformat(value).year if value else None)
             db.create_function('DATEFROMPARTS',3,lambda y,m,d: date(y,m,d).isoformat())
-            db.execute('CREATE TABLE Sales (DocumentKey,ModelCodeERP,ClosedDealDate,Value_,DiscountMotivation)')
-            initial = [('One','A','2026-03-31',7,.1),('Two','B','2026-10-01',9,.2),('Old','A','2025-12-30',4,.3)]
-            db.executemany('INSERT INTO Sales VALUES (?,?,?,?,?)',initial)
+            db.execute('CREATE TABLE Sales (DocumentKey,ModelCodeERP,ClosedDealDate,Value_,DiscountMotivation,Subdivision)')
+            initial = [('One','A','2026-03-31',7,.1,1),('Two','B','2026-10-01',9,.2,1),
+                       ('Old','A','2025-12-30',4,.3,1),('OtherBranch','A','2026-10-01',5,.4,2)]
+            db.executemany('INSERT INTO Sales VALUES (?,?,?,?,?,?)',initial)
+            db.execute('CREATE TABLE calculation_subdivisions (SubdivisionKey)')
+            db.execute('INSERT INTO calculation_subdivisions VALUES (1)')
             db.execute('CREATE TABLE document_sales (DocumentKey,Value_)')
             db.execute("INSERT INTO document_sales VALUES ('One',42)")
             db.execute('CREATE TABLE prices (ModelCode,Value_)')
@@ -113,10 +116,11 @@ class SalesIsolationTests(SimpleTestCase):
             sql = patch(optimize(source()))
             copy = re.search(r'SELECT \* INTO '+WORKING_TABLE+r'[\s\S]*?;', sql)[0]
             copy = copy.replace('SELECT * INTO '+WORKING_TABLE, 'CREATE TEMP TABLE working AS SELECT *').replace('DataWH.dbo.Sales','Sales')
+            copy = copy.replace('DataWH.motivation.PortalCalculationSubdivisions', 'calculation_subdivisions')
             db.execute(copy, {'FactYear':2026})
             enrich('working')
             self.assertEqual(db.execute('SELECT * FROM working ORDER BY DocumentKey').fetchall(),
-                             db.execute('SELECT * FROM baseline WHERE YEAR(ClosedDealDate)=2026 ORDER BY DocumentKey').fetchall())
+                             db.execute('SELECT * FROM baseline WHERE YEAR(ClosedDealDate)=2026 AND Subdivision=1 ORDER BY DocumentKey').fetchall())
             self.assertEqual(db.execute('SELECT * FROM Sales').fetchall(), initial)
 
     def test_review_source_shapes_when_available(self):
@@ -129,4 +133,3 @@ class SalesIsolationTests(SimpleTestCase):
             changed = patch(optimize(sql))
             self.assertIn(MARKER, changed)
             self.assertEqual(changed.count('FROM DataWH.dbo.Sales'), 1)
-
