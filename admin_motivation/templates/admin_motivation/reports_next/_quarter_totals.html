@@ -1,0 +1,16 @@
+{% load report_format %}
+{% if presentation.period_cards %}
+<div class="nr-section-title"><h2>Итоги по периодам</h2><span>Премии по расчёту · {{ ledger.currency }}</span></div>
+<div class="nr-card-grid nr-quarter-totals">
+{% for card in presentation.period_cards %}
+<article class="nr-period" data-period="{{ card.code }}">
+<div class="nr-period-head"><span>{% if card.code == '5' %}Годовая премия{% else %}{{ card.code }} квартал{% endif %}</span></div>
+<strong>{{ card.total|report_cash }} {{ ledger.currency }}</strong>
+<div class="nr-kpi-types">
+{% for item in card.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.total|report_cash }}</b></div>{% endfor %}
+</div>
+<small class="nr-muted">По выбранным условиям · все страницы</small>
+</article>
+{% endfor %}
+</div>
+{% endif %}
