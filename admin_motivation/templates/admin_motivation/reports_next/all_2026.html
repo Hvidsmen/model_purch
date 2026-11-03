@@ -1,7 +1,8 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}
 {% block title %}Все кварталы 2026 · DA портал{% endblock %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-period-columns-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=period-columns-20261103">
 <section class="content nr-page nr-all-year-page">
 <div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>Все кварталы 2026</h1><p class="nr-subtitle">Премии за I, II, III и IV кварталы и годовая премия по всему 2026 году.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
 <p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
@@ -23,12 +24,11 @@
 <div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button>{% if data != None %}<a href="{{ export_url }}">↓ Excel</a>{% endif %}</div></form>
 {% if data != None %}<div class="nr-kpis"><article class="nr-kpi nr-kpi-primary"><span>Премии за выбранные периоды</span><strong>{{ presentation.total|report_cash }} {{ ledger.currency }}</strong></article><article class="nr-kpi"><span>Сколько бы выплатили</span><strong>{{ presentation.possible|report_cash }} {{ ledger.currency }}</strong><small>До условий выполнения плана</small></article><article class="nr-kpi"><span>Сотрудники</span><strong>{{ presentation.people }}</strong></article><article class="nr-kpi"><span>Периоды</span><strong>{{ presentation.period_columns|length }}</strong></article></div>
 <div class="nr-section-title"><h2>План-факт мотивации подразделений</h2><span>План и факт — USD</span></div>
-<p class="nr-muted">Показатели базы мотивации по подразделению, виду и периоду. Кварталы и год, виды мотивации и разные способы расчёта не суммируются. Повторяющиеся окна по товарам и сотрудникам учитываются один раз. Премия сотрудника также зависит от его формулы и условий выплаты.</p>
-<div class="nr-table-wrap"><table class="nr-table"><thead><tr><th>Подразделение</th><th>Вид мотивации / база</th><th>Период</th><th class="num">План мотивации, USD</th><th class="num">Факт мотивации, USD</th><th class="num">Выполнение мотивации</th></tr></thead><tbody>
-{% for item in data.plan_fact %}<tr><td>{{ item.subdivision }}</td><td>{{ item.kind }}<small>{{ item.formula }} · {{ item.scope_author }}</small></td><td>{{ item.period }}</td><td class="num">{{ item.plan|report_cash }}</td><td class="num">{{ item.fact|report_cash }}</td><td class="num">{{ item.ratio|report_percent }}</td></tr>{% empty %}<tr><td colspan="6">Показатели плана и факта отсутствуют в результатах расчёта.</td></tr>{% endfor %}
-</tbody></table></div>
+<p class="nr-muted">Периоды идут в том же порядке, что и в таблицах премий сотрудников ниже. В каждом периоде показаны план, факт и выполнение базы мотивации. Кварталы и год, виды мотивации и разные способы расчёта не суммируются. Повторяющиеся окна по товарам и сотрудникам учитываются один раз. Премия сотрудника также зависит от его формулы и условий выплаты.</p>
+{% include 'admin_motivation/reports_next/_performance_matrix.html' %}
 
 {% include 'admin_motivation/reports_next/_all_2026_tables.html' %}
 {% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
 </section>{% endblock %}
 {% block module_js %}{{ block.super }}<script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
+
