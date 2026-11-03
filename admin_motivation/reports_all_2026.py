@@ -54,6 +54,8 @@ def data_for(user, execution, query):
                               'scope_author': item.get('ScopeAuthor') or 'Всё подразделение',
                               'plan': plan, 'fact': fact, 'ratio': ratio(fact, plan)})
         summary = data['period_summary']
+        from .services.annual_accrual import lookup
+        annual = lookup(data.get('annual_accrual', []))
         for item in summary['rows']:
             for index, column in enumerate(summary['columns']):
                 amount = item['values'][index]
@@ -66,6 +68,7 @@ def data_for(user, execution, query):
                     'kind': kind, 'period': column['label'], 'code': reports_next.period_code(column['label']),
                     'amount': amount, 'bonus': Decimal(0), 'total': amount, 'currency': values['Currency'],
                     'possible': item.get('possible_values', [None] * len(summary['columns']))[index],
+                    'annual_accrual': annual.get((item['subdivision'], item['author'], reports_next.period_code(column['label']))),
                     'detail_url': reverse('motivation_report_all_2026') + '?' + target.urlencode()})
     return {'rows': rows, 'plan_fact': plan_fact, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in rows),
             'total': sum((row['amount'] for row in rows), Decimal(0)), 'currency': query.get('currency', 'USD')}

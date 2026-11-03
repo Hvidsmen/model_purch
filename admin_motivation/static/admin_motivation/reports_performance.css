@@ -36,3 +36,10 @@
 .nr-type-menu input[type=checkbox]{width:16px;height:16px;margin:0;accent-color:#6951c2}
 .nr-type-actions{display:flex;justify-content:space-between;gap:12px;padding:0 4px 6px}
 .nr-type-actions button{border:0;background:none;color:#6951c2;padding:4px;cursor:pointer;font:inherit}
+
+
+.nr-annual-block{border-top:1px solid #ded5f3;padding-top:12px;margin:12px 0;color:#514383}
+.nr-annual-block>span,.nr-annual-block>strong{display:block}
+.nr-annual-block>strong{font-size:19px;font-variant-numeric:tabular-nums;margin:6px 0 10px}
+.nr-annual-block>small{font-size:11px;color:#64748b}
+.nr-page .nr-table .nr-annual-accrual{display:block;font-size:11px;line-height:1.5;color:#6951c2;margin-top:5px;white-space:normal}

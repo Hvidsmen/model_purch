@@ -11,6 +11,11 @@
 <div class="nr-kpi-types">
 {% for item in card.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.total|report_cash }}</b></div>{% endfor %}
 </div>
+{% if presentation.has_annual_accrual and card.code != '5' %}
+<div class="nr-annual-block"><span>В годовую премию за квартал</span><strong>{{ card.annual_accrual|report_cash }} {{ ledger.currency }}</strong>
+<div class="nr-kpi-types">{% for item in card.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.annual_accrual|report_cash }}</b></div>{% endfor %}</div>
+<small>До проверки годового условия выплаты</small></div>
+{% endif %}
 <small class="nr-muted">По выбранным условиям · все страницы</small>
 </article>
 {% endfor %}
@@ -20,6 +25,11 @@
 <div class="nr-kpi-types">
 {% for item in presentation.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.total|report_cash }}</b></div>{% endfor %}
 </div>
+{% if presentation.has_annual_accrual and presentation.annual_accrual != None %}
+<div class="nr-annual-block"><span>В годовую премию за выбранные кварталы</span><strong>{{ presentation.annual_accrual|report_cash }} {{ ledger.currency }}</strong>
+<div class="nr-kpi-types">{% for item in presentation.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.annual_accrual|report_cash }}</b></div>{% endfor %}</div>
+<small>До проверки годового условия выплаты</small></div>
+{% endif %}
 <small class="nr-muted">По выбранным условиям · все страницы</small>
 </article>
 </div>

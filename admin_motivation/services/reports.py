@@ -396,6 +396,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             source_sql = source_sql.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'DataWH.motivation.ReportMotivationByDealAuthorAll2026')
         from .subdivision_scope import sql_predicate
         source_sql = 'SELECT * FROM (' + source_sql.strip().rstrip(';') + ') AS included_source WHERE ' + sql_predicate('[Подразделение]')
+        annual_source_sql = source_sql
         if kind == 'manager-detail' and period_condition:
             source_sql += ' AND ' + period_condition
         if kind == 'manager':
@@ -408,6 +409,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             from .active_directors import REPORT_CONDITION, report_roster
             values = {**values, 'PortalDirectorRoster': report_roster()}
             source_sql += ' AND ' + REPORT_CONDITION
+            annual_source_sql += ' AND ' + REPORT_CONDITION
         sql, args = bind_sql(source_sql, values)
         if kind == 'subdivisions' and values.get('PremiumPeriods'):
             periods = values['PremiumPeriods']
@@ -438,6 +440,9 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                 if calculation_variant == 'all_2026':
                     from .motivation_performance import grouped_sql as performance_sql
                     result['motivation_performance'] = fetch(cursor, performance_sql(sql), args)
+                    from .annual_accrual import grouped_sql as annual_sql
+                    annual_query, annual_args = bind_sql(annual_sql(annual_source_sql, values.get('Currency', 'USD')), values)
+                    result['annual_accrual'] = fetch(cursor, annual_query, annual_args)
                 return result
             performance_fields = ('СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал', 'СуммаПланUSD', 'СуммаОтгрузокUSD')
             performance_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE ' + sql_predicate('[Подразделение]') +
