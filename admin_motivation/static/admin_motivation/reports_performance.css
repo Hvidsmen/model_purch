@@ -18,3 +18,4 @@
 .content-wrapper .nr-all-year-page .nr-performance-table thead tr:nth-child(2) th:first-child{width:90px;min-width:0;max-width:90px}
 .nr-page .nr-performance-table td.num{font-size:12px}
 .nr-page .nr-aligned-period-table .nr-period-spacer{background:#fff;border:0}
+.nr-page .nr-aligned-period-table thead th[data-period]{text-align:center}
