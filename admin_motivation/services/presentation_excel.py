@@ -121,6 +121,26 @@ def workbook(kind, data, metadata, query=None, title=None):
                  possible, item['amount'], item['bonus'], item['total'], note], 'alternate' if index % 2 else 'body')
     ws.auto_filter.ref = 'A5:J' + str(max(5, ws._portal_row))
 
+    if display.get('has_annual_accrual'):
+        quarters = [(index, column) for index, column in enumerate(display['period_columns']) if column['code'] != '5']
+        if quarters:
+            ws = sheet('В годовую по кварталам', ['Подразделение', 'Сотрудник', 'Вид мотивации',
+                       *[column['code'] + ' кв. · В годовую премию' for _, column in quarters],
+                       'Итого за выбранные кварталы', 'Валюта'],
+                       [26, 44, 22, *([26] * len(quarters)), 30, 12],
+                       'Годовая часть отгрузок квартала с годовым коэффициентом · До проверки годового условия выплаты')
+            for section in display['team_sections']:
+                for employee in section['rows']:
+                    row(ws, [employee['subdivision'], employee['author'], section['kind'],
+                             *[employee['period_cells'][index]['annual_accrual'] for index, _ in quarters],
+                             employee['annual_accrual'], currency])
+                row(ws, ['ИТОГО · ' + section['kind'], None, section['kind'],
+                         *[section['period_summary_cells'][index]['annual_accrual'] for index, _ in quarters],
+                         section['annual_accrual'], currency], 'subtotal')
+            row(ws, ['ИТОГО', None, None,
+                     *[display['period_cards'][index]['annual_accrual'] for index, _ in quarters],
+                     display['annual_accrual'], currency], 'grand')
+
     if 'plan_fact' in data:
         ws = sheet('План-факт', ['Подразделение', 'Вид мотивации', 'База мотивации', 'Сотрудник / область', 'Период',
                    'План мотивации, USD', 'Факт мотивации, USD', 'Выполнение мотивации'],
