@@ -1,5 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}{% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=employee-reports-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=separate-motivation-bases-20261103">
 <section class="content native-report nr-page">
 {% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
 
@@ -30,9 +31,9 @@
 <div class="nr-steps"><div class="nr-step"><span>01 / БАЗА</span><strong>Фактические отгрузки</strong><p>Распределение по ступеням скидки O0–O4.</p></div><div class="nr-step"><span>02 / СТАВКИ</span><strong>Возможная премия</strong><p>Отгрузки каждой ступени × её коэффициент K0–K4.</p></div><div class="nr-step"><span>03 / УСЛОВИЯ</span><strong>Выполнение плана</strong><p>Применяются правила мотивации и порог выплаты выбранного расчёта.</p></div><div class="nr-step"><span>04 / ИТОГ</span><strong>Премия + годовая доплата</strong><p>Согласование и фактический перевод учитываются отдельно от расчёта.</p></div></div>
 <div class="nr-card-grid">{% for step in calculation_steps %}<article class="nr-period"><div class="nr-period-head">{{ step.period }}</div><strong>{{ step.calculated|report_cash }} {{ query.currency }}</strong><div class="nr-period-line"><span>Возможная премия</span><b>{{ step.possible|report_cash }}</b></div><div class="nr-period-line"><span>Выполнение для мотивации</span><b>{{ step.ratio|report_percent }}</b></div><div class="nr-period-line"><span>Премия по расчёту</span><b>{{ step.calculated|report_cash }}</b></div></article>{% endfor %}</div>
 <details class="nr-deep" id="next-deep-calculation" open><summary>Подробный расчёт: товары, отгрузки, план и ставки K0–K4</summary><div class="nr-deep-body">{% include 'admin_motivation/reports/manager_detail.html' with new_report_terms=True %}</div></details>
-{% else %}{% include 'admin_motivation/reports_next/_ledger.html' %}{% endif %}
+{% else %}{% include 'admin_motivation/reports_next/_performance_sections.html' %}{% include 'admin_motivation/reports_next/_ledger.html' %}{% endif %}
 {% endif %}
 <details class="nr-help nr-value-legend"><summary>Что означают показатели и обозначения</summary><p><b>0,00</b> — рассчитанная сумма равна нулю. <b>—</b> — показатель не определён или не применяется; причина указана в пояснении к цели или формуле.</p><p><b>Возможная премия</b> — на текущих отгрузках до проверки условий. <b>Премия по расчёту</b> — после проверки условий. <b>Годовая премия</b> — отдельная часть, без квартальных премий. В пилоте доплата за кварталы равна 0.</p></details>
 <details class="nr-metadata"><summary>Источник данных и параметры расчёта</summary><div class="nr-metadata-grid">{% for label,value in metadata %}<div><strong>{{ label }}</strong>{{ value }}</div>{% endfor %}</div></details>
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/reports_next.js' %}?v=employee-reports-20261103" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=detail-fit-20261103" defer></script>{% endif %}{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=separate-motivation-bases-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=employee-reports-20261103" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=detail-fit-20261103" defer></script>{% endif %}{% endblock %}

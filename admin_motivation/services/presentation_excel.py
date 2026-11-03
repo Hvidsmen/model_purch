@@ -141,10 +141,22 @@ def workbook(kind, data, metadata, query=None, title=None):
                      *[display['period_cards'][index]['annual_accrual'] for index, _ in quarters],
                      display['annual_accrual'], currency], 'grand')
 
+    if display.get('department_performance_matrix', {}).get('rows'):
+        ws = sheet('План-факт подразделения', ['Подразделение', 'Год', 'Период', 'План, USD', 'Факт, USD', 'Выполнение'],
+                   [28, 12, 30, 25, 25, 22], 'Всё подразделение без исключений мотивации · I квартал: настоящий план')
+        for department in display['department_performance_matrix']['rows']:
+            for index, column in enumerate(display['period_columns']):
+                item = department['cells'][index]
+                if item:
+                    row(ws, [department['subdivision'], department['year'], column['label'], item['plan'], item['fact'], item['ratio']], percent_columns=(5,))
+            if department['total']:
+                item = department['total']
+                row(ws, [department['subdivision'], department['year'], 'Итого · без повторов кварталов', item['plan'], item['fact'], item['ratio']], 'subtotal', percent_columns=(5,))
+
     if 'plan_fact' in data:
         ws = sheet('План-факт', ['Подразделение', 'Вид мотивации', 'База мотивации', 'Сотрудник / область', 'Период',
                    'План мотивации, USD', 'Факт мотивации, USD', 'Выполнение мотивации'],
-                   [28, 24, 34, 44, 30, 27, 27, 27], 'Показатели подразделений · План и факт в USD')
+                   [28, 24, 34, 44, 30, 27, 27, 27], 'Базы мотивации по видам · Разные базы не складываются · USD')
         for index, item in enumerate(data['plan_fact']):
             row(ws, [item['subdivision'], item['kind'], item.get('formula', 'Подразделение'), item.get('scope_author', 'Всё подразделение'), item['period'],
                      item['plan'], item['fact'], item['ratio']],

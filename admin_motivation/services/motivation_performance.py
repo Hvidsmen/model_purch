@@ -1,5 +1,45 @@
 """Show department eligibility from calculation inputs, not projected row maxima."""
 GLOBAL_PLAN_FACT = 'DataWH.motivation.PlanFactAll2026'
+DEPARTMENT = 'Всё подразделение'
+
+
+def plan_fact_table(variant):
+    if variant not in ('main', 'all_2026'):
+        raise ValueError('Unknown calculation variant')
+    return GLOBAL_PLAN_FACT if variant == 'all_2026' else 'DataWH.motivation.PlanFact'
+
+
+def presentation_rows(rows, kind):
+    from .reports import number, ratio
+    return [{'kind': kind, 'subdivision': row['Подразделение'], 'year': row['Год'],
+             'period': row['КварталМотивации'], 'formula': row.get('VariationCalculate') or 'Подразделение',
+             'scope_author': row.get('ScopeAuthor') or 'Всё подразделение',
+             'plan': number(row.get('Plan_')), 'fact': number(row.get('Fact_')),
+             'ratio': ratio(number(row.get('Fact_')), number(row.get('Plan_')))} for row in rows]
+
+
+def department_sql(source, calculation_variant='all_2026'):
+    """Real department inputs, once per sales row, without motivation exclusions.
+
+    The filtered report supplies only authorized subdivision/year/period contexts.
+    Amounts come from physical sales/plan inputs, never employee projections.
+    Q1 retains its real plan; all periods use the same coverage as eligibility.
+    """
+    table = plan_fact_table(calculation_variant)
+    return (
+        'WITH input_rows AS (' + source + '), contexts AS ('
+        'SELECT DISTINCT [Подразделение],[Год],[КварталМотивации] FROM input_rows) '
+        'SELECT c.[Подразделение],c.[Год],c.[КварталМотивации],'
+        "N'Общий план-факт' AS VariationCalculate,N'' AS ScopeAuthor,"
+        'SUM(pf.[СуммаПланUSD]) AS Plan_,SUM(pf.[СуммаОтгрузокUSD]) AS Fact_ '
+        'FROM contexts c JOIN ' + table + ' pf ON pf.[Подразделение]=c.[Подразделение] '
+        "AND pf.[Год]=c.[Год] AND LTRIM(RTRIM(pf.[ТипКоэф]))=N'Продажи' AND (" + period_coverage('c') + ') '
+        'GROUP BY c.[Подразделение],c.[Год],c.[КварталМотивации] UNION ALL '
+        "SELECT pf.[Подразделение],pf.[Год],N'Итого',N'Общий план-факт',N'',"
+        'SUM(pf.[СуммаПланUSD]),SUM(pf.[СуммаОтгрузокUSD]) FROM ' + table + ' pf '
+        "WHERE LTRIM(RTRIM(pf.[ТипКоэф]))=N'Продажи' AND EXISTS (SELECT 1 FROM contexts c "
+        'WHERE c.[Подразделение]=pf.[Подразделение] AND c.[Год]=pf.[Год] AND (' + period_coverage('c') + ')) '
+        'GROUP BY pf.[Подразделение],pf.[Год]')
 
 
 def period_coverage(context):
@@ -11,9 +51,11 @@ def period_coverage(context):
         f"(({period} LIKE N'4 кв%' OR {period}=N'год') AND pf.[Квартал] IN (1,2,3,4))")
 
 
-def grouped_sql(source, coefficient_type=None):
-    # Personal formula windows remain independent. Global values come from the
-    # physical Sales input set, which does not repeat the base per director.
+def grouped_sql(source, coefficient_type=None, calculation_variant='all_2026'):
+    # Policy inputs must not be substituted with sales inputs. Directors share
+    # the unreplicated sales base; their channel/subdivision rules differ.
+    input_type = 'Политики' if str(coefficient_type or '').strip().casefold() == 'политики' else 'Продажи'
+    input_filter = "LTRIM(RTRIM(pf.[ТипКоэф]))=N'" + input_type + "'"
     author = "CASE WHEN [VariationCalculate]=N'Подразделение(Глобально)' THEN N'' ELSE [АвторСделки] END"
     planning = "CASE WHEN [VariationCalculate] IN (N'Марка(Бренд)',N'Группа товаров',N'Группа планов продаж') THEN [ГруппаПлановПродаж] ELSE N'' END"
     goods = "CASE WHEN [VariationCalculate] IN (N'Марка(Бренд)',N'Группа товаров') THEN [ГруппаТоваров] ELSE N'' END"
@@ -43,9 +85,9 @@ def grouped_sql(source, coefficient_type=None):
         "N'' AS ScopeAuthor,"
         "SUM(CASE WHEN LOWER(c.[КварталМотивации]) LIKE N'1 кв%' THEN pf.[СуммаОтгрузокUSD] "
         'ELSE pf.[СуммаПланUSD] END) AS Plan_,SUM(pf.[СуммаОтгрузокUSD]) AS Fact_ '
-        'FROM global_contexts c JOIN ' + GLOBAL_PLAN_FACT + ' pf ON '
+        'FROM global_contexts c JOIN ' + plan_fact_table(calculation_variant) + ' pf ON '
         'pf.[Подразделение]=c.[Подразделение] AND pf.[Год]=c.[Год] '
-        "AND LTRIM(RTRIM(pf.[ТипКоэф]))=N'Продажи' AND (" + period_coverage('c') + ') '
+        'AND ' + input_filter + ' AND (' + period_coverage('c') + ') '
         'WHERE ' + base_filter + ' '
         'GROUP BY c.[Подразделение],c.[Год],c.[КварталМотивации],c.[VariationCalculate] '
         'UNION ALL '
@@ -54,9 +96,9 @@ def grouped_sql(source, coefficient_type=None):
         "SELECT t.[Подразделение],t.[Год],N'Итого',t.[VariationCalculate],N'',"
         'SUM(CASE WHEN t.FirstOnly=1 THEN pf.[СуммаОтгрузокUSD] ELSE pf.[СуммаПланUSD] END),'
         'SUM(pf.[СуммаОтгрузокUSD]) '
-        'FROM global_totals t JOIN ' + GLOBAL_PLAN_FACT + ' pf ON '
+        'FROM global_totals t JOIN ' + plan_fact_table(calculation_variant) + ' pf ON '
         'pf.[Подразделение]=t.[Подразделение] AND pf.[Год]=t.[Год] '
-        "AND LTRIM(RTRIM(pf.[ТипКоэф]))=N'Продажи' AND EXISTS ("
+        'AND ' + input_filter + ' AND EXISTS ('
         'SELECT 1 FROM global_contexts coverage WHERE coverage.[Подразделение]=t.[Подразделение] '
         'AND coverage.[Год]=t.[Год] AND coverage.[VariationCalculate]=t.[VariationCalculate] '
         'AND (' + period_coverage('coverage') + ')) '
