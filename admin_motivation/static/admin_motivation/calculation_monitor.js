@@ -36,12 +36,17 @@
     if (active || document.hidden) return;
     active = true;
     try {
-      for (const card of cards) {
+      let next = 0;
+      async function worker() {
+       while (next < cards.length) {
+        const card = cards[next++];
         const note = card.querySelector('[data-job-monitor-note]');
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
         try {
-          const response = await fetch(card.dataset.calculationMonitor, {
+          const monitorUrl = new URL(card.dataset.calculationMonitor, location.origin);
+          monitorUrl.searchParams.set('light', '1');
+          const response = await fetch(monitorUrl, {
             credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
             headers: {'Accept': 'application/json'}
           });
@@ -63,14 +68,16 @@
             if (data.report_url) {card.dataset.reportBase=data.report_url;reportTarget(card,data.report_url);}
           }
           const provenance = card.querySelector('[data-job-provenance]');
-          if (provenance) provenance.textContent = data.execution ? `Расчёт ${data.execution.completed} МСК · ${data.execution.year} · ${data.execution.plan}${data.execution.pilot_current===false ? ' · Запуск до ограничения пилота: сохраните параметры и повторите расчёт' : data.execution.stale ? ' · Настройки изменены: нужен пересчёт' : ''}` : 'Версия завершённого расчёта пока не подтверждена. После обновления сохраните параметры задания для регистрации новых запусков.';
+          if (provenance) provenance.textContent = data.execution ? `Расчёт ${data.execution.completed} МСК · ${data.execution.year} · ${data.execution.plan}${data.execution.pilot_current===false ? ' · Запуск до ограничения пилота: сохраните параметры и повторите расчёт' : data.execution.stale ? ' · Настройки изменены: нужен пересчёт' : data.execution.settings_checked===false ? ' · Актуальность настроек проверьте в разделе выгрузки' : ''}` : 'Версия завершённого расчёта пока не подтверждена. После обновления сохраните параметры задания для регистрации новых запусков.';
           note.textContent = `Проверено в ${data.checked_at} МСК · автообновление каждые 10 секунд`;
         } catch (_) {
           card.querySelectorAll('button[name=action][value=run]').forEach(button=>button.disabled=true);
           const last=card.querySelector('[data-job-last]');if(last&&last.textContent==='Проверяем…')last.textContent='Статус недоступен';
           note.textContent = 'Не удалось проверить статус. Показаны последние полученные данные; запуск недоступен до восстановления связи. Повтор проверки через 10 секунд.';
         } finally { clearTimeout(timeout); }
+       }
       }
+      await Promise.all(Array.from({length: Math.min(2, cards.length)}, () => worker()));
     } finally { active = false; }
   }
   refresh();

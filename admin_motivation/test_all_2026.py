@@ -139,3 +139,14 @@ class All2026ViewTests(TestCase):
         self.assertEqual(response.context['data']['plan_fact'][0]['plan'], 200)
         self.assertEqual(response.context['data']['plan_fact'][0]['fact'], 150)
         self.assertTrue(all(call.kwargs['summary_only'] is True for call in load.call_args_list))
+
+
+    def test_repeated_start_reuses_job_and_does_not_restart_running_calculation(self):
+        params = {'plan_version':'Plan', 'quarter_share':'80', 'year_share':'20', 'payout_threshold':'.8'}
+        with patch('admin_motivation.services.calculation_jobs.start_job') as start, patch('admin_motivation.services.calculation_jobs.monitor', return_value={'status':'Выполняется'}):
+            first = self.client.post(self.url, params)
+            second = self.client.post(self.url, params)
+        self.assertEqual(first.status_code, 302)
+        self.assertEqual(second.status_code, 302)
+        self.assertEqual(MotivationCalculationSchedule.objects.filter(variant=ALL_2026).count(), 1)
+        start.assert_called_once()

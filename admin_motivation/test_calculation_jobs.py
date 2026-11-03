@@ -261,3 +261,43 @@ class CalculationFailureDiagnosticsTests(TestCase):
         job.refresh_from_db()
         self.assertFalse(job.synced)
         self.assertIn('Код обращения:', job.error)
+
+
+class CalculationPagePerformanceTests(TestCase):
+    def setUp(self):
+        authorize_test_case(self)
+        SalesPlanScenario.objects.create(title='Plan', source_version='Plan', loaded_at=timezone.now())
+
+    def test_page_does_not_scan_coefficients_or_compute_workflow(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        for index in range(8):
+            MotivationCalculationSchedule.objects.create(name=f'Job {index}', fact_year=2026, plan_version='Plan')
+        with patch('admin_motivation.services.coefficient_coverage.plan_warning', side_effect=AssertionError('Expensive coverage scan')), patch('admin_motivation.services.workflow.context', side_effect=AssertionError('Expensive workflow snapshot')), CaptureQueriesContext(connection) as queries:
+            response = self.client.get(reverse('motivation_calculations'))
+        self.assertContains(response, 'Job 7')
+        self.assertContains(response, 'Проверить покрытие плана')
+        plan_queries = [query for query in queries if 'admin_motivation_salesplanscenario' in query['sql'].lower()]
+        self.assertLessEqual(len(plan_queries), 2)
+
+    def test_light_monitor_does_not_rebuild_workflow(self):
+        job = MotivationCalculationSchedule.objects.create(name='Fast', fact_year=2026, plan_version='Plan')
+        with patch.object(jobs, 'monitor', return_value={'status': 'Выполняется', 'history': []}), patch('admin_motivation.services.execution_tracking.observe', return_value=None), patch('admin_motivation.services.workflow.context', side_effect=AssertionError('Expensive workflow snapshot')):
+            response = self.client.get(reverse('motivation_calculation_monitor', args=[job.pk]), {'light':'1'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()['status'], 'Выполняется')
+        self.assertNotIn('workflow', response.json())
+
+    def test_unchanged_execution_poll_does_not_write_sqlite(self):
+        import json
+        from uuid import uuid4
+        from .models import MotivationExecution
+        from .services.execution_tracking import observe
+        job = MotivationCalculationSchedule.objects.create(name='Poll', fact_year=2026, plan_version='Plan')
+        now = timezone.now()
+        execution = MotivationExecution.objects.create(run_id=uuid4(), job_key=job.key, state='completed', started_at=now, completed_at=now, parameters={'fact_year':2026}, export_snapshot={})
+        connection, cursor = MagicMock(), MagicMock()
+        cursor.fetchone.return_value = (execution.run_id, str(job.key).upper(), now.replace(tzinfo=None), now.replace(tzinfo=None), 'completed', json.dumps(execution.parameters), '{}')
+        with patch.object(MotivationExecution.objects, 'update_or_create', side_effect=AssertionError('Unnecessary write')):
+            actual = observe(job, connector=lambda *args: (connection, cursor))
+        self.assertEqual(actual.pk, execution.pk)

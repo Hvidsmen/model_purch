@@ -109,8 +109,18 @@ def report(request):
             posted[key] = value
         form = JobForm(posted)
         if form.is_valid():
-            job = form.save()
+            # Repeated clicks with identical parameters must reuse the Agent job,
+            # including after a failed/blocked start. Keep existing run history.
+            fields = ('plan_version', 'quarter_share', 'year_share', 'payout_threshold')
+            existing = MotivationCalculationSchedule.objects.filter(
+                variant=ALL_2026, fact_year=2026, mode='manual',
+                **{field: form.cleaned_data[field] for field in fields}
+            ).order_by('-synced', 'pk').first()
+            job = existing or form.save()
             try:
+                if existing and calculation_jobs.monitor(job).get('status') in ('Выполняется', 'Ожидает запуска'):
+                    messages.info(request, 'Дополнительный расчёт с этими параметрами уже выполняется. Дождитесь завершения; новое задание не создаётся.')
+                    return redirect(reverse('motivation_report_all_2026') + '?run=1')
                 calculation_jobs.start_job(job)
                 job.synced = True; job.save(update_fields=['synced'])
                 messages.success(request, 'Дополнительный расчёт 2026 запущен. Основные результаты не заменяются.')

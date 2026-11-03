@@ -70,6 +70,9 @@ def observe(job, connector=None, *, persist=True):
             execution=MotivationExecution(run_id=run,**values)
             execution.pk=MotivationExecution.objects.filter(run_id=run).values_list('pk',flat=True).first()
             return execution
+        existing = MotivationExecution.objects.filter(run_id=run).first()
+        if existing and all(str(getattr(existing, field)).casefold() == str(value).casefold() if field == 'job_key' else getattr(existing, field) == value for field, value in values.items()):
+            return existing
         execution,_=MotivationExecution.objects.update_or_create(run_id=run,defaults=values)
         return execution
     except Exception:

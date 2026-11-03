@@ -17,6 +17,14 @@ from .services import calculation_jobs, subdivision_merge
 logger = logging.getLogger(__name__)
 
 
+def loaded_plan_versions():
+    versions = {}
+    plans = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).exclude(source_version='').order_by('title', 'pk')
+    for source, title in plans.values_list('source_version', 'title'):
+        versions.setdefault(source, []).append(title)
+    return versions
+
+
 class JobForm(forms.ModelForm):
     variant = forms.ChoiceField(label='Вариант расчёта', choices=[('main', 'Основной · IV квартал'), ('all_2026', 'Все кварталы 2026')], required=False, initial='main')
 
@@ -35,10 +43,10 @@ class JobForm(forms.ModelForm):
         fields = ['name', 'variant', 'fact_year', 'plan_version', 'quarter_share', 'year_share', 'payout_threshold', 'mode', 'run_at', 'enabled']
 
     def __init__(self, *args, **kwargs):
+        versions = kwargs.pop('plan_versions', None)
         super().__init__(*args, **kwargs)
-        versions = {}
-        for plan in SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).exclude(source_version='').order_by('title', 'pk'):
-            versions.setdefault(plan.source_version, []).append(plan.title)
+        if versions is None:
+            versions = loaded_plan_versions()
         self.fields['plan_version'].choices = [('', 'Выберите загруженную версию плана')] + [
             (version, f"{' / '.join(titles)} · {version}") for version, titles in versions.items()]
         if not versions:
@@ -73,7 +81,8 @@ def admin_required(request):
 @require_http_methods(['GET', 'POST'])
 def calculations(request):
     admin_required(request)
-    form = JobForm()
+    plan_versions = loaded_plan_versions()
+    form = JobForm(plan_versions=plan_versions)
     edited_job_id = None
     if request.method == 'POST':
         job = get_object_or_404(MotivationCalculationSchedule, pk=request.POST['job']) if request.POST.get('job') else None
@@ -85,7 +94,7 @@ def calculations(request):
                 job.save(update_fields=['synced', 'error'])
                 messages.success(request, 'Запуск задания принят сервером расчёта. Дождитесь статуса «Завершено», затем откройте результат. Статус обновляется автоматически.')
                 return redirect('motivation_calculations')
-            form = JobForm(request.POST, instance=job, auto_id=f'job_{job.pk}_%s' if job else 'id_%s')
+            form = JobForm(request.POST, instance=job, auto_id=f'job_{job.pk}_%s' if job else 'id_%s', plan_versions=plan_versions)
             if form.is_valid():
                 job = form.save(commit=False)
                 calculation_jobs.sync_job(job)
@@ -104,17 +113,14 @@ def calculations(request):
             messages.error(request, text)
     jobs = list(MotivationCalculationSchedule.objects.order_by('pk'))
     approved = GlobalCoeffVersion.objects.filter(status='approved').order_by('-effective_from', '-pk').first()
-    coverage_cache = {}
+    # Keep the landing page independent of coefficient volume and plan lines.
+    plan_ids = {}
+    for source, pk in SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).order_by('-loaded_at', '-pk').values_list('source_version', 'pk'):
+        plan_ids.setdefault(source, pk)
     for job in jobs:
         job.coverage_version = approved
-        plan = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False, source_version=job.plan_version).order_by('-loaded_at', '-pk').first()
-        job.coverage_warning = None
-        if approved and plan:
-            from .services.coefficient_coverage import plan_warning
-            if plan.pk not in coverage_cache:
-                coverage_cache[plan.pk] = plan_warning(approved, plan)
-            job.coverage_warning = coverage_cache[plan.pk]
-        job.edit_form = form if edited_job_id == job.pk and form.is_bound else JobForm(instance=job, auto_id=f'job_{job.pk}_%s')
+        job.coverage_plan_id = plan_ids.get(job.plan_version)
+        job.edit_form = form if edited_job_id == job.pk and form.is_bound else JobForm(instance=job, auto_id=f'job_{job.pk}_%s', plan_versions=plan_versions)
         job.edit_open = bool(edited_job_id == job.pk)
         if job.run_at:
             job.edit_form.initial['run_at'] = job.run_at.astimezone(ZoneInfo('Europe/Moscow')).replace(tzinfo=None)
@@ -130,7 +136,7 @@ def calculations(request):
         else:
             job.next_run_label=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M') if job.run_at>timezone.now() else 'Время прошло · проверьте историю'
         job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
-    return render(request, 'admin_motivation/calculations.html', {'form': JobForm() if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
+    return render(request, 'admin_motivation/calculations.html', {'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
 
 
 @never_cache
@@ -147,9 +153,14 @@ def calculation_monitor(request, job_id):
     from .services.workflow import context as workflow_context
     from urllib.parse import urlencode
     execution = observe(job,persist=False) if role_for(request.user, 'motivation')==MOTIVATION_VIEWER else observe(job)
-    state=workflow_context()
-    data['workflow']={key:state[key] for key in ('export_current','calculated_current','export_label','calculation_label')}
-    if data.get('status') in {'Выполняется','Ожидает запуска','Ошибка'}:
+    light = request.GET.get('light') == '1'
+    if light:
+        from .models import MotivationExportLog
+        state = {'export_current': None, 'exported': MotivationExportLog.objects.only('fingerprint').order_by('-pk').first()}
+    else:
+        state = workflow_context()
+        data['workflow'] = {key:state[key] for key in ('export_current','calculated_current','export_label','calculation_label')}
+    if not light and data.get('status') in {'Выполняется','Ожидает запуска','Ошибка'}:
         data['workflow'].update(calculated_current=False,calculation_label=data['status'])
     if execution and execution.state == 'completed' and data.get('status') == 'Завершено':
         params = execution.parameters
@@ -160,7 +171,8 @@ def calculation_monitor(request, job_id):
         data['execution'] = {'completed':execution.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S') if execution.completed_at else '',
             'year':params['fact_year'],'plan':params['plan_version'],
             'pilot_current':rules_current,
-            'stale': not (rules_current and state['export_current'] and state['exported'] and state['exported'].fingerprint==execution.export_snapshot.get('fingerprint'))}
+            'settings_checked': not light,
+            'stale': not (rules_current and state['exported'] and state['exported'].fingerprint==execution.export_snapshot.get('fingerprint') and (light or state['export_current']))}
     else:
         data['report_url'] = None
     data['checked_at'] = timezone.now().astimezone(ZoneInfo('Europe/Moscow')).strftime('%H:%M:%S')

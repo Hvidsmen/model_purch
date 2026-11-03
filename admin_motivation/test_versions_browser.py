@@ -618,7 +618,9 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.clock.install()
             self.page.goto(self.live_server_url + reverse('motivation_calculations'))
             expect(self.page.locator('[data-job-monitor-note]')).to_contain_text('Проверено в')
+            self.page.locator('.ux-create-job > summary').click()
             self.page.locator('#id_name').fill('Несохранённый текст')
+            self.page.locator('.admin-job-details > summary').click()
             self.page.locator('.calculation-history summary').click()
             snapshot.update(status='Завершено', history=[{'id': 1, 'started': '24.10.2026 12:00:00',
                 'duration': '00:05:42', 'status': 'Завершено', 'message': '<script>history message</script>'}])
