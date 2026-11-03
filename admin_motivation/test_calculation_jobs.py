@@ -69,6 +69,8 @@ class CalculationJobsTests(TestCase):
         definition = 'ALTER PROCEDURE [motivation].[sp_CalcBySub] AS SELECT IIF(SUM(Fact) OVER(PARTITION BY SubdivisionName)/SUM(Plan_) OVER(PARTITION BY SubdivisionName)<0.8,1,0) FROM [DataWH].[dbo].[Subdivisions];'
         from .test_pilot_calculation import procedure
         definition+='\n'+procedure().split(' AS\n',1)[1]
+        from .test_director_participation import SOURCE
+        definition += '\n' + SOURCE
         self.cursor.fetchone.return_value = (definition, None)
         self.cursor.fetchall.return_value = [('SubdivisionKey',), ('SubdivisionName',)]
         jobs.prepare(self.cursor)
@@ -76,6 +78,7 @@ class CalculationJobsTests(TestCase):
         self.assertIn('CREATE PROCEDURE motivation.PortalCalcBySub', sql)
         self.assertIn('DataWH.motivation.PortalCalculationSubdivisions', sql)
         self.assertNotIn('ALTER PROCEDURE [motivation].[sp_CalcBySub]', sql)
+        self.assertEqual(sql.count("COALESCE(LTRIM(RTRIM([ТипКоэф])),N'')<>N'Директора'"), 2)
         view_sql = next(call.args[0] for call in self.cursor.execute.call_args_list if call.args[0].startswith('ALTER VIEW motivation.PortalCalculationSubdivisions'))
         self.assertIn("N'Вентиляция'",view_sql)
         self.assertIn('COALESCE(m.TargetName,s.SubdivisionName)',view_sql)

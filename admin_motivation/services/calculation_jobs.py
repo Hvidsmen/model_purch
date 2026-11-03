@@ -160,6 +160,8 @@ def prepare(cursor, variant='main'):
     changed = patch_first_quarter_inputs(changed)
     from .payout_threshold import parameterize
     changed = parameterize(changed)
+    from .director_participation import patch as include_director_subdivisions
+    changed = include_director_subdivisions(changed)
     from ..models import SubdivisionManagerCoeff
     if SubdivisionManagerCoeff.objects.filter(version__status='approved').exists():
         from .manager_correction import patch
