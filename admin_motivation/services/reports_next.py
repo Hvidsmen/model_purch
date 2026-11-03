@@ -3,7 +3,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from decimal import Decimal
 from django.core.exceptions import PermissionDenied, ValidationError
-from base.access import role_for, ADMIN, DIRECTOR, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, PERSONAL_ROLES, REPORT_ROLES
+from base.access import role_for, ADMIN, DIRECTOR, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN, PERSONAL_ROLES, REPORT_ROLES
 from base.report_access import politician_scope, scoped_values
 from ..models import GlobalCoeffVersion, SalesPlanScenario, Goods, Subdivision, DirectorEmployee
 from .reports import load_report, number
@@ -22,15 +22,18 @@ PERIODS = [('all', 'Все доступные периоды'), ('4', '4 ква�
 def available(user):
     role = role_for(user, 'motivation')
     keys = ['detail', 'deals']
-    if role in (*PERSONAL_ROLES, ADMIN):
+    if role in (*PERSONAL_ROLES, ADMIN, BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
         keys.insert(0, 'mine')
     if role not in PERSONAL_ROLES:
         keys.insert(0, 'team')
-    if role in (ADMIN, FINANCIER):
+    if role in (ADMIN, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN):
         keys.append('registry')
     if role not in REPORT_ROLES:
         keys.append('executive')
-    return {key: CATALOG[key] for key in keys}
+    catalog = {key: CATALOG[key] for key in keys}
+    if role in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
+        catalog['mine'] = ('Премия сотрудника' if role == BRANCH_DIRECTOR else 'Моя премия/Премия сотрудников', 'Премия выбранного сотрудника в рамках доступных подразделений и видов мотивации.')
+    return catalog
 
 
 def period_code(label):
@@ -75,6 +78,10 @@ def restrict(user, query):
     scope = politician_scope(user)
     if role_for(user, 'motivation') in REPORT_ROLES and not scope:
         raise PermissionDenied
+    if scope and role_for(user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
+        branches = scope['subdivision'] if isinstance(scope['subdivision'], list) else [scope['subdivision']]
+        if any(value not in branches for value in query.getlist('subdivision')):
+            raise PermissionDenied
     allowed = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
     allowed = [allowed] if isinstance(allowed, str) else allowed
     selected = selected_types(query, allowed)
@@ -272,3 +279,45 @@ def planned_budget(execution, scenario, query):
             differences(item.get('children', []))
     differences(result)
     return result
+
+
+def employee_context(user, query):
+    """Normalize one trusted branch and worker type for the employee report."""
+    scope, kinds, _ = restrict(user, query)
+    if not scope:
+        raise PermissionDenied
+    branches = scope['subdivision'] if isinstance(scope['subdivision'], list) else [scope['subdivision']]
+    allowed = scope['type'] if isinstance(scope['type'], list) else [scope['type']]
+    branch = query.getlist('subdivision')[0] if query.getlist('subdivision') else branches[0]
+    worker = query.getlist('type')[0] if query.getlist('type') else 'Политики' if 'Политики' in allowed else allowed[0]
+    query.setlist('subdivision', [branch])
+    query.setlist('type', [worker])
+    return {'branches': branches, 'types': allowed, 'branch': branch, 'worker': worker}
+
+
+def employee_authors(user, branch, worker, year):
+    from base.report_access import worker_scope
+    scope = politician_scope(user)
+    if not scope:
+        raise PermissionDenied
+    branches = scope['subdivision'] if isinstance(scope['subdivision'], list) else [scope['subdivision']]
+    allowed = scope['type'] if isinstance(scope['type'], list) else [scope['type']]
+    if branch not in branches or worker not in allowed:
+        raise PermissionDenied
+    scope = worker_scope(scope, 'manager-detail', {'TypeCoeff_': worker})
+    if not scope.get('all_authors'):
+        return [scope['author']]
+    from ..conns import connect_database
+    from .reports import bind_sql, fetch
+    from .report_periods import PILOT_SQL
+    from .subdivision_scope import sql_predicate
+    sql, args = bind_sql('SELECT DISTINCT [АвторСделки] AS author FROM DataWH.motivation.ReportMotivationByDealAuthor WHERE '
+        '[Подразделение] IN (@Subdivision) AND [ТипКоэф] IN (@TypeCoeff_) AND [Год] IN (@Years) AND ' + PILOT_SQL + ' AND ' + sql_predicate('[Подразделение]'),
+        {'Subdivision': [branch], 'TypeCoeff_': [worker], 'Years': [year]})
+    connection, cursor = connect_database('vm-dwh', 'DataWH')
+    try:
+        connection.timeout = 30
+        from .manager_detail import unallocated_author
+        return sorted({str(row['author']).strip() for row in fetch(cursor, sql, args) if row.get('author') and str(row['author']).strip() and not unallocated_author(row['author'])})
+    finally:
+        connection.close()

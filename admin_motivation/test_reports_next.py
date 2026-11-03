@@ -113,7 +113,7 @@ class ReportsNextTests(TestCase):
         user.groups.add(Group.objects.get(name=POLITICIAN))
         MotivationReportAccess.objects.create(user=user, subdivision=self.fixture.subs[0], deal_author='Own Author')
         self.client.force_login(user)
-        self.assertEqual(self.client.get(reverse('motivation_report_next', args=['registry'])).status_code, 403)
+        self.assertEqual(self.client.get(reverse('motivation_report_next', args=['registry'])).status_code, 200)
         self.assertEqual(self.client.get(reverse('motivation_report_next', args=['executive'])).status_code, 403)
         own = dict(detail_rows()[1], Подразделение='A', АвторСделки='Own Author')
         data = manager_detail_report([own])
@@ -442,7 +442,7 @@ class ReportsNextTests(TestCase):
             if role == POLITICIAN:
                 self.assertNotContains(response, 'Работа с моделью')
                 self.assertEqual(self.client.post(reverse('index_admin_motivation')).status_code, 403)
-                self.assertEqual(self.client.get(reverse('motivation_report_next', args=['registry'])).status_code, 403)
+                self.assertEqual(self.client.get(reverse('motivation_report_next', args=['registry'])).status_code, 200)
         unscoped = User.objects.create_user('ux-no-scope')
         unscoped.groups.add(Group.objects.get(name=POLITICIAN)); self.client.force_login(unscoped)
         self.assertEqual(self.client.get(reverse('index_admin_motivation')).status_code, 403)
@@ -487,7 +487,7 @@ class ReportsNextTests(TestCase):
                 self.assertNotIn(name, values)
         employee = User.objects.create_user('nav-employee')
         employee.groups.add(Group.objects.get(name=POLITICIAN))
-        self.assertEqual({item['key'] for item in report_navigation(employee, 'mine', query)}, {'mine', 'detail', 'deals'})
+        self.assertEqual({item['key'] for item in report_navigation(employee, 'mine', query)}, {'mine', 'detail', 'deals', 'registry'})
 
     def test_team_possible_uses_fact_before_percentage_in_usd_and_rub(self):
         for currency, expected in [('USD', Decimal(600)), ('RUB', Decimal(60000))]:

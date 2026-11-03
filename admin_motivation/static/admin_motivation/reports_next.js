@@ -44,6 +44,15 @@
  document.querySelector('[data-executive-expand]')?.addEventListener('click', () => document.querySelectorAll('.nr-exec-node').forEach(node => { node.open = true; }));
  document.querySelector('[data-executive-collapse]')?.addEventListener('click', () => document.querySelectorAll('.nr-exec-node').forEach(node => { node.open = false; }));
  const form = document.getElementById('native-report-filters');
+ if (form?.hasAttribute('data-employee-report')) {
+  form.querySelectorAll('[data-employee-selector]').forEach(select => select.addEventListener('change', () => {
+   form.elements.author.value = '';
+   const refresh = document.createElement('button');
+   refresh.type = 'submit'; refresh.hidden = true; refresh.formNoValidate = true;
+   refresh.name = 'employee_refresh'; refresh.value = '1'; form.appendChild(refresh);
+   form.requestSubmit(refresh);
+  }));
+ }
  if (form) {
   const snapshot = () => JSON.stringify([...new FormData(form).entries()].filter(([key]) => key !== 'run').sort(([a, av], [b, bv]) => a.localeCompare(b) || String(av).localeCompare(String(bv))));
   const applied = snapshot();

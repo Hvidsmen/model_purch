@@ -1,5 +1,5 @@
 {% load report_format %}
-<div class="nr-section-title"><h2 id="my-premium-periods" tabindex="-1">Ваша премия по периодам</h2><span>С учётом условий выполнения</span></div>
+<div class="nr-section-title"><h2 id="my-premium-periods" tabindex="-1">{% if employee_report %}Премия сотрудника по периодам{% else %}Ваша премия по периодам{% endif %}</h2><span>С учётом условий выполнения</span></div>
 <div class="nr-card-grid nr-with-total nr-personal-cards">
 {% for card in presentation.period_cards %}
 <article class="nr-period"><div class="nr-period-head"><span>{% if card.label == "Год" %}Годовая премия{% else %}Премия за {{ card.label }}{% endif %}</span><span class="nr-status">Рассчитано</span></div>

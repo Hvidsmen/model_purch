@@ -2,7 +2,7 @@ from django.contrib.auth.views import redirect_to_login
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.urls import reverse
-from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER, motivation_viewer_read_request, FINANCIER, financier_read_request, DIRECTOR, MODELER, ANALYST
+from .access import can_access, role_for, REPORT_ROLES, BRANCH_DIRECTOR, MOTIVATION_VIEWER, motivation_viewer_read_request, FINANCIER, financier_read_request, DIRECTOR, MODELER, ANALYST, DEPUTY_DIRECTOR, POLITICIAN
 
 
 class PortalAccessMiddleware:
@@ -31,7 +31,7 @@ class PortalAccessMiddleware:
             from .report_access import politician_scope, report_kinds
             name = match.url_name if match else None
             account_pages = {'index_base', 'portal_login', 'portal_logout', 'portal_windows_login'}
-            personal = name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next') or (name == 'motivation_report_next' and view_kwargs.get('kind') in ('mine', 'team', 'detail', 'deals')) or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
+            personal = name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next') or (name == 'motivation_report_next' and (view_kwargs.get('kind') in ('mine', 'team', 'detail', 'deals') or view_kwargs.get('kind') == 'registry' and role_for(request.user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN))) or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
             static = module == 'django.views.static' and request.path.startswith(settings.STATIC_URL)
             if personal:
                 request.personal_report_scope = politician_scope(request.user)

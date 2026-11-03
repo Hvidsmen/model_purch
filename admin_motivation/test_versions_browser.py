@@ -1230,6 +1230,49 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             self.page.screenshot(path='/tmp/new-closed-deals-mobile.png', full_page=True)
         self.assertEqual(self.errors, [])
 
+    def test_branch_director_selects_employee_and_sees_scoped_registry(self):
+        from contextlib import nullcontext
+        from uuid import uuid4
+        from django.utils import timezone
+        from django.test import Client
+        from django.conf import settings
+        from playwright.sync_api import expect
+        from base.access import BRANCH_DIRECTOR
+        from base.test_branch_roles import BranchRoleTests
+        from .models import MotivationExecution
+        from .services.manager_detail import manager_detail_report
+        from .test_manager_detail import detail_rows
+        def prepare():
+            fixture = BranchRoleTests(); fixture.setUp()
+            MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed', started_at=timezone.now(), completed_at=timezone.now(), parameters={'fact_year': 2026})
+            client = Client(); client.force_login(fixture.users[BRANCH_DIRECTOR])
+            return client.cookies[settings.SESSION_COOKIE_NAME].value
+        cookie = self.db(prepare)
+        self.page.context.add_cookies([{'name': settings.SESSION_COOKIE_NAME, 'value': cookie, 'url': self.live_server_url}])
+        def load(kind, values, **kwargs):
+            return manager_detail_report([dict(detail_rows()[1], Подразделение=values['Subdivision'][0], АвторСделки=(values.get('DealAuthor') or ['Alice'])[0])])
+        with patch('admin_motivation.services.reports_next.employee_authors', return_value=['Alice', 'Bob']), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', side_effect=load) as loaded:
+            self.page.goto(self.live_server_url + reverse('index_admin_motivation'))
+            expect(self.page.get_by_role('link', name='Премия сотрудника', exact=False)).to_be_visible()
+            self.page.get_by_role('link', name='Премия сотрудника', exact=False).click()
+            expect(self.page.get_by_role('heading', name='Премия сотрудника', exact=True)).to_be_visible()
+            expect(self.page.locator('select[name=subdivision] option')).to_have_count(2)
+            self.page.locator('select[name=author]').select_option('Alice')
+            with self.page.expect_navigation():
+                self.page.locator('select[name=subdivision]').select_option('Allowed-B')
+            expect(self.page.locator('select[name=subdivision]')).to_have_value('Allowed-B')
+            expect(self.page.locator('select[name=author]')).to_have_value('')
+            self.page.locator('select[name=author]').select_option('Bob')
+            self.page.get_by_role('button', name='Показать', exact=True).click()
+            expect(self.page.locator('.nr-subtitle')).to_contain_text('Allowed-B · Bob')
+            self.assertEqual(loaded.call_args.args[1]['DealAuthor'], ['Bob'])
+            self.assertEqual(loaded.call_args.args[1]['Subdivision'], ['Allowed-B'])
+            self.page.screenshot(path='/tmp/director-employee-premium.png', full_page=True)
+            self.page.get_by_role('link', name='Реестр', exact=True).click()
+            expect(self.page.get_by_role('heading', name='Реестр премий к выплате')).to_be_visible()
+            self.assertTrue(all(set(call.args[1]['Subdivision']) <= {'Allowed-A', 'Allowed-B'} for call in loaded.call_args_list))
+        self.assertEqual(self.errors, [])
+
     def setUp(self):
         authorize_test_case(self)
         self.first, _ = GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001, 1, 1))

@@ -8,7 +8,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.http import require_GET
-from base.access import role_for, REPORT_ROLES, PERSONAL_ROLES, ADMIN
+from base.access import role_for, REPORT_ROLES, PERSONAL_ROLES, ADMIN, BRANCH_DIRECTOR, DEPUTY_DIRECTOR
 from .models import MotivationExecution, SalesPlanScenario, Subdivision
 from .services import reports_next as reports
 
@@ -29,12 +29,14 @@ def report_navigation(user, kind, query):
         shared['run'] = '1'
     captions = {'mine': 'Моя премия', 'team': 'Команда', 'registry': 'Реестр',
                 'executive': 'Сравнение плана', 'detail': 'Детальный расчёт', 'deals': 'Сделки'}
+    if role_for(user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
+        captions['mine'] = reports.available(user)['mine'][0]
     return [{'key': key, 'label': captions[key], 'active': key == kind,
              'url': reverse('motivation_report_next', args=[key]) + ('?' + shared.urlencode() if shared else '')}
             for key in reports.available(user)]
 
 
-def workbook(kind, data, metadata, query=None):
+def workbook(kind, data, metadata, query=None, title=None):
     from openpyxl import Workbook
     from openpyxl.cell import WriteOnlyCell
     from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
@@ -51,7 +53,7 @@ def workbook(kind, data, metadata, query=None):
                 cell.number_format = '0.00%' if position in percent_columns or kind == 'executive' and position == 4 else '#,##0.00'
             cells.append(cell)
         sheet.append(cells)
-    append([reports.CATALOG[kind][0]])
+    append([title or reports.CATALOG[kind][0]])
     if kind == 'executive':
         append(['Подразделение / вид мотивации / директор', 'План: глобальные коэффициенты, USD', 'План: коэффициенты подразделений, USD', 'Разница, USD', 'Разница, %', 'План продаж, USD', 'DDP, USD', 'Глобальная мотивация, % от плана', 'Мотивация подразделений, % от плана', 'Наценка глобальная', 'Наценка подразделений', 'Отклонение наценки'])
         def write(nodes, indent=0):
@@ -159,6 +161,9 @@ def report(request, kind):
     query = request.GET.copy()
     query.pop('execution', None)
     report_user = request.user
+    employee_report = kind == 'mine' and role_for(request.user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR)
+    employee_filters = None
+    employee_authors = []
     preview_accounts, preview_user = [], None
     admin_preview = role_for(request.user, 'motivation') == ADMIN and kind in ('mine', 'detail')
     if admin_preview:
@@ -174,6 +179,8 @@ def report(request, kind):
     else:
         query.pop('preview_user', None)
     try:
+        if employee_report:
+            employee_filters = reports.employee_context(request.user, query)
         scope, types, period = reports.restrict(report_user, query)
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
@@ -203,7 +210,20 @@ def report(request, kind):
     if preview_user:
         metadata.insert(1, ('Личный отчёт сотрудника', preview_user.motivation_report_access.deal_author))
     try:
+        if employee_report and selected:
+            employee_authors = reports.employee_authors(request.user, employee_filters['branch'], employee_filters['worker'], query['year'])
+            authors = [author for author in query.getlist('author') if author]
+            if not authors:
+                query.pop('author', None)
+            if len(authors) > 1 or any(author not in employee_authors for author in authors):
+                raise PermissionDenied
+            if not authors and len(employee_authors) == 1:
+                query.setlist('author', employee_authors)
+            if query.get('author'):
+                metadata.append(('Сотрудник', query['author']))
         if query.get('run') == '1' or query.get('export') == 'xlsx':
+            if employee_report and not query.get('author'):
+                raise ValidationError('Выберите сотрудника в доступном подразделении.')
             if kind == 'mine' and admin_preview and preview_user is None:
                 raise ValidationError('Выберите сотрудника для предпросмотра личной премии.')
             if not selected:
@@ -238,7 +258,7 @@ def report(request, kind):
                     from .services.report_excel import report_excel
                     output = report_excel(detail, {'Currency': query['currency'], 'Years': [query['year']], 'TypeCoeff_': query.getlist('type'), 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'), 'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand')}, query.get('table', 'all'), provenance=metadata)
                 else:
-                    output = workbook(kind, data, metadata, query=query)
+                    output = workbook(kind, data, metadata, query=query, title=reports.available(request.user)[kind][0])
                 return FileResponse(output, as_attachment=True, filename=f'motivation-next-{kind}.xlsx', content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
             if detail:
                 detail['excel_urls'] = {}
@@ -283,7 +303,8 @@ def report(request, kind):
     page_query.pop('export', None)
     all_types = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
     all_types = [all_types] if isinstance(all_types, str) else all_types
-    return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.CATALOG[kind][0],
+    return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.available(request.user)[kind][0],
+        'employee_report': employee_report, 'employee_filters': employee_filters, 'employee_authors': employee_authors,
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
         'reset_url': '?' + reset_query.urlencode(), 'branch_label': branch_label or 'Все доступные подразделения', 'selected_branches': selected_subs, 'all_types': all_types, 'type_choices': [{'value': value, 'selected': value in query.getlist('type')} for value in all_types], 'type_label': ', '.join(query.getlist('type')) or 'Все доступные виды',
