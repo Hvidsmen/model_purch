@@ -94,8 +94,10 @@ def calculations(request):
                 messages.success(request, 'Параметры задания сохранены и переданы серверу расчёта. Для ручного расчёта нажмите «Запустить сейчас»; для автоматического проверьте расписание.')
                 return redirect('motivation_calculations')
         except Exception as error:
-            text = ' '.join(error.messages) if isinstance(error, ValidationError) else 'Не удалось настроить или запустить SQL Agent. Проверьте DWH_SQL_CONN_STR, службу Agent и права на создание заданий и процедур; подробности в журнале.'
-            logger.exception('Motivation calculation job operation failed')
+            from uuid import uuid4
+            reference = uuid4().hex[:12]
+            text = calculation_jobs.failure_message(error, reference)
+            logger.exception('Motivation calculation job operation failed [%s]', reference)
             if job and job.pk:
                 job.synced, job.error = False, text
                 job.save(update_fields=['synced', 'error'])

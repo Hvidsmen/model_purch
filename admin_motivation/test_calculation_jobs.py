@@ -217,3 +217,47 @@ class CalculationJobsTests(TestCase):
         self.cursor.fetchone.return_value = (None, None, 1, 'Previous success', datetime(2026, 10, 24, 12), 180)
         self.cursor.fetchall.return_value = []
         self.assertEqual(jobs.monitor(self.job, self.connector)['status'], 'Ожидает запуска')
+
+
+class CalculationFailureDiagnosticsTests(TestCase):
+    def test_prepare_failure_has_stage_and_rolls_back(self):
+        job = MotivationCalculationSchedule(fact_year=2026, plan_version='Test')
+        connection, cursor = MagicMock(), MagicMock()
+        with patch.object(jobs, 'prepare', side_effect=RuntimeError('private details')):
+            with self.assertRaises(jobs.JobOperationError) as caught:
+                jobs.sync_job(job, lambda *args: (connection, cursor))
+        self.assertEqual(caught.exception.stage, 'Подготовка расчётной процедуры')
+        connection.rollback.assert_called_once()
+        connection.commit.assert_not_called()
+        connection.close.assert_called_once()
+        text = jobs.failure_message(caught.exception, 'test123')
+        self.assertIn('Подготовка расчётной процедуры', text)
+        self.assertNotIn('private details', text)
+        self.assertIn('test123', text)
+
+    def test_sql_diagnostic_does_not_expose_connection_or_query(self):
+        import pyodbc
+        error = jobs.JobOperationError('Подготовка расчётной процедуры', pyodbc.ProgrammingError(
+            '42000', "[SQL Server]Incorrect syntax near 'PWD=private-secret;SELECT private_data' (102) (SQLExecDirectW)"))
+        text = jobs.failure_message(error, 'ref123')
+        self.assertIn('SQLSTATE 42000', text)
+        self.assertIn('SQL 102', text)
+        self.assertIn('Ошибка синтаксиса SQL', text)
+        self.assertNotIn('private', text)
+
+    def test_missing_connection_and_validation_are_actionable(self):
+        text = jobs.failure_message(RuntimeError('Не настроено подключение к SQL Server: задайте DWH_SQL_CONN_STR'), 'ref')
+        self.assertIn('перезапустите Django', text)
+        self.assertEqual(jobs.failure_message(ValidationError('Проверьте план'), 'ref'), 'Проверьте план')
+
+    def test_admin_run_failure_is_persisted_with_reference(self):
+        authorize_test_case(self)
+        job = MotivationCalculationSchedule.objects.create(name='Test', fact_year=2026, plan_version='Test')
+        with patch.object(jobs, 'start_job', side_effect=jobs.JobOperationError('Запуск задания SQL Agent', RuntimeError('secret'))):
+            response = self.client.post(reverse('motivation_calculations'), {'job': job.pk, 'action': 'run'})
+        self.assertContains(response, 'Запуск задания SQL Agent')
+        self.assertContains(response, 'Код обращения:')
+        self.assertNotContains(response, 'secret')
+        job.refresh_from_db()
+        self.assertFalse(job.synced)
+        self.assertIn('Код обращения:', job.error)

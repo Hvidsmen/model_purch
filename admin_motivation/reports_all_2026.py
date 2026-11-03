@@ -109,9 +109,11 @@ def report(request):
                 return redirect(reverse('motivation_report_all_2026') + '?run=1')
             except ValidationError as exc:
                 error = ' '.join(exc.messages)
-            except Exception:
-                logging.getLogger(__name__).exception('Additional 2026 run failed')
-                error = 'Не удалось запустить дополнительный расчёт. Проверьте подключение DataWH и SQL Server Agent.'
+            except Exception as exc:
+                from uuid import uuid4
+                reference = uuid4().hex[:12]
+                logging.getLogger(__name__).exception('Additional 2026 run failed [%s]', reference)
+                error = calculation_jobs.failure_message(exc, reference)
             job.error = error; job.save(update_fields=['error'])
     job = MotivationCalculationSchedule.objects.filter(variant=ALL_2026).order_by('-created_at', '-pk').first()
     observed = observe(job, persist=can_start) if job else None

@@ -7,6 +7,47 @@ from django.core.exceptions import ValidationError
 from ..conns import connect_database
 from .subdivision_aliases import rules
 
+class JobOperationError(RuntimeError):
+    """Preserve the underlying exception for server logs and label its stage."""
+    def __init__(self, stage, cause):
+        self.stage, self.cause = stage, cause
+        super().__init__(f'{stage}: {cause}')
+
+
+def failure_message(error, reference):
+    """Only allowlisted diagnostics reach the UI; never connection strings."""
+    if isinstance(error, ValidationError):
+        return ' '.join(error.messages)
+    stage = getattr(error, 'stage', 'Операция SQL Agent')
+    cause = getattr(error, 'cause', error)
+    import pyodbc
+    reason, codes = 'Подробности записаны в журнале сервера.', []
+    if isinstance(cause, pyodbc.Error):
+        args = cause.args
+        state = str(args[0]) if args else ''
+        if re.fullmatch(r'[A-Z0-9]{5}', state):
+            codes.append('SQLSTATE ' + state)
+        numbers = re.findall(r'\((\d{1,6})\)', ' '.join(str(arg) for arg in args[1:]))
+        codes.extend('SQL ' + number for number in dict.fromkeys(numbers))
+        known = {
+            '102': 'Ошибка синтаксиса SQL при подготовке процедуры или задания.',
+            '207': 'SQL Server не распознал имя колонки в процедуре.',
+            '208': 'SQL Server не нашёл таблицу или представление.',
+            '229': 'Недостаточно прав SQL Server для этой операции.',
+            '15151': 'Объект SQL Server не найден или нет прав доступа.',
+            '22022': 'SQL Agent отклонил запуск. Проверьте службу Agent и состояние задания.',
+        }
+        reason = next((known[number] for number in numbers if number in known), reason)
+        if state.startswith('08') or state in ('HYT00', 'HYT01'):
+            reason = 'Не удалось подключиться к SQL Server или истекло время ожидания.'
+        elif state == '28000':
+            reason = 'SQL Server отклонил вход. Проверьте учётную запись подключения.'
+    elif isinstance(cause, RuntimeError) and str(cause).startswith('Не настроено подключение к SQL Server:'):
+        reason = 'Не задано подключение DWH_SQL_CONN_STR. Настройте его на сервере портала и перезапустите Django.'
+    code = (' [' + ', '.join(codes) + ']') if codes else ''
+    return f'Не удалось выполнить расчёт. Этап: {stage}.{code} {reason} Код обращения: {reference}.'
+
+
 PROC = 'motivation.PortalCalcBySub'
 LOCKED_COMMAND = """DECLARE @result int;
 EXEC @result = sys.sp_getapplock @Resource=N'PortalMotivationCalculation',
@@ -131,6 +172,7 @@ def prepare(cursor, variant='main'):
 def sync_job(job, connector=None):
     command = calculation_command(job)
     connection = None
+    stage = 'Подключение к DataWH'
     try:
         connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
         connection.autocommit = False
@@ -138,15 +180,20 @@ def sync_job(job, connector=None):
         from ..models import SubdivisionMergeLog
         if any(not row.details.get('sql_synced') for row in SubdivisionMergeLog.objects.all()):
             raise ValidationError('Сначала синхронизируйте объединение подразделений с SQL Server на странице объединения.')
+        stage = 'Блокировка параллельного расчёта'
         cursor.execute("""DECLARE @r int; EXEC @r=sys.sp_getapplock
           @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;
           IF @r < 0 THROW 50001,N'Дождитесь завершения расчёта мотивации',1;""")
         from .calculation_variants import variant_of, MAIN
         variant = variant_of(job)
+        stage = 'Подготовка расчётной процедуры'
         prepare(cursor) if variant == MAIN else prepare(cursor, variant)
         from .execution_tracking import DDL
+        stage = 'Подготовка журнала запусков'
         cursor.execute(DDL)
+        stage = 'Проверка параметров процедуры и плана'
         validate_sql_parameters(cursor, job)
+        stage = 'Настройка задания SQL Agent'
         name = job_name(job)
         cursor.execute('SELECT job_id FROM msdb.dbo.sysjobs WHERE name=?', name)
         exists = cursor.fetchone()
@@ -160,6 +207,7 @@ def sync_job(job, connector=None):
         schedule = cursor.fetchone()
         if schedule:
             cursor.execute('EXEC msdb.dbo.sp_detach_schedule @job_name=?, @schedule_id=?, @delete_unused_schedule=1', name, schedule[0])
+        stage = 'Настройка расписания SQL Agent'
         if job.enabled and job.mode != 'manual':
             if job.run_at is None:
                 raise ValidationError('Укажите дату и время расписания.')
@@ -170,11 +218,17 @@ def sync_job(job, connector=None):
             instant = job.run_at.astimezone(ZoneInfo('UTC')).replace(tzinfo=None) + timedelta(minutes=offset)
             cursor.execute('EXEC msdb.dbo.sp_add_jobschedule @job_name=?, @name=?, @freq_type=?, @freq_interval=1, @active_start_date=?, @active_start_time=?',
                            name, name, 4 if job.mode == 'daily' else 1, int(instant.strftime('%Y%m%d')), int(instant.strftime('%H%M%S')))
+        stage = 'Сохранение задания SQL Agent'
         connection.commit()
-    except Exception:
+    except Exception as error:
         if connection is not None:
-            connection.rollback()
-        raise
+            try:
+                connection.rollback()
+            except Exception:
+                pass  # Keep the original failure, including a lost connection.
+        if isinstance(error, ValidationError):
+            raise
+        raise JobOperationError(stage, error) from error
     finally:
         if connection is not None:
             connection.close()
@@ -187,6 +241,8 @@ def start_job(job, connector=None):
         connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
         cursor.execute('EXEC msdb.dbo.sp_start_job @job_name=?', job_name(job))
         connection.commit()
+    except Exception as error:
+        raise JobOperationError('Запуск задания SQL Agent', error) from error
     finally:
         if connection is not None:
             connection.close()
