@@ -10,9 +10,9 @@ from django.urls import reverse
 from django.utils import timezone
 from django.core.exceptions import ValidationError
 from openpyxl import load_workbook
-from base.access import POLITICIAN
-from base.models import MotivationReportAccess
-from .models import MotivationCalculationSchedule, MotivationExecution, SalesPlanScenario, Chanel, Subdivision
+from base.access import POLITICIAN, SALES, DIRECTOR, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, FINANCIER, MODELER, MOTIVATION_VIEWER, ADMIN
+from base.models import MotivationReportAccess, PortalReportGroup
+from .models import MotivationCalculationSchedule, MotivationExecution, SalesPlanScenario, Chanel, Subdivision, TypeCoeff
 from .services.calculation_variants import ALL_2026, isolate, full_year_patch, main_runs
 from .services.calculation_jobs import calculation_command
 from .services.execution_tracking import parameters
@@ -113,17 +113,16 @@ class All2026ViewTests(TestCase):
         self.assertEqual((job.variant, job.fact_year, job.mode, job.enabled), (ALL_2026, 2026, 'manual', False))
         self.assertTrue(MotivationCalculationSchedule.objects.filter(pk=job.pk, variant=ALL_2026).exists())
 
-    def test_personal_read_access_and_export_never_expand_scope(self):
+    def test_personal_roles_cannot_open_additional_report_or_export(self):
         channel = Chanel.objects.create(chanel_name='All-year')
         branch = Subdivision.objects.create(subdivision_key='A', subdivision_name='A', subdivision_global='A', chanel=channel)
         user = User.objects.create_user('all-year-policy'); user.groups.add(Group.objects.get(name=POLITICIAN))
         MotivationReportAccess.objects.create(user=user, subdivision=branch, deal_author='Own')
         self.client.force_login(user)
-        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=self.source('Own')) as load:
-            response = self.client.get(self.url, {'run':'1', 'author':'Foreign'})
-            self.assertEqual(response.status_code, 200)
-            self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Own'])
-            self.assertEqual(load.call_args.args[1]['Subdivision'], ['A'])
+        with patch('admin_motivation.services.reports_next.load_report') as load:
+            self.assertEqual(self.client.get(self.url, {'run':'1'}).status_code, 403)
+            self.assertEqual(self.client.get(self.url, {'export':'xlsx'}).status_code, 403)
+            load.assert_not_called()
         self.assertEqual(self.client.get(self.url, {'run':'1', 'subdivision':'Foreign'}).status_code, 403)
         self.assertEqual(self.client.post(self.url, {'plan_version':'Plan'}).status_code, 403)
 
@@ -135,7 +134,7 @@ class All2026ViewTests(TestCase):
             'VariationCalculate': 'Подразделение(Глобально)', 'Plan_': 200, 'Fact_': 150}]
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source) as load:
             response = self.client.get(self.url, {'run':'1', 'type':'Политики'})
-        self.assertContains(response, 'План-факт мотивации подразделений')
+        self.assertContains(response, 'План-факт по базам мотивации')
         self.assertEqual(response.context['data']['plan_fact'][0]['plan'], 200)
         self.assertEqual(response.context['data']['plan_fact'][0]['fact'], 150)
         self.assertTrue(all(call.kwargs['summary_only'] is True for call in load.call_args_list))
@@ -150,3 +149,59 @@ class All2026ViewTests(TestCase):
         self.assertEqual(second.status_code, 302)
         self.assertEqual(MotivationCalculationSchedule.objects.filter(variant=ALL_2026).count(), 1)
         start.assert_called_once()
+
+    def role_account(self, role, name):
+        user = User.objects.create_user(name)
+        user.groups.add(Group.objects.get(name=role))
+        channel, _ = Chanel.objects.get_or_create(chanel_name='Access')
+        branch, _ = Subdivision.objects.get_or_create(subdivision_key='A', defaults={
+            'subdivision_name': 'A', 'subdivision_global': 'A', 'chanel': channel})
+        MotivationReportAccess.objects.create(user=user, subdivision=branch, deal_author='Own')
+        if role in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
+            group = Group.objects.create(name=name + '-scope')
+            config = PortalReportGroup.objects.create(group=group, portal_role=role)
+            config.subdivisions.add(branch)
+            user.groups.add(group)
+        TypeCoeff.objects.get_or_create(type_coeff_name='Политики')
+        return user
+
+    def test_explicit_roles_see_link_and_can_read_and_export(self):
+        index = reverse('motivation_reports_next')
+        for role in (ADMIN, DIRECTOR, BRANCH_DIRECTOR):
+            with self.subTest(role=role):
+                user = self.role_account(role, 'allowed-' + str(len(User.objects.all())))
+                self.client.force_login(user)
+                response = self.client.get(index)
+                self.assertContains(response, self.url)
+                with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=self.source('Own')):
+                    response = self.client.get(self.url, {'run': '1', 'type': 'Политики'})
+                    self.assertEqual(response.status_code, 200)
+                    exported = self.client.get(self.url, {'export': 'xlsx', 'type': 'Политики'})
+                    self.assertEqual(exported.status_code, 200)
+                    exported.close()
+
+    def test_other_roles_do_not_see_link_and_cannot_open_by_url(self):
+        for role in (POLITICIAN, SALES, DEPUTY_DIRECTOR, FINANCIER, MODELER, MOTIVATION_VIEWER):
+            with self.subTest(role=role):
+                user = self.role_account(role, 'denied-' + str(len(User.objects.all())))
+                self.client.force_login(user)
+                self.assertNotContains(self.client.get(reverse('motivation_reports_next')), self.url)
+                with patch('admin_motivation.services.reports_next.load_report') as load:
+                    self.assertEqual(self.client.get(self.url, {'run': '1'}).status_code, 403)
+                    self.assertEqual(self.client.get(self.url, {'export': 'xlsx'}).status_code, 403)
+                    load.assert_not_called()
+
+    def test_read_access_does_not_grant_starting_calculations(self):
+        for role in (DIRECTOR, BRANCH_DIRECTOR):
+            user = self.role_account(role, 'readonly-' + str(len(User.objects.all())))
+            self.client.force_login(user)
+            with patch('admin_motivation.services.calculation_jobs.start_job') as start:
+                self.assertEqual(self.client.post(self.url, {'plan_version': 'Plan'}).status_code, 403)
+                start.assert_not_called()
+
+    def test_director_remains_limited_to_assigned_subdivisions(self):
+        user = self.role_account(BRANCH_DIRECTOR, 'scoped-director')
+        self.client.force_login(user)
+        with patch('admin_motivation.services.reports_next.load_report') as load:
+            self.assertEqual(self.client.get(self.url, {'run': '1', 'subdivision': 'Foreign'}).status_code, 403)
+            load.assert_not_called()

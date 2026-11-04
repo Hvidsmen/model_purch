@@ -16,7 +16,9 @@ from .services import reports_next as reports
 
 @require_GET
 def index(request):
-    return render(request, 'admin_motivation/reports_next/index.html', {'catalog': reports.available(request.user)})
+    from .services.all_2026_access import can_view
+    return render(request, 'admin_motivation/reports_next/index.html', {
+        'catalog': reports.available(request.user), 'can_view_all_2026': can_view(request.user)})
 
 
 def report_navigation(user, kind, query):
