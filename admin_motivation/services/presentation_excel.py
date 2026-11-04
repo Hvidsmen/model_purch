@@ -75,21 +75,21 @@ def workbook(kind, data, metadata, query=None, title=None):
         return ws
 
     period_headers = [column['label'] for column in display['period_columns']]
-    headers = ['Вид мотивации', 'Сотрудников', *period_headers, 'Годовая доплата', 'Всего по расчёту', 'До условий выполнения']
-    ws = sheet('Сводка', headers, [28, 16, *([21] * len(period_headers)), 22, 24, 27],
+    headers = ['Вид мотивации', 'Сотрудников', *period_headers, 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency]
+    ws = sheet('Сводка', headers, [28, 16, *([21] * len(period_headers)), 22, 24, 48],
                'Итоги по выбранным подразделениям и периодам')
     for section in display['team_sections']:
         row(ws, [section['kind'], section['people'], *section['period_totals'],
                  section['bonus'], section['total'], section['possible']], 'subtotal')
     row(ws, ['ИТОГО', display['people'], *display['period_totals'], display['bonus'], display['total'], display['possible']], 'grand')
     row(ws, [], 'blank')
-    row(ws, ['«До условий выполнения» — мотивация на фактических отгрузках до применения процента выполнения.'], 'note')
+    row(ws, ['«Премия без учёта выполнения плана» — сумма по фактическим отгрузкам и коэффициентам без применения условия выполнения плана.'], 'note')
     row(ws, ['Подробности по сотрудникам — на отдельных листах. Состав директоров соответствует текущему справочнику.'], 'note')
 
     for section in display['team_sections']:
         ws = sheet(section['kind'][:31], ['Подразделение', 'Сотрудник', *period_headers,
-                   'Премия по расчёту', 'Годовая доплата', 'Всего по расчёту', 'До условий выполнения', 'Статус'],
-                   [26, 44, *([21] * len(period_headers)), 23, 22, 24, 27, 36],
+                   'Премия по расчёту', 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency, 'Статус'],
+                   [26, 44, *([21] * len(period_headers)), 23, 22, 24, 48, 36],
                    section['kind'] + ' · Итоги по всем страницам отчёта')
         for index, employee in enumerate(section['rows']):
             row(ws, [employee['subdivision'], employee['author'], *employee['period_values'],
@@ -102,8 +102,8 @@ def workbook(kind, data, metadata, query=None, title=None):
                  section['amount'], section['bonus'], section['total'], section['possible'], None], 'grand')
 
     ws = sheet('По периодам', ['Подразделение', 'Сотрудник', 'Вид мотивации', 'Период',
-               'Валюта', 'До условий выполнения', 'Премия по расчёту', 'Годовая доплата', 'Всего по расчёту', 'Пояснение'],
-               [26, 44, 22, 26, 12, 27, 24, 22, 24, 62],
+               'Валюта', 'Премия без учёта выполнения плана, ' + currency, 'Премия по расчёту', 'Годовая доплата', 'Всего по расчёту', 'Пояснение'],
+               [26, 44, 22, 26, 12, 48, 24, 22, 24, 62],
                'Расшифровка сумм и нулевых начислений по периодам')
     for index, item in enumerate(data['rows']):
         possible = item.get('possible')
