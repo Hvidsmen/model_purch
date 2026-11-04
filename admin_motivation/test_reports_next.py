@@ -194,6 +194,82 @@ class ReportsNextTests(TestCase):
         self.assertNotContains(response, 'Сотрудник для предпросмотра')
         self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Own Author'])
 
+    def director_preview_user(self, username='preview-director', author='Own Director', *, active=True, branch_access=True):
+        user = User.objects.create_user(username, is_active=active)
+        user.groups.add(Group.objects.get(name=BRANCH_DIRECTOR))
+        MotivationReportAccess.objects.create(user=user, subdivision=self.fixture.subs[0], deal_author=author)
+        TypeCoeff.objects.get_or_create(type_coeff_name='Директора')
+        if branch_access:
+            group = Group.objects.create(name=username + '-branch')
+            scope = PortalReportGroup.objects.create(group=group, portal_role=BRANCH_DIRECTOR)
+            scope.subdivisions.add(self.fixture.subs[0])
+            user.groups.add(group)
+        return user
+
+    def test_admin_can_preview_director_own_political_and_director_premiums(self):
+        user = self.director_preview_user()
+        url = reverse('motivation_report_next', args=['mine'])
+        response = self.client.get(url)
+        self.assertIn(user.pk, [employee.pk for employee in response.context['preview_accounts']])
+        own = dict(detail_rows()[1], Подразделение='A', АвторСделки='Own Director')
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=manager_detail_report([own])) as load:
+            response = self.client.get(url, {'run': '1', 'preview_user': user.pk, 'author': 'Foreign',
+                                            'subdivision': 'A', 'type': ['Политики', 'Директора']})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['query'].getlist('author'), ['Own Director'])
+        self.assertEqual(response.context['preview_user'].pk, user.pk)
+        self.assertEqual([call.args[1]['TypeCoeff_'] for call in load.call_args_list], ['Политики', 'Директора'])
+        for call in load.call_args_list:
+            self.assertEqual(call.args[1]['DealAuthor'], ['Own Director'])
+            self.assertEqual(call.args[1]['Subdivision'], ['A'])
+            self.assertFalse(call.kwargs['access_scope']['all_authors'])
+        self.assertFalse(response.context['employee_report'])
+        for row in response.context['ledger']['rows']:
+            self.assertIn('preview_user=', row['detail_url'])
+
+    def test_director_preview_detail_and_export_keep_own_author(self):
+        user = self.director_preview_user()
+        own = dict(detail_rows()[1], Подразделение='A', АвторСделки='Own Director')
+        query = {'run': '1', 'preview_user': user.pk, 'author': 'Foreign', 'subdivision': 'A', 'type': 'Директора'}
+        with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=manager_detail_report([own])) as load:
+            detail = self.client.get(reverse('motivation_report_next', args=['detail']), query)
+            self.assertEqual(detail.status_code, 200)
+            self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Own Director'])
+            exported = self.client.get(reverse('motivation_report_next', args=['mine']), {**query, 'export': 'xlsx'})
+            self.assertEqual(exported.status_code, 200)
+            self.assertEqual(load.call_args.args[1]['DealAuthor'], ['Own Director'])
+            self.assertFalse(load.call_args.kwargs['access_scope']['all_authors'])
+            exported.close()
+
+    def test_director_preview_rejects_other_subdivision(self):
+        user = self.director_preview_user()
+        with patch('admin_motivation.services.reports_next.load_report') as load:
+            response = self.client.get(reverse('motivation_report_next', args=['mine']),
+                                       {'run': '1', 'preview_user': user.pk, 'subdivision': 'B'})
+        self.assertEqual(response.status_code, 403)
+        load.assert_not_called()
+
+    def test_inactive_or_unconfigured_directors_are_not_preview_candidates(self):
+        users = [self.director_preview_user('inactive-director', active=False),
+                 self.director_preview_user('no-author-director', author='  '),
+                 self.director_preview_user('no-branches-director', branch_access=False)]
+        url = reverse('motivation_report_next', args=['mine'])
+        response = self.client.get(url)
+        candidates = {employee.pk for employee in response.context['preview_accounts']}
+        for user in users:
+            self.assertNotIn(user.pk, candidates)
+            with patch('admin_motivation.services.reports_next.load_report') as load:
+                response = self.client.get(url, {'run': '1', 'preview_user': user.pk})
+            self.assertEqual(response.status_code, 403)
+            load.assert_not_called()
+
+    def test_preview_scope_does_not_change_director_team_access(self):
+        from base.report_access import politician_scope
+        user = self.director_preview_user()
+        self.assertTrue(politician_scope(user)['all_authors'])
+        self.assertFalse(reports_next.preview_scope(user)['all_authors'])
+        self.assertTrue(reports_next.restrict(user, QueryDict('subdivision=A'))[0]['all_authors'])
+
     def test_presentation_groups_people_without_changing_calculation_or_export_rows(self):
         from .services.reports_next_presenter import present
         ledger = {'total': Decimal(15), 'rows': [

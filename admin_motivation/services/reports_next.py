@@ -68,14 +68,29 @@ def selected_types(query, allowed=None):
     return values or allowed
 
 
-def restrict(user, query):
+def preview_scope(user):
+    """Personal preview includes directors, without their team-wide author scope."""
+    if role_for(user, 'motivation') not in (*PERSONAL_ROLES, BRANCH_DIRECTOR):
+        return None
+    access = getattr(user, 'motivation_report_access', None)
+    if not access or not access.deal_author.strip():
+        return None
+    scope = politician_scope(user)
+    if not scope:
+        return None
+    scope = {**scope, 'author': access.deal_author.strip(), 'all_authors': False}
+    scope.pop('director_author', None)
+    return scope
+
+
+def restrict(user, query, *, access_scope=None):
     if len(query.get('search', '')) > 255:
         raise ValidationError('Поисковый запрос слишком длинный.')
     for field in ('planning', 'goods', 'brand', 'author', 'subdivision'):
         items = query.getlist(field)
         if len(items) > 100 or any(len(value) > 255 for value in items):
             raise ValidationError('Слишком много значений фильтра или слишком длинное значение.')
-    scope = politician_scope(user)
+    scope = access_scope if access_scope is not None else politician_scope(user)
     if role_for(user, 'motivation') in REPORT_ROLES and not scope:
         raise PermissionDenied
     if scope and role_for(user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
@@ -122,8 +137,8 @@ def current_run(execution, connector=None):
                 connection.close()
 
 
-def actual_reports(user, execution, query, *, detailed=False):
-    scope, kinds, period = restrict(user, query)
+def actual_reports(user, execution, query, *, detailed=False, access_scope=None):
+    scope, kinds, period = restrict(user, query, access_scope=access_scope)
     expected_year = str(execution.parameters.get('fact_year', ''))
     year = query.get('year', expected_year)
     if year != expected_year:

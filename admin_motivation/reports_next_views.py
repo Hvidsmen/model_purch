@@ -8,7 +8,7 @@ from django.http import FileResponse, Http404
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
 from django.views.decorators.http import require_GET
-from base.access import role_for, REPORT_ROLES, PERSONAL_ROLES, ADMIN, BRANCH_DIRECTOR, DEPUTY_DIRECTOR
+from base.access import role_for, REPORT_ROLES, ADMIN, BRANCH_DIRECTOR, DEPUTY_DIRECTOR
 from .services.calculation_variants import main_runs
 from .models import MotivationExecution, SalesPlanScenario, Subdivision
 from .services import reports_next as reports
@@ -171,24 +171,30 @@ def report(request, kind):
     employee_report = kind == 'mine' and role_for(request.user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR)
     employee_filters = None
     employee_authors = []
-    preview_accounts, preview_user = [], None
+    preview_accounts, preview_user, preview_scope = [], None, None
     admin_preview = role_for(request.user, 'motivation') == ADMIN and kind in ('mine', 'detail')
     if admin_preview:
         from django.contrib.auth import get_user_model
-        from base.report_access import politician_scope
         candidates = get_user_model().objects.filter(is_active=True, motivation_report_access__isnull=False).select_related('motivation_report_access').prefetch_related('groups').order_by('last_name', 'first_name', 'username')
-        preview_accounts = [user for user in candidates if role_for(user, 'motivation') in PERSONAL_ROLES and politician_scope(user)]
+        preview_scopes = {}
+        for user in candidates:
+            personal_scope = reports.preview_scope(user)
+            if personal_scope:
+                preview_accounts.append(user)
+                preview_scopes[user.pk] = personal_scope
         if query.get('preview_user'):
             preview_user = next((user for user in preview_accounts if str(user.pk) == query['preview_user']), None)
             if preview_user is None:
                 raise PermissionDenied
             report_user = preview_user
+            preview_scope = preview_scopes[preview_user.pk]
+            query.setlist('author', [preview_scope['author']])
     else:
         query.pop('preview_user', None)
     try:
         if employee_report:
             employee_filters = reports.employee_context(request.user, query)
-        scope, types, period = reports.restrict(report_user, query)
+        scope, types, period = reports.restrict(report_user, query, access_scope=preview_scope)
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
         return HttpResponseBadRequest(' '.join(exc.messages))
@@ -243,7 +249,7 @@ def report(request, kind):
                 data = reports.planned_budget(selected, plan, query)
             else:
                 with reports.current_run(selected):
-                    data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'))
+                    data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'), access_scope=preview_scope)
                 if kind in ('team', 'registry') and query.get('search', '').strip():
                     from decimal import Decimal
                     term = query['search'].strip().casefold().replace('ё', 'е')
