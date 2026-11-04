@@ -167,7 +167,7 @@ class All2026ViewTests(TestCase):
 
     def test_explicit_roles_see_link_and_can_read_and_export(self):
         index = reverse('motivation_reports_next')
-        for role in (ADMIN, DIRECTOR, BRANCH_DIRECTOR):
+        for role in (ADMIN, DIRECTOR, BRANCH_DIRECTOR, MOTIVATION_VIEWER):
             with self.subTest(role=role):
                 user = self.role_account(role, 'allowed-' + str(len(User.objects.all())))
                 self.client.force_login(user)
@@ -181,7 +181,7 @@ class All2026ViewTests(TestCase):
                     exported.close()
 
     def test_other_roles_do_not_see_link_and_cannot_open_by_url(self):
-        for role in (POLITICIAN, SALES, DEPUTY_DIRECTOR, FINANCIER, MODELER, MOTIVATION_VIEWER):
+        for role in (POLITICIAN, SALES, DEPUTY_DIRECTOR, FINANCIER, MODELER):
             with self.subTest(role=role):
                 user = self.role_account(role, 'denied-' + str(len(User.objects.all())))
                 self.client.force_login(user)
@@ -192,7 +192,7 @@ class All2026ViewTests(TestCase):
                     load.assert_not_called()
 
     def test_read_access_does_not_grant_starting_calculations(self):
-        for role in (DIRECTOR, BRANCH_DIRECTOR):
+        for role in (DIRECTOR, BRANCH_DIRECTOR, MOTIVATION_VIEWER):
             user = self.role_account(role, 'readonly-' + str(len(User.objects.all())))
             self.client.force_login(user)
             with patch('admin_motivation.services.calculation_jobs.start_job') as start:
