@@ -14,9 +14,12 @@ from .models import MotivationCalculationSchedule, MotivationExecution, Subdivis
 from .services import reports_next
 from .services.calculation_variants import ALL_2026, main_runs
 from .services.reports_next_presenter import present
+from .services.all_2026_access import can_view
 
 
 def selection(user, query):
+    if not can_view(user):
+        raise PermissionDenied
     scope = politician_scope(user)
     if role_for(user, 'motivation') in REPORT_ROLES and not scope:
         raise PermissionDenied
@@ -71,6 +74,8 @@ def data_for(user, execution, query):
 
 @require_http_methods(['GET', 'POST'])
 def report(request):
+    if not can_view(request.user):
+        raise PermissionDenied
     from .operation_views import JobForm
     from .services import calculation_jobs
     from .services.execution_tracking import observe
