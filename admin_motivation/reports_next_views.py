@@ -75,7 +75,7 @@ def workbook(kind, data, metadata, query=None, title=None):
         append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта',
                 *(period_headers if kind == 'registry' else []), 'Премия по расчёту',
                 'Годовая доплата за кварталы', 'Всего по расчёту',
-                *(period_headers if kind != 'registry' else []), 'Статус', 'Сколько бы выплатили · без процента выполнения'])
+                *(period_headers if kind != 'registry' else []), 'Статус', 'Премия без учёта выполнения плана'])
         for row in display['employees' if kind == 'team' else 'registry_rows']:
             append([row['subdivision'], row['author'], ', '.join(row['kinds']), data['currency'],
                     *(row['period_values'] if kind == 'registry' else []), row['amount'],
@@ -84,7 +84,7 @@ def workbook(kind, data, metadata, query=None, title=None):
                     sum((item['possible'] for item in row['rows']), Decimal(0)) if all(item.get('possible') is not None for item in row['rows']) else None])
         if kind in ('team', 'registry'):
             sheet = book.create_sheet('Итого по видам')
-            append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта', 'Сколько бы выплатили · без процента выполнения'])
+            append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта', 'Премия без учёта выполнения плана'])
             for row in display['type_totals']:
                 append([row['kind'], row['amount'], row['bonus'], row['total'], data['currency'], row['possible']])
     else:
