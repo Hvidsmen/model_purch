@@ -4,9 +4,9 @@ DEPARTMENT = 'Всё подразделение'
 
 
 def plan_fact_table(variant):
-    if variant not in ('main', 'all_2026'):
+    if variant not in ('main', 'all_2026', 'separate_2026'):
         raise ValueError('Unknown calculation variant')
-    return GLOBAL_PLAN_FACT if variant == 'all_2026' else 'DataWH.motivation.PlanFact'
+    return {'main':'DataWH.motivation.PlanFact', 'all_2026':GLOBAL_PLAN_FACT, 'separate_2026':'DataWH.motivation.PlanFactSeparate2026'}[variant]
 
 
 def presentation_rows(rows, kind):
@@ -48,7 +48,7 @@ def period_coverage(context):
         f"({period} LIKE N'1 кв%' AND pf.[Квартал]=1) OR "
         f"({period} LIKE N'2 кв%' AND pf.[Квартал] IN (1,2)) OR "
         f"({period} LIKE N'3 кв%' AND pf.[Квартал]=3) OR "
-        f"(({period} LIKE N'4 кв%' OR {period}=N'год') AND pf.[Квартал] IN (1,2,3,4))")
+        f"(({period} LIKE N'4 кв%' OR {period}=N'год') AND (pf.[Квартал]=4 OR pf.[Год]<>2026))")
 
 
 def grouped_sql(source, coefficient_type=None, calculation_variant='all_2026'):
@@ -67,6 +67,9 @@ def grouped_sql(source, coefficient_type=None, calculation_variant='all_2026'):
         from .director_participation import EXCLUDED
         excluded = ','.join("N'" + name.replace("'", "''") + "'" for name in EXCLUDED)
         base_filter = "(pf.[Канал] IS NULL OR pf.[Канал]<>N'ДПП') AND pf.[Подразделение] NOT IN (" + excluded + ')'
+    if str(coefficient_type or '').strip().casefold() != 'директора':
+        from .heat_exclusion import predicate as heat_predicate
+        base_filter += " AND NOT (pf.[Год]=2026 AND " + heat_predicate('pf.[ГруппаПлановПродаж]') + ")"
     return (
         'WITH input_rows AS (' + source + '), personal_windows AS ('
         'SELECT ' + dimensions + ',' + author + ' AS ScopeAuthor,' + planning + ' AS ScopePlanning,'

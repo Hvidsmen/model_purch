@@ -24,18 +24,18 @@ PREMIUM_PERIODS = [('4', '4 квартал'), ('5', 'Год')]
 FILTERS = {
  'manager-detail': [('type', 'TypeCoeff_', 'Вид работника', 'TPK', False), ('subdivision', 'Subdivision', 'Подразделение', 'Sub', True),
                     ('author', 'DealAuthor', 'Автор сделки', 'DA', True), ('planning', 'gp_sales', 'Группа планов продаж', 'PGSales', True),
-                    ('goods', 'GPGoods', 'Группа товаров', 'GPGoods', True), ('brand', 'Brend', 'Марка / бренд', 'Brend', True),
+                    ('goods', 'GPGoods', 'Группа', 'GPGoods', True), ('brand', 'Brend', 'Бренд', 'Brend', True),
                     ('year', 'Years', 'Год', 'Years', True)],
  'manager': [('type', 'TypeCoeff_', 'Вид работника', 'TPK', False), ('subdivision', 'Subdivision', 'Подразделение', 'Sub', False),
              ('author', 'DealAuthor', 'Автор сделки', 'DA', False), ('planning', 'gp_sales', 'Группа планов продаж', 'PGSales', True),
-             ('quarter', 'qm', 'Квартал', 'Quar', False)],
+             ('quarter', 'qm', 'Квартал', 'Quar', False), ('goods', 'GPGoods', 'Группа', 'GPGoods', True), ('brand', 'Brend', 'Бренд', 'Brend', True)],
  'deals': [('type', 'TypeCoeff', 'Тип коэффициента', 'TC', False), ('subdivision', 'Division', 'Подразделение', 'Sub', False),
            ('channel', 'Channel', 'Канал', 'Chanel', True), ('author', 'ManagerName', 'Менеджер', 'DataSet1', True),
-           ('planning', 'GPSales', 'Группа планов продаж', 'GPSales', True), ('goods', 'GPGoods', 'Группа товаров', 'GPGoods', True),
-           ('brand', 'Brend', 'Марка / бренд', 'Brend', True), ('partner', 'Partner', 'Партнёр', 'Partner', True)],
+           ('planning', 'GPSales', 'Группа планов продаж', 'GPSales', True), ('goods', 'GPGoods', 'Группа', 'GPGoods', True),
+           ('brand', 'Brend', 'Бренд', 'Brend', True), ('partner', 'Partner', 'Партнёр', 'Partner', True)],
  'subdivisions': [('type', 'type_coeff', 'Тип коэффициента', 'TypeCoeff', True), ('subdivision', 'Subdivision', 'Подразделение', 'Sub', True),
-                  ('planning', 'gp_sales', 'Группа планов продаж', 'GPsales', True), ('goods', 'GPGoods', 'Группа товаров', 'GPGoods', True),
-                  ('brand', 'Brend', 'Марка / бренд', 'Brend', True),
+                  ('planning', 'gp_sales', 'Группа планов продаж', 'GPsales', True), ('goods', 'GPGoods', 'Группа', 'GPGoods', True),
+                  ('brand', 'Brend', 'Бренд', 'Brend', True),
                   ('period', 'PremiumPeriods', 'Период премии', '_premium_periods', True)],
 }
 
@@ -75,10 +75,11 @@ def parameters(kind, query, trusted_identity=False):
     return values
 
 
-def bind_sql(sql, parameters):
+def bind_sql(sql, parameters, *, expand_aliases=True):
     """Expand lists without inserting values into SQL; empty optional lists mean all."""
     from .subdivision_aliases import report_parameters
-    sql, parameters = report_parameters(sql, parameters)
+    if expand_aliases:
+        sql, parameters = report_parameters(sql, parameters)
     bound = []
     token = re.compile(r"(?P<column>COALESCE\([^\n]*?\)|[\w\[\].]+)\s+IN\s*\(\s*@(?P<list>\w+)\s*\)|@(?P<scalar>\w+)", re.I)
     def replace(match):
@@ -95,13 +96,14 @@ def bind_sql(sql, parameters):
     return token.sub(replace, sql), bound
 
 
-def fetch(cursor, sql, args=(), limit=50000):
+def fetch(cursor, sql, args=(), limit=50000, *, canonical_rows=True):
     cursor.execute(sql, *args)
     columns = [item[0] for item in cursor.description]
     rows = cursor.fetchmany(limit + 1)
     if len(rows) > limit: raise ValidationError('Слишком много строк. Уточните фильтры отчёта.')
     from .subdivision_aliases import report_rows
-    return report_rows([dict(zip(columns, row)) for row in rows])
+    rows = [dict(zip(columns, row)) for row in rows]
+    return report_rows(rows) if canonical_rows else rows
 
 
 def choices(kind, values, refresh=False, access_scope=None):
@@ -127,7 +129,11 @@ def choices(kind, values, refresh=False, access_scope=None):
             if kind == 'deals' and dataset not in ('Sub', 'TC') and not values.get('Division'):
                 result.append({'name': name, 'label': caption, 'multiple': multiple, 'options': []})
                 continue
-            lookup=queries[dataset]
+            lookup=queries.get(dataset)
+            if lookup is None and kind == 'manager' and dataset in ('GPGoods','Brend'):
+                lookup=json.loads((SQL_ROOT / 'lookups.json').read_text(encoding='utf-8'))['manager-detail'][dataset]
+            if lookup is None:
+                raise ValidationError('Не найден источник значений фильтра.')
             if kind!='deals':
                 from .report_periods import PILOT_SQL
                 lookup+=(' AND ' if re.search(r'\bWHERE\b',lookup,re.I) else ' WHERE ')+PILOT_SQL
@@ -365,12 +371,17 @@ def manager_currency_sql(sql, currency):
 
 
 def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False):
+    if kind == 'manager':
+        values = {'GPGoods': [], 'Brend': [], **values}
+    from functools import partial
+    read_rows = partial(fetch, canonical_rows=calculation_variant != 'separate_2026')
+    bind_report_sql = partial(bind_sql, expand_aliases=calculation_variant != 'separate_2026')
     if access_scope:
         from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
         access_scope = worker_scope(access_scope, kind, values)
     from .report_periods import pilot_enabled, PILOT_SQL
-    if calculation_variant not in ('main', 'all_2026') or calculation_variant == 'all_2026' and (kind != 'manager-detail' or list(values.get('Years') or []) != ['2026']):
+    if calculation_variant not in ('main', 'all_2026', 'separate_2026') or calculation_variant in ('all_2026', 'separate_2026') and (kind != 'manager-detail' or list(values.get('Years') or []) != ['2026']):
         raise ValidationError('Неизвестный источник дополнительного отчёта.')
     pilot = pilot_enabled(kind, access_scope) and calculation_variant == 'main'
     if pilot and kind=='manager':
@@ -392,10 +403,13 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         connection, cursor = connect_database('vm-dwh', 'DataWH')
         connection.timeout = 60
         source_sql = (SQL_ROOT / f'{kind}.sql').read_text(encoding='utf-8')
-        if calculation_variant == 'all_2026':
-            source_sql = source_sql.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'DataWH.motivation.ReportMotivationByDealAuthorAll2026')
+        if calculation_variant in ('all_2026', 'separate_2026'):
+            source_sql = source_sql.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'DataWH.motivation.ReportMotivationByDealAuthor' + ('Separate2026' if calculation_variant == 'separate_2026' else 'All2026'))
         from .subdivision_scope import sql_predicate
         source_sql = 'SELECT * FROM (' + source_sql.strip().rstrip(';') + ') AS included_source WHERE ' + sql_predicate('[Подразделение]')
+        if kind == 'deals':
+            from .heat_exclusion import predicate as heat_predicate
+            source_sql += " AND NOT ([Год]=2026 AND " + heat_predicate('[ГруппаПлановПродаж]') + " AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики',N'Продажи'))"
         annual_source_sql = source_sql
         if kind == 'manager-detail' and period_condition:
             source_sql += ' AND ' + period_condition
@@ -410,7 +424,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             values = {**values, 'PortalDirectorRoster': report_roster()}
             source_sql += ' AND ' + REPORT_CONDITION
             annual_source_sql += ' AND ' + REPORT_CONDITION
-        sql, args = bind_sql(source_sql, values)
+        sql, args = bind_report_sql(source_sql, values)
         if kind == 'subdivisions' and values.get('PremiumPeriods'):
             periods = values['PremiumPeriods']
             sql = ('SELECT * FROM (' + sql + ') AS premium_source WHERE '
@@ -421,29 +435,29 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             from .deal_amounts import QUARTERLY_SQL, ANNUAL_SQL, POSSIBLE_SQL, detail_projection
             source = '(' + sql + ') AS report_source'
             sums = f'SUM([СуммаОтгрузокUSD]) AS shipments, SUM({QUARTERLY_SQL}) AS quarterly, SUM({ANNUAL_SQL}) AS annual, SUM({POSSIBLE_SQL}) AS possible'
-            summary = fetch(cursor, 'SELECT [АвторСделки] AS author,COUNT_BIG(*) AS count,'+sums+' FROM '+source+' GROUP BY [АвторСделки] ORDER BY [АвторСделки]', args)
+            summary = read_rows(cursor, 'SELECT [АвторСделки] AS author,COUNT_BIG(*) AS count,'+sums+' FROM '+source+' GROUP BY [АвторСделки] ORDER BY [АвторСделки]', args)
             totals = {key: total(summary, key) for key in ['count','shipments','quarterly','annual','possible']}
             count = int(totals['count'])
             pages = max(1, (count+49)//50)
             page = min(max(1, page), pages)
-            details = fetch(cursor, 'SELECT '+detail_projection()+' FROM '+source+' ORDER BY [ДатаЗакрытияСделки] DESC,[Номер],[Модель],[АвторСделки] OFFSET ? ROWS FETCH NEXT 50 ROWS ONLY', [*args, (page-1)*50], 50)
+            details = read_rows(cursor, 'SELECT '+detail_projection()+' FROM '+source+' ORDER BY [ДатаЗакрытияСделки] DESC,[Номер],[Модель],[АвторСделки] OFFSET ? ROWS FETCH NEXT 50 ROWS ONLY', [*args, (page-1)*50], 50)
             return {'summary': summary, 'totals': totals, 'details': details, 'page': page, 'pages': pages, 'offset': (page-1)*50}
         if kind == 'manager-detail':
             from .manager_detail import grouped_sql, manager_detail_report
-            rows = fetch(cursor, grouped_sql(sql, summary_only=summary_only), args)
+            rows = read_rows(cursor, grouped_sql(sql, summary_only=summary_only), args)
             if summary_only:
                 from .manager_detail import period_motivation_summary
                 if premium_period and premium_period != 'all':
                     from .reports_next import period_code
                     rows = [row for row in rows if period_code(row.get('КварталМотивации')) in period_codes]
                 result = {'period_summary': period_motivation_summary(rows, values.get('Currency', 'USD'), pilot=pilot), 'currency': values.get('Currency', 'USD')}
-                if calculation_variant == 'all_2026' or include_performance:
+                if calculation_variant in ('all_2026', 'separate_2026') or include_performance:
                     from .motivation_performance import grouped_sql as performance_sql, department_sql
-                    result['motivation_performance'] = fetch(cursor, performance_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant), args)
-                    result['department_performance'] = fetch(cursor, department_sql(sql, calculation_variant), args)
+                    result['motivation_performance'] = read_rows(cursor, performance_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant), args)
+                    result['department_performance'] = read_rows(cursor, department_sql(sql, calculation_variant), args)
                     from .annual_accrual import grouped_sql as annual_sql
-                    annual_query, annual_args = bind_sql(annual_sql(annual_source_sql, values.get('Currency', 'USD')), values)
-                    result['annual_accrual'] = fetch(cursor, annual_query, annual_args)
+                    annual_query, annual_args = bind_report_sql(annual_sql(annual_source_sql, values.get('Currency', 'USD')), values)
+                    result['annual_accrual'] = read_rows(cursor, annual_query, annual_args)
                 return result
             performance_fields = ('СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал', 'СуммаПланUSD', 'СуммаОтгрузокUSD')
             performance_source = ('DataWH.motivation.ReportMotivationByDealAuthor WHERE ' + sql_predicate('[Подразделение]') +
@@ -455,13 +469,13 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                 # Multiple directors share the same subdivision sales/plan inputs.
                 dimensions = '[Подразделение],[Год],[КварталМотивации],[ГруппаПлановПродаж],[ГруппаТоваров],[Марка]'
                 performance_source = '(SELECT ' + dimensions + ',' + ','.join(f'MAX([{field}]) AS [{field}]' for field in performance_fields) + ' FROM ' + performance_source + ' GROUP BY ' + dimensions + ') AS director_inputs'
-            if calculation_variant == 'all_2026':
-                performance_source = performance_source.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'DataWH.motivation.ReportMotivationByDealAuthorAll2026')
-            performance_sql, performance_args = bind_sql(
+            if calculation_variant in ('all_2026', 'separate_2026'):
+                performance_source = performance_source.replace('DataWH.motivation.ReportMotivationByDealAuthor', 'DataWH.motivation.ReportMotivationByDealAuthor' + ('Separate2026' if calculation_variant == 'separate_2026' else 'All2026'))
+            performance_sql, performance_args = bind_report_sql(
                 'SELECT [Подразделение],[Год],[КварталМотивации],' +
                 ','.join(f'SUM([{field}]) AS [{field}]' for field in performance_fields) +
                 ' FROM ' + performance_source + ' GROUP BY [Подразделение],[Год],[КварталМотивации]', values)
-            performance = fetch(cursor, performance_sql, performance_args)
+            performance = read_rows(cursor, performance_sql, performance_args)
             if premium_period and premium_period != 'all':
                 from .reports_next import period_code
                 rows = [row for row in rows if period_code(row.get('КварталМотивации')) in period_codes]
@@ -471,12 +485,12 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             dimensions = ['Подразделение', 'АвторСделки', 'Год', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
             columns = ','.join('['+key+']' for key in dimensions)
             sums = ','.join('SUM(['+key+']) AS ['+key+']' for key in DIV_NUMBERS)
-            rows = fetch(cursor, 'SELECT '+columns+','+sums+' FROM ('+sql+') AS report_source GROUP BY '+columns, args)
+            rows = read_rows(cursor, 'SELECT '+columns+','+sums+' FROM ('+sql+') AS report_source GROUP BY '+columns, args)
             return subdivision_report(rows, scope)
         required = ('TypeCoeff_', 'Subdivision', 'qm') if access_scope and access_scope.get('all_authors') else ('TypeCoeff_', 'Subdivision', 'DealAuthor', 'qm')
         if any(not values.get(key) for key in required): raise ValidationError('Выберите вид работника, подразделение, автора сделки и квартал.')
-        rows = fetch(cursor, sql, args)
-        period_sql, period_args = bind_sql(
+        rows = read_rows(cursor, sql, args)
+        period_sql, period_args = bind_report_sql(
             'SELECT [VariationCalculate],[ГруппаПлановПродаж],'
             'SUM(CASE WHEN [КварталМотивации]=@qm THEN [СуммаПланUSDКвартал] END) AS QPeriodPlan,'
             'SUM(CASE WHEN [КварталМотивации]=@qm THEN [СуммаОтгрузокUSDКвартал] END) AS QPeriodFact,'
@@ -486,14 +500,14 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             'WHERE ' + sql_predicate('[Подразделение]') + ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф]=@TypeCoeff_ '
             'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales) '
             + ('AND ' + PILOT_SQL + ' ' if pilot else '') + 'GROUP BY [VariationCalculate],[ГруппаПлановПродаж]', values)
-        period_rows = fetch(cursor, period_sql, period_args)
+        period_rows = read_rows(cursor, period_sql, period_args)
         report = manager_report(rows, period_rows, pilot=pilot)
         # Read years from the source table: the legacy presentation view may omit Год.
-        year_sql, year_args = bind_sql('SELECT DISTINCT [Год] FROM DataWH.motivation.ReportMotivationByDealAuthor '
+        year_sql, year_args = bind_report_sql('SELECT DISTINCT [Год] FROM DataWH.motivation.ReportMotivationByDealAuthor '
             'WHERE ' + sql_predicate('[Подразделение]') + ' AND [Подразделение] IN (@Subdivision) AND [ТипКоэф] = @TypeCoeff_ '
             'AND [АвторСделки] IN (@DealAuthor) AND [ГруппаПлановПродаж] IN (@gp_sales)' + (' AND ' + PILOT_SQL if pilot else ''), values)
         report['currency'] = values.get('Currency', 'USD')
-        report['years'] = sorted({str(row['Год']) for row in fetch(cursor, year_sql, year_args) if row.get('Год') is not None})
+        report['years'] = sorted({str(row['Год']) for row in read_rows(cursor, year_sql, year_args) if row.get('Год') is not None})
         return report
     finally:
         if connection is not None: connection.close()

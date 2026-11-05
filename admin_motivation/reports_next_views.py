@@ -25,7 +25,7 @@ def report_navigation(user, kind, query):
     """Carry shared conditions only; personal/product drilldowns stay on their report."""
     from django.http import QueryDict
     shared = QueryDict(mutable=True)
-    for field in ('year', 'period', 'type', 'subdivision', 'currency'):
+    for field in ('year', 'period', 'type', 'subdivision', 'currency', 'planning', 'goods', 'brand'):
         if query.getlist(field):
             shared.setlist(field, query.getlist(field))
     if query.get('run') == '1':
@@ -229,6 +229,9 @@ def report(request, kind):
         metadata.append(('Поиск сотрудника', query['search'].strip()))
     if kind == 'executive':
         metadata.append(('Состав директоров', 'Действующие привязки к подразделениям' if query['director_scope'] == 'active' else 'Все сохранённые коэффициенты, включая архивные'))
+    for field, caption in [('planning','Группа планов продаж'),('goods','Группа'),('brand','Бренд')]:
+        if query.getlist(field):
+            metadata.append((caption, ', '.join(query.getlist(field))))
     if preview_user:
         metadata.insert(1, ('Личный отчёт сотрудника', preview_user.motivation_report_access.deal_author))
     try:
@@ -327,13 +330,14 @@ def report(request, kind):
     page_query.pop('export', None)
     all_types = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
     all_types = [all_types] if isinstance(all_types, str) else all_types
+    from .services.product_filters import fields as product_fields
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.available(request.user)[kind][0],
-        'premium_rule_outdated': bool(kind != 'executive' and selected and selected.parameters.get('premium_amount_quarters') != [4]),
+        'premium_rule_outdated': bool(kind != 'executive' and selected and (selected.parameters.get('premium_amount_quarters') != [4] or selected.parameters.get('transition_rule') != 'moscow-tt-q4-heat-v1')),
         'employee_report': employee_report, 'employee_filters': employee_filters, 'employee_authors': employee_authors,
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
         'reset_url': '?' + reset_query.urlencode(), 'branch_label': branch_label or 'Все доступные подразделения', 'selected_branches': selected_subs, 'all_types': all_types, 'type_choices': [{'value': value, 'selected': value in query.getlist('type')} for value in all_types], 'type_label': ', '.join(query.getlist('type')) or 'Все доступные виды',
-        'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
+        'product_filter_fields': product_fields(query, strict=False), 'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
         'report_navigation': report_navigation(request.user, kind, query),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})

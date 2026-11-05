@@ -608,7 +608,8 @@ class ReportsNextTests(TestCase):
             self.assertEqual(values['period'], ['4', '5'])
             self.assertEqual(values['subdivision'], ['A'])
             self.assertEqual(values['run'], ['1'])
-            for name in ('author', 'preview_user', 'planning', 'search', 'export', 'page'):
+            self.assertEqual(values.get('planning'), ['RAC'])
+            for name in ('author', 'preview_user', 'search', 'export', 'page'):
                 self.assertNotIn(name, values)
         employee = User.objects.create_user('nav-employee')
         employee.groups.add(Group.objects.get(name=POLITICIAN))

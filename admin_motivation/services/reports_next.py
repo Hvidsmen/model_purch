@@ -121,7 +121,7 @@ def current_run(execution, connector=None):
             raise ValidationError('Выполняется расчёт. Дождитесь завершения и повторите запрос.')
         locked = True
         variant = execution.parameters.get('variant', 'main')
-        if variant not in ('main', 'all_2026'):
+        if variant not in ('main', 'all_2026', 'separate_2026'):
             raise ValidationError('Неизвестный вариант расчёта.')
         cursor.execute("SELECT TOP (1) RunId,State_ FROM motivation.PortalMotivationRun WHERE COALESCE(JSON_VALUE(Parameters_,'$.variant'),N'main')=? ORDER BY StartedAt DESC", variant)
         latest = cursor.fetchone()
@@ -254,6 +254,8 @@ def planned_budget(execution, scenario, query):
     for day, original, pg, group, brand, amount, ddp, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
         share = ((annual_share if '5' in periods else Decimal(0)) + (quarter_share if '4' in periods else Decimal(0))) if day.month >= 10 else Decimal(0)
         sub = canonical(original, aliases)
+        if execution.parameters.get('transition_rule') and original not in ('Д-Москва', 'ТЕРМОТРЕЙД'):
+            continue
         if not included(original, aliases) or selected_subdivisions and sub not in selected_subdivisions:
             continue
         version = next((version for version in reversed(versions) if version.effective_from <= day), None)
@@ -266,6 +268,9 @@ def planned_budget(execution, scenario, query):
         bucket['plan'] += amount
         bucket['ddp'] = add(bucket['ddp'], ddp)
         for kind, target in kinds.items():
+            from .heat_exclusion import is_heat
+            if year == 2026 and is_heat(pg):
+                continue
             if target not in included_kinds or target == 'directors':
                 continue
             for side in ('global', 'local'):

@@ -1,5 +1,5 @@
 (() => {
- const branches = document.querySelector('.next-branches:not(.next-periods):not(.next-types)');
+ const branches = document.querySelector('.next-branches:not(.next-periods):not(.next-types):not(.next-products)');
  const checks = [...(branches?.querySelectorAll('input[type=checkbox]') || [])];
  branches?.querySelector('[data-next-select-all]')?.addEventListener('click', () => checks.forEach(input => { input.checked = true; }));
  branches?.querySelector('[data-next-clear-all]')?.addEventListener('click', () => checks.forEach(input => { input.checked = false; }));
