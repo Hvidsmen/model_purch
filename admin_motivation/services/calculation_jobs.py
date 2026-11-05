@@ -57,7 +57,7 @@ EXEC motivation.PortalCalcBySub;
 EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';"""
 
 
-def calculation_command(job):
+def calculation_command(job, follow_up=None, *, locked=True):
     if type(job.fact_year) is not int or not 1 <= job.fact_year <= 9999:
         raise ValidationError('Укажите год факта в параметрах задания.')
     plan = (job.plan_version or '').strip()
@@ -86,7 +86,29 @@ def calculation_command(job):
                  f"@PlanVersion=N'{escaped_plan}', "
                  f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f}, @PayoutThreshold={threshold:.8f};")
     from .execution_tracking import tracked_statement
-    return LOCKED_COMMAND.replace('EXEC motivation.PortalCalcBySub;', tracked_statement(job, statement))
+    tracked = tracked_statement(job, statement)
+    if follow_up is not None:
+        # A separate SQL scope keeps tracking variables independent. THROW in
+        # the first calculation prevents this statement from being reached.
+        additional = calculation_command(follow_up, locked=False)
+        tracked += "\nEXEC sys.sp_executesql N'" + additional.replace("'", "''") + "';"
+    return LOCKED_COMMAND.replace('EXEC motivation.PortalCalcBySub;', tracked) if locked else tracked
+
+
+def additional_job(job):
+    """Reuse a manual receipt for the chained variant; never add a timer."""
+    from ..models import MotivationCalculationSchedule
+    from .calculation_variants import variant_of, MAIN, ALL_2026
+    if variant_of(job) != MAIN or job.fact_year != 2026:
+        return None
+    values = dict(variant=ALL_2026, fact_year=2026, mode='manual',
+                  enabled=False, plan_version=job.plan_version,
+                  quarter_share=job.quarter_share, year_share=job.year_share,
+                  payout_threshold=job.payout_threshold)
+    existing = MotivationCalculationSchedule.objects.filter(variant=ALL_2026).order_by('-created_at', '-pk').first()
+    if existing and all(getattr(existing, field) == value for field, value in values.items()):
+        return existing
+    return MotivationCalculationSchedule.objects.create(name='Все кварталы 2026', **values)
 
 
 def validate_sql_parameters(cursor, job):
@@ -181,6 +203,9 @@ def prepare(cursor, variant='main'):
 
 def sync_job(job, connector=None):
     command = calculation_command(job)
+    follow_up = additional_job(job)
+    if follow_up is not None:
+        command = calculation_command(job, follow_up)
     connection = None
     stage = 'Подключение к DataWH'
     try:
@@ -198,6 +223,9 @@ def sync_job(job, connector=None):
         variant = variant_of(job)
         stage = 'Подготовка расчётной процедуры'
         prepare(cursor) if variant == MAIN else prepare(cursor, variant)
+        if follow_up is not None:
+            stage = 'Подготовка расчёта всех кварталов 2026'
+            prepare(cursor, 'all_2026')
         from .execution_tracking import DDL
         stage = 'Подготовка журнала запусков'
         cursor.execute(DDL)
