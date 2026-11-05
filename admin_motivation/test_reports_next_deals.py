@@ -25,6 +25,9 @@ def deal_payload():
 
 class ClosedDealsNextTests(TestCase):
     def setUp(self):
+        audit = patch('admin_motivation.services.execution_tracking.observe_latest', return_value=None)
+        audit.start()
+        self.addCleanup(audit.stop)
         self.actor = User.objects.create_superuser('deals-admin')
         self.client.force_login(self.actor)
         self.run = MotivationExecution.objects.create(run_id=uuid4(), job_key=uuid4(), state='completed',
@@ -40,6 +43,7 @@ class ClosedDealsNextTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '30.10.2026')
         self.assertContains(response, '28.10.2026')
+
         self.assertContains(response, '22,04%')
         self.assertContains(response, '0,60%')
         self.assertEqual(len(response.context['data']['columns']), 18)
@@ -54,6 +58,18 @@ class ClosedDealsNextTests(TestCase):
         self.assertIn('page=3', response.context['data']['next_url'])
         self.assertIn('partner=Partner', response.context['data']['next_url'])
         self.assertNotContains(response, 'name="execution"')
+
+
+    def test_latest_scheduled_run_is_used_for_deals_and_csv(self):
+        latest = MotivationExecution(run_id=uuid4(), job_key=uuid4(), state='completed',
+            started_at=timezone.now(), completed_at=timezone.now(), parameters=self.run.parameters)
+        for extra in ({}, {'export': 'csv'}):
+            with self.subTest(extra=extra), patch('admin_motivation.services.execution_tracking.observe_latest', return_value=latest) as audit, patch('admin_motivation.reports_next_deals.choices', return_value=[]), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()) as guard, patch('admin_motivation.reports_next_deals.load_report', return_value=deal_payload()):
+                response = self.client.get(self.url, {**self.query, **extra})
+                self.assertEqual(response.status_code, 200)
+                guard.assert_called_once_with(latest)
+                audit.assert_called_once_with('main', persist=True)
+                response.close()
 
     def test_csv_is_identical_to_legacy_including_hidden_fields_and_formula_protection(self):
         payload = deal_payload()

@@ -202,6 +202,13 @@ def report(request, kind):
         return HttpResponseBadRequest(' '.join(exc.messages))
     runs = main_runs().filter(state='completed').order_by('-completed_at', '-started_at', '-pk')
     selected = runs.first()
+    run_error = None
+    if kind != 'executive' and (query.get('run') == '1' or query.get('export') == 'xlsx'):
+        from .services.execution_tracking import latest_for_report
+        try:
+            selected = latest_for_report(selected, persist=role_for(request.user, 'motivation') == ADMIN)
+        except ValidationError as exc:
+            run_error = exc
     plans = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).order_by('-loaded_at', '-pk')
     original_plan = reports.default_plan(selected) if selected else None
     plan = get_object_or_404(plans, pk=query['plan']) if query.get('plan', '').isdigit() else original_plan
@@ -237,6 +244,8 @@ def report(request, kind):
             if query.get('author'):
                 metadata.append(('Сотрудник', query['author']))
         if query.get('run') == '1' or query.get('export') == 'xlsx':
+            if run_error is not None:
+                raise run_error
             if employee_report and not query.get('author'):
                 raise ValidationError('Выберите сотрудника в доступном подразделении.')
             if kind == 'mine' and admin_preview and preview_user is None:
