@@ -36,7 +36,7 @@ class ClosedDealsNextTests(TestCase):
         self.query = {'run': '1', 'type': 'Политики', 'subdivision': 'A', 'start': '2026-01-01', 'end': '2026-11-03', 'page': '2'}
 
     def test_new_catalog_has_deals_and_uses_all_legacy_fields_and_filters(self):
-        self.assertContains(self.client.get(reverse('motivation_reports_next')), 'Факт закрытых сделок')
+        self.assertContains(self.client.get(reverse('motivation_reports')), 'Факт закрытых сделок')
         filters = {**self.query, 'author': ['Иванов'], 'channel': ['Retail'], 'planning': ['RAC'], 'goods': ['Split'], 'brand': ['Brand'], 'partner': ['Partner']}
         with patch('admin_motivation.reports_next_deals.choices', return_value=[]), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()) as guard, patch('admin_motivation.reports_next_deals.load_report', return_value=deal_payload()) as load:
             response = self.client.get(self.url, filters)
@@ -72,10 +72,14 @@ class ClosedDealsNextTests(TestCase):
                 response.close()
 
     def test_csv_is_identical_to_legacy_including_hidden_fields_and_formula_protection(self):
+        from django.test import RequestFactory
+        from .report_views import report_page
         payload = deal_payload()
         payload['details'][0]['Партнер'] = '=HYPERLINK("bad")'
         with patch('admin_motivation.report_views.choices', return_value=[]), patch('admin_motivation.report_views.load_report', return_value=deepcopy(payload)):
-            old = self.client.get(reverse('motivation_report', args=['deals']), {**self.query, 'export': 'csv'})
+            request = RequestFactory().get(reverse('motivation_report', args=['deals']), {**self.query, 'export': 'csv'})
+            request.user = self.actor
+            old = report_page(request, 'deals')
         with patch('admin_motivation.reports_next_deals.choices', return_value=[]), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.reports_next_deals.load_report', return_value=deepcopy(payload)):
             new = self.client.get(self.url, {**self.query, 'export': 'csv'})
         self.assertEqual(new.content, old.content)

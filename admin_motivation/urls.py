@@ -1,10 +1,11 @@
 from . import editor_views, reports_next_views, reports_all_2026, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
+from . import report_navigation_views
 
 urlpatterns = [
     path('coefficients/editor/check/',editor_views.check,name='motivation_editor_check'),
     path('coefficients/history/<int:log_id>.csv', operation_views.coefficient_edit_log, name='motivation_coefficient_edit_log'),
-    path('reports-next/', reports_next_views.index, name='motivation_reports_next'),
+    path('reports-next/', report_navigation_views.catalog, name='motivation_reports_next'),
     path('reports-next/year-2026/', reports_all_2026.report, name='motivation_report_all_2026'),
     path('reports-next/<str:kind>/', reports_next_views.report, name='motivation_report_next'),
     path('coefficients/coverage/repair-all/', coverage_views.repair_all, name='motivation_coverage_repair_all'),
@@ -26,9 +27,9 @@ urlpatterns = [
     path("coefficients/template/<int:subdivision>/", views.download_coefficient_template, name="motivation_subdivision_template"),
     path("copy_group/", director_views.coefficient_group_copy, name="motivation_copy_group"),
     path("directors/", director_views.director_directory, name="motivation_director_directory"),
-    path("reports/", report_views.report_index, name="motivation_reports"),
-    path("reports/plan-summary/", report_views.plan_summary, name="motivation_plan_summary"),
-    path("reports/<str:kind>/", report_views.report_page, name="motivation_report"),
+    path("reports/", reports_next_views.index, name="motivation_reports"),
+    path("reports/plan-summary/", report_navigation_views.legacy_report, {'kind': 'plan-summary'}, name="motivation_plan_summary"),
+    path("reports/<str:kind>/", report_navigation_views.legacy_report, name="motivation_report"),
     path("director_coefficients/global", director_views.director_coefficients, name="motivation_directors_global"),
     path("director_coefficients/local", director_views.director_coefficients, {"local": True}, name="motivation_directors_local"),
     path("coefficient_comparison", comparison_views.comparison_action, name="motivation_coefficient_comparison"),

@@ -36,11 +36,11 @@ class ReportsNextTests(TestCase):
             'plan_version': fixture.scenario.source_version, 'quarter_share': '80', 'year_share': '20', 'payout_threshold': '.8'},
             export_snapshot=export_snapshot())
 
-    def test_new_tab_and_old_reports_remain_available(self):
+    def test_single_catalog_replaces_version_tabs(self):
         response = self.client.get(reverse('motivation_reports'))
-        self.assertContains(response, 'Текущие отчёты')
-        self.assertContains(response, 'Новые отчёты')
-        response = self.client.get(reverse('motivation_reports_next'))
+        self.assertNotContains(response, 'Текущие отчёты')
+        self.assertNotContains(response, 'Новые отчёты')
+        self.assertRedirects(self.client.get(reverse('motivation_reports_next')), reverse('motivation_reports'))
         self.assertContains(response, 'Сводный отчёт: план премий')
         self.assertContains(response, 'Реестр премий к выплате')
         self.assertContains(response, 'Моя премия')

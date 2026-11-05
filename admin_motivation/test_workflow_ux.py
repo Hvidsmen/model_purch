@@ -98,8 +98,8 @@ class WorkflowUxTests(TestCase):
     def test_report_receipt_renders_with_recorded_context(self):
         from django.utils import timezone
         MotivationExecution.objects.create(run_id=uuid4(),job_key=uuid4(),state='completed',started_at=timezone.now(),completed_at=timezone.now(),parameters={'fact_year':2026,'plan_version':'Recorded plan'},export_snapshot={'versions':[{'title':'Recorded coefficients','from':'2026-01-01'}]})
-        with patch('admin_motivation.report_views.choices',return_value=[]),patch('admin_motivation.report_views.load_report',return_value={'currency':'USD','nodes':[],'periods':[]}):
-            response=self.client.get(reverse('motivation_report',args=['manager-detail']),{'year':'2026','run':'1'})
+        response=self.client.get(reverse('motivation_report',args=['manager-detail']),{'year':'2026'},follow=True)
+        self.assertEqual(response.redirect_chain[0][0], reverse('motivation_report_next',args=['detail'])+'?year=2026')
         self.assertContains(response,'Recorded plan')
 
     def test_monitor_links_actual_record_and_refreshes_workflow(self):
