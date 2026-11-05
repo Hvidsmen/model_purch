@@ -166,7 +166,7 @@ class All2026ViewTests(TestCase):
         return user
 
     def test_explicit_roles_see_link_and_can_read_and_export(self):
-        index = reverse('motivation_reports_next')
+        index = reverse('motivation_reports')
         for role in (ADMIN, DIRECTOR, BRANCH_DIRECTOR, MOTIVATION_VIEWER):
             with self.subTest(role=role):
                 user = self.role_account(role, 'allowed-' + str(len(User.objects.all())))
@@ -185,7 +185,7 @@ class All2026ViewTests(TestCase):
             with self.subTest(role=role):
                 user = self.role_account(role, 'denied-' + str(len(User.objects.all())))
                 self.client.force_login(user)
-                self.assertNotContains(self.client.get(reverse('motivation_reports_next')), self.url)
+                self.assertNotContains(self.client.get(reverse('motivation_reports')), self.url)
                 with patch('admin_motivation.services.reports_next.load_report') as load:
                     self.assertEqual(self.client.get(self.url, {'run': '1'}).status_code, 403)
                     self.assertEqual(self.client.get(self.url, {'export': 'xlsx'}).status_code, 403)

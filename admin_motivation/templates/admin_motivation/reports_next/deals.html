@@ -3,7 +3,7 @@
 <link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=deal-filters-20261103">
 <section class="content native-report nr-page nr-deals-page">
 {% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
-<a class="nr-back" href="{% url 'motivation_reports_next' %}">← Новые отчёты</a>
+<a class="nr-back" href="{% url 'motivation_reports' %}">← Отчёты</a>
 {% include 'admin_motivation/reports_next/_navigation.html' %}
 <div class="nr-heading"><div><span class="nr-eyebrow">Мотивация / фактические отгрузки</span><h1>Факт закрытых сделок</h1><p class="nr-subtitle">От отгрузок — к возможной мотивации. Все поля прежнего отчёта сохранены.</p></div><span class="nr-status">Факт · USD</span></div>
 <div class="nr-context"><span>{{ query.start }} — {{ query.end }}</span><span>{{ query.subdivision|default:'Выберите подразделение' }}</span><span>{{ query.type|default:'Выберите вид мотивации' }}</span>{% if execution %}<span>Последний успешный расчёт {% timezone 'Europe/Moscow' %}{{ execution.completed_at|date:'d.m.Y, H:i' }}{% endtimezone %} МСК</span>{% endif %}</div>

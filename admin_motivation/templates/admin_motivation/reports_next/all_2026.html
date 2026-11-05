@@ -23,7 +23,7 @@
 {% include 'admin_motivation/reports_next/_product_filters.html' %}
 <label>Сотрудник<input name="author" value="{{ query.author }}" placeholder="Точное ФИО · пусто — все доступные"></label>
 <label>Валюта<select name="currency"><option {% if query.currency != 'RUB' %}selected{% endif %}>USD</option><option {% if query.currency == 'RUB' %}selected{% endif %}>RUB</option></select></label>
-<div class="nr-field" style="grid-column:1/-1">Периоды<div class="nr-controls-row">{% for choice in periods %}<label><input type="checkbox" name="period" value="{{ choice.code }}" {% if choice.selected %}checked{% endif %}> {{ choice.label }}</label>{% endfor %}<small>Пустой выбор — все пять периодов.</small></div></div>
+<div class="nr-field" style="grid-column:1/-1">Периоды<div class="nr-controls-row">{% for choice in periods %}<label><input type="checkbox" name="period" value="{{ choice.code }}" {% if choice.selected %}checked{% endif %}> {{ choice.label }}</label>{% endfor %}<small>Пустой выбор — {% if scenario == 'separate' %}все три квартала{% else %}все пять периодов{% endif %}.</small></div></div>
 <div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button>{% if data != None %}<a href="{{ export_url }}">↓ Excel</a>{% endif %}</div></form>
 {% if data != None %}{% include 'admin_motivation/reports_next/_team_summary.html' %}
 {% include 'admin_motivation/reports_next/_report_period_cards.html' %}

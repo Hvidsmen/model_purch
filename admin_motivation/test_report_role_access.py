@@ -31,7 +31,7 @@ class ReportRoleAccessTests(TestCase):
 
     def test_director_employee_report_and_export_validate_branch_and_employee(self):
         self.client.force_login(self.fixture.users[BRANCH_DIRECTOR])
-        catalog = self.client.get(reverse('motivation_reports_next'))
+        catalog = self.client.get(reverse('motivation_reports'))
         self.assertContains(catalog, 'Премия сотрудника')
         self.assertContains(catalog, 'Реестр премий к выплате')
         with patch('admin_motivation.services.reports_next.employee_authors', return_value=['Alice', 'Bob']), patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=self.source()) as load:
@@ -69,7 +69,7 @@ class ReportRoleAccessTests(TestCase):
         user = self.fixture.users[DEPUTY_DIRECTOR]
         user.first_name, user.last_name = 'Иван', 'Иванов'; user.save()
         self.client.force_login(user)
-        self.assertContains(self.client.get(reverse('motivation_reports_next')), 'Моя премия/Премия сотрудников')
+        self.assertContains(self.client.get(reverse('motivation_reports')), 'Моя премия/Премия сотрудников')
         # The own-director employee list is derived from trusted identity without DWH lookup.
         self.assertEqual(reports_next.employee_authors(user, 'Allowed-A', 'Директора', '2026'), ['Иванов Иван'])
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=self.source(author='Иванов Иван')) as load:

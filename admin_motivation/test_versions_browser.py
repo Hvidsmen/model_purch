@@ -226,8 +226,8 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
         annual = manager_detail_report([detail_rows()[1]])
         with patch('admin_motivation.services.reports_next.planned_budget', return_value=budget) as comparison, patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=annual):
             self.page.goto(self.live_server_url + reverse('motivation_reports'))
-            self.page.get_by_role('link', name='Новые отчёты · пилот', exact=True).click()
-            expect(self.page.get_by_role('heading', name='Новые отчёты мотивации')).to_be_visible()
+            expect(self.page.get_by_role('link', name='Новые отчёты · пилот', exact=True)).to_have_count(0)
+            expect(self.page.get_by_role('heading', name='Отчёты мотивации', exact=True)).to_be_visible()
             self.page.get_by_role('link', name='Сводный отчёт: план премий', exact=False).click()
             self.page.select_option('select[name=plan]', str(alternate))
             self.page.locator('.next-periods > summary').click()

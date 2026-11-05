@@ -192,13 +192,13 @@ def report(request):
             logging.getLogger(__name__).exception('Additional 2026 report failed')
             error = 'Не удалось получить отдельные результаты 2026. Проверьте подключение DataWH и состояние задания.'
     from .services.product_filters import fields as product_fields
-    branches = scope['subdivision'] if scope else list(Subdivision.objects.values_list('subdivision_key', flat=True))
+    branches = scope['subdivision'] if scope else list(Subdivision.all_objects.values_list('subdivision_key', flat=True))
     branches = [branches] if isinstance(branches, str) else branches
     if variant == 'separate_2026':
         from .services.subdivision_aliases import expand, mapping
-        branches = [name for name in expand(branches, mapping()) if name in ('Д-Москва','ТЕРМОТРЕЙД')]
+        branches = [name for name in expand(branches, mapping()) if name.strip().casefold() in ('д-москва','термотрейд')]
     else:
-        branches = [name for name in branches if name == 'Д-Москва']
+        branches = [name for name in branches if name.strip().casefold() == 'д-москва']
     kinds = scope['type'] if scope else ['Политики', 'Продажи', 'Директора']
     kinds = [kinds] if isinstance(kinds, str) else kinds
     params = query.copy(); params['run'] = '1'; params['export'] = 'xlsx'

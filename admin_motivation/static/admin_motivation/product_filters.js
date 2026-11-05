@@ -31,5 +31,9 @@
     if (input.disabled) input.checked = false;
    }
   });
+  // Refresh dependent fields without starting a report or a calculation.
+  const branch = scenario.form.querySelector('select[name=subdivision]');
+  if (branch) branch.value = '';
+  scenario.form.requestSubmit();
  });
 })();
