@@ -87,6 +87,12 @@ def calculation_command(job, follow_up=None, *, locked=True):
                  f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f}, @PayoutThreshold={threshold:.8f};")
     from .execution_tracking import tracked_statement
     tracked = tracked_statement(job, statement)
+    if variant_of(job) == 'all_2026':
+        from copy import copy
+        separate = copy(job)
+        separate.variant = 'separate_2026'
+        additional = calculation_command(separate, locked=False)
+        tracked += "\nEXEC sys.sp_executesql N'" + additional.replace("'", "''") + "';"
     if follow_up is not None:
         # A separate SQL scope keeps tracking variables independent. THROW in
         # the first calculation prevents this statement from being reached.
@@ -131,7 +137,7 @@ def quote(name):
 
 
 def prepare(cursor, variant='main'):
-    from .calculation_variants import procedure, MAIN, ALL_2026, isolate, full_year_patch
+    from .calculation_variants import procedure, MAIN, ALL_2026, SEPARATE_2026, isolate, full_year_patch
     proc = procedure(variant)
     cursor.execute("SELECT OBJECT_DEFINITION(OBJECT_ID(N'motivation.sp_CalcBySub')), OBJECT_ID(?)", proc)
     definition, existing = cursor.fetchone()
@@ -147,20 +153,24 @@ def prepare(cursor, variant='main'):
     config = rules()
     if config:
         cursor.executemany('INSERT INTO motivation.PortalSubdivisionMerge (SourceName,TargetName) VALUES (?,?)', [(source, target) for source, target, policy in config])
-    cursor.execute("IF OBJECT_ID(N'motivation.PortalCalculationSubdivisions', N'V') IS NULL EXEC(N'CREATE VIEW motivation.PortalCalculationSubdivisions AS SELECT 1 AS placeholder');")
+    view_name = 'PortalSeparateSubdivisions' if variant == SEPARATE_2026 else 'PortalCalculationSubdivisions'
+    cursor.execute("IF OBJECT_ID(N'motivation.PortalCalculationSubdivisions', N'V') IS NULL EXEC(N'CREATE VIEW motivation.PortalCalculationSubdivisions AS SELECT 1 AS placeholder');".replace('PortalCalculationSubdivisions', view_name))
     projections = [f'COALESCE(m.TargetName,s.{quote(column)}) AS {quote(column)}' if column == 'SubdivisionName' else 's.' + quote(column) for column in columns]
+    if variant == SEPARATE_2026:
+        projections = ['s.' + quote(column) for column in columns]
     from .subdivision_scope import sql_predicate
     from .calculation_scope import predicate as calculation_predicate
-    cursor.execute('ALTER VIEW motivation.PortalCalculationSubdivisions AS SELECT ' + ','.join(projections) +
+    cursor.execute('ALTER VIEW motivation.' + view_name + ' AS SELECT ' + ','.join(projections) +
                    ' FROM dbo.Subdivisions s LEFT JOIN motivation.PortalSubdivisionMerge m ON m.SourceName=s.SubdivisionName WHERE ' +
                    sql_predicate('s.SubdivisionName') + ' AND ' + sql_predicate('COALESCE(m.TargetName,s.SubdivisionName)') +
-                   ' AND ' + calculation_predicate('COALESCE(m.TargetName,s.SubdivisionName)') + ';')
+                   ' AND ' + calculation_predicate('COALESCE(m.TargetName,s.SubdivisionName)') +
+                   " AND s.SubdivisionName IN (N'Д-Москва',N'ТЕРМОТРЕЙД');")
     header = re.compile(r'\b(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)PROC(?:EDURE)?\s+(?:\[?motivation\]?\s*\.\s*)?(?:\[sp_CalcBySub\]|sp_CalcBySub\b)', re.I)
     changed, count = header.subn(('ALTER' if existing else 'CREATE') + ' PROCEDURE ' + proc, definition, count=1)
     if count != 1:
         raise ValidationError('Не удалось распознать определение sp_CalcBySub. Исходная процедура не изменена.')
     changed, references = re.subn(r'(?:(?:\[?DataWH\]?)\s*\.\s*)?\[?dbo\]?\s*\.\s*\[?Subdivisions\]?(?!\w)',
-                                  'DataWH.motivation.PortalCalculationSubdivisions', changed, flags=re.I)
+                                  'DataWH.motivation.' + view_name, changed, flags=re.I)
     if not references:
         raise ValidationError('В процедуре не найден справочник для ограничения расчёта подразделением Д-Москва. Расчёт не запущен.')
     from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff, GlobalCoeffVersion, MotivationExportLog
@@ -191,7 +201,13 @@ def prepare(cursor, variant='main'):
         from .manager_correction import patch
         changed = patch(changed)
     from .pilot_calculation import patch as pilot_patch
-    changed = pilot_patch(changed) if variant == MAIN else isolate(full_year_patch(changed))
+    changed = pilot_patch(changed) if variant == MAIN else full_year_patch(changed)
+    from .transition_2026 import patch as transition_patch, separate_coefficients
+    changed = transition_patch(changed)
+    if variant == SEPARATE_2026:
+        changed = separate_coefficients(changed)
+    if variant != MAIN:
+        changed = isolate(changed, 'Separate2026' if variant == SEPARATE_2026 else 'All2026')
     from .calculation_performance import patch as scope_preparation, MARKER as performance_marker
     changed = scope_preparation(changed)
     from .calculation_sales_isolation import patch as isolate_sales
@@ -226,6 +242,9 @@ def sync_job(job, connector=None):
         if follow_up is not None:
             stage = 'Подготовка расчёта всех кварталов 2026'
             prepare(cursor, 'all_2026')
+            prepare(cursor, 'separate_2026')
+        if variant == 'all_2026':
+            prepare(cursor, 'separate_2026')
         from .execution_tracking import DDL
         stage = 'Подготовка журнала запусков'
         cursor.execute(DDL)

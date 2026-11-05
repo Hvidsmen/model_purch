@@ -17,6 +17,13 @@ from .services.reports_next_presenter import present
 from .services.all_2026_access import can_view
 
 
+def selected_variant(query):
+    value = query.get('scenario', 'combined')
+    if value not in ('combined', 'separate'):
+        raise ValidationError('Выберите объединённый или раздельный сценарий.')
+    return 'separate_2026' if value == 'separate' else ALL_2026
+
+
 def selection(user, query):
     if not can_view(user):
         raise PermissionDenied
@@ -26,28 +33,39 @@ def selection(user, query):
     allowed = scope['type'] if scope else ['Политики', 'Продажи', 'Директора']
     allowed = [allowed] if isinstance(allowed, str) else allowed
     kinds = reports_next.selected_types(query, allowed)
-    periods = list(dict.fromkeys(query.getlist('period'))) or list('12345')
-    if any(code not in '12345' for code in periods) or query.get('year', '2026') != '2026':
+    variant = selected_variant(query)
+    available_periods = '123' if variant == 'separate_2026' else '12345'
+    periods = list(dict.fromkeys(query.getlist('period'))) or list(available_periods)
+    if any(code not in available_periods for code in periods) or query.get('year', '2026') != '2026':
         raise ValidationError('Дополнительный вариант: только 2026 год и кварталы I–IV/год.')
     if query.get('currency', 'USD') not in ('USD', 'RUB'):
         raise ValidationError('Выберите USD или RUB.')
     if scope:
         allowed_branches = scope['subdivision'] if isinstance(scope['subdivision'], list) else [scope['subdivision']]
-        if any(branch not in allowed_branches for branch in query.getlist('subdivision')):
+        from .services.subdivision_aliases import mapping, canonical
+        aliases = mapping()
+        if any(canonical(branch, aliases) not in allowed_branches for branch in query.getlist('subdivision')):
             raise PermissionDenied
+    for field in ('planning','goods','brand','author','subdivision'):
+        if len(query.getlist(field)) > 100 or any(len(value)>255 for value in query.getlist(field)):
+            raise ValidationError('Слишком много значений фильтра или слишком длинное значение.')
     return scope, kinds, periods
 
 
 def data_for(user, execution, query):
     scope, kinds, periods = selection(user, query)
+    variant = selected_variant(query)
+    if scope and variant == 'separate_2026':
+        from .services.subdivision_aliases import expand, mapping
+        scope = {**scope, 'subdivision': expand(scope['subdivision'], mapping())}
     rows, plan_fact, department = [], [], []
     for kind in kinds:
         values = {'TypeCoeff_': kind, 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'),
-                  'gp_sales': [], 'GPGoods': [], 'Brend': [], 'Years': ['2026'], 'Currency': query.get('currency', 'USD')}
+                  'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand'), 'Years': ['2026'], 'Currency': query.get('currency', 'USD')}
         if scope:
             values = scoped_values('manager-detail', values, scope)
         data = reports_next.load_report('manager-detail', values, access_scope=scope, premium_period=periods,
-                                        summary_only=True, calculation_variant=ALL_2026)
+                                        summary_only=True, calculation_variant=variant)
         from .services.motivation_performance import presentation_rows, DEPARTMENT
         plan_fact.extend(presentation_rows(data.get('motivation_performance', []), kind))
         department.extend(presentation_rows(data.get('department_performance', []), DEPARTMENT))
@@ -78,7 +96,7 @@ def report(request):
         raise PermissionDenied
     from .operation_views import JobForm
     from .services import calculation_jobs
-    from .services.execution_tracking import observe
+    from .services.execution_tracking import observe, observe_latest
     scope = politician_scope(request.user)
     if role_for(request.user, 'motivation') in REPORT_ROLES and not scope:
         raise PermissionDenied
@@ -137,10 +155,13 @@ def report(request):
                 error = calculation_jobs.failure_message(exc, reference)
             job.error = error; job.save(update_fields=['error'])
     job = MotivationCalculationSchedule.objects.filter(variant=ALL_2026).order_by('-created_at', '-pk').first()
-    observed = observe(job, persist=can_start) if job else None
+    variant = selected_variant(query)
+    observed = observe_latest(variant, persist=can_start)
+    if observed is None and job and variant == ALL_2026:
+        observed = observe(job, persist=can_start)
     pending = bool(observed and observed.state in ('queued', 'running'))
-    execution = MotivationExecution.objects.filter(parameters__variant=ALL_2026, state='completed').order_by('-completed_at', '-pk').first()
-    if observed and observed.parameters.get('variant') != ALL_2026:
+    execution = MotivationExecution.objects.filter(parameters__variant=variant, state='completed').order_by('-completed_at', '-pk').first()
+    if observed and observed.parameters.get('variant') != variant:
         observed = None
     if observed and observed.state == 'completed':
         execution = observed
@@ -148,16 +169,18 @@ def report(request):
     data, presentation = None, {}
     if query.get('run') == '1' or query.get('export') == 'xlsx':
         try:
+            if observed and observed.state != 'completed':
+                raise ValidationError('Выбранный сценарий ещё не завершён успешно. Дождитесь расчёта.')
             if execution is None:
                 raise ValidationError('Дополнительный расчёт ещё не завершён. Результаты основного варианта здесь не используются.')
             with reports_next.current_run(execution):
                 data = data_for(request.user, execution, query)
-            presentation = present('registry', data, data, query.getlist('period') or list('12345'))
+            presentation = present('registry', data, data, query.getlist('period') or list('123' if variant == 'separate_2026' else '12345'))
             if query.get('search', '').strip():
                 raise ValidationError('Для отбора сотрудника используйте поле «Сотрудник».')
             if query.get('export') == 'xlsx':
                 from .reports_next_views import workbook
-                output = workbook('registry', data, [('Вариант', 'Все кварталы и год за 2026'), ('Премиальная база', 'Весь 2026 год'), ('Запуск', str(execution.run_id)), ('Завершён', str(execution.completed_at)), ('План', execution.parameters.get('plan_version', '')), ('Квартальная доля, %', execution.parameters.get('quarter_share', '')), ('Годовая доля, %', execution.parameters.get('year_share', '')), ('Порог выплаты', execution.parameters.get('payout_threshold', ''))], query=query, title='Все кварталы 2026')
+                output = workbook('registry', data, [('Вариант', 'Москва и ТТ раздельно' if variant == 'separate_2026' else 'Москва + ТТ объединённо'), ('Премиальная база', 'I–III кварталы: выбранный сценарий; IV квартал и годовая часть: только IV квартал'), ('Товарные фильтры', '; '.join(field + ': ' + ', '.join(query.getlist(field)) for field in ('planning','goods','brand') if query.getlist(field))), ('Запуск', str(execution.run_id)), ('Завершён', str(execution.completed_at)), ('План', execution.parameters.get('plan_version', '')), ('Квартальная доля, %', execution.parameters.get('quarter_share', '')), ('Годовая доля, %', execution.parameters.get('year_share', '')), ('Порог выплаты', execution.parameters.get('payout_threshold', ''))], query=query, title='Все кварталы 2026')
                 return FileResponse(output, as_attachment=True, filename='motivation-all-2026.xlsx')
             for section in presentation['team_sections']:
                 section['page'] = Paginator(section['rows'], 100).get_page(query.get(section['page_parameter']))
@@ -168,14 +191,20 @@ def report(request):
         except Exception:
             logging.getLogger(__name__).exception('Additional 2026 report failed')
             error = 'Не удалось получить отдельные результаты 2026. Проверьте подключение DataWH и состояние задания.'
+    from .services.product_filters import fields as product_fields
     branches = scope['subdivision'] if scope else list(Subdivision.objects.values_list('subdivision_key', flat=True))
     branches = [branches] if isinstance(branches, str) else branches
+    if variant == 'separate_2026':
+        from .services.subdivision_aliases import expand, mapping
+        branches = [name for name in expand(branches, mapping()) if name in ('Д-Москва','ТЕРМОТРЕЙД')]
+    else:
+        branches = [name for name in branches if name == 'Д-Москва']
     kinds = scope['type'] if scope else ['Политики', 'Продажи', 'Директора']
     kinds = [kinds] if isinstance(kinds, str) else kinds
     params = query.copy(); params['run'] = '1'; params['export'] = 'xlsx'
     return render(request, 'admin_motivation/reports_next/all_2026.html', {
         'kind': 'registry', 'all_2026_report': True, 'query': query, 'form': form, 'can_start': can_start, 'error': error,
         'job': job, 'pending': pending, 'execution': execution, 'data': data, 'ledger': data,
-        'presentation': presentation, 'periods': [{'code': code, 'label': label, 'selected': not query.getlist('period') or code in query.getlist('period')} for code, label in [('1','I квартал'),('2','II квартал'),('3','III квартал'),('4','IV квартал'),('5','Год')]],
-        'branches': branches, 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
+        'presentation': presentation, 'periods': [{'code': code, 'label': label, 'selected': not query.getlist('period') or code in query.getlist('period')} for code, label in [('1','I квартал'),('2','II квартал'),('3','III квартал'),('4','IV квартал'),('5','Год')] if variant != 'separate_2026' or code in '123'],
+        'rule_outdated': bool(execution and execution.parameters.get('transition_rule') != 'moscow-tt-q4-heat-v1'), 'scenario': query.get('scenario','combined'), 'product_filter_fields': product_fields(query), 'branches': branches, 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
     })

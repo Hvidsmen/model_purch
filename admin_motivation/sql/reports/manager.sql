@@ -39,6 +39,8 @@ WHERE
 AND АвторСделки IN (@DealAuthor)
 AND ТипКоэф = @TypeCoeff_
 AND ГруппаПлановПродаж IN (@gp_sales)
+AND ГруппаТоваров IN (@GPGoods)
+AND Марка IN (@Brend)
 
 
 UNION ALL
@@ -84,3 +86,5 @@ WHERE
 
 AND ТипКоэф = @TypeCoeff_
 AND ГруппаПлановПродаж IN (@gp_sales)
+AND ГруппаТоваров IN (@GPGoods)
+AND Марка IN (@Brend)

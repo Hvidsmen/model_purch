@@ -15,19 +15,20 @@ from .services.presentation_excel import workbook
 class DepartmentPerformanceTests(SimpleTestCase):
     def test_whole_department_keeps_dpp_and_actual_q1_plan_without_employee_duplicates(self):
         with sqlite3.connect(':memory:') as db:
+            db.create_function('PATINDEX', 2, lambda pattern, value: next((i+1 for i,ch in enumerate(value or '') if ch not in '0123456789. '), 0))
             db.create_function('LOWER', 1, lambda value: value.lower() if value else value)
             db.execute('CREATE TABLE input (Подразделение,Год,КварталМотивации,VariationCalculate,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаПланUSD,СуммаОтгрузокUSD)')
             periods = ['1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', '4 Квартал(1-4 кв)', 'Год']
             db.executemany('INSERT INTO input VALUES (?,?,?,?,?,?,?,?,?,?)', [
                 ('Д-Москва', 2026, period, 'Подразделение(Глобально)', author, 'PG', 'G', 'B', 999, 999)
                 for author in ('Иван', 'Пётр') for period in periods])
-            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD)')
-            db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [
+            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD,ГруппаПлановПродаж DEFAULT "PG")')
+            db.executemany('INSERT INTO plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD) VALUES (?,?,?,?,?,?,?)', [
                 ('Д-Москва', 2026, kind, q, channel, plan, fact)
                 for q in (1, 2, 3, 4) for kind, channel, plan, fact in [
                     ('Продажи', 'Dealer', 100, 60), ('Продажи', 'ДПП', 50, 40),
                     ('Директора', 'Dealer', 9999, 9999), ('Политики', 'Dealer', 80, 50)]])
-            db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [
+            db.executemany('INSERT INTO plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD) VALUES (?,?,?,?,?,?,?)', [
                 ('Д-СПб', 2026, 'Продажи', 3, 'Dealer', 9999, 9999),
                 ('Д-Москва', 2025, 'Продажи', 3, 'Dealer', 9999, 9999)])
             for variant in ('main', 'all_2026'):
@@ -35,7 +36,7 @@ class DepartmentPerformanceTests(SimpleTestCase):
                     return {row[2]: row[5:] for row in db.execute(sql.replace(plan_fact_table(variant), 'plan_fact').replace("N'", "'"))}
                 actual = execute(department_sql('SELECT * FROM input', variant))
                 self.assertEqual(actual, {'1 Квартал': (150, 100), '2 Квартал(1-2 кв)': (300, 200),
-                    '3 Квартал': (150, 100), '4 Квартал(1-4 кв)': (600, 400), 'Год': (600, 400), 'Итого': (600, 400)})
+                    '3 Квартал': (150, 100), '4 Квартал(1-4 кв)': (150, 100), 'Год': (150, 100), 'Итого': (600, 400)})
                 policies = execute(grouped_sql('SELECT * FROM input', 'Политики', variant))
                 directors = execute(grouped_sql('SELECT * FROM input', 'Директора', variant))
                 self.assertEqual(policies['1 Квартал'], (50, 50))

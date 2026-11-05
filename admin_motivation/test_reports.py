@@ -95,8 +95,8 @@ class NativeMotivationReportTests(TestCase):
         database = sqlite3.connect(':memory:')
         self.addCleanup(database.close)
         database.create_function('LOWER',1,lambda value:value.lower() if value is not None else None)
-        database.execute('CREATE TABLE report (Подразделение, АвторСделки, ТипКоэф, ГруппаПлановПродаж, КварталМотивации)')
-        database.execute("INSERT INTO report VALUES ('Д-Астрахань', NULL, 'Директора', 'RAC', '4 Квартал(1-4 кв)')")
+        database.execute('CREATE TABLE report (Подразделение, АвторСделки, ТипКоэф, ГруппаПлановПродаж, КварталМотивации, ГруппаТоваров, Марка)')
+        database.execute("INSERT INTO report (Подразделение, АвторСделки, ТипКоэф, ГруппаПлановПродаж, КварталМотивации) VALUES ('Д-Астрахань', NULL, 'Директора', 'RAC', '4 Квартал(1-4 кв)')")
         connection, cursor = Mock(), Mock()
         calls = []
         def read(cursor, sql, args=(), **kwargs):
@@ -108,7 +108,7 @@ class NativeMotivationReportTests(TestCase):
             'admin_motivation.services.reports.fetch', side_effect=read):
             first = choices('manager', values, refresh=True)
             self.assertEqual(next(f for f in first if f['name'] == 'author')['options'], [])
-            database.executemany('INSERT INTO report VALUES (?, ?, ?, ?, ?)', [
+            database.executemany('INSERT INTO report (Подразделение, АвторСделки, ТипКоэф, ГруппаПлановПродаж, КварталМотивации) VALUES (?, ?, ?, ?, ?)', [
                 ('Д-Астрахань', 'Иванов', 'Директора', 'RAC', '4 Квартал(1-4 кв)'),
                 ('Д-Астрахань', '   ', 'Директора', 'RAC', '4 Квартал(1-4 кв)'),
                 ('Д-Астрахань', 'Другой тип', 'Продажи', 'RAC', '4 Квартал(1-4 кв)'),

@@ -5,29 +5,32 @@ from django.db.models import Q
 
 MAIN = 'main'
 ALL_2026 = 'all_2026'
+SEPARATE_2026 = 'separate_2026'
 CHOICES = [(MAIN, 'Основной · премия только за IV квартал'), (ALL_2026, 'Дополнительный · все кварталы 2026')]
 TABLES = ('Fact', 'PlanFact', 'ReportMotivationByDealAuthor')
 
 
 def variant_of(job):
     value = getattr(job, 'variant', MAIN)
-    if value not in (MAIN, ALL_2026):
+    if value not in (MAIN, ALL_2026, SEPARATE_2026):
         raise ValidationError('Неизвестный вариант расчёта.')
-    if value == ALL_2026 and job.fact_year != 2026:
+    if value in (ALL_2026, SEPARATE_2026) and job.fact_year != 2026:
         raise ValidationError('Дополнительный вариант доступен только за 2026 год.')
     return value
 
 
 def procedure(variant):
-    if variant not in (MAIN, ALL_2026):
+    if variant not in (MAIN, ALL_2026, SEPARATE_2026):
         raise ValidationError('Неизвестный вариант расчёта.')
-    return 'motivation.PortalCalcBySub' if variant == MAIN else 'motivation.PortalCalcAll2026'
+    return {MAIN: 'motivation.PortalCalcBySub', ALL_2026: 'motivation.PortalCalcAll2026', SEPARATE_2026: 'motivation.PortalCalcSeparate2026'}[variant]
 
 
-def isolate(sql):
+def isolate(sql, suffix='All2026'):
+    if suffix not in ('All2026', 'Separate2026'):
+        raise ValueError('Unknown calculation namespace')
     for table in TABLES:
         pattern = r'(?:(?:\[?DataWH\]?)\s*\.\s*)?\[?motivation\]?\s*\.\s*\[?' + table + r'\]?(?!\w)'
-        sql = re.sub(pattern, 'DataWH.motivation.' + table + 'All2026', sql, flags=re.I)
+        sql = re.sub(pattern, 'DataWH.motivation.' + table + suffix, sql, flags=re.I)
     return sql
 
 

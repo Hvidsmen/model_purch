@@ -21,9 +21,19 @@ def parameters(job):
     from .pilot_calculation import PERIODS
     from .calculation_variants import variant_of, ALL_2026
     variant = variant_of(job)
-    return {'fact_year':job.fact_year,'plan_version':job.plan_version,
-            'quarter_share':str(job.quarter_share),'year_share':str(job.year_share),
-            'payout_threshold':str(job.payout_threshold), 'premium_periods':list('12345') if variant == ALL_2026 else list(PERIODS), 'quarter_catchup':False, 'premium_amount_quarters':[1,2,3,4] if variant == ALL_2026 else [4], 'variant':variant}
+    from .transition_2026 import RULE_VERSION
+    transition = job.fact_year == 2026
+    periods = list('123') if variant == 'separate_2026' else list('12345') if variant == ALL_2026 else list(PERIODS)
+    return {'fact_year': job.fact_year, 'plan_version': job.plan_version,
+            'quarter_share': str(job.quarter_share), 'year_share': str(job.year_share),
+            'payout_threshold': str(job.payout_threshold), 'premium_periods': periods,
+            'quarter_catchup': False,
+            'premium_amount_quarters': [int(code) for code in periods if code != '5'],
+            'variant': variant, 'transition_rule': RULE_VERSION if transition else None,
+            'q4_eligibility_quarters': [4] if transition else [1,2,3,4],
+            'annual_amount_quarters': [] if variant == 'separate_2026' else [4] if transition or variant == 'main' else [1,2,3,4],
+            'calculation_subdivisions': ['Д-Москва', 'ТЕРМОТРЕЙД']}
+
 
 
 def tracked_statement(job, statement):
@@ -90,7 +100,7 @@ def execution_from_row(row, *, persist=False):
 
 def observe_latest(variant='main', connector=None, *, persist=False):
     """Read the newest actual SQL Agent run, including scheduled executions."""
-    if variant not in ('main', 'all_2026'):
+    if variant not in ('main', 'all_2026', 'separate_2026'):
         raise ValidationError('Неизвестный вариант расчёта.')
     connection = None
     try:

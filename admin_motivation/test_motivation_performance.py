@@ -9,12 +9,13 @@ class MotivationPerformanceTests(SimpleTestCase):
                   'АвторСделки','ГруппаПлановПродаж','ГруппаТоваров','Марка',
                   'СуммаПланUSD','СуммаОтгрузокUSD','ТипКоэф']
         with sqlite3.connect(':memory:') as db:
+            db.create_function('PATINDEX', 2, lambda pattern, value: next((i+1 for i,ch in enumerate(value or '') if ch not in '0123456789. '), 0))
             db.create_function('LOWER', 1, lambda value: value.lower() if value else value)
             db.execute('CREATE TABLE input (' + ','.join('['+field+']' for field in fields) + ')')
-            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD)')
-            db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [
+            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD,ГруппаПлановПродаж DEFAULT "PG")')
+            db.executemany('INSERT INTO plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD) VALUES (?,?,?,?,?,?,?)', [
                 ('A',2026,'Продажи',3,'Dealer',100,75),
-                ('A',2026,'Продажи',1,'Dealer',800,525)])
+                ('A',2026,'Продажи',1,'Dealer',800,525), ('A',2026,'Продажи',4,'Dealer',900,600)])
             rows = [
                 ('A',2026,'3 Квартал','Подразделение(Глобально)','One','PG1','G','B',100,75),
                 ('A',2026,'3 Квартал','Подразделение(Глобально)','Two','PG2','H','C',100,75),
@@ -33,6 +34,7 @@ class MotivationPerformanceTests(SimpleTestCase):
 
     def test_global_report_uses_whole_department_and_same_period_as_payout(self):
         with sqlite3.connect(':memory:') as db:
+            db.create_function('PATINDEX', 2, lambda pattern, value: next((i+1 for i,ch in enumerate(value or '') if ch not in '0123456789. '), 0))
             db.create_function('LOWER', 1, lambda value: value.lower() if value else value)
             db.execute('CREATE TABLE input (Подразделение,Год,КварталМотивации,VariationCalculate,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаПланUSD,СуммаОтгрузокUSD,ТипКоэф)')
             periods = ['1 Квартал','2 Квартал(1-2 кв)','3 Квартал','4 Квартал(1-4 кв)','Год']
@@ -40,8 +42,8 @@ class MotivationPerformanceTests(SimpleTestCase):
             rows = [('A',2026,period,'Подразделение(Глобально)','Selected','PG','G','B',396570.37,397849.78,'Политики')
                     for period in periods]
             db.executemany('INSERT INTO input VALUES (?,?,?,?,?,?,?,?,?,?,?)', rows * 10)
-            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD)')
-            db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [
+            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD,ГруппаПлановПродаж DEFAULT "PG")')
+            db.executemany('INSERT INTO plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD) VALUES (?,?,?,?,?,?,?)', [
                 ('A',2026,'Продажи',1,'Dealer',100,60),
                 ('A',2026,'Продажи',2,'Dealer',100,100),
                 ('A',2026,'Продажи',3,'Dealer',100,60),
@@ -57,17 +59,18 @@ class MotivationPerformanceTests(SimpleTestCase):
             result = {row[2]: row[5:] for row in db.execute(sql, ['Selected'])}
         self.assertEqual(result, {
             '1 Квартал': (60,60), '2 Квартал(1-2 кв)': (200,160),
-            '3 Квартал': (100,66), '4 Квартал(1-4 кв)': (500,326), 'Год': (500,326), 'Итого': (500,326)})
+            '3 Квартал': (100,66), '4 Квартал(1-4 кв)': (200,100), 'Год': (200,100), 'Итого': (500,326)})
         # The same query uses the union of selected windows, not their sum.
         with sqlite3.connect(':memory:') as db:
+            db.create_function('PATINDEX', 2, lambda pattern, value: next((i+1 for i,ch in enumerate(value or '') if ch not in '0123456789. '), 0))
             db.create_function('LOWER', 1, lambda value: value.lower() if value else value)
             db.execute('CREATE TABLE input (Подразделение,Год,КварталМотивации,VariationCalculate,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаПланUSD,СуммаОтгрузокUSD,ТипКоэф)')
             db.executemany('INSERT INTO input VALUES (?,?,?,?,?,?,?,?,?,?,?)', rows)
-            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD)')
-            db.executemany('INSERT INTO plan_fact VALUES (?,?,?,?,?,?,?)', [('A',2026,'Продажи',q,'Dealer',100,50) for q in (1,2,3,4)])
+            db.execute('CREATE TABLE plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD,ГруппаПлановПродаж DEFAULT "PG")')
+            db.executemany('INSERT INTO plan_fact (Подразделение,Год,ТипКоэф,Квартал,Канал,СуммаПланUSD,СуммаОтгрузокUSD) VALUES (?,?,?,?,?,?,?)', [('A',2026,'Продажи',q,'Dealer',100,50) for q in (1,2,3,4)])
             for selected, expected in [(['1 Квартал'], (50,50)),
                                        (['1 Квартал','2 Квартал(1-2 кв)','3 Квартал'], (300,150)),
-                                       (['2 Квартал(1-2 кв)','Год'], (400,200))]:
+                                       (['2 Квартал(1-2 кв)','Год'], (300,150))]:
                 source = 'SELECT * FROM input WHERE КварталМотивации IN (' + ','.join('?' for _ in selected) + ')'
                 query = grouped_sql(source).replace(GLOBAL_PLAN_FACT, 'plan_fact').replace("N'", "'")
                 values = {row[2]:row[5:] for row in db.execute(query, selected)}

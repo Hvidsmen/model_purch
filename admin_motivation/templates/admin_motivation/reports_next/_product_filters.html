@@ -1,0 +1,8 @@
+{% load static %}{% for filter in product_filter_fields %}
+<div class="nr-field">{{ filter.label }}<details class="next-branches next-products"><summary data-product-caption>{{ filter.caption }}</summary><div class="next-branch-options">
+<input type="search" data-product-search placeholder="Найти значение" aria-label="Найти: {{ filter.label }}"><button type="button" data-product-clear>Снять все</button>
+{% for option in filter.options %}<label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}" {% if option.selected %}checked{% endif %}> {{ option.value }}</label>{% endfor %}
+<small>Пустой выбор — все доступные значения. Условие выплаты проверено по полной базе расчёта.</small>
+</div></details></div>
+{% endfor %}
+<script src="{% static 'admin_motivation/product_filters.js' %}?v=transition-20261105" defer></script>

@@ -35,7 +35,7 @@ class CalculationChainTests(TestCase):
         self.assertIn('EXEC motivation.PortalCalcAll2026', extra)
         self.assertIn("Plan O''''Brien", extra)
         self.assertEqual(command.count('sys.sp_getapplock'), 1)
-        self.assertEqual(command.count('DECLARE @portalRun'), 2)
+        self.assertEqual(command.count('DECLARE @portalRun'), 3)
         self.assertNotIn('sp_start_job', command)
 
     @patch.object(jobs, 'prepare')
