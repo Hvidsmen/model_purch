@@ -21,6 +21,9 @@ from .test_manager_detail import detail_rows
 
 class ReportsNextTests(TestCase):
     def setUp(self):
+        audit = patch('admin_motivation.services.execution_tracking.observe_latest', return_value=None)
+        audit.start()
+        self.addCleanup(audit.stop)
         from .test_sales_plans import SalesPlanTests
         from .services.approval import review_approval, approve_review
         from .services.workflow import export_snapshot
@@ -97,6 +100,49 @@ class ReportsNextTests(TestCase):
         self.assertEqual(load.call_args.kwargs['premium_period'], '5')
         self.assertTrue(load.call_args.kwargs['summary_only'])
         self.assertEqual(result['sections'], [])
+
+    def scheduled_execution(self, state='completed'):
+        now = timezone.now() + timedelta(hours=1)
+        return MotivationExecution(run_id=uuid4(), job_key=uuid4(), state=state,
+            started_at=now, completed_at=now if state != 'running' else None,
+            parameters=self.run.parameters, export_snapshot=self.run.export_snapshot)
+
+    def test_report_uses_latest_scheduled_run_before_reading_results(self):
+        latest = self.scheduled_execution()
+        source = manager_detail_report(detail_rows())
+        with patch('admin_motivation.services.execution_tracking.observe_latest', return_value=latest) as audit, patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()) as guard, patch('admin_motivation.services.reports_next.load_report', return_value=source):
+            response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'type': 'Политики'})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.context['execution'].run_id, latest.run_id)
+        self.assertEqual(response.context['execution'].completed_at, latest.completed_at)
+        guard.assert_called_once_with(latest)
+        audit.assert_called_once_with('main', persist=True)
+
+    def test_scheduled_run_export_uses_latest_run_for_read_only_user(self):
+        user = User.objects.create_user('scheduled-finance')
+        user.groups.add(Group.objects.get(name=FINANCIER))
+        self.client.force_login(user)
+        latest = self.scheduled_execution()
+        with patch('admin_motivation.services.execution_tracking.observe_latest', return_value=latest) as audit, patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()) as guard, patch('admin_motivation.services.reports_next.load_report', return_value=manager_detail_report(detail_rows())):
+            response = self.client.get(reverse('motivation_report_next', args=['registry']), {'export': 'xlsx', 'type': 'Политики'})
+        self.assertEqual(response.status_code, 200)
+        guard.assert_called_once_with(latest)
+        audit.assert_called_once_with('main', persist=False)
+        self.assertFalse(MotivationExecution.objects.filter(run_id=latest.run_id).exists())
+        response.close()
+
+    def test_new_failed_or_running_run_does_not_read_previous_results(self):
+        for state, message in [('running', 'Выполняется новый расчёт'), ('failed', 'Последний запуск расчёта завершился ошибкой')]:
+            with self.subTest(state=state), patch('admin_motivation.services.execution_tracking.observe_latest', return_value=self.scheduled_execution(state)), patch('admin_motivation.services.reports_next.current_run') as guard, patch('admin_motivation.services.reports_next.load_report') as load:
+                response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1'})
+                self.assertContains(response, message)
+                guard.assert_not_called()
+                load.assert_not_called()
+
+    def test_filter_page_without_report_request_does_not_query_audit(self):
+        with patch('admin_motivation.services.execution_tracking.observe_latest') as audit:
+            self.client.get(reverse('motivation_report_next', args=['team']))
+        audit.assert_not_called()
 
     def test_finance_registry_does_not_claim_payment_approval(self):
         user = User.objects.create_user('next-finance')

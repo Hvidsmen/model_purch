@@ -5,7 +5,7 @@ from django.shortcuts import render
 from django.http import JsonResponse
 from django.template.loader import render_to_string
 from django.urls import reverse
-from base.access import role_for, REPORT_ROLES
+from base.access import role_for, REPORT_ROLES, ADMIN
 from base.report_access import politician_scope, scoped_query, scoped_values, identity_choices
 from .services.calculation_variants import main_runs
 from .models import MotivationExecution
@@ -39,6 +39,8 @@ def report(request):
             values = scoped_values('deals', values, scope)
         filters = choices('deals', values, refresh=query.get('refresh_choices') == '1', **({'access_scope': scope} if scope else {}))
         if not choices_only and (query.get('run') == '1' or query.get('export') == 'csv'):
+            from .services.execution_tracking import latest_for_report
+            selected = latest_for_report(selected, persist=role_for(request.user, 'motivation') == ADMIN)
             try:
                 page = max(1, int(query.get('page', '1')))
             except (ValueError, TypeError):
