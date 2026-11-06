@@ -49,15 +49,22 @@ def failure_message(error, reference):
 
 
 PROC = 'motivation.PortalCalcBySub'
-LOCKED_COMMAND = """DECLARE @result int;
+LOCKED_COMMAND = """SET NOCOUNT ON;
+DECLARE @result int;
 EXEC @result = sys.sp_getapplock @Resource=N'PortalMotivationCalculation',
  @LockMode=N'Exclusive', @LockOwner=N'Session', @LockTimeout=0;
 IF @result < 0 THROW 50001, N'Расчёт мотивации уже выполняется', 1;
+BEGIN TRY
 EXEC motivation.PortalCalcBySub;
+END TRY
+BEGIN CATCH
+ EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';
+ THROW;
+END CATCH;
 EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';"""
 
 
-def calculation_command(job, follow_up=None, *, locked=True):
+def calculation_command(job, follow_up=None, *, locked=True, include_separate=True):
     if type(job.fact_year) is not int or not 1 <= job.fact_year <= 9999:
         raise ValidationError('Укажите год факта в параметрах задания.')
     plan = (job.plan_version or '').strip()
@@ -86,18 +93,23 @@ def calculation_command(job, follow_up=None, *, locked=True):
                  f"@PlanVersion=N'{escaped_plan}', "
                  f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f}, @PayoutThreshold={threshold:.8f};")
     from .execution_tracking import tracked_statement
-    tracked = tracked_statement(job, statement)
-    if variant_of(job) == 'all_2026':
+    from .calculation_pipeline import validate_pair, main_projection, cache_setup, scoped
+    variant = variant_of(job)
+    optimized = follow_up is not None and variant == 'main' and job.fact_year == 2026
+    if optimized:
+        validate_pair(job, follow_up)
+        combined = calculation_command(follow_up, locked=False, include_separate=False)
+        statement = cache_setup(2026) + scoped(combined) + '\n' + main_projection()
+    elif locked and variant == 'all_2026':
+        statement = cache_setup(2026) + statement
+    tracked = tracked_statement(job, statement, release_lock=False)
+    if optimized or variant == 'all_2026' and include_separate:
         from copy import copy
-        separate = copy(job)
+        separate = copy(follow_up if optimized else job)
         separate.variant = 'separate_2026'
-        additional = calculation_command(separate, locked=False)
-        tracked += "\nEXEC sys.sp_executesql N'" + additional.replace("'", "''") + "';"
-    if follow_up is not None:
-        # A separate SQL scope keeps tracking variables independent. THROW in
-        # the first calculation prevents this statement from being reached.
-        additional = calculation_command(follow_up, locked=False)
-        tracked += "\nEXEC sys.sp_executesql N'" + additional.replace("'", "''") + "';"
+        tracked += '\n' + scoped(calculation_command(separate, locked=False))
+    elif follow_up is not None:
+        tracked += '\n' + scoped(calculation_command(follow_up, locked=False))
     return LOCKED_COMMAND.replace('EXEC motivation.PortalCalcBySub;', tracked) if locked else tracked
 
 
@@ -201,11 +213,17 @@ def prepare(cursor, variant='main'):
         from .manager_correction import patch
         changed = patch(changed)
     from .pilot_calculation import patch as pilot_patch
-    changed = pilot_patch(changed) if variant == MAIN else full_year_patch(changed)
     from .transition_2026 import patch as transition_patch, separate_coefficients
-    changed = transition_patch(changed)
     from .annual_accrual import patch_calculation as capture_annual_contributions
-    changed = capture_annual_contributions(changed)
+    if variant == ALL_2026:
+        from .calculation_pipeline import validate_equivalence
+        main_sql = capture_annual_contributions(transition_patch(pilot_patch(changed)))
+        combined_sql = capture_annual_contributions(transition_patch(full_year_patch(changed)))
+        validate_equivalence(main_sql, combined_sql)
+        changed = combined_sql
+    else:
+        changed = pilot_patch(changed) if variant == MAIN else full_year_patch(changed)
+        changed = capture_annual_contributions(transition_patch(changed))
     if variant == SEPARATE_2026:
         changed = separate_coefficients(changed)
     if variant != MAIN:
@@ -214,6 +232,9 @@ def prepare(cursor, variant='main'):
     changed = scope_preparation(changed)
     from .calculation_sales_isolation import patch as isolate_sales
     changed = isolate_sales(changed, cursor=cursor)
+    if variant != MAIN:
+        from .shared_sales_preparation import patch as share_preparation
+        changed = share_preparation(changed, cursor=cursor)
     import logging
     logging.getLogger(__name__).info('Calculation preparation scoped to fact year: %s; variant: %s', performance_marker in changed, variant)
     cursor.execute(changed)
@@ -258,10 +279,10 @@ def sync_job(job, connector=None):
         exists = cursor.fetchone()
         if not exists:
             cursor.execute('EXEC msdb.dbo.sp_add_job @job_name=?, @enabled=1, @description=?', name, 'Расчёт мотивации из портала')
-            cursor.execute('EXEC msdb.dbo.sp_add_jobstep @job_name=?, @step_name=?, @subsystem=N\'TSQL\', @database_name=N\'DataWH\', @command=?', name, 'Расчёт мотивации', command)
+            cursor.execute('EXEC msdb.dbo.sp_add_jobstep @job_name=?, @step_name=?, @subsystem=N\'TSQL\', @database_name=N\'DataWH\', @flags=4, @command=?', name, 'Расчёт мотивации', command)
             cursor.execute('EXEC msdb.dbo.sp_add_jobserver @job_name=?', name)
         else:
-            cursor.execute('EXEC msdb.dbo.sp_update_jobstep @job_name=?, @step_id=1, @command=?', name, command)
+            cursor.execute('EXEC msdb.dbo.sp_update_jobstep @job_name=?, @step_id=1, @flags=4, @command=?', name, command)
         cursor.execute('SELECT schedule_id FROM msdb.dbo.sysschedules WHERE name=?', name)
         schedule = cursor.fetchone()
         if schedule:
@@ -354,14 +375,14 @@ def monitor(job, connector=None):
             return {'status': status_label(None), 'history': []}
         server_zone = datetime_timezone(timedelta(minutes=int(row[5])))
         cursor.execute("""SELECT TOP (30) h.instance_id,h.run_date,h.run_time,h.run_duration,h.run_status,
-          CASE WHEN h.run_status=0 THEN COALESCE(failure.message,h.message) ELSE h.message END
+          CASE WHEN h.run_status IN (0,1) THEN COALESCE(step_output.message,h.message) ELSE h.message END
           FROM msdb.dbo.sysjobhistory h JOIN msdb.dbo.sysjobs j ON j.job_id=h.job_id
           OUTER APPLY (SELECT TOP (1) f.message FROM msdb.dbo.sysjobhistory f
-            WHERE f.job_id=h.job_id AND f.step_id>0 AND f.run_status=0
+            WHERE f.job_id=h.job_id AND f.step_id>0 AND f.run_status=h.run_status
               AND f.instance_id<h.instance_id AND f.instance_id>COALESCE(
                 (SELECT MAX(p.instance_id) FROM msdb.dbo.sysjobhistory p
                  WHERE p.job_id=h.job_id AND p.step_id=0 AND p.instance_id<h.instance_id),0)
-            ORDER BY f.instance_id DESC) failure
+            ORDER BY f.instance_id DESC) step_output
           WHERE j.name=? AND h.step_id=0 ORDER BY h.instance_id DESC""", job_name(job))
         history = []
         for instance, on_date, at_time, duration, result, message in cursor.fetchall():

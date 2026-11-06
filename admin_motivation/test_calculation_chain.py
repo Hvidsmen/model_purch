@@ -27,9 +27,10 @@ class CalculationChainTests(TestCase):
         command = jobs.calculation_command(self.job, additional)
         boundary = command.index('EXEC sys.sp_executesql')
         main, extra = command[:boundary], command[boundary:]
-        self.assertIn('EXEC motivation.PortalCalcBySub', main)
-        self.assertIn('THROW;', main)
-        self.assertIn("State_=N'completed'", main)
+        self.assertNotIn('EXEC motivation.PortalCalcBySub', command)
+        self.assertIn('SELECT * INTO DataWH.motivation.ReportMotivationByDealAuthor', command)
+        self.assertIn('THROW;', command)
+        self.assertIn("State_=N'completed'", command)
         self.assertIn(str(self.job.key), main)
         self.assertIn(str(additional.key), extra)
         self.assertIn('EXEC motivation.PortalCalcAll2026', extra)

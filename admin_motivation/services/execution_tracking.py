@@ -38,21 +38,25 @@ def parameters(job):
 
 
 
-def tracked_statement(job, statement):
+def tracked_statement(job, statement, *, release_lock=True):
     data = json.dumps(parameters(job),ensure_ascii=False).replace("'","''")
     key = str(job.key)  # UUID model field, never user-provided SQL text.
-    return f"""DECLARE @portalRun uniqueidentifier=NEWID();
+    caption = {'main': 'Основной запуск', 'all_2026': 'Объединённый расчёт',
+               'separate_2026': 'Раздельный расчёт'}[parameters(job)['variant']]
+    release = "EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';" if release_lock else ''
+    return f"""DECLARE @portalRun uniqueidentifier=NEWID(), @portalStarted datetime2=SYSUTCDATETIME();
 INSERT INTO motivation.PortalMotivationRun (RunId,JobKey,StartedAt,State_,Parameters_,ExportSnapshot)
  SELECT @portalRun,'{key}',SYSUTCDATETIME(),N'running',N'{data}',
  (SELECT Snapshot_ FROM motivation.PortalMotivationExport WHERE Id=1);
 BEGIN TRY
  {statement}
+ PRINT N'{caption}: '+CONVERT(nvarchar(30),DATEDIFF(SECOND,@portalStarted,SYSUTCDATETIME()))+N' сек.';
  UPDATE motivation.PortalMotivationRun SET State_=N'completed',CompletedAt=SYSUTCDATETIME() WHERE RunId=@portalRun;
 END TRY
 BEGIN CATCH
  IF XACT_STATE() <> 0 ROLLBACK;
  UPDATE motivation.PortalMotivationRun SET State_=N'failed',CompletedAt=SYSUTCDATETIME() WHERE RunId=@portalRun;
- EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';
+ {release}
  THROW;
 END CATCH;"""
 
