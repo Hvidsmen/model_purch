@@ -6,6 +6,10 @@
    menu.querySelector('[data-product-caption]').textContent = !values.length ? 'Все доступные' : values.length <= 2 ? values.join(', ') : `Выбрано: ${values.length}`;
   };
   checks.forEach(input => input.addEventListener('change', update));
+  menu.querySelector('[data-product-all]')?.addEventListener('click', () => {
+   checks.forEach(input => { input.checked = true; }); update();
+   menu.dispatchEvent(new Event('change', {bubbles: true}));
+  });
   menu.querySelector('[data-product-clear]').addEventListener('click', () => {
    checks.forEach(input => { input.checked = false; }); update();
    menu.dispatchEvent(new Event('change', {bubbles: true}));

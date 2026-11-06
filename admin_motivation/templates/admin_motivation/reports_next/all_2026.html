@@ -19,7 +19,7 @@
 {% if execution %}<p class="nr-context">Последний успешный дополнительный расчёт: {% timezone 'Europe/Moscow' %}{{ execution.completed_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% endif %}
 <form method="get" id="native-report-filters" class="next-filter nr-filter-panel"><input type="hidden" name="year" value="2026">
 <label>Сценарий расчёта<select name="scenario"><option value="combined" {% if scenario != 'separate' %}selected{% endif %}>Москва + ТТ · объединённо</option><option value="separate" {% if scenario == 'separate' %}selected{% endif %}>Москва и ТТ · раздельно · I–III кварталы</option></select></label>
-<label>Подразделение<select name="subdivision"><option value="">Все доступные</option>{% for branch in branches %}<option {% if query.subdivision == branch %}selected{% endif %}>{{ branch }}</option>{% endfor %}</select></label>
+{% include 'admin_motivation/reports_next/_subdivision_select.html' %}
 {% include 'admin_motivation/reports_next/_motivation_types.html' %}
 {% include 'admin_motivation/reports_next/_product_filters.html' %}
 <label>Сотрудник<input name="author" value="{{ query.author }}" placeholder="Точное ФИО · пусто — все доступные"></label>

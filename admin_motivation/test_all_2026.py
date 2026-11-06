@@ -57,6 +57,45 @@ class All2026SqlTests(SimpleTestCase):
 
 
 class All2026ViewTests(TestCase):
+    def test_multiple_subdivisions_survive_display_filters_and_excel(self):
+        from urllib.parse import urlsplit
+        from django.http import QueryDict
+        self.execution.parameters['variant'] = 'separate_2026'
+        self.execution.save(update_fields=['parameters'])
+        channel = Chanel.objects.create(chanel_name='Multi branches')
+        moscow = Subdivision.all_objects.create(subdivision_key='Д-Москва',subdivision_name='Москва',subdivision_global='Москва',chanel=channel)
+        Subdivision.all_objects.create(subdivision_key='Термотрейд',subdivision_name='ТТ',subdivision_global='ТТ',chanel=channel,merged_into=moscow)
+        def source(kind, values, **kwargs):
+            entries = [('Д-Москва',10),('Термотрейд',20)]
+            return {'period_summary':{'columns':[{'label':'3 кв.'}], 'rows':[
+                {'subdivision':name,'author':name+' employee','values':[Decimal(amount)],'possible_values':[Decimal(amount)]}
+                for name,amount in entries if not values['Subdivision'] or name in values['Subdivision']]}}
+        base = {'scenario':'separate','period':'3','type':'Политики','run':'1'}
+        with patch('admin_motivation.services.execution_tracking.observe_latest',return_value=None), \
+             patch('admin_motivation.services.reports_next.current_run',return_value=nullcontext()), \
+             patch('admin_motivation.services.reports_next.load_report',side_effect=source) as load:
+            for selected,total in [(['Д-Москва'],10),(['Термотрейд'],20),(['Д-Москва','Термотрейд'],30),([],30)]:
+                response = self.client.get(self.url,{**base,'subdivision':selected})
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.context['selected_subdivisions'],selected)
+                self.assertEqual(load.call_args.args[1]['Subdivision'],selected)
+                self.assertEqual(response.context['data']['total'],total)
+                self.assertEqual(QueryDict(urlsplit(response.context['export_url']).query).getlist('subdivision'),selected)
+                self.assertContains(response,'type="checkbox" name="subdivision"')
+                self.assertNotContains(response,'select name="subdivision"')
+            exported = self.client.get(self.url,{**base,'subdivision':['Д-Москва','Термотрейд'],'export':'xlsx'})
+            self.assertEqual(load.call_args.args[1]['Subdivision'],['Д-Москва','Термотрейд'])
+            book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
+            names = {row[0] for row in book['Политики'].values}
+            self.assertTrue({'Д-Москва','Термотрейд'} <= names)
+            book.close(); exported.close()
+
+    @patch('admin_motivation.services.execution_tracking.observe_latest',return_value=None)
+    def test_combined_scenario_maps_original_selection_to_merged_subdivision(self, observe):
+        response = self.client.get(self.url,{'scenario':'combined','subdivision':['Д-Москва','Термотрейд']})
+        self.assertEqual(response.context['query'].getlist('subdivision'),['Д-Москва'])
+        self.assertEqual(response.context['selected_subdivisions'],['Д-Москва'])
+
     def setUp(self):
         self.admin = User.objects.create_superuser('all-year-admin')
         self.client.force_login(self.admin)
@@ -204,4 +243,5 @@ class All2026ViewTests(TestCase):
         self.client.force_login(user)
         with patch('admin_motivation.services.reports_next.load_report') as load:
             self.assertEqual(self.client.get(self.url, {'run': '1', 'subdivision': 'Foreign'}).status_code, 403)
+            self.assertEqual(self.client.get(self.url, {'run': '1', 'subdivision': ['A', 'Foreign']}).status_code, 403)
             load.assert_not_called()
