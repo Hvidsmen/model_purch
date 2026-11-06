@@ -122,6 +122,10 @@ def present(kind, data, ledger=None, period='all'):
                 targets.append({**cell, 'label': column['label'],
                     'remaining': max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None else None})
             result['remaining_targets'].append({**row, 'title': title, 'targets': targets})
+    result['department_remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] == 'Всё подразделение']
+    for section in result['team_sections']:
+        section['remaining_targets'] = [row for row in result['remaining_targets']
+                                        if row['title'] == 'По коэффициентам' and row['kind'] == section['kind']]
     from .annual_accrual import enrich
     enrich(result, ledger)
     return result
@@ -282,4 +286,5 @@ def new_detail_labels(data):
         (19, 'Всего по расчёту', 'Премия по расчёту плюс годовая доплата за кварталы.')]:
         data['headers'][index].update(label=label, title=explanation)
     return data
+
 

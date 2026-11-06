@@ -16,13 +16,13 @@
 {% if admin_preview and kind == 'mine' and not preview_user %}<div class="nr-hero-empty"><strong>Посмотрите премию глазами сотрудника</strong><p>Выберите сотрудника в условиях отчёта. Будут применены его личные ограничения доступа. {% if not preview_accounts %}Нет сотрудников с настроенным личным доступом к отчётам.{% endif %}</p></div>{% endif %}
 {% if data == None and not error %}{% if not admin_preview or kind != 'mine' %}<div class="nr-empty"><strong>{% if kind == 'executive' %}Сравните два варианта премий{% elif kind == 'registry' %}Подготовьте реестр для проверки{% else %}Посмотрите результат расчёта{% endif %}</strong>Выберите условия выше и нажмите «Показать». Итоги появятся здесь, детализация — на следующем уровне.</div>{% endif %}{% endif %}
 {% if data != None %}
+{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_my_remaining.html' with targets=presentation.department_remaining_targets %}{% endif %}
 {% if kind == 'mine' %}<p class="nr-lead">Премия рассчитана по отгрузкам и условиям выполнения плана. Ниже — сумма по периодам, цель и вклад товаров.</p><details class="nr-help nr-mine-intro"><summary>{% if employee_report %}Как считается премия сотрудника{% else %}Как считается ваша премия{% endif %}</summary><p>Отгрузки по ступеням скидки O0–O4 умножаются на ставки K0–K4. Затем применяются условия выполнения плана{% if ledger.payout_threshold != None %}: порог выплаты — {{ ledger.payout_threshold|report_percent }}{% endif %}. Возможная премия на текущих отгрузках отличается от прогноза при 100%.</p><p>При формуле «Подразделение(Глобально)» выполнение считается по подразделению, а премия сотрудника — по его отгрузкам.</p></details>{% elif kind == 'team' %}{% include 'admin_motivation/reports_next/_team_summary.html' %}{% include 'admin_motivation/reports_next/_report_period_cards.html' %}{% else %}{% include 'admin_motivation/reports_next/_kpis.html' %}{% endif %}
 {% if kind == 'executive' %}
 {% include 'admin_motivation/reports_next/_executive_summary.html' %}
 
 <details class="nr-metadata"><summary>Как сравниваются бюджеты</summary><div class="nr-note">Плановая премия при выполнении плана на 100%. На обеих сторонах — одинаковые отгрузки плана, состав директоров и версии коэффициентов из расчёта. {% if query.director_scope == 'active' %}Состав выбран по действующим привязкам справочника: архивные и отвязанные от филиала директора исключены из обеих сторон. Это плановый сценарий с текущим составом, сохранённые фактические выплаты не меняются.{% else %}В историческом режиме учитываются все директора с сохранёнными ставками, в том числе удалённые из текущего справочника.{% endif %} Факт здесь не пересчитывается. Для обеих частей премии учитываются только октябрь–декабрь: квартальная доля и годовая доля. План и DDP показаны за весь выбранный год. Персональная плановая детализация есть для директоров; план политик и продаж не содержит ФИО.</div></details>
 {% elif kind == 'mine' %}
-{% include 'admin_motivation/reports_next/_my_remaining.html' %}
 {% include 'admin_motivation/reports_next/_my_periods.html' %}
 
 {% include 'admin_motivation/reports_next/_my_goals.html' %}{% include 'admin_motivation/reports_next/_my_products.html' %}
@@ -38,4 +38,5 @@
 <details class="nr-metadata"><summary>Источник данных и параметры расчёта</summary><div class="nr-metadata-grid">{% for label,value in metadata %}<div><strong>{{ label }}</strong>{{ value }}</div>{% endfor %}</div></details>
 </section>{% endblock %}
 {% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_team_tabs.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=employee-reports-20261103" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=detail-fit-20261103" defer></script>{% endif %}{% endblock %}
+
 

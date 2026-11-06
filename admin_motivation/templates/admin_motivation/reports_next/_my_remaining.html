@@ -1,7 +1,7 @@
 {% load report_format %}
 <div class="nr-section-title"><h2>Осталось до 100%</h2><span>План и факт — USD</span></div>
 <div class="nr-card-grid nr-personal-cards">
-{% for row in presentation.remaining_targets %}
+{% for row in targets %}
 <article class="nr-period"><div class="nr-period-head"><span>{{ row.title }}{% if row.title != 'Всё подразделение' %} · {{ row.kind }}{% endif %}</span></div>
 <p class="nr-muted">{{ row.subdivision }} · {{ row.year }} · {{ row.formula }} · {{ row.scope_author }}</p>
 {% for target in row.targets %}
@@ -12,3 +12,4 @@
 </article>
 {% empty %}<p class="nr-note">Нет данных план-факта для расчёта остатка.</p>{% endfor %}
 </div>
+
