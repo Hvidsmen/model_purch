@@ -53,6 +53,13 @@ class MyRemainingTests(SimpleTestCase):
         self.assertIn('30,00 USD', html)
         self.assertIn('Директора', html)
         self.assertIn('— USD', html)
+        overview = render_to_string('admin_motivation/reports_next/_team_remaining.html', {'presentation': result})
+        self.assertIn('nr-kpis nr-target-overview', overview)
+        self.assertEqual(overview.count('nr-target-column'), 3)
+        self.assertIn('Политики', overview)
+        self.assertIn('Директора', overview)
+        self.assertNotIn('Продажи', overview)
+        self.assertEqual(overview.count('nr-target-secondary'), 3)
         self.assertEqual(len(result['department_remaining_targets']), 1)
         for section in result['team_sections']:
             self.assertTrue(all(row['kind'] == section['kind'] for row in section['remaining_targets']))
@@ -63,7 +70,7 @@ class MyRemainingTests(SimpleTestCase):
         self.assertNotIn('Политики', panel)
         from django.template.loader import get_template
         source = get_template('admin_motivation/reports_next/report.html').template.source
-        self.assertIn("{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_my_remaining.html'", source)
+        self.assertIn("{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_team_remaining.html'", source)
         self.assertNotIn("{% elif kind == 'mine' %}\n{% include 'admin_motivation/reports_next/_my_remaining.html'", source)
 
     @patch('admin_motivation.services.reports_next.restrict', return_value=(None, ['Политики'], '4'))

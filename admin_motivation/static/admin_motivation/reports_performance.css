@@ -106,3 +106,18 @@
 .nr-page .nr-report-period-card .nr-period-types thead th{background:#f8f9fc;color:#526176;font-weight:500}
 .nr-page .nr-report-period-card .nr-period-types tbody td{color:#37465c}
 
+
+/* Match the four KPI columns below; retain their responsive breakpoints. */
+.nr-kpis.nr-target-overview{margin:0 0 16px;align-items:start}
+.nr-target-column{display:grid;gap:8px;min-width:0}
+.nr-target-overview .nr-target-card{width:100%;box-sizing:border-box}
+.nr-target-secondary{padding:11px 12px;background:#fafbfe;border-color:#e3e6ef;box-shadow:none}
+.nr-target-secondary .nr-target-amount{font-size:18px;color:#45516b}
+.nr-target-secondary .nr-target-heading{font-size:11px}
+.nr-target-secondary .nr-target-period{background:#f0f1f6;color:#69758a;font-size:9px}
+.nr-target-secondary .nr-target-context{font-size:10px;margin:3px 0 6px}
+.nr-target-secondary .nr-target-caption{font-size:10px;margin-bottom:6px}
+.nr-target-secondary .nr-target-facts{margin-top:6px;padding-top:6px}
+.nr-target-secondary .nr-target-facts strong{font-size:11px}
+.nr-target-secondary .nr-target-track{height:4px}
+.nr-target-secondary.nr-target-complete .nr-target-amount{color:#218568}

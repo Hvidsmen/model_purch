@@ -1,0 +1,7 @@
+<div class="nr-section-title"><h2>Осталось до 100%</h2><span>План и факт — USD</span></div>
+<div class="nr-kpis nr-target-overview">
+<div class="nr-target-column">{% for row in presentation.department_remaining_targets %}{% for target in row.display_targets %}{% include 'admin_motivation/reports_next/_target_card.html' %}{% endfor %}{% empty %}<p class="nr-note">Нет данных по подразделению.</p>{% endfor %}</div>
+{% for section in presentation.team_sections %}
+<div class="nr-target-column">{% for row in section.remaining_targets %}{% for target in row.display_targets %}{% include 'admin_motivation/reports_next/_target_card.html' with compact=True %}{% endfor %}{% empty %}<article class="nr-target-card nr-target-secondary"><div class="nr-target-heading">{{ section.kind }}</div><p class="nr-muted">Нет данных план-факта.</p></article>{% endfor %}</div>
+{% endfor %}
+</div>

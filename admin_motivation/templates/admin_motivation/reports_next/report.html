@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}{% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=employee-reports-20261103">
-<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=compact-target-cards-20261106">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=aligned-target-overview-20261106">
 <section class="content native-report nr-page">
 {% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
 
@@ -16,7 +16,7 @@
 {% if admin_preview and kind == 'mine' and not preview_user %}<div class="nr-hero-empty"><strong>Посмотрите премию глазами сотрудника</strong><p>Выберите сотрудника в условиях отчёта. Будут применены его личные ограничения доступа. {% if not preview_accounts %}Нет сотрудников с настроенным личным доступом к отчётам.{% endif %}</p></div>{% endif %}
 {% if data == None and not error %}{% if not admin_preview or kind != 'mine' %}<div class="nr-empty"><strong>{% if kind == 'executive' %}Сравните два варианта премий{% elif kind == 'registry' %}Подготовьте реестр для проверки{% else %}Посмотрите результат расчёта{% endif %}</strong>Выберите условия выше и нажмите «Показать». Итоги появятся здесь, детализация — на следующем уровне.</div>{% endif %}{% endif %}
 {% if data != None %}
-{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_my_remaining.html' with targets=presentation.department_remaining_targets %}{% endif %}
+{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_team_remaining.html' %}{% endif %}
 {% if kind == 'mine' %}<p class="nr-lead">Премия рассчитана по отгрузкам и условиям выполнения плана. Ниже — сумма по периодам, цель и вклад товаров.</p><details class="nr-help nr-mine-intro"><summary>{% if employee_report %}Как считается премия сотрудника{% else %}Как считается ваша премия{% endif %}</summary><p>Отгрузки по ступеням скидки O0–O4 умножаются на ставки K0–K4. Затем применяются условия выполнения плана{% if ledger.payout_threshold != None %}: порог выплаты — {{ ledger.payout_threshold|report_percent }}{% endif %}. Возможная премия на текущих отгрузках отличается от прогноза при 100%.</p><p>При формуле «Подразделение(Глобально)» выполнение считается по подразделению, а премия сотрудника — по его отгрузкам.</p></details>{% elif kind == 'team' %}{% include 'admin_motivation/reports_next/_team_summary.html' %}{% include 'admin_motivation/reports_next/_report_period_cards.html' %}{% else %}{% include 'admin_motivation/reports_next/_kpis.html' %}{% endif %}
 {% if kind == 'executive' %}
 {% include 'admin_motivation/reports_next/_executive_summary.html' %}

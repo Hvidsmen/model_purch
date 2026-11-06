@@ -2,14 +2,7 @@
 <div class="nr-section-title"><h2>Осталось до 100%</h2><span>План и факт — USD</span></div>
 <div class="nr-target-grid">
 {% for row in targets %}{% for target in row.display_targets %}
-<article class="nr-target-card{% if target.remaining == 0 %} nr-target-complete{% endif %}">
-<div class="nr-target-heading"><span>{{ row.title }}{% if row.title != 'Всё подразделение' %} · {{ row.kind }}{% endif %}</span><span class="nr-target-period">{{ target.label }}</span></div>
-<p class="nr-target-context">{{ row.subdivision }} · {{ row.year }}{% if row.title != 'Всё подразделение' %} · {{ row.formula }} · {{ row.scope_author }}{% endif %}</p>
-<div class="nr-target-amount">{{ target.remaining|report_cash }} USD</div>
-<p class="nr-target-caption">{% if target.remaining == None %}Нет данных для определения остатка{% elif target.remaining == 0 %}План выполнен{% else %}Объём продаж до выполнения плана{% endif %}</p>
-<div class="nr-target-progress-label"><span>Выполнение плана</span><strong>{{ target.ratio|report_percent }}</strong></div>
-<div class="nr-target-track" role="progressbar" aria-label="Выполнение плана: {{ row.subdivision }} · {{ row.kind }} · {{ target.label }}" aria-valuemin="0" aria-valuemax="100"{% if target.ratio != None %} aria-valuenow="{{ target.progress|stringformat:'.2f' }}"{% endif %}><i style="width:{{ target.progress|stringformat:'.2f' }}%"></i></div>
-<div class="nr-target-facts"><div><span>Факт</span><strong>{{ target.fact|report_cash }} USD</strong></div><div><span>План · 100%</span><strong>{{ target.plan|report_cash }} USD</strong></div></div>
-</article>
+{% include 'admin_motivation/reports_next/_target_card.html' %}
+
 {% endfor %}{% empty %}<p class="nr-note">Нет данных план-факта для расчёта остатка.</p>{% endfor %}
 </div>
