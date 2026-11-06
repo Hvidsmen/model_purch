@@ -121,7 +121,17 @@ def present(kind, data, ledger=None, period='all'):
                 plan, fact = cell.get('plan'), cell.get('fact')
                 targets.append({**cell, 'label': column['label'],
                     'remaining': max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None else None})
-            result['remaining_targets'].append({**row, 'title': title, 'targets': targets})
+            display_targets = []
+            for target in targets:
+                ratio = target.get('ratio')
+                display = {**target, 'progress': min(max(ratio * 100, ZERO), Decimal(100)) if ratio is not None else ZERO}
+                if (display_targets and target['label'] == 'Год' and display_targets[-1]['label'] == '4 кв.'
+                        and target.get('plan') is not None and target.get('fact') is not None
+                        and all(target.get(key) == display_targets[-1].get(key) for key in ('plan', 'fact', 'ratio'))):
+                    display_targets[-1]['label'] = 'IV квартал и годовая часть'
+                else:
+                    display_targets.append(display)
+            result['remaining_targets'].append({**row, 'title': title, 'targets': targets, 'display_targets': display_targets})
     result['department_remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] == 'Всё подразделение']
     for section in result['team_sections']:
         section['remaining_targets'] = [row for row in result['remaining_targets']
@@ -286,5 +296,6 @@ def new_detail_labels(data):
         (19, 'Всего по расчёту', 'Премия по расчёту плюс годовая доплата за кварталы.')]:
         data['headers'][index].update(label=label, title=explanation)
     return data
+
 
 

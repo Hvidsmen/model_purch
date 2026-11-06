@@ -11,6 +11,24 @@ from .test_performance_matrix import performance
 
 
 class MyRemainingTests(SimpleTestCase):
+    def test_identical_q4_and_year_share_one_display_card_without_changing_targets(self):
+        rows = [{'subdivision': 'Д-Москва', 'author': 'Сотрудник', 'unallocated': False,
+                 'kind': 'Политики', 'code': code, 'period': label,
+                 'amount': Decimal(0), 'bonus': Decimal(0), 'total': Decimal(0)}
+                for code, label in [('4', '4 Квартал'), ('5', 'Год')]]
+        ledger = {'rows': rows, 'total': Decimal(0), 'kinds': ['Политики'],
+                  'department_plan_fact': [performance(period, kind='Всё подразделение')
+                                           for period in ('4 Квартал', 'Год')]}
+        result = present('team', ledger, ledger, ['4', '5'])
+        row = result['department_remaining_targets'][0]
+        self.assertEqual(len(row['targets']), 2)
+        self.assertEqual(len(row['display_targets']), 1)
+        self.assertEqual(row['display_targets'][0]['label'], 'IV квартал и годовая часть')
+        self.assertEqual(row['display_targets'][0]['progress'], Decimal(66))
+        ledger['department_plan_fact'][1]['fact'] = Decimal(90)
+        different = present('team', ledger, ledger, ['4', '5'])
+        self.assertEqual(len(different['department_remaining_targets'][0]['display_targets']), 2)
+
     def test_department_and_each_coefficient_keep_their_own_targets(self):
         rows = [{'subdivision': 'Д-Москва', 'author': 'Сотрудник', 'unallocated': False,
                  'kind': 'Политики', 'code': code, 'period': label,
@@ -58,4 +76,5 @@ class MyRemainingTests(SimpleTestCase):
             actual_reports(None, SimpleNamespace(parameters={'fact_year': 2026}), QueryDict('year=2026'), detailed=True)
         self.assertTrue(load.call_args.kwargs['include_performance'])
         self.assertFalse(load.call_args.kwargs['summary_only'])
+
 
