@@ -141,7 +141,8 @@ class CalculationJobsTests(TestCase):
         jobs.sync_job(self.job, self.connector)
         step = next(call.args for call in self.cursor.execute.call_args_list if 'sp_add_jobstep' in call.args[0])
         self.assertIn('@FactYear=2026', step[-1])
-        self.assertIn("@PlanVersion=N'Test plan'", step[-1])
+        self.assertIn('@flags=4', step[0])
+        self.assertIn("@PlanVersion=N''Test plan''", step[-1])
         self.cursor.reset_mock()
         self.connection.reset_mock()
         self.cursor.fetchall.return_value = []
