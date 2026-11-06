@@ -80,3 +80,10 @@
 .nr-page .nr-employee-premium-table :is(th,td).num{min-width:0;white-space:normal;overflow-wrap:anywhere}
 .nr-page .nr-employee-premium-table thead th{position:static}
 @media(max-width:700px){.nr-page .nr-employee-premiums{overflow-x:auto}.nr-page .nr-table.nr-employee-premium-table{min-width:760px}}
+
+/* Card breakdowns must override the site's 1000px minimum for full tables. */
+.nr-page .nr-report-period-card .nr-summary-types{min-width:0;max-width:100%}
+.nr-page .nr-report-period-card table.nr-period-types{width:100%;min-width:0;max-width:100%;table-layout:fixed}
+.nr-page .nr-report-period-card .nr-period-types :is(th,td){width:auto;min-width:0;max-width:none;position:static;padding:7px 4px;white-space:normal;overflow-wrap:anywhere;font-size:12px;text-transform:none;letter-spacing:normal}
+.nr-page .nr-report-period-card .nr-period-types thead th{background:#f8f9fc;color:#526176;font-weight:500}
+.nr-page .nr-report-period-card .nr-period-types tbody td{color:#37465c}

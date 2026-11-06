@@ -1,11 +1,7 @@
-{% if presentation.department_performance_matrix.rows or presentation.performance_matrix.rows %}
+{% if presentation.department_performance_matrix.rows %}
 <div class="nr-all-year-page">
 <div class="nr-section-title"><h2>План-факт подразделения</h2><span>USD · без исключений мотивации</span></div>
 <p class="nr-muted">Общий план и факт по всему подразделению, включая канал ДПП. Показатели берутся из исходных данных расчёта один раз, независимо от числа сотрудников и видов мотивации. Отбор сотрудника и товара не уменьшает общую базу подразделения. За I квартал показан настоящий план, без приравнивания к факту.</p>
 {% include 'admin_motivation/reports_next/_performance_matrix.html' with matrix=presentation.department_performance_matrix %}
-<div class="nr-section-title"><h2>План-факт по базам мотивации</h2><span>План и факт — USD</span></div>
-<p class="nr-muted">Каждый вид мотивации и каждая база расчёта показаны отдельно, даже при совпадении сумм. Для политиков и продаж применяются их исключения; для директоров канал ДПП и семь ранее исключённых подразделений включаются. При глобальной формуле выполнение проверяется по всему подразделению в пределах правил соответствующего вида, при личной — по указанной базе сотрудника. За I квартал план мотивации равен факту.</p>
-{% include 'admin_motivation/reports_next/_performance_matrix.html' with matrix=presentation.performance_matrix %}
-<p class="nr-muted">Периоды совпадают с периодами премий: I квартал; I–II кварталы для II; III квартал; только IV квартал для IV квартала и годовой части за 2026 год. «Итого» учитывает объединение выбранных кварталов один раз. Базы разных видов мотивации не складываются; общий план-факт подразделения не является их суммой.</p>
 </div>
 {% endif %}

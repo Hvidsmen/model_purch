@@ -75,7 +75,7 @@ class PerformanceMatrixTests(SimpleTestCase):
         self.assertIn('Итого', html)
         self.assertIn('50,00%', html)
 
-    def test_plan_fact_and_employee_tables_share_exact_period_column_boundaries(self):
+    def test_plan_fact_and_responsive_employee_tables_use_same_period_order(self):
         class Columns(HTMLParser):
             def __init__(self):
                 super().__init__()
@@ -84,13 +84,15 @@ class PerformanceMatrixTests(SimpleTestCase):
             def handle_starttag(self, tag, attrs):
                 attrs = dict(attrs)
                 if tag == 'table':
-                    self.tables.append([])
+                    self.tables.append({'widths': [], 'periods': []})
                 if tag == 'col':
-                    self.tables[-1].append(int(attrs['style'].removeprefix('width:').removesuffix('px')))
+                    self.tables[-1]['widths'].append(attrs['style'])
+                if tag == 'th' and attrs.get('data-period') not in (None, 'total'):
+                    self.tables[-1]['periods'].append(attrs['data-period'])
 
         for codes in (['1', '2', '3'], ['3'], ['1', '5']):
             columns = [{'code': code, 'label': code} for code in codes]
-            matrix = performance_matrix([performance(code + ' Квартал') for code in codes], columns)
+            matrix = performance_matrix([performance('Год' if code == '5' else code + ' Квартал') for code in codes], columns)
             presentation = {'period_columns': columns, 'performance_matrix': matrix,
                             'team_sections': [{'kind': 'Политики', 'people': 0, 'page': [], 'period_totals': []}]}
             context = {'presentation': presentation, 'ledger': {'currency': 'USD'}}
@@ -98,7 +100,8 @@ class PerformanceMatrixTests(SimpleTestCase):
             for name in ['_performance_matrix.html', '_all_2026_tables.html']:
                 parser.feed(render_to_string('admin_motivation/reports_next/' + name, context))
             upper, lower = parser.tables
-            self.assertEqual(sum(upper), sum(lower))
-            for index in range(len(codes)):
-                self.assertEqual(sum(upper[:1 + 3 * index]), sum(lower[:1 + index]))
-                self.assertEqual(sum(upper[:1 + 3 * (index + 1)]), sum(lower[:2 + index]))
+            self.assertEqual(upper['periods'], codes)
+            self.assertEqual(lower['periods'], codes)
+            self.assertEqual(len(upper['widths']), 4 + 3 * len(codes))
+            self.assertEqual(len(lower['widths']), 3 + len(codes))
+            self.assertTrue(all('px' not in width for width in lower['widths']))

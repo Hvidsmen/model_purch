@@ -134,7 +134,7 @@ class All2026ViewTests(TestCase):
             'VariationCalculate': 'Подразделение(Глобально)', 'Plan_': 200, 'Fact_': 150}]
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source) as load:
             response = self.client.get(self.url, {'run':'1', 'type':'Политики'})
-        self.assertContains(response, 'План-факт по базам мотивации')
+        self.assertContains(response, 'План-факт мотивации · Политики')
         self.assertEqual(response.context['data']['plan_fact'][0]['plan'], 200)
         self.assertEqual(response.context['data']['plan_fact'][0]['fact'], 150)
         self.assertTrue(all(call.kwargs['summary_only'] is True for call in load.call_args_list))

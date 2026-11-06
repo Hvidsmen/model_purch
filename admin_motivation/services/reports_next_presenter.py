@@ -104,6 +104,10 @@ def present(kind, data, ledger=None, period='all'):
                                for item in result['type_totals']]
     if 'plan_fact' in ledger:
         result['performance_matrix'] = performance_matrix(ledger['plan_fact'], result['period_columns'])
+        for section in result['team_sections']:
+            section['performance_matrix'] = performance_matrix(
+                [item for item in ledger['plan_fact'] if item.get('kind') == section['kind']],
+                result['period_columns'])
     if 'department_plan_fact' in ledger:
         result['department_performance_matrix'] = performance_matrix(ledger['department_plan_fact'], result['period_columns'])
     from .annual_accrual import enrich
