@@ -14,6 +14,39 @@ from . import test_annual_accrual as annual_fixtures
 
 
 class TeamMockupTests(SimpleTestCase):
+    def test_plan_fact_moves_with_type_panels_in_team_registry_and_all_quarters(self):
+        import re
+        ledger = annual_fixtures.AnnualAccrualTests().ledger()
+        def metric(kind, plan):
+            return {'kind':kind,'subdivision':'ТЕРМОТРЕЙД','year':2026,'period':'3 Квартал',
+                    'formula':'Подразделение(Глобально)','scope_author':'Всё подразделение',
+                    'plan':Decimal(plan),'fact':Decimal(plan)-1,'ratio':Decimal('.9')}
+        ledger['plan_fact'] = [metric('Политики',100),metric('Продажи',200),metric('Директора',300)]
+        ledger['department_plan_fact'] = [metric('Всё подразделение',999)]
+        for kind, template, extra in [
+            ('team','_team_tables.html',{}),('registry','_team_ledger.html',{}),
+            ('registry','_all_2026_tables.html',{'all_2026_report':True})]:
+            with self.subTest(template=template):
+                display = present(kind,ledger,ledger)
+                for section in display['team_sections']:
+                    section['page'] = Paginator(section['rows'],50).get_page(1)
+                    self.assertTrue(all(row['kind']==section['kind'] for row in section['performance_matrix']['rows']))
+                context = {'presentation':display,'ledger':ledger,'kind':kind,**extra}
+                html = render_to_string('admin_motivation/reports_next/'+template,context)
+                panels = re.findall(r'<section role="tabpanel"[^>]*>(.*?)</section>',html,re.S)
+                self.assertEqual(len(panels),3)
+                for panel,section in zip(panels,display['team_sections']):
+                    self.assertEqual(panel.count('data-performance-kind='),1)
+                    self.assertIn('data-performance-kind="'+section['kind']+'"',panel)
+                    self.assertNotIn('999,00',panel)
+                    for other in ('Политики','Продажи','Директора'):
+                        if other!=section['kind']:
+                            self.assertNotIn('data-performance-kind="'+other+'"',panel)
+                overall = render_to_string('admin_motivation/reports_next/_performance_sections.html',context)
+                self.assertEqual(overall.count('<table'),1)
+                self.assertIn('999,00',overall)
+                self.assertNotIn('data-performance-kind=',overall)
+
     def display(self):
         ledger = annual_fixtures.AnnualAccrualTests().ledger()
         display = present('team', ledger, ledger)
