@@ -218,6 +218,14 @@ def report(request, kind):
     query.setdefault('director_scope', 'active')
     query.setdefault('currency', 'USD')
     query.setdefault('period', 'all')
+    moscow_only = bool(selected and selected.parameters.get('transition_rule') == 'moscow-tt-q4-heat-v1')
+    if moscow_only:
+        from .services.calculation_scope import restrict_report
+        try:
+            restrict_report(query, scope)
+        except ValidationError as exc:
+            from django.http import HttpResponseBadRequest
+            return HttpResponseBadRequest(' '.join(exc.messages))
     metadata = [('Расчёт', selected.completed_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M МСК') if selected and selected.completed_at else 'Нет'), ('Год', query.get('year', '')),
         ('План расчёта DWH', selected.parameters.get('plan_version', '') if selected else ''),
         ('План сравнения' if kind == 'executive' else 'Загруженная копия плана расчёта', str(plan) if plan else 'Не загружена'), ('Период премии', reports.period_label(query)),
@@ -304,6 +312,9 @@ def report(request, kind):
     selected_subs = query.getlist('subdivision')
     branch_names = scope.get('subdivision', []) if scope else list(Subdivision.objects.values_list('subdivision_key', flat=True))
     branch_names = [branch_names] if isinstance(branch_names, str) else branch_names
+    if moscow_only:
+        from .services.calculation_scope import SUBDIVISION
+        branch_names = [SUBDIVISION]
     branches = [{'name': value, 'selected': value in selected_subs} for value in branch_names]
     period_options = [item for item in reports.PERIODS if not scope or not scope.get('pilot_periods') or item[0] in ('all', '4', '5')]
     export_query = query.copy()
@@ -341,3 +352,4 @@ def report(request, kind):
         'report_navigation': report_navigation(request.user, kind, query),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})
+
