@@ -147,12 +147,15 @@ def actual_reports(user, execution, query, *, detailed=False, access_scope=None)
     if currency not in ('USD', 'RUB'):
         raise ValidationError('Выберите USD или RUB.')
     results, ledger, plan_fact, department = [], [], [], []
+    from .annual_accrual import SNAPSHOT_VERSION
+    snapshot_options = ({'annual_accrual_snapshot': True}
+                        if execution.parameters.get('annual_accrual_source') == SNAPSHOT_VERSION else {})
     for kind in kinds:
         values = {'TypeCoeff_': kind, 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'),
                   'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand'), 'Years': [year], 'Currency': currency}
         if scope:
             values = scoped_values('manager-detail', values, scope)
-        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed, include_performance=not detailed)
+        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed, include_performance=not detailed, **snapshot_options)
         from .motivation_performance import presentation_rows, DEPARTMENT
         plan_fact.extend(presentation_rows(data.get('motivation_performance', []), kind))
         department.extend(presentation_rows(data.get('department_performance', []), DEPARTMENT))
@@ -171,7 +174,8 @@ def actual_reports(user, execution, query, *, detailed=False, access_scope=None)
                     'bonus': Decimal(0), 'currency': currency,
                     'possible': item.get('possible_values', [None] * len(summary['columns']))[index]}
                 if not detailed:
-                    entry['annual_accrual'] = annual.get((item['subdivision'], item['author'], entry['code']))
+                    entry['annual_accrual'] = annual.get((item['subdivision'], item['author'], entry['code']),
+                        Decimal(0) if snapshot_options and entry['code'] in ('1','2','3','4') else None)
                 ledger.append(entry)
             # Current Q4/year pilot has no catch-up payments, including exports.
     for item in ledger:

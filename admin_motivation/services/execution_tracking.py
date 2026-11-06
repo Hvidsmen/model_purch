@@ -23,6 +23,7 @@ def parameters(job):
     variant = variant_of(job)
     from .transition_2026 import RULE_VERSION
     transition = job.fact_year == 2026
+    from .annual_accrual import SNAPSHOT_VERSION
     periods = list('123') if variant == 'separate_2026' else list('12345') if variant == ALL_2026 else list(PERIODS)
     return {'fact_year': job.fact_year, 'plan_version': job.plan_version,
             'quarter_share': str(job.quarter_share), 'year_share': str(job.year_share),
@@ -32,7 +33,8 @@ def parameters(job):
             'variant': variant, 'transition_rule': RULE_VERSION if transition else None,
             'q4_eligibility_quarters': [4] if transition else [1,2,3,4],
             'annual_amount_quarters': [] if variant == 'separate_2026' else [4] if transition or variant == 'main' else [1,2,3,4],
-            'calculation_subdivisions': ['Д-Москва', 'ТЕРМОТРЕЙД']}
+            'calculation_subdivisions': ['Д-Москва', 'ТЕРМОТРЕЙД'],
+            'annual_accrual_source': SNAPSHOT_VERSION}
 
 
 

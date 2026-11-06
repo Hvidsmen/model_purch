@@ -2,13 +2,14 @@
 {% block title %}Все кварталы 2026 · DA портал{% endblock %}
 {% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-period-columns-20261103">
-<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=team-mockup-20261103">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=annual-fit-20261106">
 <section class="content nr-page nr-all-year-page">
 <div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>Премии команды</h1><p class="nr-subtitle">I–III кварталы: Москва и ТТ раздельно или объединённо. IV квартал и годовая часть: по результатам IV квартала Москвы + ТТ.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
 <p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
 {% for message in messages %}<p class="nr-note" role="status">{{ message }}</p>{% endfor %}
 {% if error %}<p class="next-error" role="alert">{{ error }}</p>{% endif %}
 {% if rule_outdated %}<p class="nr-note warning">Показаны сохранённые суммы по прежним правилам. Запустите новый расчёт для применения переходных правил 2026 и исключения HEAT.</p>{% endif %}
+{% if annual_accrual_requires_recalculation %}<p class="nr-note">Для показателя «В годовую премию» за I–III кварталы нужен новый расчёт после обновления. Эти суммы показываются отдельно и не добавляются к годовой выплате IV квартала.</p>{% endif %}
 {% if pending %}<p class="nr-note" data-all-year-pending role="status">Расчёт выполняется. Страница обновит статус автоматически.</p>{% endif %}
 {% if can_start %}<details class="nr-filter-panel" {% if not execution %}open{% endif %}><summary>Запустить дополнительный расчёт за 2026 год</summary>
 <form method="post" class="next-filter" data-ux-submit="Запускаем отдельный расчёт 2026…">{% csrf_token %}

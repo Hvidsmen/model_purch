@@ -204,6 +204,8 @@ def prepare(cursor, variant='main'):
     changed = pilot_patch(changed) if variant == MAIN else full_year_patch(changed)
     from .transition_2026 import patch as transition_patch, separate_coefficients
     changed = transition_patch(changed)
+    from .annual_accrual import patch_calculation as capture_annual_contributions
+    changed = capture_annual_contributions(changed)
     if variant == SEPARATE_2026:
         changed = separate_coefficients(changed)
     if variant != MAIN:

@@ -71,3 +71,12 @@
 .nr-employee-tabs .nr-section-title h3{font-size:15px;margin:0}
 @media(max-width:850px){.nr-page .nr-mockup-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.nr-mockup-summary .nr-kpi>strong{font-size:21px}}
 @media(max-width:480px){.nr-report-period-values strong{font-size:18px}.nr-employee-tab-list button{flex:1;padding:9px 8px}.nr-page .nr-mockup-summary{gap:8px}.nr-mockup-summary .nr-kpi{padding:12px}}
+
+/* Employee premiums fit the report width; page scrolling replaces the inner pane. */
+.nr-page .nr-employee-premiums{max-width:100%;max-height:none;overflow:visible;scrollbar-gutter:auto}
+.nr-page .nr-table.nr-employee-premium-table{table-layout:fixed;width:100%;min-width:0}
+.content-wrapper .nr-all-year-page .nr-employee-premium-table :is(th,td):first-child{width:auto;min-width:0;max-width:none;position:static;white-space:normal;overflow-wrap:anywhere}
+.nr-page .nr-employee-premium-table :is(th,td){padding:10px 8px}
+.nr-page .nr-employee-premium-table :is(th,td).num{min-width:0;white-space:normal;overflow-wrap:anywhere}
+.nr-page .nr-employee-premium-table thead th{position:static}
+@media(max-width:700px){.nr-page .nr-employee-premiums{overflow-x:auto}.nr-page .nr-table.nr-employee-premium-table{min-width:760px}}
