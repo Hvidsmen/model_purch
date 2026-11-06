@@ -29,12 +29,24 @@ class MyRemainingTests(SimpleTestCase):
                           ('По коэффициентам', 'Политики', [Decimal(30), None]),
                           ('По коэффициентам', 'Директора', [Decimal(0)])])
         self.assertEqual(ledger, original)
-        html = render_to_string('admin_motivation/reports_next/_my_remaining.html', {'presentation': result})
+        html = render_to_string('admin_motivation/reports_next/_my_remaining.html', {'targets': result['remaining_targets']})
         self.assertIn('Осталось до 100%', html)
         self.assertIn('80,00 USD', html)
         self.assertIn('30,00 USD', html)
         self.assertIn('Директора', html)
         self.assertIn('— USD', html)
+        self.assertEqual(len(result['department_remaining_targets']), 1)
+        for section in result['team_sections']:
+            self.assertTrue(all(row['kind'] == section['kind'] for row in section['remaining_targets']))
+        director = next(section for section in result['team_sections'] if section['kind'] == 'Директора')
+        panel = render_to_string('admin_motivation/reports_next/_type_performance.html',
+                                 {'kind': 'team', 'section': director, 'presentation': result})
+        self.assertIn('Осталось до 100%', panel)
+        self.assertNotIn('Политики', panel)
+        from django.template.loader import get_template
+        source = get_template('admin_motivation/reports_next/report.html').template.source
+        self.assertIn("{% if kind == 'team' %}{% include 'admin_motivation/reports_next/_my_remaining.html'", source)
+        self.assertNotIn("{% elif kind == 'mine' %}\n{% include 'admin_motivation/reports_next/_my_remaining.html'", source)
 
     @patch('admin_motivation.services.reports_next.restrict', return_value=(None, ['Политики'], '4'))
     def test_detailed_personal_report_requests_separate_performance_sources(self, restrict):
@@ -46,3 +58,4 @@ class MyRemainingTests(SimpleTestCase):
             actual_reports(None, SimpleNamespace(parameters={'fact_year': 2026}), QueryDict('year=2026'), detailed=True)
         self.assertTrue(load.call_args.kwargs['include_performance'])
         self.assertFalse(load.call_args.kwargs['summary_only'])
+
