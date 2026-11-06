@@ -1,5 +1,14 @@
+{% if fit %}
+<colgroup>
+<col style="width:20%">
+{% for column in presentation.period_columns %}<col style="width:calc(60% / var(--nr-periods))">{% endfor %}
+<col style="width:10%"><col style="width:10%">
+</colgroup>
+{% else %}
 <colgroup>
 <col style="width:240px">
 {% for column in presentation.period_columns %}{% if performance %}<col style="width:90px"><col style="width:90px"><col style="width:90px">{% else %}<col style="width:270px">{% endif %}{% endfor %}
 {% if performance %}<col style="width:120px"><col style="width:120px"><col style="width:120px">{% else %}<col style="width:180px"><col style="width:180px">{% endif %}
 </colgroup>
+
+{% endif %}

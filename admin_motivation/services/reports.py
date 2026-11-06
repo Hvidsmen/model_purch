@@ -370,7 +370,7 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False, annual_accrual_snapshot=False):
     if kind == 'manager':
         values = {'GPGoods': [], 'Brend': [], **values}
     from functools import partial
@@ -455,8 +455,11 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                     from .motivation_performance import grouped_sql as performance_sql, department_sql
                     result['motivation_performance'] = read_rows(cursor, performance_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant), args)
                     result['department_performance'] = read_rows(cursor, department_sql(sql, calculation_variant), args)
-                    from .annual_accrual import grouped_sql as annual_sql
-                    annual_query, annual_args = bind_report_sql(annual_sql(annual_source_sql, values.get('Currency', 'USD')), values)
+                    from .annual_accrual import grouped_sql as annual_sql, snapshot_sql
+                    annual_source = (snapshot_sql(calculation_variant, values.get('Currency', 'USD'),
+                                                 director_roster='PortalDirectorRoster' in values)
+                                     if annual_accrual_snapshot else annual_sql(annual_source_sql, values.get('Currency', 'USD')))
+                    annual_query, annual_args = bind_report_sql(annual_source, values)
                     result['annual_accrual'] = read_rows(cursor, annual_query, annual_args)
                 return result
             performance_fields = ('СуммаПланUSDКвартал', 'СуммаОтгрузокUSDКвартал', 'СуммаПланUSD', 'СуммаОтгрузокUSD')

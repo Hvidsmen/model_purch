@@ -7,7 +7,7 @@ MAIN = 'main'
 ALL_2026 = 'all_2026'
 SEPARATE_2026 = 'separate_2026'
 CHOICES = [(MAIN, 'Основной · премия только за IV квартал'), (ALL_2026, 'Дополнительный · все кварталы 2026')]
-TABLES = ('Fact', 'PlanFact', 'ReportMotivationByDealAuthor')
+TABLES = ('Fact', 'PlanFact', 'ReportMotivationByDealAuthor', 'AnnualAccrual')
 
 
 def variant_of(job):

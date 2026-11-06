@@ -1,7 +1,7 @@
 from io import BytesIO
 from unittest.mock import patch
 from openpyxl import load_workbook
-from django.test import TestCase
+from django.test import TestCase, RequestFactory
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 from base.testing import authorize_test_case
@@ -12,7 +12,7 @@ from .services.report_excel import report_excel
 
 class ReportExcelTests(TestCase):
     def setUp(self):
-        authorize_test_case(self)
+        self.actor = authorize_test_case(self)
         self.data = manager_detail_report(detail_rows(), 'RUB', detail_rows())
         self.parameters = {'Currency': 'RUB', 'Subdivision': ['A'], 'TypeCoeff_': 'Директора',
                            'DealAuthor': ['Иванов'], 'Years': ['2026']}
@@ -76,10 +76,18 @@ class ReportExcelTests(TestCase):
             stream.close()
 
     def test_download_view_preserves_filters_and_skips_lookup_requests(self):
+        from .report_views import report_page
         url = reverse('motivation_report', args=['manager-detail'])
+        # Legacy URLs now redirect. Keep the format regression on the original
+        # renderer; public redirects are covered by test_report_catalog.
+        def legacy_get(parameters):
+            request = RequestFactory().get(url, parameters)
+            request.user = self.actor
+            request.session = {}
+            return report_page(request, 'manager-detail')
         with patch('admin_motivation.report_views.choices') as choices, \
              patch('admin_motivation.report_views.load_report', return_value=self.data) as load:
-            response = self.client.get(url, {'export': 'xlsx', 'table': 'all', 'currency': 'RUB',
+            response = legacy_get({'export': 'xlsx', 'table': 'all', 'currency': 'RUB',
                 'subdivision': ['A', 'B'], 'author': ['Иванов'], 'type': 'Директора', 'year': '2026'})
             self.assertEqual(response.status_code, 200)
             self.assertIn('motivation-manager-RUB-all.xlsx', response['Content-Disposition'])
@@ -91,7 +99,7 @@ class ReportExcelTests(TestCase):
             book.close(); response.close()
         with patch('admin_motivation.report_views.choices', return_value=[]), \
              patch('admin_motivation.report_views.load_report', return_value=self.data):
-            page = self.client.get(url, {'run': '1', 'type': 'Директора', 'author': 'Иванов', 'currency': 'RUB'})
+            page = legacy_get({'run': '1', 'type': 'Директора', 'author': 'Иванов', 'currency': 'RUB'})
         self.assertContains(page, 'Скачать весь отчёт Excel')
         self.assertContains(page, 'Скачать итоговую таблицу Excel')
         self.assertContains(page, 'Скачать расширенную таблицу Excel')

@@ -630,7 +630,7 @@ class ReportsNextTests(TestCase):
                 self.assertEqual([section['kind'] for section in presentation['team_sections']], ['Политики', 'Продажи', 'Директора'])
                 self.assertEqual([len(section['rows']) for section in presentation['team_sections']], [2, 2, 2])
                 self.assertEqual([section['people'] for section in presentation['team_sections']], [1, 1, 1])
-                self.assertContains(response, '<table class="nr-table nr-aligned-period-table"', count=3, html=False)
+                self.assertContains(response, '<table class="nr-table nr-aligned-period-table nr-employee-premium-table"', count=3, html=False)
                 self.assertContains(response, 'Премия без учёта выполнения плана')
                 self.assertContains(response, 'nr-kpi-types', count=3)
                 self.assertContains(response, 'Премия без учёта выполнения плана, ' + currency, count=3)

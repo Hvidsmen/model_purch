@@ -59,13 +59,16 @@ def data_for(user, execution, query):
         from .services.subdivision_aliases import expand, mapping
         scope = {**scope, 'subdivision': expand(scope['subdivision'], mapping())}
     rows, plan_fact, department = [], [], []
+    from .services.annual_accrual import SNAPSHOT_VERSION
+    snapshot_options = ({'annual_accrual_snapshot': True}
+                        if execution.parameters.get('annual_accrual_source') == SNAPSHOT_VERSION else {})
     for kind in kinds:
         values = {'TypeCoeff_': kind, 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'),
                   'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand'), 'Years': ['2026'], 'Currency': query.get('currency', 'USD')}
         if scope:
             values = scoped_values('manager-detail', values, scope)
         data = reports_next.load_report('manager-detail', values, access_scope=scope, premium_period=periods,
-                                        summary_only=True, calculation_variant=variant)
+                                        summary_only=True, calculation_variant=variant, **snapshot_options)
         from .services.motivation_performance import presentation_rows, DEPARTMENT
         plan_fact.extend(presentation_rows(data.get('motivation_performance', []), kind))
         department.extend(presentation_rows(data.get('department_performance', []), DEPARTMENT))
@@ -77,6 +80,7 @@ def data_for(user, execution, query):
                 amount = item['values'][index]
                 if amount is None:
                     continue
+                code = reports_next.period_code(column['label'])
                 target = query.copy()
                 target.setlist('period', [reports_next.period_code(column['label'])])
                 target.setlist('type', [kind]); target.setlist('author', [item['author']]); target.setlist('subdivision', [item['subdivision']])
@@ -84,7 +88,8 @@ def data_for(user, execution, query):
                     'kind': kind, 'period': column['label'], 'code': reports_next.period_code(column['label']),
                     'amount': amount, 'bonus': Decimal(0), 'total': amount, 'currency': values['Currency'],
                     'possible': item.get('possible_values', [None] * len(summary['columns']))[index],
-                    'annual_accrual': annual.get((item['subdivision'], item['author'], reports_next.period_code(column['label']))),
+                    'annual_accrual': annual.get((item['subdivision'], item['author'], code),
+                        Decimal(0) if snapshot_options and code in ('1','2','3','4') else None),
                     'detail_url': reverse('motivation_report_all_2026') + '?' + target.urlencode()})
     return {'rows': rows, 'plan_fact': plan_fact, 'department_plan_fact': department, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in rows),
             'total': sum((row['amount'] for row in rows), Decimal(0)), 'currency': query.get('currency', 'USD')}
@@ -192,6 +197,7 @@ def report(request):
             logging.getLogger(__name__).exception('Additional 2026 report failed')
             error = 'Не удалось получить отдельные результаты 2026. Проверьте подключение DataWH и состояние задания.'
     from .services.product_filters import fields as product_fields
+    from .services.annual_accrual import SNAPSHOT_VERSION
     branches = scope['subdivision'] if scope else list(Subdivision.all_objects.values_list('subdivision_key', flat=True))
     branches = [branches] if isinstance(branches, str) else branches
     if variant == 'separate_2026':
@@ -205,6 +211,7 @@ def report(request):
     return render(request, 'admin_motivation/reports_next/all_2026.html', {
         'kind': 'registry', 'all_2026_report': True, 'query': query, 'form': form, 'can_start': can_start, 'error': error,
         'job': job, 'pending': pending, 'execution': execution, 'data': data, 'ledger': data,
+        'annual_accrual_requires_recalculation': bool(execution and execution.parameters.get('annual_accrual_source') != SNAPSHOT_VERSION),
         'presentation': presentation, 'periods': [{'code': code, 'label': label, 'selected': not query.getlist('period') or code in query.getlist('period')} for code, label in [('1','I квартал'),('2','II квартал'),('3','III квартал'),('4','IV квартал'),('5','Год')] if variant != 'separate_2026' or code in '123'],
         'rule_outdated': bool(execution and execution.parameters.get('transition_rule') != 'moscow-tt-q4-heat-v1'), 'scenario': query.get('scenario','combined'), 'product_filter_fields': product_fields(query), 'branches': branches, 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
     })
