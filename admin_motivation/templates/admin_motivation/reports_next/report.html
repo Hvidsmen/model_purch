@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}{% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=employee-reports-20261103">
-<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=period-types-fit-20261106">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=target-cards-20261106">
 <section class="content native-report nr-page">
 {% include 'admin_motivation/reports_next/_tabs.html' with new_reports=True %}
 
@@ -38,5 +38,6 @@
 <details class="nr-metadata"><summary>Источник данных и параметры расчёта</summary><div class="nr-metadata-grid">{% for label,value in metadata %}<div><strong>{{ label }}</strong>{{ value }}</div>{% endfor %}</div></details>
 </section>{% endblock %}
 {% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_team_tabs.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=employee-reports-20261103" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=detail-fit-20261103" defer></script>{% endif %}{% endblock %}
+
 
 
