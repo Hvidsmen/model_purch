@@ -155,7 +155,7 @@ def actual_reports(user, execution, query, *, detailed=False, access_scope=None)
                   'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand'), 'Years': [year], 'Currency': currency}
         if scope:
             values = scoped_values('manager-detail', values, scope)
-        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed, include_performance=not detailed, **snapshot_options)
+        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed, include_performance=True, **snapshot_options)
         from .motivation_performance import presentation_rows, DEPARTMENT
         plan_fact.extend(presentation_rows(data.get('motivation_performance', []), kind))
         department.extend(presentation_rows(data.get('department_performance', []), DEPARTMENT))
@@ -356,3 +356,4 @@ def employee_authors(user, branch, worker, year):
         return sorted({str(row['author']).strip() for row in fetch(cursor, sql, args) if row.get('author') and str(row['author']).strip() and not unallocated_author(row['author'])})
     finally:
         connection.close()
+
