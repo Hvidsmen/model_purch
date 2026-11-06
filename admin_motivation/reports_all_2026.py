@@ -119,6 +119,12 @@ def report(request):
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
         return HttpResponseBadRequest(' '.join(exc.messages))
+    # The combined scenario has one canonical subdivision, while the separate
+    # scenario retains each selected original. Validate access before mapping.
+    selected = query.getlist('subdivision')
+    if (selected_variant(query) == ALL_2026 and selected
+            and all(value.strip().casefold() in ('д-москва','термотрейд') for value in selected)):
+        query.setlist('subdivision', ['Д-Москва'])
     initial = {'name': 'Все кварталы 2026', 'variant': ALL_2026, 'fact_year': 2026, 'mode': 'manual',
                'quarter_share': 80, 'year_share': 20, 'payout_threshold': '.8'}
     baseline = main_runs().filter(state='completed', parameters__fact_year=2026).order_by('-completed_at', '-pk').first()
@@ -185,7 +191,7 @@ def report(request):
                 raise ValidationError('Для отбора сотрудника используйте поле «Сотрудник».')
             if query.get('export') == 'xlsx':
                 from .reports_next_views import workbook
-                output = workbook('registry', data, [('Вариант', 'Москва и ТТ раздельно' if variant == 'separate_2026' else 'Москва + ТТ объединённо'), ('Премиальная база', 'I–III кварталы: выбранный сценарий; IV квартал и годовая часть: только IV квартал'), ('Товарные фильтры', '; '.join(field + ': ' + ', '.join(query.getlist(field)) for field in ('planning','goods','brand') if query.getlist(field))), ('Запуск', str(execution.run_id)), ('Завершён', str(execution.completed_at)), ('План', execution.parameters.get('plan_version', '')), ('Квартальная доля, %', execution.parameters.get('quarter_share', '')), ('Годовая доля, %', execution.parameters.get('year_share', '')), ('Порог выплаты', execution.parameters.get('payout_threshold', ''))], query=query, title='Все кварталы 2026')
+                output = workbook('registry', data, [('Вариант', 'Москва и ТТ раздельно' if variant == 'separate_2026' else 'Москва + ТТ объединённо'), ('Подразделения', ', '.join(query.getlist('subdivision')) or 'Все доступные'), ('Премиальная база', 'I–III кварталы: выбранный сценарий; IV квартал и годовая часть: только IV квартал'), ('Товарные фильтры', '; '.join(field + ': ' + ', '.join(query.getlist(field)) for field in ('planning','goods','brand') if query.getlist(field))), ('Запуск', str(execution.run_id)), ('Завершён', str(execution.completed_at)), ('План', execution.parameters.get('plan_version', '')), ('Квартальная доля, %', execution.parameters.get('quarter_share', '')), ('Годовая доля, %', execution.parameters.get('year_share', '')), ('Порог выплаты', execution.parameters.get('payout_threshold', ''))], query=query, title='Все кварталы 2026')
                 return FileResponse(output, as_attachment=True, filename='motivation-all-2026.xlsx')
             for section in presentation['team_sections']:
                 section['page'] = Paginator(section['rows'], 100).get_page(query.get(section['page_parameter']))
@@ -213,5 +219,5 @@ def report(request):
         'job': job, 'pending': pending, 'execution': execution, 'data': data, 'ledger': data,
         'annual_accrual_requires_recalculation': bool(execution and execution.parameters.get('annual_accrual_source') != SNAPSHOT_VERSION),
         'presentation': presentation, 'periods': [{'code': code, 'label': label, 'selected': not query.getlist('period') or code in query.getlist('period')} for code, label in [('1','I квартал'),('2','II квартал'),('3','III квартал'),('4','IV квартал'),('5','Год')] if variant != 'separate_2026' or code in '123'],
-        'rule_outdated': bool(execution and execution.parameters.get('transition_rule') != 'moscow-tt-q4-heat-v1'), 'scenario': query.get('scenario','combined'), 'product_filter_fields': product_fields(query), 'branches': branches, 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
+        'rule_outdated': bool(execution and execution.parameters.get('transition_rule') != 'moscow-tt-q4-heat-v1'), 'scenario': query.get('scenario','combined'), 'product_filter_fields': product_fields(query), 'branches': branches, 'selected_subdivisions': query.getlist('subdivision'), 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
     })

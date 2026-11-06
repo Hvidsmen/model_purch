@@ -1,0 +1,9 @@
+<div class="nr-field"><span>Подразделения</span>
+<details class="nr-type-select next-products" data-subdivision-picker>
+<summary><span data-product-caption>{% if selected_subdivisions %}{{ selected_subdivisions|join:', ' }}{% else %}Все доступные{% endif %}</span></summary>
+<div class="nr-type-menu">
+<input type="search" data-product-search placeholder="Найти подразделение" aria-label="Найти подразделение">
+<div class="nr-type-actions"><button type="button" data-product-all>Выбрать все</button><button type="button" data-product-clear>Снять все</button></div>
+{% for branch in branches %}<label><input type="checkbox" name="subdivision" value="{{ branch }}" {% if branch in selected_subdivisions %}checked{% endif %}><span>{{ branch }}</span></label>{% endfor %}
+<small>Пустой выбор — все доступные подразделения.</small>
+</div></details></div>
