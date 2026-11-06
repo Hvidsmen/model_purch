@@ -22,6 +22,7 @@
 
 <details class="nr-metadata"><summary>Как сравниваются бюджеты</summary><div class="nr-note">Плановая премия при выполнении плана на 100%. На обеих сторонах — одинаковые отгрузки плана, состав директоров и версии коэффициентов из расчёта. {% if query.director_scope == 'active' %}Состав выбран по действующим привязкам справочника: архивные и отвязанные от филиала директора исключены из обеих сторон. Это плановый сценарий с текущим составом, сохранённые фактические выплаты не меняются.{% else %}В историческом режиме учитываются все директора с сохранёнными ставками, в том числе удалённые из текущего справочника.{% endif %} Факт здесь не пересчитывается. Для обеих частей премии учитываются только октябрь–декабрь: квартальная доля и годовая доля. План и DDP показаны за весь выбранный год. Персональная плановая детализация есть для директоров; план политик и продаж не содержит ФИО.</div></details>
 {% elif kind == 'mine' %}
+{% include 'admin_motivation/reports_next/_my_remaining.html' %}
 {% include 'admin_motivation/reports_next/_my_periods.html' %}
 
 {% include 'admin_motivation/reports_next/_my_goals.html' %}{% include 'admin_motivation/reports_next/_my_products.html' %}
@@ -37,3 +38,4 @@
 <details class="nr-metadata"><summary>Источник данных и параметры расчёта</summary><div class="nr-metadata-grid">{% for label,value in metadata %}<div><strong>{{ label }}</strong>{{ value }}</div>{% endfor %}</div></details>
 </section>{% endblock %}
 {% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_team_tabs.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=employee-reports-20261103" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=detail-fit-20261103" defer></script>{% endif %}{% endblock %}
+

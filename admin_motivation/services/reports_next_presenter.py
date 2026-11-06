@@ -110,6 +110,18 @@ def present(kind, data, ledger=None, period='all'):
                 result['period_columns'])
     if 'department_plan_fact' in ledger:
         result['department_performance_matrix'] = performance_matrix(ledger['department_plan_fact'], result['period_columns'])
+    result['remaining_targets'] = []
+    for title, matrix in [('Всё подразделение', result.get('department_performance_matrix', {})),
+                          ('По коэффициентам', result.get('performance_matrix', {}))]:
+        for row in matrix.get('rows', []):
+            targets = []
+            for column, cell in zip(matrix['columns'], row['cells']):
+                if cell is None:
+                    continue
+                plan, fact = cell.get('plan'), cell.get('fact')
+                targets.append({**cell, 'label': column['label'],
+                    'remaining': max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None else None})
+            result['remaining_targets'].append({**row, 'title': title, 'targets': targets})
     from .annual_accrual import enrich
     enrich(result, ledger)
     return result
@@ -270,3 +282,4 @@ def new_detail_labels(data):
         (19, 'Всего по расчёту', 'Премия по расчёту плюс годовая доплата за кварталы.')]:
         data['headers'][index].update(label=label, title=explanation)
     return data
+

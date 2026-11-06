@@ -483,7 +483,12 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                 from .reports_next import period_code
                 rows = [row for row in rows if period_code(row.get('КварталМотивации')) in period_codes]
                 performance = [row for row in performance if period_code(row.get('КварталМотивации')) in period_codes]
-            return manager_detail_report(rows, values.get('Currency', 'USD'), performance, pilot=pilot)
+            result = manager_detail_report(rows, values.get('Currency', 'USD'), performance, pilot=pilot)
+            if include_performance:
+                from .motivation_performance import grouped_sql as motivation_sql, department_sql
+                result['motivation_performance'] = read_rows(cursor, motivation_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant), args)
+                result['department_performance'] = read_rows(cursor, department_sql(sql, calculation_variant), args)
+            return result
         if kind == 'subdivisions':
             dimensions = ['Подразделение', 'АвторСделки', 'Год', 'ТипКоэф', 'ГруппаПлановПродаж', 'ГруппаТоваров', 'Марка', 'КварталМотивации']
             columns = ','.join('['+key+']' for key in dimensions)
@@ -514,3 +519,4 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         return report
     finally:
         if connection is not None: connection.close()
+
