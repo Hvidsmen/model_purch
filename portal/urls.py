@@ -25,6 +25,7 @@ from django.conf.urls.static import static
 urlpatterns = ([
                    path('sales-planning/', sales_planning.index, name='sales_planning_index'),
                    path('sales-planning/split/', sales_planning.split, name='sales_planning_split'),
+                   path('sales-planning/directories/', sales_planning.directories, name='sales_planning_directories'),
                    path('accounts/administration/sales-planning-preview/', sales_planning_preview.preview, name='sales_planning_preview'),
                    path('accounts/administration/', admin_views.dashboard, name='portal_administration'),
                    path('accounts/windows/', identity_views.windows_login, name='portal_windows_login'),

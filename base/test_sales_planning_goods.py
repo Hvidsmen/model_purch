@@ -58,7 +58,7 @@ class GoodsImportTests(TestCase):
         self.assertTrue(SalesPlanningGoods.objects.get().is_active)
 
     def test_page_loads_only_on_admin_post_and_renders_separate_groups_and_parent(self):
-        url = reverse('sales_planning_split')
+        url = reverse('sales_planning_directories')
         admin = User.objects.create_superuser('goods-admin')
         self.client.force_login(admin)
         with patch('base.sales_planning.load_goods', side_effect=lambda: self.import_rows([product(name='<b>Split</b>'), product(b'parent', 'Родительская группа', None)])) as load:
