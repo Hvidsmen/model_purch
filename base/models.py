@@ -2,6 +2,23 @@ from django.conf import settings
 from django.db import models
 
 
+class SalesPlanningChannel(models.Model):
+    name = models.CharField('Канал продаж', max_length=255, unique=True)
+    is_active = models.BooleanField('Присутствует в источнике', default=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return self.name
+
+
+class SalesPlanningDirectoryLoad(models.Model):
+    directory = models.CharField(max_length=40, unique=True)
+    loaded_at = models.DateTimeField()
+    row_count = models.PositiveIntegerField()
+
+
 class MotivationReportAccess(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='motivation_report_access')
     subdivision = models.ForeignKey('admin_motivation.Subdivision', on_delete=models.PROTECT, verbose_name='Подразделение для отчётов')
@@ -42,3 +59,4 @@ class GroupProjectAccess(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'project'], name='unique_group_project_access')]
+

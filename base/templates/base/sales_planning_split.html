@@ -1,26 +1,38 @@
-{% extends 'base/portal_shell.html' %}
+{% extends 'base/portal_shell.html' %}{% load tz %}
 {% block title %}Split · Модель планирования продаж · DA портал{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
 {% block module_navigation %}<nav class="portal-section-nav" aria-label="Модель планирования продаж"><a href="{% url 'sales_planning_split' %}" aria-current="page">Split</a></nav>{% endblock %}
 {% block content %}
 <section class="portal-welcome">
     <h1>Split</h1>
-    <p>Модель планирования продаж. Первоначальная загрузка справочников из DataWH.</p>
+    <p>Модель планирования продаж. Справочники из DataWH.</p>
+    {% for message in messages %}<p role="status">{{ message }}</p>{% endfor %}
+    {% if error %}<p class="alert alert-danger" role="alert">{{ error }}</p>{% endif %}
     <section class="admin-panel" aria-labelledby="source-title">
         <h2 id="source-title">Источник данных · DataWH</h2>
-        <p role="status"><strong>Источник не настроен</strong></p>
-        <p>Для загрузки каналов продаж и номенклатуры нужны SQL-запросы к DataWH. После настройки источника станет доступна первоначальная загрузка.</p>
-        <button class="admin-button" type="button" disabled aria-describedby="load-reason">Загрузить справочники из DataWH</button>
-        <p id="load-reason" class="admin-muted">Загрузка недоступна: SQL-запросы ещё не предоставлены.</p>
+        <p>Каналы продаж: источник настроен. Номенклатура: ожидается SQL-запрос.</p>
+        <form method="post">{% csrf_token %}<input type="hidden" name="action" value="load_channels">
+            <button class="admin-button" type="submit">{% if channel_load %}Обновить каналы продаж из DataWH{% else %}Загрузить каналы продаж из DataWH{% endif %}</button>
+        </form>
+        <p class="admin-muted">Повторная загрузка обновляет список без дублей. Отсутствующие в источнике каналы сохраняются как неактивные.</p>
     </section>
     <div class="portal-cards">
-    {% for directory in directories %}
-        <section class="portal-project-card" aria-labelledby="directory-{{ forloop.counter }}">
-            <h2 id="directory-{{ forloop.counter }}">{{ directory }}</h2>
-            <p><strong>Источник не настроен</strong></p>
-            <p>Данные не загружены.</p>
+        <section class="portal-project-card" aria-labelledby="channels-title">
+            <h2 id="channels-title">Каналы продаж</h2>
+            {% if channel_load %}
+            <p><strong>Загружено: {{ channel_load.row_count }}</strong></p>
+            <p class="admin-muted">Последняя загрузка: {% timezone 'Europe/Moscow' %}{{ channel_load.loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>
+            <div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Канал продаж</th></tr></thead><tbody>
+                {% for channel in channel_page %}<tr><td>{{ channel.name }}</td></tr>{% endfor %}
+            </tbody></table></div>
+            {% if channel_page.paginator.num_pages > 1 %}<nav aria-label="Страницы каналов продаж">{% if channel_page.has_previous %}<a href="?page={{ channel_page.previous_page_number }}">← Назад</a>{% endif %} Страница {{ channel_page.number }} из {{ channel_page.paginator.num_pages }} {% if channel_page.has_next %}<a href="?page={{ channel_page.next_page_number }}">Далее →</a>{% endif %}</nav>{% endif %}
+            {% else %}<p>Источник настроен. Данные ещё не загружены.</p>{% endif %}
         </section>
-    {% endfor %}
+        <section class="portal-project-card" aria-labelledby="goods-title">
+            <h2 id="goods-title">Номенклатура</h2>
+            <p><strong>Источник не настроен</strong></p>
+            <p>Данные не загружены. Для подключения нужен SQL-запрос к DataWH.</p>
+        </section>
     </div>
 </section>
 {% endblock %}
