@@ -29,6 +29,32 @@ class SalesPlanningGoods(models.Model):
         ordering = ['name', 'source_key']
 
 
+class SalesPlanningGroup(models.Model):
+    source_key = models.CharField(max_length=64, unique=True)
+    name = models.TextField('Группа планирования')
+    source_names = models.JSONField(default=list)
+    is_active = models.BooleanField(default=True)
+    notes = models.TextField('Примечание Split', blank=True)
+    related_groups = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='related_from')
+    replacement_groups = models.ManyToManyField('self', symmetrical=False, blank=True, related_name='replacement_for')
+
+    class Meta:
+        ordering = ['name', 'pk']
+
+    def __str__(self):
+        return self.name
+
+
+class SalesPlanningBlockPair(models.Model):
+    group = models.ForeignKey(SalesPlanningGroup, on_delete=models.CASCADE, related_name='block_pairs')
+    power = models.TextField('Мощность')
+    indoor = models.ForeignKey(SalesPlanningGoods, on_delete=models.PROTECT, related_name='+')
+    outdoor = models.ForeignKey(SalesPlanningGoods, on_delete=models.PROTECT, related_name='+')
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['group', 'power'], name='unique_split_group_power_pair')]
+
+
 class SalesPlanningDirectoryLoad(models.Model):
     directory = models.CharField(max_length=40, unique=True)
     loaded_at = models.DateTimeField()
@@ -75,6 +101,7 @@ class GroupProjectAccess(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'project'], name='unique_group_project_access')]
+
 
 
 
