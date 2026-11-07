@@ -60,7 +60,7 @@ class ChannelPageTests(TestCase):
     def setUp(self):
         self.user = User.objects.create_superuser('channel-admin')
         self.client.force_login(self.user)
-        self.url = reverse('sales_planning_split')
+        self.url = reverse('sales_planning_directories')
 
     def test_load_redirects_then_displays_saved_channels_without_dwh_on_get(self):
         def imported():

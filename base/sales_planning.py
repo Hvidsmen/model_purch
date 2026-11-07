@@ -24,7 +24,7 @@ def index(request):
 @login_required
 @never_cache
 @require_http_methods(['GET', 'POST'])
-def split(request):
+def directories(request):
     if not can_access(request.user, 'admin'):
         raise PermissionDenied
     error = ''
@@ -42,8 +42,8 @@ def split(request):
             error = 'Не удалось загрузить справочник из DataWH. Проверьте подключение и журнал сервера. Сохранённые данные не изменены.'
         else:
             messages.success(request, f'Каналы продаж загружены: {count}.' if action == 'load_channels' else f'Номенклатура загружена: {count}.')
-            return redirect('sales_planning_split')
-    return render(request, 'base/sales_planning_split.html', {
+            return redirect('sales_planning_directories')
+    return render(request, 'base/sales_planning_directories.html', {
         'error': error,
         'channel_load': SalesPlanningDirectoryLoad.objects.filter(directory='channels').first(),
         'channel_page': Paginator(SalesPlanningChannel.objects.filter(is_active=True), 50).get_page(request.GET.get('page')),
@@ -53,3 +53,15 @@ def split(request):
 
 
 
+
+@login_required
+@never_cache
+@require_GET
+def split(request):
+    if not can_access(request.user, 'admin'):
+        raise PermissionDenied
+    loads = {entry.directory: entry for entry in SalesPlanningDirectoryLoad.objects.all()}
+    return render(request, 'base/sales_planning_split.html', {
+        'directory_statuses': [{'label': label, 'load': loads.get(key)}
+                               for key, label in [('channels', 'Каналы продаж'), ('goods', 'Номенклатура')]],
+    })
