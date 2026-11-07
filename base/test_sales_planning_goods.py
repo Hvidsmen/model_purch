@@ -9,8 +9,8 @@ from .models import SalesPlanningGoods, SalesPlanningDirectoryLoad
 from .sales_planning_source import load_goods, GOODS_SQL
 
 
-def product(key=b'product', name='Split', parent=b'parent', planning='Планирование', brand='Daichi', sales='Планы продаж'):
-    return (key, name, parent, planning, brand, sales, '2.5', 'Внутренний', 'Мульти')
+def product(key=b'product', name='Split', parent='Товарная группа', planning='Планирование', brand='Daichi', sales='Планы продаж'):
+    return (key, name, parent, planning, brand, sales, '2.5', 'Внутренний', 'INV')
 
 
 class GoodsImportTests(TestCase):
@@ -29,9 +29,9 @@ class GoodsImportTests(TestCase):
         self.assertEqual(self.import_rows([product(), product(b'parent', 'Группа', None)]), 2)
         good = SalesPlanningGoods.objects.get(source_key='0x' + b'product'.hex())
         pk = good.pk
-        self.assertEqual(good.parent_key, '0x' + b'parent'.hex())
+        self.assertEqual(good.product_group, 'Товарная группа')
         self.assertEqual((good.planning_group, good.sales_plan_group, good.brand, good.power_class, good.block_type, good.outdoor_block_type),
-                         ('Планирование', 'Планы продаж', 'Daichi', '2.5', 'Внутренний', 'Мульти'))
+                         ('Планирование', 'Планы продаж', 'Daichi', '2.5', 'Внутренний', 'INV'))
         self.import_rows([product(memoryview(b'product'), 'Новое название')])
         good.refresh_from_db()
         self.assertEqual(good.pk, pk)
@@ -64,7 +64,7 @@ class GoodsImportTests(TestCase):
         with patch('base.sales_planning.load_goods', side_effect=lambda: self.import_rows([product(name='<b>Split</b>'), product(b'parent', 'Родительская группа', None)])) as load:
             response = self.client.post(url, {'action': 'load_goods'}, follow=True)
         load.assert_called_once()
-        for text in ('Номенклатура загружена: 2', 'Планирование', 'Планы продаж', 'Родительская группа', '&lt;b&gt;Split&lt;/b&gt;', 'Мульти'):
+        for text in ('Номенклатура загружена: 2', 'Планирование', 'Планы продаж', 'Товарная группа', '&lt;b&gt;Split&lt;/b&gt;', 'INV', 'Бренд', 'Мощность', 'INV / On-Off'):
             self.assertContains(response, text)
         secure = Client(enforce_csrf_checks=True)
         secure.force_login(admin)
@@ -74,3 +74,4 @@ class GoodsImportTests(TestCase):
         with patch('base.sales_planning.load_goods') as load:
             self.assertEqual(self.client.post(url, {'action': 'load_goods'}).status_code, 403)
             load.assert_not_called()
+

@@ -10,7 +10,6 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from .models import SalesPlanningChannel, SalesPlanningDirectoryLoad, SalesPlanningGoods
 from .sales_planning_source import load_channels, load_goods
-from django.db.models import OuterRef, Subquery
 from .access import can_access
 
 
@@ -49,8 +48,8 @@ def split(request):
         'channel_load': SalesPlanningDirectoryLoad.objects.filter(directory='channels').first(),
         'channel_page': Paginator(SalesPlanningChannel.objects.filter(is_active=True), 50).get_page(request.GET.get('page')),
         'goods_load': SalesPlanningDirectoryLoad.objects.filter(directory='goods').first(),
-        'goods_page': Paginator(SalesPlanningGoods.objects.filter(is_active=True).annotate(
-            parent_name=Subquery(SalesPlanningGoods.objects.filter(source_key=OuterRef('parent_key')).values('name')[:1])), 50).get_page(request.GET.get('goods_page')),
+        'goods_page': Paginator(SalesPlanningGoods.objects.filter(is_active=True), 50).get_page(request.GET.get('goods_page')),
     })
+
 
 

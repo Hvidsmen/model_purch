@@ -36,8 +36,8 @@
             {% if goods_load %}
             <p><strong>Загружено: {{ goods_load.row_count }}</strong></p>
             <p class="admin-muted">Последняя загрузка: {% timezone 'Europe/Moscow' %}{{ goods_load.loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>
-            <div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Наименование</th><th>Родитель</th><th>Группа планирования</th><th>Группа планов продаж</th><th>Марка</th><th>Класс мощности</th><th>Тип блока</th><th>Тип наружного блока</th></tr></thead><tbody>
-                {% for good in goods_page %}<tr><td title="{{ good.source_key }}">{{ good.name }}</td><td title="{{ good.parent_key }}">{{ good.parent_name|default:good.parent_key|default:'—' }}</td><td>{{ good.planning_group|default:'—' }}</td><td>{{ good.sales_plan_group|default:'—' }}</td><td>{{ good.brand|default:'—' }}</td><td>{{ good.power_class|default:'—' }}</td><td>{{ good.block_type|default:'—' }}</td><td>{{ good.outdoor_block_type|default:'—' }}</td></tr>{% endfor %}
+            <div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Наименование</th><th>Товарная группа</th><th>Группа планирования</th><th>Группа планов продаж</th><th>Бренд</th><th>Мощность</th><th>Тип блока</th><th>INV / On-Off</th></tr></thead><tbody>
+                {% for good in goods_page %}<tr><td title="{{ good.source_key }}">{{ good.name }}</td><td>{{ good.product_group|default:'—' }}</td><td>{{ good.planning_group|default:'—' }}</td><td>{{ good.sales_plan_group|default:'—' }}</td><td>{{ good.brand|default:'—' }}</td><td>{{ good.power_class|default:'—' }}</td><td>{{ good.block_type|default:'—' }}</td><td>{{ good.outdoor_block_type|default:'—' }}</td></tr>{% endfor %}
             </tbody></table></div>
             {% if goods_page.paginator.num_pages > 1 %}<nav aria-label="Страницы номенклатуры">{% if goods_page.has_previous %}<a href="?goods_page={{ goods_page.previous_page_number }}">← Назад</a>{% endif %} Страница {{ goods_page.number }} из {{ goods_page.paginator.num_pages }} {% if goods_page.has_next %}<a href="?goods_page={{ goods_page.next_page_number }}">Далее →</a>{% endif %}</nav>{% endif %}
             {% else %}<p>Источник настроен. Данные ещё не загружены.</p>{% endif %}
@@ -45,4 +45,5 @@
     </div>
 </section>
 {% endblock %}
+
 
