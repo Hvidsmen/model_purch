@@ -13,6 +13,22 @@ class SalesPlanningChannel(models.Model):
         return self.name
 
 
+class SalesPlanningGoods(models.Model):
+    source_key = models.CharField('Ссылка DataWH', max_length=255, unique=True)
+    name = models.TextField('Наименование')
+    parent_key = models.CharField('Родитель DataWH', max_length=255, blank=True)
+    planning_group = models.TextField('Группа планирования', blank=True)
+    sales_plan_group = models.TextField('Группа планов продаж', blank=True)
+    brand = models.TextField('Марка', blank=True)
+    power_class = models.TextField('Класс мощности', blank=True)
+    block_type = models.TextField('Тип блока', blank=True)
+    outdoor_block_type = models.TextField('Тип наружного блока', blank=True)
+    is_active = models.BooleanField('Присутствует в источнике', default=True)
+
+    class Meta:
+        ordering = ['name', 'source_key']
+
+
 class SalesPlanningDirectoryLoad(models.Model):
     directory = models.CharField(max_length=40, unique=True)
     loaded_at = models.DateTimeField()
@@ -59,4 +75,5 @@ class GroupProjectAccess(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'project'], name='unique_group_project_access')]
+
 

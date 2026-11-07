@@ -27,7 +27,7 @@ class SalesPlanningTests(TestCase):
         self.assertRedirects(self.client.get(reverse('sales_planning_index')), reverse('sales_planning_split'))
         with patch('model_purch.conns.connect_database', side_effect=AssertionError('Unexpected DWH connection')):
             response = self.client.get(reverse('sales_planning_split'))
-        self.assertContains(response, 'Источник не настроен', count=1)
+        self.assertNotContains(response, 'Источник не настроен')
         self.assertContains(response, 'Каналы продаж')
         self.assertContains(response, 'Номенклатура')
         self.assertContains(response, 'name="action" value="load_channels"')
@@ -36,4 +36,5 @@ class SalesPlanningTests(TestCase):
         self.assertIn('no-store', response['Cache-Control'])
         self.assertEqual(self.client.post(reverse('sales_planning_split')).status_code, 400)
         self.assertEqual(self.client.post(reverse('sales_planning_index')).status_code, 405)
+
 
