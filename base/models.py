@@ -16,13 +16,13 @@ class SalesPlanningChannel(models.Model):
 class SalesPlanningGoods(models.Model):
     source_key = models.CharField('Ссылка DataWH', max_length=255, unique=True)
     name = models.TextField('Наименование')
-    parent_key = models.CharField('Родитель DataWH', max_length=255, blank=True)
+    product_group = models.TextField('Товарная группа', blank=True)
     planning_group = models.TextField('Группа планирования', blank=True)
     sales_plan_group = models.TextField('Группа планов продаж', blank=True)
-    brand = models.TextField('Марка', blank=True)
-    power_class = models.TextField('Класс мощности', blank=True)
+    brand = models.TextField('Бренд', blank=True)
+    power_class = models.TextField('Мощность', blank=True)
     block_type = models.TextField('Тип блока', blank=True)
-    outdoor_block_type = models.TextField('Тип наружного блока', blank=True)
+    outdoor_block_type = models.TextField('INV / On-Off', blank=True)
     is_active = models.BooleanField('Присутствует в источнике', default=True)
 
     class Meta:
@@ -75,5 +75,6 @@ class GroupProjectAccess(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'project'], name='unique_group_project_access')]
+
 
 

@@ -38,11 +38,12 @@ def load_goods():
     goods = {}
     fields = ('planning_group', 'brand', 'sales_plan_group', 'power_class', 'block_type', 'outdoor_block_type')
     for row in rows:
-        key, parent = reference_key(row[0]), reference_key(row[2])
+        key = reference_key(row[0])
+        product_group = str(row[2]).strip() if row[2] is not None else ''
         name = str(row[1]).strip() if row[1] is not None else ''
-        if not key or not name or len(key) > 255 or len(parent) > 255:
+        if not key or not name or len(key) > 255:
             raise ValidationError('В номенклатуре отсутствует ссылка или наименование либо ссылка длиннее 255 символов. Данные не изменены.')
-        values = {'name': name, 'parent_key': parent, **{
+        values = {'name': name, 'product_group': product_group, **{
             field: str(value).strip() if value is not None else '' for field, value in zip(fields, row[3:])}}
         if key in goods and goods[key] != values:
             raise ValidationError('В номенклатуре найдены разные записи с одной ссылкой. Данные не изменены.')
@@ -54,7 +55,7 @@ def load_goods():
         SalesPlanningGoods.objects.bulk_create(
             [SalesPlanningGoods(source_key=key, **values) for key, values in goods.items()],
             update_conflicts=True, unique_fields=['source_key'],
-            update_fields=['name', 'parent_key', *fields, 'is_active'], batch_size=80)
+            update_fields=['name', 'product_group', *fields, 'is_active'], batch_size=80)
         SalesPlanningDirectoryLoad.objects.update_or_create(directory='goods', defaults={
             'loaded_at': timezone.now(), 'row_count': len(goods)})
     return len(goods)
@@ -97,4 +98,5 @@ def load_channels():
         SalesPlanningDirectoryLoad.objects.update_or_create(directory='channels', defaults={
             'loaded_at': timezone.now(), 'row_count': len(names)})
     return len(names)
+
 
