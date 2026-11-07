@@ -58,6 +58,8 @@ def load_goods():
             update_fields=['name', 'product_group', *fields, 'is_active'], batch_size=80)
         SalesPlanningDirectoryLoad.objects.update_or_create(directory='goods', defaults={
             'loaded_at': timezone.now(), 'row_count': len(goods)})
+        from .sales_planning_group_service import rebuild_groups
+        rebuild_groups()
     return len(goods)
 
 
@@ -98,5 +100,6 @@ def load_channels():
         SalesPlanningDirectoryLoad.objects.update_or_create(directory='channels', defaults={
             'loaded_at': timezone.now(), 'row_count': len(names)})
     return len(names)
+
 
 

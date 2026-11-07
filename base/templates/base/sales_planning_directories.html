@@ -5,6 +5,7 @@
 {% block content %}
 <section class="portal-welcome">
     <h1>Справочники</h1>
+    <p><a class="admin-button secondary" href="{% url 'sales_planning_groups' %}">Группы планирования →</a></p>
     <p>Модель планирования продаж. Справочники из DataWH.</p>
     {% for message in messages %}<p role="status">{{ message }}</p>{% endfor %}
     {% if error %}<p class="alert alert-danger" role="alert">{{ error }}</p>{% endif %}
@@ -45,5 +46,6 @@
     </div>
 </section>
 {% endblock %}
+
 
 

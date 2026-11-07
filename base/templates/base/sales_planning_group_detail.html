@@ -1,0 +1,22 @@
+{% extends 'base/portal_shell.html' %}
+{% block title %}{{ group.name }} · Группа планирования{% endblock %}
+{% block project_name %}Модель планирования продаж{% endblock %}
+{% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='directories' %}{% endblock %}
+{% block content %}<section class="portal-welcome"><p><a href="{% url 'sales_planning_groups' %}">← Группы планирования</a></p><h1>{{ group.name }}</h1>
+{% if not group.is_active %}<p role="status">Группа неактивна. Моделей в текущей номенклатуре нет; ручные настройки сохранены.</p>{% endif %}
+{% for message in messages %}<p role="status">{{ message }}</p>{% endfor %}{% if error %}<p role="alert" class="alert alert-danger">{{ error }}</p>{% endif %}
+<p>Моделей: {{ summary.count }} · Бренд: {{ summary.brand|join:', '|default:'—' }} · Товарная группа: {{ summary.product_group|join:', '|default:'—' }} · INV / On-Off: {{ summary.outdoor_block_type|join:', '|default:'—' }}</p>
+<section class="admin-panel"><h2>Мощности и пары блоков</h2><p>Для каждой мощности выберите один внутренний и один наружный блок. Автоматически модели не назначаются.</p>
+{% if unclassified %}<p role="status">Моделей с незаполненной мощностью или нераспознанным типом блока: {{ unclassified }}. Проверьте состав ниже.</p>{% endif %}
+{% for row in powers %}<div class="admin-panel"><h3>Мощность {{ row.power }}</h3>{% if row.error %}<p role="alert">{{ row.error }}</p>{% endif %}
+{% if row.pair %}<p>Сохранено: {{ row.pair.indoor.name }} + {{ row.pair.outdoor.name }}</p>{% endif %}
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="pair"><input type="hidden" name="power" value="{{ row.power }}">
+<label>Внутренний блок <select name="indoor" required><option value="">Выберите модель</option>{% for good in row.indoor %}<option value="{{ good.pk }}" {% if row.pair.indoor_id == good.pk %}selected{% endif %}>{{ good.name }} · {{ good.source_key }}</option>{% endfor %}</select></label>
+<label>Наружный блок <select name="outdoor" required><option value="">Выберите модель</option>{% for good in row.outdoor %}<option value="{{ good.pk }}" {% if row.pair.outdoor_id == good.pk %}selected{% endif %}>{{ good.name }} · {{ good.source_key }}</option>{% endfor %}</select></label>
+<button type="submit" class="admin-button" {% if not group.is_active %}disabled{% endif %}>Сохранить пару</button></form>
+{% if row.pair %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="remove_pair"><input type="hidden" name="pair" value="{{ row.pair.pk }}"><button type="submit" class="admin-button secondary">Снять выбор пары</button></form>{% endif %}</div>
+{% empty %}<p>Нет мощностей для выбора пар.</p>{% endfor %}</section>
+<section class="admin-panel"><h2>Ручные настройки Split</h2><form method="post">{% csrf_token %}<input type="hidden" name="action" value="settings">{{ form.as_p }}<button type="submit" class="admin-button">Сохранить настройки</button></form><p>Связанные и замещающие группы задаются направленно: от этой группы к выбранным. В расчётах пока не используются.</p></section>
+<section class="admin-panel"><h2>Состав группы</h2><div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Модель</th><th>Мощность</th><th>Тип блока</th><th>INV / On-Off</th><th>Бренд</th><th>Группа планов продаж</th></tr></thead><tbody>{% for good in goods_page %}<tr><td title="{{ good.source_key }}">{{ good.name }}</td><td>{{ good.power_class|default:'—' }}</td><td>{{ good.block_type|default:'—' }}</td><td>{{ good.outdoor_block_type|default:'—' }}</td><td>{{ good.brand|default:'—' }}</td><td>{{ good.sales_plan_group|default:'—' }}</td></tr>{% empty %}<tr><td colspan="6">Нет активных моделей.</td></tr>{% endfor %}</tbody></table></div>
+<nav aria-label="Страницы моделей">{% if goods_page.has_previous %}<a href="?page={{ goods_page.previous_page_number }}">← Назад</a>{% endif %} {{ goods_page.number }} / {{ goods_page.paginator.num_pages }} {% if goods_page.has_next %}<a href="?page={{ goods_page.next_page_number }}">Далее →</a>{% endif %}</nav></section>
+</section>{% endblock %}
