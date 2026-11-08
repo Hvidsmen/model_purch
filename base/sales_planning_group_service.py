@@ -1,5 +1,6 @@
 """Derived groups and manual Split settings have independent lifecycles."""
 from hashlib import sha256
+import re
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
@@ -57,15 +58,60 @@ def group_summaries(groups):
                                for key, value in stats[group.pk].items()}} for group in groups]
 
 
+def block_kind(value):
+    """Use the source block-type label, never the model name or INV flag."""
+    key = re.sub(r'[\W_]+', '', str(value or '').casefold())
+    if 'внутр' in key and 'наруж' in key:
+        return None
+    if key.startswith(('внутр', 'блоквнутр')) or key in ('indoor', 'indoorunit', 'in'):
+        return 'indoor'
+    if key.startswith(('наруж', 'блокнаруж')) or key in ('outdoor', 'outdoorunit', 'out'):
+        return 'outdoor'
+    return None
+
+
 def pair_error(pair):
-    for good, prefix, caption in [(pair.indoor, 'внутр', 'внутренний'), (pair.outdoor, 'наруж', 'наружный')]:
+    for good, kind in [(pair.indoor, 'indoor'), (pair.outdoor, 'outdoor')]:
         if not good.is_active:
             return 'Выбранная модель отсутствует в текущей номенклатуре. Подберите замену.'
         if group_key(good.planning_group) != pair.group.source_key or good.power_class.strip() != pair.power:
             return 'Группа или мощность выбранной модели изменилась. Проверьте пару.'
-        if not good.block_type.strip().casefold().startswith(prefix):
+        if block_kind(good.block_type) != kind:
             return 'В паре должен быть один внутренний и один наружный блок.'
     return ''
+
+
+def power_rows(group, goods):
+    powers = {}
+    for good in goods:
+        power = good.power_class.strip()
+        if not power:
+            continue
+        row = powers.setdefault(power, {'power': power, 'indoor': [], 'outdoor': []})
+        kind = block_kind(good.block_type)
+        if kind:
+            row[kind].append(good)
+    for pair in group.block_pairs.select_related('indoor', 'outdoor', 'group'):
+        row = powers.setdefault(pair.power, {'power': pair.power, 'indoor': [], 'outdoor': []})
+        row['pair'], row['error'] = pair, pair_error(pair)
+    for row in powers.values():
+        for kind in ('indoor', 'outdoor'):
+            row['selected_' + kind] = (getattr(row['pair'], kind + '_id') if row.get('pair')
+                                      else row[kind][0].pk if len(row[kind]) == 1 else None)
+        row['automatic'] = not row.get('pair') and len(row['indoor']) == len(row['outdoor']) == 1
+    return [powers[key] for key in sorted(powers)]
+
+
+@transaction.atomic
+def save_unique_pairs(group):
+    if not group.is_active:
+        raise ValidationError('Группа неактивна.')
+    count = 0
+    for row in power_rows(group, list(group_goods(group))):
+        if row['automatic']:
+            save_pair(group, row['power'], row['selected_indoor'], row['selected_outdoor'])
+            count += 1
+    return count
 
 
 @transaction.atomic
@@ -81,3 +127,4 @@ def save_pair(group, power, indoor_id, outdoor_id):
         raise ValidationError(error)
     return SalesPlanningBlockPair.objects.update_or_create(group=group, power=pair.power,
         defaults={'indoor': pair.indoor, 'outdoor': pair.outdoor})[0]
+
