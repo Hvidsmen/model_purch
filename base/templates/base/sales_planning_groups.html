@@ -1,7 +1,9 @@
-{% extends 'base/portal_shell.html' %}{% load tz %}
+{% extends 'base/portal_shell.html' %}{% load tz static %}
 {% block title %}Группы планирования · Split{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
 {% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='directories' %}{% endblock %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_group_filters.css' %}?v=20261108">{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'base/split_group_filters.js' %}?v=20261108" defer></script>{% endblock %}
 {% block content %}<section class="portal-welcome">
 <p><a href="{% url 'sales_planning_directories' %}">← Справочники</a></p><h1>Группы планирования</h1>
 <p>Состав из поля «Группа планирования» номенклатуры. Пары блоков и связи Split настраиваются внутри группы.</p>
@@ -9,10 +11,24 @@
 <section class="admin-panel"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="rebuild"><button class="admin-button" type="submit">{% if load %}Обновить группы из номенклатуры{% else %}Сформировать группы из номенклатуры{% endif %}</button></form>
 <p class="admin-muted">Без обращения к DataWH. Ручные настройки сохраняются. При следующем обновлении номенклатуры состав обновится автоматически.</p>
 {% if load %}<p>Групп: {{ load.row_count }} · {% timezone 'Europe/Moscow' %}{{ load.loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% endif %}</section>
-<form method="get"><label>Поиск группы <input type="search" name="q" value="{{ search }}" maxlength="255"></label> <label><input type="checkbox" name="inactive" value="1" {% if include_inactive %}checked{% endif %}> Включая неактивные</label> <button type="submit" class="admin-button secondary">Найти</button></form>
-<div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Группа</th><th>Моделей</th><th>Бренд</th><th>Товарная группа</th><th>Мощности</th><th>Тип блока</th><th>INV / On-Off</th></tr></thead><tbody>
-{% for row in rows %}<tr><td><a href="{% url 'sales_planning_group_detail' row.group.pk %}">{{ row.group.name }}</a>{% if not row.group.is_active %} · Неактивна{% endif %}</td><td>{{ row.count }}</td><td>{{ row.brand|join:', '|default:'—' }}</td><td>{{ row.product_group|join:', '|default:'—' }}</td><td>{{ row.power_class|join:', '|default:'—' }}</td><td>{{ row.block_type|join:', '|default:'—' }}</td><td>{{ row.outdoor_block_type|join:', '|default:'—' }}</td></tr>{% empty %}<tr><td colspan="7">Групп не найдено. Сформируйте справочник или измените поиск.</td></tr>{% endfor %}</tbody></table></div>
-<nav aria-label="Страницы групп">{% if page.has_previous %}<a href="?q={{ search|urlencode }}&amp;inactive={% if include_inactive %}1{% endif %}&amp;page={{ page.previous_page_number }}">← Назад</a>{% endif %} Страница {{ page.number }} из {{ page.paginator.num_pages }} {% if page.has_next %}<a href="?q={{ search|urlencode }}&amp;inactive={% if include_inactive %}1{% endif %}&amp;page={{ page.next_page_number }}">Далее →</a>{% endif %}</nav>
+<form method="get" class="split-group-filters">
+<label class="split-filter-field">Поиск группы <input type="search" name="q" value="{{ search }}" maxlength="255"></label>
+{% for filter in filters %}<div class="split-filter-field"><span>{{ filter.label }}</span>
+<details class="split-filter-select" data-split-filter data-empty="{% if filter.name == 'pair_status' %}Все статусы{% else %}Все доступные{% endif %}">
+<summary><span data-caption>{{ filter.caption }}</span></summary>
+<div class="split-filter-menu"><input type="search" data-search placeholder="Найти значение" aria-label="Поиск: {{ filter.label }}">
+<div class="split-filter-actions"><button type="button" data-all>Выбрать все</button><button type="button" data-clear>Снять все</button></div>
+{% for option in filter.options %}<label><input type="checkbox" name="{{ filter.name }}" value="{{ option.value }}" {% if option.selected %}checked{% endif %}><span>{{ option.label }}</span></label>{% empty %}<p>Нет значений в номенклатуре.</p>{% endfor %}
+</div></details></div>{% endfor %}
+<div class="split-filter-footer"><label><input type="checkbox" name="inactive" value="1" {% if include_inactive %}checked{% endif %}> Включая неактивные</label>
+<button type="submit" class="admin-button">Показать</button><a href="{% url 'sales_planning_groups' %}">Сбросить фильтры</a></div>
+<p class="admin-muted">Пустой выбор — все значения. Между фильтрами действует «И»: выбранные характеристики должны встречаться у одной модели группы. Статус пар проверяется по всему составу группы.</p>
+</form>
+<p>Найдено групп: <strong>{{ page.paginator.count }}</strong></p>
+<div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Группа</th><th>Моделей</th><th>Бренд</th><th>Товарная группа</th><th>Мощности</th><th>Тип блока</th><th>INV / On-Off</th><th>Пары блоков</th></tr></thead><tbody>
+{% for row in rows %}<tr><td><a href="{% url 'sales_planning_group_detail' row.group.pk %}">{{ row.group.name }}</a>{% if not row.group.is_active %} · Неактивна{% endif %}</td><td>{{ row.count }}</td><td>{{ row.brand|join:', '|default:'—' }}</td><td>{{ row.product_group|join:', '|default:'—' }}</td><td>{{ row.power_class|join:', '|default:'—' }}</td><td>{{ row.block_type|join:', '|default:'—' }}</td><td>{{ row.outdoor_block_type|join:', '|default:'—' }}</td><td>{{ row.pair_status }}</td></tr>{% empty %}<tr><td colspan="8">Групп не найдено. Сформируйте справочник или измените поиск.</td></tr>{% endfor %}</tbody></table></div>
+<nav aria-label="Страницы групп">{% if previous_url %}<a href="{{ previous_url }}">← Назад</a>{% endif %} Страница {{ page.number }} из {{ page.paginator.num_pages }} {% if next_url %}<a href="{{ next_url }}">Далее →</a>{% endif %}</nav>
 {% if ungrouped_count %}<section class="admin-panel"><h2>Не указана группа планирования: {{ ungrouped_count }}</h2><p>Эти записи не образуют отдельную группу. Исправьте классификацию в источнике и обновите номенклатуру.</p><ul>{% for good in ungrouped_page %}<li>{{ good.name }} · {{ good.source_key }}</li>{% endfor %}</ul>
-<nav aria-label="Номенклатура без группы">{% if ungrouped_page.has_previous %}<a href="?q={{ search|urlencode }}&amp;inactive={% if include_inactive %}1{% endif %}&amp;page={{ page.number }}&amp;missing_page={{ ungrouped_page.previous_page_number }}">← Назад</a>{% endif %} {{ ungrouped_page.number }} / {{ ungrouped_page.paginator.num_pages }} {% if ungrouped_page.has_next %}<a href="?q={{ search|urlencode }}&amp;inactive={% if include_inactive %}1{% endif %}&amp;page={{ page.number }}&amp;missing_page={{ ungrouped_page.next_page_number }}">Далее →</a>{% endif %}</nav></section>{% endif %}
+<nav aria-label="Номенклатура без группы">{% if missing_previous_url %}<a href="{{ missing_previous_url }}">← Назад</a>{% endif %} {{ ungrouped_page.number }} / {{ ungrouped_page.paginator.num_pages }} {% if missing_next_url %}<a href="{{ missing_next_url }}">Далее →</a>{% endif %}</nav></section>{% endif %}
 </section>{% endblock %}
+

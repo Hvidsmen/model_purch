@@ -11,6 +11,7 @@ from django.views.decorators.http import require_http_methods
 from .access import can_access
 from .models import SalesPlanningGroup, SalesPlanningDirectoryLoad
 from .sales_planning_group_service import rebuild_groups, ungrouped_goods, group_summaries, group_goods, save_pair, pair_error
+from .sales_planning_group_filters import filter_groups, page_link, STATUSES, ATTRIBUTES
 
 
 class GroupSettingsForm(forms.ModelForm):
@@ -52,13 +53,30 @@ def groups(request):
         queryset = queryset.filter(is_active=True)
     if search:
         queryset = queryset.filter(name__icontains=search)
+    try:
+        queryset, filters, statuses, selected_filters = filter_groups(queryset, request.GET)
+    except ValidationError as exc:
+        from django.http import HttpResponseBadRequest
+        return HttpResponseBadRequest(' '.join(exc.messages))
     page = Paginator(queryset, 25).get_page(request.GET.get('page'))
+    rows = group_summaries(list(page))
+    for row in rows:
+        row['pair_status'] = dict(STATUSES)[statuses.get(row['group'].source_key, 'pending')]
+    missing = ungrouped_goods()
+    for field, label in ATTRIBUTES:
+        if selected_filters[field]:
+            missing = missing.filter(**{field + '__in': selected_filters[field]})
+    missing_page = Paginator(missing, 25).get_page(request.GET.get('missing_page'))
     return render(request, 'base/sales_planning_groups.html', {
-        'error': error, 'page': page, 'rows': group_summaries(list(page)), 'search': search,
+        'error': error, 'page': page, 'rows': rows, 'search': search, 'filters': filters,
+        'previous_url': page_link(request.GET, 'page', page.previous_page_number()) if page.has_previous() else '',
+        'next_url': page_link(request.GET, 'page', page.next_page_number()) if page.has_next() else '',
+        'missing_previous_url': page_link(request.GET, 'missing_page', missing_page.previous_page_number()) if missing_page.has_previous() else '',
+        'missing_next_url': page_link(request.GET, 'missing_page', missing_page.next_page_number()) if missing_page.has_next() else '',
         'include_inactive': request.GET.get('inactive') == '1',
         'load': SalesPlanningDirectoryLoad.objects.filter(directory='groups').first(),
-        'ungrouped_count': ungrouped_goods().count(),
-        'ungrouped_page': Paginator(ungrouped_goods(), 25).get_page(request.GET.get('missing_page')),
+        'ungrouped_count': missing_page.paginator.count,
+        'ungrouped_page': missing_page,
     })
 
 
@@ -117,3 +135,4 @@ def detail(request, pk):
         'goods_page': Paginator(goods, 50).get_page(request.GET.get('page')),
         'unclassified': sum(not good.power_class.strip() or not good.block_type.strip().casefold().startswith(('внутр', 'наруж')) for good in goods),
     })
+
