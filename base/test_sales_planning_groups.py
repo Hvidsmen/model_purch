@@ -21,7 +21,7 @@ class GroupDirectoryTests(TestCase):
 
     def good(self, key, group, block, power):
         return SalesPlanningGoods.objects.create(source_key=key, name=key, planning_group=group,
-            block_type=block, power_class=power, brand='Daichi', product_group='Split', outdoor_block_type='INV')
+            block_type=block, power_class=power, brand='Daichi', product_group='Бытовые кондиционеры', outdoor_block_type='INV')
 
     def group(self):
         return SalesPlanningGroup.objects.get(source_key=group_key('KUMO'))
@@ -83,7 +83,7 @@ class GroupDirectoryTests(TestCase):
 
     def test_goods_import_rebuilds_groups_atomically(self):
         connection, cursor = Mock(), Mock()
-        cursor.fetchall.return_value = [(b'in', 'Модель', 'Split', 'Новая', 'Brand', 'Sales', '12', 'Внутренний', 'INV')]
+        cursor.fetchall.return_value = [(b'in', 'Модель', 'Бытовые кондиционеры', 'Новая', 'Brand', 'Sales', '12', 'Внутренний', 'INV')]
         with patch('base.sales_planning_source.connect_database', return_value=(connection, cursor)):
             load_goods()
         group = SalesPlanningGroup.objects.get(source_key=group_key('Новая'))
@@ -91,7 +91,7 @@ class GroupDirectoryTests(TestCase):
         self.assertEqual(SalesPlanningDirectoryLoad.objects.get(directory='groups').row_count, 1)
         with patch('base.sales_planning_source.connect_database', return_value=(connection, cursor)), \
              patch('base.sales_planning_group_service.rebuild_groups', side_effect=RuntimeError('fail')):
-            cursor.fetchall.return_value = [(b'bad', 'Bad', '', 'Bad', '', '', '', '', '')]
+            cursor.fetchall.return_value = [(b'bad', 'Bad', 'Бытовые кондиционеры', 'Bad', '', '', '', '', '')]
             with self.assertRaises(RuntimeError):
                 load_goods()
         self.assertEqual(group_goods(group).count(), 1)
@@ -138,3 +138,4 @@ class GroupDirectoryTests(TestCase):
         response = self.client.post(detail, {'action': 'settings', 'related_groups': [self.group().pk]})
         self.assertTrue(response.context['form'].errors)
         self.assertFalse(self.group().related_groups.exists())
+

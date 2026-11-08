@@ -12,6 +12,7 @@ from .access import can_access
 from .models import SalesPlanningGroup, SalesPlanningDirectoryLoad
 from .sales_planning_group_service import rebuild_groups, ungrouped_goods, group_summaries, group_goods, save_pair, block_kind, power_rows, save_unique_pairs
 from .sales_planning_group_filters import filter_groups, page_link, STATUSES, ATTRIBUTES
+from .sales_planning_scope import split_groups
 
 
 class GroupSettingsForm(forms.ModelForm):
@@ -24,9 +25,19 @@ class GroupSettingsForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         selected = list(self.instance.related_groups.values_list('pk', flat=True)) + list(self.instance.replacement_groups.values_list('pk', flat=True))
+        self.preserved_links = {}
         for field in ('related_groups', 'replacement_groups'):
-            self.fields[field].queryset = SalesPlanningGroup.objects.filter(Q(is_active=True) | Q(pk__in=selected)).exclude(pk=self.instance.pk)
+            allowed = split_groups().filter(Q(is_active=True) | Q(pk__in=selected)).exclude(pk=self.instance.pk)
+            self.fields[field].queryset = allowed
+            self.preserved_links[field] = list(getattr(self.instance, field).exclude(pk__in=allowed).values_list('pk', flat=True))
             self.fields[field].help_text = 'Выбор нескольких групп: Ctrl / Cmd. Неактивные сохранённые связи не удаляются при обновлении.'
+
+    def save(self, commit=True):
+        instance = super().save(commit=commit)
+        if commit:
+            for field, ids in self.preserved_links.items():
+                getattr(instance, field).add(*ids)
+        return instance
 
 
 @login_required
@@ -48,7 +59,7 @@ def groups(request):
             messages.success(request, f'Группы планирования обновлены: {count}. Ручные настройки сохранены.')
             return redirect('sales_planning_groups')
     search = request.GET.get('q', '').strip()[:255]
-    queryset = SalesPlanningGroup.objects.all()
+    queryset = split_groups()
     if request.GET.get('inactive') != '1':
         queryset = queryset.filter(is_active=True)
     if search:
@@ -74,6 +85,7 @@ def groups(request):
         'missing_previous_url': page_link(request.GET, 'missing_page', missing_page.previous_page_number()) if missing_page.has_previous() else '',
         'missing_next_url': page_link(request.GET, 'missing_page', missing_page.next_page_number()) if missing_page.has_next() else '',
         'include_inactive': request.GET.get('inactive') == '1',
+        'group_count': split_groups().filter(is_active=True).count(),
         'load': SalesPlanningDirectoryLoad.objects.filter(directory='groups').first(),
         'ungrouped_count': missing_page.paginator.count,
         'ungrouped_page': missing_page,
@@ -86,7 +98,7 @@ def groups(request):
 def detail(request, pk):
     if not can_access(request.user, 'admin'):
         raise PermissionDenied
-    group = get_object_or_404(SalesPlanningGroup, pk=pk)
+    group = get_object_or_404(split_groups(), pk=pk)
     error = ''
     form = GroupSettingsForm(instance=group)
     if request.method == 'POST':
@@ -130,5 +142,6 @@ def detail(request, pk):
         'goods_page': Paginator(goods, 50).get_page(request.GET.get('page')),
         'unclassified': sum(not good.power_class.strip() or not block_kind(good.block_type) for good in goods),
     })
+
 
 

@@ -5,6 +5,7 @@ from django.utils import timezone
 
 from model_purch.conns import connect_database
 from .models import SalesPlanningChannel, SalesPlanningDirectoryLoad, SalesPlanningGoods
+from .sales_planning_scope import PRODUCT_GROUP
 
 
 CHANNEL_SQL = '''SELECT DISTINCT
@@ -15,7 +16,8 @@ WHERE Даичи_КаналПродаж IS NOT NULL'''
 GOODS_SQL = '''SELECT
     Ссылка, Наименование, Родитель, Даичи_ГруппаПланирования, Марка,
     Даичи_ГруппаПлановПродаж, БИТ_КлассМощности, БИТ_ТипБлока, БИТ_ТипНаружногоБлока
-FROM DataWH.erp.[Справочники.Номенклатура]'''
+FROM DataWH.erp.[Справочники.Номенклатура]
+WHERE LTRIM(RTRIM(Родитель)) = N'Бытовые кондиционеры' '''
 
 
 def reference_key(value):
@@ -40,6 +42,9 @@ def load_goods():
     for row in rows:
         key = reference_key(row[0])
         product_group = str(row[2]).strip() if row[2] is not None else ''
+        if product_group.casefold() != PRODUCT_GROUP.casefold():
+            continue
+        product_group = PRODUCT_GROUP
         name = str(row[1]).strip() if row[1] is not None else ''
         if not key or not name or len(key) > 255:
             raise ValidationError('В номенклатуре отсутствует ссылка или наименование либо ссылка длиннее 255 символов. Данные не изменены.')
@@ -100,6 +105,7 @@ def load_channels():
         SalesPlanningDirectoryLoad.objects.update_or_create(directory='channels', defaults={
             'loaded_at': timezone.now(), 'row_count': len(names)})
     return len(names)
+
 
 
 
