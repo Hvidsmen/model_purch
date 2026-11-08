@@ -2,7 +2,7 @@
 from django.core.exceptions import ValidationError
 
 from .models import SalesPlanningGoods, SalesPlanningBlockPair
-from .sales_planning_group_service import group_key, pair_error
+from .sales_planning_group_service import group_key, pair_error, block_kind
 
 
 ATTRIBUTES = [('brand', 'Бренд'), ('product_group', 'Товарная группа'),
@@ -30,8 +30,7 @@ def filter_groups(queryset, query):
         key = group_key(row['planning_group'])
         group = state.setdefault(key, {'powers': set(), 'valid': set(), 'review': False})
         power = row['power_class'].strip()
-        block = row['block_type'].strip().casefold()
-        if not power or not block.startswith(('внутр', 'наруж')):
+        if not power or not block_kind(row['block_type']):
             group['review'] = True
         if power:
             group['powers'].add(power)
@@ -71,3 +70,4 @@ def page_link(query, parameter, number):
     result = query.copy()
     result[parameter] = str(number)
     return '?' + result.urlencode()
+
