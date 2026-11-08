@@ -1,5 +1,6 @@
 from django.conf import settings
 from django.db import models
+import uuid
 
 
 class SalesPlanningChannel(models.Model):
@@ -55,6 +56,43 @@ class SalesPlanningBlockPair(models.Model):
         constraints = [models.UniqueConstraint(fields=['group', 'power'], name='unique_split_group_power_pair')]
 
 
+class SplitScenario(models.Model):
+    family = models.UUIDField(default=uuid.uuid4, editable=False)
+    version = models.PositiveIntegerField(default=1)
+    title = models.CharField(max_length=200)
+    year = models.PositiveIntegerField()
+    start = models.DateField()
+    end = models.DateField()
+    stock_date = models.DateField()
+    entry_mode = models.CharField(max_length=10, default='period')
+    status = models.CharField(max_length=10, default='draft')
+    revision = models.PositiveIntegerField(default=1)
+    state = models.JSONField(default=dict)
+    parent = models.ForeignKey('self', null=True, blank=True, on_delete=models.PROTECT)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        constraints = [models.UniqueConstraint(fields=['family', 'version'], name='unique_split_scenario_version'),
+                       models.UniqueConstraint(fields=['family'], condition=models.Q(status='draft'), name='one_split_family_draft')]
+
+    def save(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        if self.pk and type(self).objects.filter(pk=self.pk, status='approved').exists():
+            raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')
+        super().save(*args, **kwargs)
+
+
+class SplitScenarioEvent(models.Model):
+    scenario = models.ForeignKey(SplitScenario, on_delete=models.PROTECT, related_name='events')
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT)
+    at = models.DateTimeField(auto_now_add=True)
+    action = models.CharField(max_length=200)
+    revision = models.PositiveIntegerField()
+
+
 class SalesPlanningDirectoryLoad(models.Model):
     directory = models.CharField(max_length=40, unique=True)
     loaded_at = models.DateTimeField()
@@ -101,6 +139,7 @@ class GroupProjectAccess(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'project'], name='unique_group_project_access')]
+
 
 
 

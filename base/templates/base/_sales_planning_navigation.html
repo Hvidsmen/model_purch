@@ -1,4 +1,6 @@
 <nav class="portal-section-nav" aria-label="Модель планирования продаж">
 <a href="{% url 'sales_planning_split' %}"{% if active == 'split' %} aria-current="page"{% endif %}>Split</a>
+<a href="{% url 'split_scenarios' %}"{% if active == 'scenarios' %} aria-current="page"{% endif %}>Сценарии плана</a>
 <a href="{% url 'sales_planning_directories' %}"{% if active == 'directories' %} aria-current="page"{% endif %}>Справочники</a>
 </nav>
+
