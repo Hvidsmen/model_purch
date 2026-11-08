@@ -2,6 +2,7 @@
 from django.core.exceptions import ValidationError
 
 from .models import SalesPlanningGoods, SalesPlanningBlockPair
+from .sales_planning_scope import split_goods, split_groups
 from .sales_planning_group_service import group_key, pair_error, block_kind
 
 
@@ -21,7 +22,7 @@ def filter_groups(queryset, query):
     choices = {field: set() for field, label in ATTRIBUTES}
     state, matches = {}, set()
     fields = ['planning_group', 'block_type', *choices]
-    for row in SalesPlanningGoods.objects.filter(is_active=True).order_by().values(*fields).iterator():
+    for row in split_goods().order_by().values(*fields).iterator():
         for field in choices:
             if row[field].strip():
                 choices[field].add(row[field].strip())
@@ -37,7 +38,7 @@ def filter_groups(queryset, query):
         # OR within one filter; AND across attributes of the same source model.
         if all(not selected[field] or row[field].strip() in selected[field] for field in choices):
             matches.add(key)
-    for pair in SalesPlanningBlockPair.objects.select_related('group', 'indoor', 'outdoor').iterator():
+    for pair in SalesPlanningBlockPair.objects.filter(group__in=split_groups()).select_related('group', 'indoor', 'outdoor').iterator():
         group = state.setdefault(pair.group.source_key, {'powers': set(), 'valid': set(), 'review': False})
         if pair_error(pair):
             group['review'] = True
@@ -70,4 +71,5 @@ def page_link(query, parameter, number):
     result = query.copy()
     result[parameter] = str(number)
     return '?' + result.urlencode()
+
 

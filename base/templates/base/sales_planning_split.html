@@ -5,17 +5,18 @@
 {% block content %}
 <section class="portal-welcome">
 <h1>Split</h1>
-<p>Модель планирования продаж.</p>
+<p>Модель планирования продаж · товарная группа «Бытовые кондиционеры».</p>
 <section class="admin-panel">
 <h2>Справочники для планирования</h2>
 <p>Каналы продаж и номенклатура загружаются из DataWH. Просмотр списков и обновление доступны в разделе «Справочники».</p>
 <div class="portal-cards">
 {% for entry in directory_statuses %}<div>
 <h3>{{ entry.label }}</h3>
-{% if entry.load %}<p>Загружено: <strong>{{ entry.load.row_count }}</strong></p><p class="admin-muted">{% timezone 'Europe/Moscow' %}{{ entry.load.loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% else %}<p>Данные ещё не загружены.</p>{% endif %}
+{% if entry.load %}<p>Загружено: <strong>{{ entry.count }}</strong></p><p class="admin-muted">{% timezone 'Europe/Moscow' %}{{ entry.load.loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% else %}<p>Данные ещё не загружены.</p>{% endif %}
 </div>{% endfor %}
 </div>
 <a class="admin-button" href="{% url 'sales_planning_directories' %}">Открыть справочники →</a>
 </section>
 </section>
 {% endblock %}
+

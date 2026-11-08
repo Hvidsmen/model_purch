@@ -10,6 +10,7 @@ from django.core.exceptions import ValidationError
 from django.core.paginator import Paginator
 from .models import SalesPlanningChannel, SalesPlanningDirectoryLoad, SalesPlanningGoods
 from .sales_planning_source import load_channels, load_goods
+from .sales_planning_scope import split_goods
 from .access import can_access
 
 
@@ -48,7 +49,8 @@ def directories(request):
         'channel_load': SalesPlanningDirectoryLoad.objects.filter(directory='channels').first(),
         'channel_page': Paginator(SalesPlanningChannel.objects.filter(is_active=True), 50).get_page(request.GET.get('page')),
         'goods_load': SalesPlanningDirectoryLoad.objects.filter(directory='goods').first(),
-        'goods_page': Paginator(SalesPlanningGoods.objects.filter(is_active=True), 50).get_page(request.GET.get('goods_page')),
+        'goods_count': split_goods().count(),
+        'goods_page': Paginator(split_goods(), 50).get_page(request.GET.get('goods_page')),
     })
 
 
@@ -62,6 +64,7 @@ def split(request):
         raise PermissionDenied
     loads = {entry.directory: entry for entry in SalesPlanningDirectoryLoad.objects.all()}
     return render(request, 'base/sales_planning_split.html', {
-        'directory_statuses': [{'label': label, 'load': loads.get(key)}
+        'directory_statuses': [{'label': label, 'load': loads.get(key), 'count': split_goods().count() if key == 'goods' else loads[key].row_count if key in loads else 0}
                                for key, label in [('channels', 'Каналы продаж'), ('goods', 'Номенклатура')]],
     })
+

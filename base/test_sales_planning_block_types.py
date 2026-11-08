@@ -29,7 +29,7 @@ class AutomaticPairTests(TestCase):
 
     def good(self, key, block, power='07/20'):
         return SalesPlanningGoods.objects.create(source_key=key, name=key, planning_group='G',
-            power_class=power, block_type=block, outdoor_block_type='INV')
+            product_group='Бытовые кондиционеры', power_class=power, block_type=block, outdoor_block_type='INV')
 
     def test_unique_candidates_are_preselected_without_get_writes_then_saved_together(self):
         response = self.client.get(self.url)
@@ -70,3 +70,4 @@ class AutomaticPairTests(TestCase):
         response = self.client.get(self.url)
         self.assertTrue(response.context['powers'][0]['error'])
         self.assertEqual(response.context['powers'][0]['selected_outdoor'], self.outdoor.pk)
+

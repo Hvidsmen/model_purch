@@ -9,6 +9,7 @@ from django.db.models.functions import Trim
 from django.utils import timezone
 
 from .models import SalesPlanningGoods, SalesPlanningGroup, SalesPlanningDirectoryLoad, SalesPlanningBlockPair
+from .sales_planning_scope import split_goods, PRODUCT_GROUP
 
 
 def group_key(name):
@@ -16,7 +17,7 @@ def group_key(name):
 
 
 def ungrouped_goods():
-    return SalesPlanningGoods.objects.filter(is_active=True).annotate(trimmed=Trim('planning_group')).filter(trimmed='')
+    return split_goods().annotate(trimmed=Trim('planning_group')).filter(trimmed='')
 
 
 @transaction.atomic
@@ -24,7 +25,7 @@ def rebuild_groups():
     if not SalesPlanningDirectoryLoad.objects.filter(directory='goods').exists():
         raise ValidationError('Сначала загрузите номенклатуру из DataWH.')
     names = {}
-    for raw in SalesPlanningGoods.objects.filter(is_active=True).order_by().values_list('planning_group', flat=True).distinct():
+    for raw in split_goods().order_by().values_list('planning_group', flat=True).distinct():
         if raw.strip():
             names.setdefault(group_key(raw), []).append(raw)
     SalesPlanningGroup.objects.update(is_active=False)
@@ -38,7 +39,7 @@ def rebuild_groups():
 
 
 def group_goods(group):
-    return SalesPlanningGoods.objects.filter(is_active=True, planning_group__in=group.source_names)
+    return split_goods().filter(planning_group__in=group.source_names)
 
 
 def group_summaries(groups):
@@ -47,7 +48,7 @@ def group_summaries(groups):
     stats = {group.pk: {'count': 0, 'brand': set(), 'power_class': set(), 'block_type': set(),
                         'product_group': set(), 'outdoor_block_type': set()} for group in groups}
     fields = ['planning_group', 'brand', 'power_class', 'block_type', 'product_group', 'outdoor_block_type']
-    rows = SalesPlanningGoods.objects.filter(is_active=True, planning_group__in=list(owners)).order_by().values(*fields).annotate(count=Count('pk'))
+    rows = split_goods().filter(planning_group__in=list(owners)).order_by().values(*fields).annotate(count=Count('pk'))
     for row in rows:
         stat = stats[owners[row['planning_group']]]
         stat['count'] += row['count']
@@ -72,6 +73,8 @@ def block_kind(value):
 
 def pair_error(pair):
     for good, kind in [(pair.indoor, 'indoor'), (pair.outdoor, 'outdoor')]:
+        if good.product_group.strip().casefold() != PRODUCT_GROUP.casefold():
+            return 'Модель вне товарной группы «Бытовые кондиционеры». Проверьте пару.'
         if not good.is_active:
             return 'Выбранная модель отсутствует в текущей номенклатуре. Подберите замену.'
         if group_key(good.planning_group) != pair.group.source_key or good.power_class.strip() != pair.power:
@@ -127,4 +130,5 @@ def save_pair(group, power, indoor_id, outdoor_id):
         raise ValidationError(error)
     return SalesPlanningBlockPair.objects.update_or_create(group=group, power=pair.power,
         defaults={'indoor': pair.indoor, 'outdoor': pair.outdoor})[0]
+
 

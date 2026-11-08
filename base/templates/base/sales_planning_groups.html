@@ -6,11 +6,11 @@
 {% block module_js %}{{ block.super }}<script src="{% static 'base/split_group_filters.js' %}?v=20261108" defer></script>{% endblock %}
 {% block content %}<section class="portal-welcome">
 <p><a href="{% url 'sales_planning_directories' %}">← Справочники</a></p><h1>Группы планирования</h1>
-<p>Состав из поля «Группа планирования» номенклатуры. Пары блоков и связи Split настраиваются внутри группы.</p>
+<p>Только товарная группа «Бытовые кондиционеры». Состав из поля «Группа планирования» номенклатуры. Пары блоков и связи Split настраиваются внутри группы.</p>
 {% for message in messages %}<p role="status">{{ message }}</p>{% endfor %}{% if error %}<p role="alert" class="alert alert-danger">{{ error }}</p>{% endif %}
 <section class="admin-panel"><form method="post">{% csrf_token %}<input type="hidden" name="action" value="rebuild"><button class="admin-button" type="submit">{% if load %}Обновить группы из номенклатуры{% else %}Сформировать группы из номенклатуры{% endif %}</button></form>
 <p class="admin-muted">Без обращения к DataWH. Ручные настройки сохраняются. При следующем обновлении номенклатуры состав обновится автоматически.</p>
-{% if load %}<p>Групп: {{ load.row_count }} · {% timezone 'Europe/Moscow' %}{{ load.loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% endif %}</section>
+{% if load %}<p>Групп: {{ group_count }} · {% timezone 'Europe/Moscow' %}{{ load.loaded_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% endif %}</section>
 <form method="get" class="split-group-filters">
 <label class="split-filter-field">Поиск группы <input type="search" name="q" value="{{ search }}" maxlength="255"></label>
 {% for filter in filters %}<div class="split-filter-field"><span>{{ filter.label }}</span>
@@ -31,4 +31,5 @@
 {% if ungrouped_count %}<section class="admin-panel"><h2>Не указана группа планирования: {{ ungrouped_count }}</h2><p>Эти записи не образуют отдельную группу. Исправьте классификацию в источнике и обновите номенклатуру.</p><ul>{% for good in ungrouped_page %}<li>{{ good.name }} · {{ good.source_key }}</li>{% endfor %}</ul>
 <nav aria-label="Номенклатура без группы">{% if missing_previous_url %}<a href="{{ missing_previous_url }}">← Назад</a>{% endif %} {{ ungrouped_page.number }} / {{ ungrouped_page.paginator.num_pages }} {% if missing_next_url %}<a href="{{ missing_next_url }}">Далее →</a>{% endif %}</nav></section>{% endif %}
 </section>{% endblock %}
+
 
