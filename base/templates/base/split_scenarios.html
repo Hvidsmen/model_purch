@@ -1,0 +1,10 @@
+{% extends 'base/portal_shell.html' %}{% load static %}
+{% block title %}Сценарии плана Split{% endblock %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=cycle1">{% endblock %}
+{% block project_name %}Модель планирования продаж{% endblock %}
+{% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='scenarios' %}{% endblock %}
+{% block content %}<section class="portal-welcome split-workspace"><h1>Планы продаж Split</h1><p>Черновик → распределение → проверки → утверждение → корректировка.</p>
+<section class="admin-panel"><h2>Сценарии и версии</h2><div class="admin-table-scroll"><table class="admin-table"><thead><tr><th>Сценарий</th><th>Период</th><th>Версия</th><th>Статус</th><th>Автор</th></tr></thead><tbody>{% for item in page %}<tr><td><a href="{% url 'split_scenario' item.pk %}">{{ item.title }}</a></td><td>{{ item.start|date:'d.m.Y' }}–{{ item.end|date:'d.m.Y' }}</td><td>{{ item.version }}</td><td>{% if item.status == 'approved' %}Утверждён{% else %}Черновик{% endif %}</td><td>{{ item.created_by }}</td></tr>{% empty %}<tr><td colspan="5">Создайте первый сценарий ниже.</td></tr>{% endfor %}</tbody></table></div>
+<p>{% if page.has_previous %}<a href="?page={{ page.previous_page_number }}">← Назад</a>{% endif %} {{ page.number }} / {{ page.paginator.num_pages }} {% if page.has_next %}<a href="?page={{ page.next_page_number }}">Далее →</a>{% endif %}</p></section>
+<section class="admin-panel"><h2>Создать сценарий</h2><p>Состав групп и названия сохраняются в версии. Источники факта, остатков и поступлений пока не подключены: значения вводятся вручную. Сезонность из макета не переносится.</p><form method="post">{% csrf_token %}<div class="split-create">{{ form.as_p }}</div><button class="admin-button" type="submit">Создать черновик</button></form></section>
+</section>{% endblock %}

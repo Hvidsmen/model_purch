@@ -1,0 +1,32 @@
+.split-workspace .split-heading{display:flex;justify-content:space-between;align-items:start;gap:16px;flex-wrap:wrap}
+.split-workspace .split-heading h1 small{font-size:16px;color:#806ab5}
+.split-totals{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0}
+.split-totals article{padding:16px;border:1px solid #dfd9f5;border-radius:9px;background:#faf9ff;min-width:0}
+.split-totals span{display:block;font-size:12px;color:#64748b}
+.split-totals strong{display:block;margin-top:7px;font-size:23px;color:#5137a1;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.split-tabs{display:flex;gap:16px;flex-wrap:wrap;padding:12px 0;margin:12px 0 20px;border-bottom:1px solid #e1e5ee}
+.split-workspace fieldset{border:0;padding:0;margin:0;min-width:0}
+.split-workspace input:not([type=checkbox]),.split-workspace select,.split-workspace textarea{border:1px solid #d8ddeb;border-radius:6px;padding:7px 9px;background:white;color:#26334b;max-width:100%;box-sizing:border-box}
+.split-workspace input[type=number]{width:130px;font-variant-numeric:tabular-nums}
+.split-workspace input[type=checkbox]{accent-color:#6b4fca}
+.split-workspace select[multiple]{width:100%;min-height:150px}
+.split-workspace button{margin:6px 8px 6px 0}
+.split-workspace label{font-size:12px;color:#64748b}
+.split-workspace .split-create{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin:12px 0}
+.split-create>p,.split-create>label{display:flex;flex-direction:column;gap:6px;margin:0;min-width:0}
+.split-create .helptext{font-size:11px;font-weight:400;color:#718096}
+.split-workspace .errorlist{color:#a33b43;font-size:12px}
+.split-workspace h3{font-size:17px;margin:18px 0 12px}
+.split-workspace h4{font-size:15px;margin:0 0 10px}
+.split-power,.split-preview{padding:15px;border:1px solid #e0dcef;border-radius:8px;margin:12px 0;background:#fcfbff}
+.split-months{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin:10px 0}
+.split-months label{display:flex;flex-direction:column;gap:5px}
+.split-picker{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:16px 0}
+.split-workspace .admin-table td{vertical-align:middle}
+.split-workspace textarea{display:block;width:100%;margin:6px 0}
+@media(max-width:900px){.split-totals{grid-template-columns:repeat(2,minmax(0,1fr))}.split-totals strong{font-size:20px}}
+@media(max-width:500px){.split-totals{grid-template-columns:1fr}.split-workspace .split-create{grid-template-columns:1fr}}
+
+.split-workspace .admin-panel{overflow-x:auto}
+.split-tabs a{color:#6551ae;text-decoration:none;padding:5px 0}
+.split-tabs a[aria-current=page]{color:#4f32a8;font-weight:600;border-bottom:2px solid #7254ca}
