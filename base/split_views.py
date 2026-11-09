@@ -62,6 +62,16 @@ def scenario(request, pk):
                 return redirect('split_scenario', pk=target.pk)
             if action == 'approve':
                 approve(item, request.user, request.POST.get('revision'), request.POST.get('acknowledge') == 'on')
+            elif action == 'load_history':
+                from .split_history import load_history
+                if item.status != 'draft' or str(request.POST.get('revision')) != str(item.revision):
+                    raise ValidationError('Обновите черновик. Утверждённый исторический факт не перезаписывается.')
+                if not item.state['groups'] or not item.state['channels']:
+                    raise ValidationError('Сначала добавьте группы и каналы.')
+                post = request.POST.copy(); post['action'] = 'lines'
+                state = changed_state(item,post) if post.get('with_lines') == '1' else deepcopy(item.state)
+                state['history'] = load_history(item)
+                persist(item,request.user,request.POST.get('revision'),state,'Загружен исторический факт за три предыдущих календарных года')
             elif action == 'bulk_preview':
                 candidate = deepcopy(item)
                 candidate.state = changed_state(item, {**request.POST.dict(), 'action': 'bulk'})
@@ -112,6 +122,7 @@ def scenario(request, pk):
         except ValidationError as exc:
             error = ' '.join(exc.messages)
     data = evaluate(item)
+    from .split_history import presentation as history_presentation
     group = item.state['groups'].get(gid, {'ref': {}, 'powers': {}, 'channels': {}, 'forecast': {}})
     selected_line = group['channels'].get(cid, {'months': {}})
     detail_rows = [row for row in data['shipments'] if row['group_key'] == group['ref'].get('source_key') and row['channel_id'] == cid]
@@ -142,7 +153,9 @@ def scenario(request, pk):
     return render(request, 'base/split_scenario.html', {'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
-        'matrix_colspan': 2 + 3 * len(item.state['channels']),
+        'history': history_presentation(item),
+        'plan_channel_colspan': 3 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 2,
+        'matrix_colspan': 2 + (3 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 2) * len(item.state['channels']),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
@@ -154,6 +167,7 @@ def scenario(request, pk):
         'brands': sorted({brand for group in item.state['groups'].values() for brand in group['ref']['brand'] if brand}),
         'forecast_sources': SplitScenario.objects.filter(status='approved', start__lt=item.start).order_by('-start'),
         'versions': versions, 'comparison': comparison, 'events': item.events.select_related('actor').order_by('-at')[:100]})
+
 
 
 
