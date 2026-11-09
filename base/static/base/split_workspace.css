@@ -55,4 +55,7 @@
 .split-history-metrics span{display:flex;flex-direction:column;gap:3px;white-space:nowrap}
 .split-history-metrics small{font-size:10px;color:#718096;font-weight:400}
 .split-history-metrics strong{font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
+.split-plan-matrix .split-matrix-total{background:#f0ebff;border-left:1px solid #d7cbf3}
+.split-plan-matrix .split-matrix-grand-total{background:#f5f1ff}
+.split-matrix-grand-total th,.split-matrix-grand-total strong{font-weight:600}
 
