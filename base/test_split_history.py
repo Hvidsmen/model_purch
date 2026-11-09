@@ -55,7 +55,9 @@ class HistoricalFactTests(TestCase):
         connection,cursor=self.source([('G','Дилеры',2025,1,10,200,100)])
         with patch('base.split_history.connect_database',return_value=(connection,cursor)):
             response=self.client.post(url,{'action':'load_history','revision':self.scenario.revision},follow=True)
-        self.assertContains(response,'Раскрыть по месяцам')
+        self.assertContains(response,'data-history-toggle=')
+        self.assertContains(response,'data-history-month=')
+        self.assertNotContains(response,'Раскрыть по месяцам')
         self.scenario.refresh_from_db()
         self.assertEqual(self.scenario.state['groups'],original)
         self.assertTrue(self.scenario.state['history']['rows'])
