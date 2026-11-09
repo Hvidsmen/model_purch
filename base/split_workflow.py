@@ -127,9 +127,34 @@ def bulk_change(scenario, state, post):
     return state
 
 
-def changed_state(scenario, post):
+def changed_state(scenario, post, *, allow_empty=False):
     state = deepcopy(scenario.state)
     action = post.get('action')
+    member_action, _, target = (action or '').partition(':')
+    if member_action in ('add_group', 'remove_group', 'add_channel', 'remove_channel'):
+        from django.http import QueryDict
+        draft = deepcopy(scenario)
+        if post.get('with_lines') == '1':
+            inputs = post.copy()
+            inputs['action'] = 'lines'
+            draft.state = changed_state(scenario, inputs)
+        gids, cids = list(draft.state['groups']), list(draft.state['channels'])
+        if member_action.startswith('add_'):
+            target = post.get('new_group' if member_action == 'add_group' else 'new_channel', '')
+        if not target:
+            raise ValidationError('Выберите группу или канал для добавления.')
+        values = gids if member_action.endswith('group') else cids
+        if member_action.startswith('remove_'):
+            if target not in values:
+                raise ValidationError('Элемент уже отсутствует в плане. Обновите страницу.')
+            values.remove(target)
+        elif target not in values:
+            values.append(target)
+        composition = QueryDict('', mutable=True)
+        composition.update(action='composition', confirm='on')
+        composition.setlist('groups', gids)
+        composition.setlist('channels', cids)
+        return changed_state(draft, composition, allow_empty=True)
     if action == 'lines':
         for gid, group in state['groups'].items():
             group['ddp'] = decimal_input(post, 'ddp_' + gid)
@@ -190,7 +215,7 @@ def changed_state(scenario, post):
         gids, cids = set(post.getlist('groups')), set(post.getlist('channels'))
         allowed_groups = {str(group.pk): group for group in split_groups().filter(is_active=True)}
         allowed_channels = {str(channel.pk): channel for channel in SalesPlanningChannel.objects.filter(is_active=True)}
-        if not gids or not cids or not gids <= set(allowed_groups) | set(state['groups']) or not cids <= set(allowed_channels) | set(state['channels']):
+        if ((not gids or not cids) and not allow_empty) or not gids <= set(allowed_groups) | set(state['groups']) or not cids <= set(allowed_channels) | set(state['channels']):
             raise ValidationError('Выберите допустимые группы и каналы. Состав не может быть пустым.')
         archived_groups = state.setdefault('archived_groups', {})
         for key in list(state['groups']):
@@ -297,4 +322,5 @@ def forecast_preview(destination, source, start, end):
             value = (totals[key] * number((right-left).days + 1) / number(denominator)).quantize(number('.000001'))
             result.append({'gid': gid, 'group': group['ref']['name'], 'month': month, 'value': value})
     return result
+
 
