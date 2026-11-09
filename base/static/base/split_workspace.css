@@ -30,3 +30,16 @@
 .split-workspace .admin-panel{overflow-x:auto}
 .split-tabs a{color:#6551ae;text-decoration:none;padding:5px 0}
 .split-tabs a[aria-current=page]{color:#4f32a8;font-weight:600;border-bottom:2px solid #7254ca}
+.split-matrix-tools{display:flex;align-items:end;gap:10px;flex-wrap:wrap;margin:12px 0}
+.split-matrix-tools>label{display:flex;flex-direction:column;gap:5px;max-width:360px;min-width:180px}
+.split-matrix-tools select{width:100%}
+.split-plan-matrix{border-collapse:separate;border-spacing:0}
+.split-plan-matrix th,.split-plan-matrix td{border-right:1px solid #e6e8f0}
+.split-plan-matrix .split-channel-heading{text-align:center;background:#f1edfc;color:#6045ae;font-weight:600}
+.split-plan-matrix .split-matrix-group{min-width:200px;max-width:260px;font-weight:500}
+.split-workspace .split-plan-matrix input[type=number]{width:80px}
+.split-matrix-entry{display:flex;align-items:center;gap:5px}
+.split-matrix-entry label{display:flex;align-items:center;gap:2px;font-size:10px}
+.split-workspace .split-remove{border:0;border-radius:4px;background:transparent;color:#8b6aab;font-size:17px;padding:0 5px;margin:0 0 0 4px;line-height:1.2}
+.split-workspace .split-remove:hover{background:#f7e6eb;color:#ae3e58}
+

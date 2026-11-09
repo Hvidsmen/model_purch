@@ -87,10 +87,12 @@ def scenario(request, pk):
                 persist(item, request.user, request.POST.get('revision'), state,
                     {'lines': 'Объёмы, наценки и DDP', 'distribution': 'Месяцы, мощности и модели', 'stock': 'Остатки, поступления и прогноз',
                      'equal_months': 'Равномерные доли месяцев вручную', 'equal_powers': 'Равномерные доли мощностей вручную',
-                     'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам'}.get(action, action))
+                     'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам',
+                     'add_group': 'Добавлена группа в план', 'remove_group': 'Группа исключена из плана',
+                     'add_channel': 'Добавлен канал в план', 'remove_channel': 'Канал исключён из плана'}.get((action or '').split(':')[0], action))
             if preview is None and forecast is None or action == 'forecast_apply':
-                if action == 'composition':
-                    gid, cid = next(iter(state['groups'])), next(iter(state['channels']))
+                if action == 'composition' or (action or '').split(':')[0] in ('add_group', 'remove_group', 'add_channel', 'remove_channel'):
+                    gid, cid = next(iter(state['groups']), ''), next(iter(state['channels']), '')
                 messages.success(request, 'Изменения сохранены.' if action != 'approve' else 'План утверждён. Редактирование заблокировано.')
                 return redirect(return_to(pk, tab, gid, cid))
         except ValidationError as exc:
@@ -136,6 +138,7 @@ def scenario(request, pk):
     return render(request, 'base/split_scenario.html', {'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
+        'matrix_colspan': 2 + 3 * len(item.state['channels']),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
@@ -147,4 +150,5 @@ def scenario(request, pk):
         'brands': sorted({brand for group in item.state['groups'].values() for brand in group['ref']['brand'] if brand}),
         'forecast_sources': SplitScenario.objects.filter(status='approved', start__lt=item.start).order_by('-start'),
         'versions': versions, 'comparison': comparison, 'events': item.events.select_related('actor').order_by('-at')[:100]})
+
 
