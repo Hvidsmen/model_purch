@@ -26,7 +26,7 @@ from . import split_exports
 def scenarios(request):
     if not can_access(request.user, 'admin'):
         raise PermissionDenied
-    form = ScenarioForm(request.POST or None, initial={'year': date.today().year + 1, 'mode': 'year', 'entry_mode': 'period'})
+    form = ScenarioForm(request.POST if request.method == 'POST' else None)
     if request.method == 'POST' and form.is_valid():
         scenario = create_scenario(request.user, form.cleaned_data)
         return redirect('split_scenario', pk=scenario.pk)
@@ -49,9 +49,9 @@ def scenario(request, pk):
     tab = request.GET.get('tab', 'plan')
     if tab not in ('plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
         tab = 'plan'
-    gid = request.POST.get('group') or request.GET.get('group') or next(iter(item.state['groups']))
-    cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']))
-    if gid not in item.state['groups'] or cid not in item.state['channels']:
+    gid = request.POST.get('group') or request.GET.get('group') or next(iter(item.state['groups']), '')
+    cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
+    if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
     error, preview, forecast = '', None, None
     if request.method == 'POST':
@@ -106,8 +106,9 @@ def scenario(request, pk):
         except ValidationError as exc:
             error = ' '.join(exc.messages)
     data = evaluate(item)
-    group = item.state['groups'][gid]
-    detail_rows = [row for row in data['shipments'] if row['group_key'] == group['ref']['source_key'] and row['channel_id'] == cid]
+    group = item.state['groups'].get(gid, {'ref': {}, 'powers': {}, 'channels': {}, 'forecast': {}})
+    selected_line = group['channels'].get(cid, {'months': {}})
+    detail_rows = [row for row in data['shipments'] if row['group_key'] == group['ref'].get('source_key') and row['channel_id'] == cid]
     monthly = {}
     from decimal import Decimal
     for row in detail_rows:
@@ -116,8 +117,8 @@ def scenario(request, pk):
             total['quantity'] += row['quantity']
         total['cost'] += row['cost']
         total['revenue'] += row['revenue']
-    months = [{'key': month, 'value': group['channels'][cid]['months'].get(month),
-               'quantity': group['channels'][cid].get('month_quantities', {}).get(month)} for month in planning_months(item)]
+    months = [{'key': month, 'value': selected_line['months'].get(month),
+               'quantity': selected_line.get('month_quantities', {}).get(month)} for month in planning_months(item)]
     powers = []
     for index, (key, power) in enumerate(group['powers'].items()):
         powers.append({**power, 'key': key, 'index': index,
@@ -133,6 +134,8 @@ def scenario(request, pk):
         comparison = {'scenario': reference, 'old': old['totals'], 'new': data['totals'], 'rows': [
             {'new': row, 'old': old_lines.get((row['gid'], row['cid']))} for row in data['lines']]}
     return render(request, 'base/split_scenario.html', {'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
+        'needs_composition': not item.state['groups'] or not item.state['channels'],
+        'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
@@ -144,3 +147,4 @@ def scenario(request, pk):
         'brands': sorted({brand for group in item.state['groups'].values() for brand in group['ref']['brand'] if brand}),
         'forecast_sources': SplitScenario.objects.filter(status='approved', start__lt=item.start).order_by('-start'),
         'versions': versions, 'comparison': comparison, 'events': item.events.select_related('actor').order_by('-at')[:100]})
+
