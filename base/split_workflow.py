@@ -42,11 +42,11 @@ def empty_line(scenario):
 
 @transaction.atomic
 def create_scenario(actor, cleaned):
-    scenario = SplitScenario(title=cleaned['title'], year=cleaned['year'], start=cleaned['start'], end=cleaned['end'],
-        stock_date=cleaned['stock_date'], entry_mode=cleaned['entry_mode'], created_by=actor)
+    scenario = SplitScenario(title=cleaned['title'], year=cleaned['start'].year, start=cleaned['start'], end=cleaned['end'],
+        stock_date=cleaned['stock_date'], entry_mode=cleaned.get('entry_mode', 'period'), created_by=actor)
     state = {'schema': 1, 'reference_at': timezone.now().isoformat(), 'source_notes': '', 'groups': {},
-             'channels': {str(channel.pk): {'id': channel.pk, 'name': channel.name} for channel in cleaned['channels']}}
-    for group in cleaned['groups']:
+             'channels': {str(channel.pk): {'id': channel.pk, 'name': channel.name} for channel in cleaned.get('channels', [])}}
+    for group in cleaned.get('groups', []):
         entry = group_snapshot(group)
         entry['channels'] = {cid: empty_line(scenario) for cid in state['channels']}
         entry['forecast'] = {month: None for month in forecast_months(scenario)}
@@ -99,7 +99,7 @@ def bulk_change(scenario, state, post):
     values = allocate(target_qty - fixed, base) if sum(base, ZERO) else [ZERO] * len(free)
     for group, value in zip(free, values):
         line = group['channels'][cid]
-        line['input'] = stored(value + (number(line['fact']) if scenario.entry_mode == 'annual' else ZERO))
+        line['input'] = stored(value + (number(line['fact']) if state.get('volume_mode', scenario.entry_mode) == 'annual' else ZERO))
     fixed_revenue, free_revenue, cost = ZERO, ZERO, ZERO
     for group in entries:
         line = group['channels'][cid]
@@ -183,6 +183,10 @@ def changed_state(scenario, post):
     elif action == 'composition':
         if post.get('confirm') != 'on':
             raise ValidationError('Подтвердите изменение состава сценария.')
+        volume_mode = post.get('volume_mode', state.get('volume_mode', scenario.entry_mode))
+        if volume_mode not in ('period', 'annual'):
+            raise ValidationError('Выберите способ задания объёма.')
+        state['volume_mode'] = volume_mode
         gids, cids = set(post.getlist('groups')), set(post.getlist('channels'))
         allowed_groups = {str(group.pk): group for group in split_groups().filter(is_active=True)}
         allowed_channels = {str(channel.pk): channel for channel in SalesPlanningChannel.objects.filter(is_active=True)}
@@ -293,3 +297,4 @@ def forecast_preview(destination, source, start, end):
             value = (totals[key] * number((right-left).days + 1) / number(denominator)).quantize(number('.000001'))
             result.append({'gid': gid, 'group': group['ref']['name'], 'month': month, 'value': value})
     return result
+

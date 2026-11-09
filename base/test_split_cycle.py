@@ -168,13 +168,17 @@ class SplitCycleTests(TestCase):
             forecast_preview(destination, source, date(2027, 9, 1), date(2027, 10, 31))
 
     def test_http_manual_full_cycle_and_scenario_creation(self):
-        data = {'title': 'Создан через форму', 'year': 2027, 'mode': 'remaining', 'start': '2027-12-01',
-                'entry_mode': 'period', 'groups': [self.group.pk], 'channels': [self.channels[0].pk]}
+        data = {'title': 'Создан через форму', 'start': '2027-12-01', 'end': '2027-12-31', 'stock_date': '2027-11-30'}
         response = self.client.post(reverse('split_scenarios'), data)
         self.assertEqual(response.status_code, 302)
         item = SplitScenario.objects.get(title='Создан через форму')
-        gid, cid = next(iter(item.state['groups'])), next(iter(item.state['channels']))
+        self.assertEqual(item.state['groups'], {})
+        self.assertEqual(item.state['channels'], {})
+        gid, cid = str(self.group.pk), str(self.channels[0].pk)
         url = reverse('split_scenario', args=[item.pk])
+        self.assertContains(self.client.get(url), 'Начать планирование')
+        self.client.post(url, {'action': 'composition', 'confirm': 'on', 'revision': item.revision,
+            'groups': [gid], 'channels': [cid], 'volume_mode': 'period'})
         def post(values):
             item.refresh_from_db()
             result = self.client.post(url, {'revision': item.revision, 'group': gid, 'channel': cid, **values})
@@ -235,6 +239,22 @@ class SplitCycleTests(TestCase):
         post.setlist('channels', [first, second])
         restored = changed_state(item, post)
         self.assertEqual(restored['groups'][gid]['channels'][first]['input'], '10')
+
+    def test_volume_mode_is_selected_inside_planning_and_uses_saved_fact(self):
+        from django.http import QueryDict
+        item = self.complete()
+        gid, cid = next(iter(item.state['groups'])), str(self.channels[0].pk)
+        post = QueryDict('', mutable=True)
+        post.update(action='composition', confirm='on', volume_mode='annual')
+        post.setlist('groups', [gid]); post.setlist('channels', list(item.state['channels']))
+        state = changed_state(item, post)
+        state['groups'][gid]['channels'][cid]['input'] = '50'
+        state['groups'][gid]['channels'][cid]['fact'] = '20'
+        persist(item, self.actor, item.revision, state, 'Способ объёма на этапе планирования')
+        item.refresh_from_db()
+        self.assertEqual(quantity(item, item.state['groups'][gid]['channels'][cid]), 30)
+        response = self.client.get(reverse('split_scenario', args=[item.pk]))
+        self.assertContains(response, 'Годовая цель')
 
     def test_bulk_keeps_locked_values_and_preview_does_not_write(self):
         item = self.complete()
@@ -325,3 +345,4 @@ class SplitCycleTests(TestCase):
         for stock in result['stock']:
             sold = sum(row['quantity'] for row in result['shipments'] if row['power'] == stock['power'] and row['kind'] == 'indoor')
             self.assertEqual(stock['quantity'], sold)
+

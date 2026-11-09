@@ -58,6 +58,8 @@ def months_between(start, end):
     result = []
     while cursor <= end:
         result.append(cursor.strftime('%Y-%m'))
+        if cursor.year == end.year and cursor.month == end.month:
+            break
         cursor = date(cursor.year + (cursor.month == 12), cursor.month % 12 + 1, 1)
     return result
 
@@ -72,7 +74,7 @@ def forecast_months(scenario):
 
 def quantity(scenario, line):
     value = number(line['input'])
-    if scenario.entry_mode == 'annual':
+    if scenario.state.get('volume_mode', scenario.entry_mode) == 'annual':
         actual = number(line.get('fact'), optional=True)
         if actual is None and value == 0:
             return ZERO
@@ -87,7 +89,7 @@ def quantity(scenario, line):
 @precise
 def evaluate(scenario):
     state, errors, warnings, lines, shipments, stock = scenario.state, [], [], [], [], []
-    totals = {'quantity': ZERO, 'cost': ZERO, 'revenue': ZERO, 'closing': ZERO}
+    totals = {'quantity': ZERO, 'cost': ZERO, 'revenue': ZERO, 'closing': ZERO if state['groups'] else None}
     for gid, group in state['groups'].items():
         shipment_start = len(shipments)
         name, powers = group['ref']['name'], group['powers']
@@ -219,3 +221,4 @@ def evaluate(scenario):
         errors.append('План пуст: задайте положительный объём хотя бы для одной группы и канала.')
     return {'lines': lines, 'shipments': shipments, 'stock': stock, 'totals': totals,
             'errors': list(dict.fromkeys(errors)), 'warnings': list(dict.fromkeys(warnings))}
+
