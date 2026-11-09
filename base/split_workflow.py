@@ -181,6 +181,7 @@ def changed_state(scenario, post, *, allow_empty=False):
         gid, cid, group = selected(state, post)
         if action == 'equal_months':
             group['channels'][cid]['allocation'] = 'percent'
+            group['channels'][cid]['distribution_mode'] = 'equal'
             group['channels'][cid]['months'] = dict(zip(planning_months(scenario), map(stored, allocate(HUNDRED, [number(1)] * len(planning_months(scenario))))))
         elif action == 'equal_powers':
             keys = [key for key, power in group['powers'].items() if power['active']]
@@ -193,6 +194,7 @@ def changed_state(scenario, post, *, allow_empty=False):
                 group['powers'][key]['share'] = stored(value)
         else:
             if action != 'distribution_powers':
+                group['channels'][cid]['distribution_mode'] = 'manual'
                 mode = post.get('monthly_mode', 'percent')
                 if mode not in ('percent', 'quantity'):
                     raise ValidationError('Выберите доли или месячные количества.')

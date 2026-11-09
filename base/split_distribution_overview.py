@@ -77,6 +77,11 @@ def overview(scenario, section, filters):
                          'channel_ids':{cid}, 'quantity':qty,'status':status,'power_status':powers,
                          'by_quantity':by_quantity,'months':values,'month_cells':list(zip(months,values))})
             rows[-1]['source'] = group.get('distribution_sources',{}).get('months:'+cid)
+            source = rows[-1]['source']
+            mode = line.get('distribution_mode') or ('fact' if source and not source.get('adjusted') else 'manual')
+            auto_fact = not by_quantity and qty is not None and qty > 0 and all(value in (None,'') for value in values)
+            rows[-1]['mode'] = 'fact' if auto_fact else mode
+            rows[-1]['auto_fact'] = auto_fact
     counts = {key:sum(row['status']['key'] == key for row in rows) for key in ('ready','missing','invalid','not_required')}
     filtered = []
     for row in rows:

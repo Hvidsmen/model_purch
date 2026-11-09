@@ -100,7 +100,7 @@ class DistributionFallbackTests(TestCase):
         with patch('base.split_distribution_history.load_basis',return_value=self.basis()):
             response = self.client.post(self.url+'?tab=distribution&section=months',
                 {'action':'fact_distribution','revision':self.scenario.revision,'group':self.gid,'channel':str(self.channels[1].pk)},follow=True)
-        self.assertContains(response,'Правило распределения:')
+        self.assertContains(response,'data-month-grid')
         self.assertContains(response,'Группа планирования · все каналы')
         self.scenario.refresh_from_db()
         source = self.scenario.state['groups'][self.gid]['distribution_sources']['months:'+str(self.channels[1].pk)]
