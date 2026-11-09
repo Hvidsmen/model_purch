@@ -126,6 +126,7 @@ def scenario(request, pk):
     historical = history_presentation(item)
     from .split_matrix_totals import enrich_history, plan_totals, hide_empty_history_years
     hide_empty_history_years(historical)
+    historical['latest_year'] = historical['years'][-1] if historical['snapshot'] and historical['years'] else None
     history_total = enrich_history(historical)
     matrix_totals = plan_totals(data, item.state)
     plan_lines = {}
@@ -170,9 +171,9 @@ def scenario(request, pk):
         'history_total': history_total, 'matrix_totals': matrix_totals, 'plan_lines': plan_lines,
         'history_by_group': {row['gid']: row for row in historical['groups']},
         'plan_channel_colspan': 4 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 3,
-        'history_channel_colspan': (4 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 3) + (len(historical['years']) if historical['snapshot'] else 0),
-        'history_total_colspan': 1 + (len(historical['years']) if historical['snapshot'] else 0),
-        'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + (len(historical['years']) * (len(item.state['channels'])+1) if historical['snapshot'] else 0),
+        'history_channel_colspan': (4 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 3) + (1 if historical['latest_year'] else 0),
+        'history_total_colspan': 1 + (1 if historical['latest_year'] else 0),
+        'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
