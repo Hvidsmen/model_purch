@@ -62,15 +62,19 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
-    if request.method == 'POST' and request.POST.get('action') in ('preview_month_grid','save_month_grid'):
+    if request.method == 'POST' and request.POST.get('action') in ('preview_month_grid','save_month_grid','preview_power_grid','save_power_grid'):
         try:
             if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
                 raise ValidationError('Расчёт уже изменён или утверждён. Обновите страницу перед сохранением.')
-            from .split_month_grid import preview as month_preview, apply_grid
-            if request.POST['action'] == 'preview_month_grid':
-                return JsonResponse({'ok':True,**month_preview(item,gid,cid)})
+            power_grid = request.POST['action'] in ('preview_power_grid','save_power_grid')
+            if power_grid:
+                from .split_power_grid import preview as grid_preview, apply_grid
+            else:
+                from .split_month_grid import preview as grid_preview, apply_grid
+            if request.POST['action'].startswith('preview_'):
+                return JsonResponse({'ok':True,**grid_preview(item,gid,cid)})
             state,count = apply_grid(item,request.POST.get('grid_payload',''))
-            persist(item,request.user,request.POST.get('revision'),state,f'Месяцы в таблице · сохранено строк: {count}')
+            persist(item,request.user,request.POST.get('revision'),state,('Мощности' if power_grid else 'Месяцы')+f' в таблице · сохранено строк: {count}')
             return JsonResponse({'ok':True,'revision':item.revision})
         except ValidationError as exc:
             return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
@@ -201,18 +205,6 @@ def scenario(request, pk):
     basis_token, distribution_basis, distribution_warning = '', None, ''
     source_key = 'months:'+cid if distribution_section == 'months' else 'powers'
     distribution_basis = group.get('distribution_sources',{}).get(source_key)
-    if tab == 'distribution' and distribution_section == 'powers' and distribution_edit and item.status == 'draft' and gid and cid and request.method == 'GET':
-        from .split_distribution_history import needs_default, resolve_proposal, apply_proposal, metadata
-        if needs_default(group,cid,distribution_section):
-            try:
-                values,basis = resolve_proposal(item,group,item.state['channels'][cid]['name'],distribution_section)
-                group = deepcopy(group)
-                apply_proposal(group,cid,distribution_section,values)
-                distribution_basis = metadata(basis)
-                basis_token = signing.dumps({'identity':[item.pk,item.revision,gid,cid,distribution_section],
-                                             'basis':distribution_basis,'shares':values},salt='split-distribution',compress=True)
-            except ValidationError as exc:
-                distribution_warning = ' '.join(exc.messages)
     selected_line = group['channels'].get(cid, {'months': {}})
     detail_rows = [row for row in data['shipments'] if row['group_key'] == group['ref'].get('source_key') and row['channel_id'] == cid]
     monthly = {}

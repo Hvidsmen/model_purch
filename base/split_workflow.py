@@ -184,7 +184,9 @@ def changed_state(scenario, post, *, allow_empty=False):
             group['channels'][cid]['distribution_mode'] = 'equal'
             group['channels'][cid]['months'] = dict(zip(planning_months(scenario), map(stored, allocate(HUNDRED, [number(1)] * len(planning_months(scenario))))))
         elif action == 'equal_powers':
-            keys = [key for key, power in group['powers'].items() if power['active']]
+            columns = dict.fromkeys(key for entry in state['groups'].values() for key in entry['powers'])
+            keys = [key for key in columns if key in group['powers'] and group['powers'][key]['active']]
+            group['power_distribution_mode'] = 'equal'
             if not keys:
                 raise ValidationError('Нет мощностей для распределения.')
             for power in group['powers'].values():
@@ -204,6 +206,7 @@ def changed_state(scenario, post, *, allow_empty=False):
                 for month in planning_months(scenario):
                     group['channels'][cid]['months'][month] = decimal_input(post, 'month_' + month, percentage=True)
             if action != 'distribution_months':
+                group['power_distribution_mode'] = 'manual'
                 for index, (key, power) in enumerate(group['powers'].items()):
                     power['share'] = decimal_input(post, 'share_' + str(index), percentage=True)
                     power['factor'] = decimal_input(post, 'factor_' + str(index))

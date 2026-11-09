@@ -185,6 +185,7 @@ def apply_proposal(group, cid, section, values):
         group['channels'][cid]['distribution_mode'] = 'fact'
         group['channels'][cid]['months'] = values
     else:
+        group['power_distribution_mode'] = 'fact'
         for key,power in group['powers'].items():
             power['share'] = values.get(key,'0')
 

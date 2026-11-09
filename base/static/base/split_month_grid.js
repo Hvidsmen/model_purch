@@ -2,6 +2,10 @@
     const form = document.querySelector('[data-month-grid]');
     if (!form) return;
     const draft = form.dataset.draft === '1';
+    const powers = form.dataset.kind === 'powers';
+    const previewAction = powers ? 'preview_power_grid' : 'preview_month_grid';
+    const saveAction = powers ? 'save_power_grid' : 'save_month_grid';
+    const columns = Array.from(form.querySelectorAll('thead [data-grid-column]'), cell => cell.dataset.gridColumn);
     const scale = 1000000n, hundred = 100n * scale;
     const message = form.querySelector('[data-grid-message]');
     const save = form.querySelector('[data-grid-save]');
@@ -34,6 +38,8 @@
             rule:element.querySelector('[data-row-rule]').textContent,
             status:element.querySelector('[data-row-status]').textContent,
             statusKey:element.dataset.distributionStatus, error:element.querySelector('[data-row-error]').textContent};
+        row.params = Array.from(element.querySelectorAll('[data-power-param]'));
+        row.original.params = row.params.map(input => input.value);
         return row;
     });
     function validate(row) {
@@ -44,10 +50,16 @@
         }
         const target = row.unit.value === 'percent' ? hundred : parse(row.element.dataset.quantity, 'quantity');
         let error = '';
-        if (missing) error = 'Заполните все месяцы, в том числе явные нули.';
+        if (!row.inputs.length) error = 'Нет активных колонок для распределения.';
+        else if (missing) error = powers ? 'Заполните все активные мощности, в том числе явные нули.' : 'Заполните все месяцы, в том числе явные нули.';
         else if (target === null) error = 'Сначала исправьте плановый объём.';
         else if (sum !== target) error = row.unit.value === 'percent' ? 'Сумма должна быть ровно 100%.' : 'Сумма количеств должна совпадать с планом.';
-        if (row.mode === 'fact' && row.dirty && !row.token) error = 'Получите распределение из факта заново.';
+        if (row.mode === 'fact' && row.dirty && !row.token && !(powers && row.original.mode === 'fact' && row.element.dataset.existingFact === '1')) error = 'Получите распределение из факта заново.';
+        for (const input of row.params) {
+            if (!['factor','cost'].includes(input.dataset.powerParam)) continue;
+            const value = parse(input.value,input.dataset.powerParam === 'cost' ? 'percent' : 'quantity');
+            if (input.dataset.powerParam === 'factor' && value === 0n) error = 'Соотношение DDP должно быть положительным.';
+        }
         return {sum, error};
     }
     function refresh(row) {
@@ -69,7 +81,11 @@
             button.disabled = !draft || row.busy || submitting;
         });
         row.unit.disabled = !draft || row.mode !== 'manual' || row.busy || submitting;
-        row.unit.closest('label').hidden = !draft || row.mode !== 'manual';
+        row.unit.closest('label').hidden = powers || !draft || row.mode !== 'manual';
+        row.params.forEach(function (input) {
+            if (input.tagName === 'SELECT') input.disabled = !draft || row.busy || submitting;
+            else input.readOnly = !draft || row.busy || submitting;
+        });
         row.inputs.forEach(function (input) {
             input.readOnly = !draft || row.mode !== 'manual' || row.busy || submitting;
             input.setAttribute('aria-invalid', String(row.dirty && !row.valid));
@@ -99,9 +115,9 @@
         row.controller = new AbortController();
         row.mode = 'fact'; row.busy = true; row.requestError = ''; refresh(row); toolbar();
         try {
-            const data = await request({action:'preview_month_grid',group:row.element.dataset.gid,channel:row.element.dataset.cid},row.controller.signal);
+            const data = await request({action:previewAction,group:row.element.dataset.gid,channel:row.element.dataset.cid},row.controller.signal);
             if (id !== row.requestId) return;
-            if (row.inputs.some(input => !Object.prototype.hasOwnProperty.call(data.values, input.dataset.month))) throw new Error('В ответе отсутствуют плановые месяцы.');
+            if (row.inputs.some(input => !Object.prototype.hasOwnProperty.call(data.values, input.dataset.month))) throw new Error('В ответе отсутствуют колонки распределения.');
             row.unit.value = 'percent';
             row.inputs.forEach(input => { input.value = data.values[input.dataset.month].replace('.', ','); });
             row.token = data.token; row.dirty = true;
@@ -118,6 +134,7 @@
             button.addEventListener('click', function () {
                 if (!draft || row.busy || submitting) return;
                 const mode = button.dataset.modeButton;
+                if (!row.inputs.length) { row.requestError = 'Нет активных мощностей. Обновите состав группы.'; refresh(row); toolbar(); return; }
                 if (mode === 'fact') { fact(row); return; }
                 if (mode === 'manual') manual(row);
                 else {
@@ -130,6 +147,11 @@
             });
         });
         row.unit.addEventListener('change', function () { manual(row); refresh(row); toolbar(); });
+        row.params.forEach(function (input) {
+            input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', function () {
+                row.dirty = true; row.requestError = ''; refresh(row); toolbar();
+            });
+        });
         row.inputs.forEach(function (input) {
             input.addEventListener('input', function () { if (draft) { manual(row); refresh(row); toolbar(); } });
             input.addEventListener('paste', function (event) {
@@ -139,16 +161,20 @@
                 if (!text) return;
                 try {
                     const matrix = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n').map(line => line.split('\t'));
-                    const r0 = rows.indexOf(row), c0 = row.inputs.indexOf(input), width = matrix[0].length;
-                    if (r0+matrix.length > rows.length || c0+width > row.inputs.length || matrix.some(line => line.length !== width)) throw new Error('Блок Excel выходит за границы видимых строк или месяцев либо имеет разную ширину.');
+                    const r0 = rows.indexOf(row), c0 = columns.indexOf(input.dataset.month), width = matrix[0].length;
+                    if (r0+matrix.length > rows.length || c0 < 0 || c0+width > columns.length || matrix.some(line => line.length !== width)) throw new Error('Блок Excel выходит за границы видимых строк или колонок либо имеет разную ширину.');
                     const prepared = matrix.map(function (line,index) {
                         const target = rows[r0+index];
                         if (target.busy) throw new Error('Дождитесь загрузки факта перед вставкой.');
-                        return line.map(value => parse(value.replace(/^"(.*)"$/, '$1'),target.unit.value));
+                        return line.map(function (value,col) {
+                            const cell = target.inputs.find(item => item.dataset.month === columns[c0+col]);
+                            if (!cell) throw new Error('В одной из строк нет этой активной мощности. Разделите блок Excel.');
+                            return {input:cell,value:parse(value.replace(/^"(.*)"$/, '$1'),target.unit.value)};
+                        });
                     });
                     prepared.forEach(function (line,index) {
                         const target = rows[r0+index]; manual(target);
-                        line.forEach((value,col) => { target.inputs[c0+col].value = value === null ? '' : format(value, ','); });
+                        line.forEach(cell => { cell.input.value = cell.value === null ? '' : format(cell.value, ','); });
                         target.element.querySelector('[data-row-rule]').textContent = 'Вручную · вставка из Excel · не сохранено';
                         refresh(target);
                     });
@@ -164,11 +190,24 @@
         rows.forEach(refresh);
         const changed = rows.filter(row => row.dirty);
         if (!changed.length || changed.some(row => !row.valid)) { toolbar(); return; }
-        const payload = changed.map(row => ({gid:row.element.dataset.gid,cid:row.element.dataset.cid,mode:row.mode,unit:row.unit.value,token:row.token,
-            values:Object.fromEntries(row.inputs.map(input => [input.dataset.month,format(parse(input.value,row.unit.value),'.')]))}));
+        const payload = changed.map(function (row) {
+            const item = {gid:row.element.dataset.gid,cid:row.element.dataset.cid,mode:row.mode,unit:row.unit.value,token:row.token,
+                values:Object.fromEntries(row.inputs.map(input => [input.dataset.month,format(parse(input.value,row.unit.value),'.')]))};
+            if (powers) item.parameters = Object.fromEntries(Array.from(row.element.querySelectorAll('[data-power-config]'), function (cell) {
+                return [cell.dataset.powerConfig,Object.fromEntries(Array.from(cell.querySelectorAll('[data-power-param]'), function (input) {
+                    let value = input.value;
+                    if (['factor','cost'].includes(input.dataset.powerParam)) {
+                        const parsed = parse(value,input.dataset.powerParam === 'cost' ? 'percent' : 'quantity');
+                        value = parsed === null ? null : format(parsed,'.');
+                    }
+                    return [input.dataset.powerParam,value];
+                }))];
+            }));
+            return item;
+        });
         submitting = true; rows.forEach(refresh); toolbar();
         try {
-            await request({action:'save_month_grid',grid_payload:JSON.stringify(payload)});
+            await request({action:saveAction,grid_payload:JSON.stringify(payload)});
             window.location.reload();
         } catch (error) {
             submitting = false; rows.forEach(refresh); toolbar();
@@ -189,6 +228,7 @@
             row.requestId++; row.busy = false; row.dirty = false; row.requestError = ''; row.token = '';
             row.mode = row.original.mode; row.unit.value = row.original.unit;
             row.inputs.forEach((input,index) => { input.value = row.original.values[index]; });
+            row.params.forEach((input,index) => { input.value = row.original.params[index]; });
             row.element.querySelector('[data-row-rule]').textContent = row.original.rule;
             refresh(row);
         });
