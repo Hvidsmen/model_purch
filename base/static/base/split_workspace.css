@@ -84,3 +84,28 @@
 .split-distribution-table thead .split-distribution-pinned{background:#f6f7fb;z-index:3}
 
 .split-distribution-rule{min-width:160px;max-width:260px;white-space:normal}
+.split-month-table-wrap{width:100%;min-width:0}
+.split-month-table{table-layout:fixed;width:100%;max-width:100%;border-collapse:separate;border-spacing:0;font-size:11px}
+.split-month-identity-col{width:24%}.split-month-sum-col{width:7%}.split-month-action-col{width:8%}
+.split-workspace .split-month-table th,.split-workspace .split-month-table td{padding:8px 3px;white-space:normal;overflow-wrap:anywhere;min-width:0}
+.split-month-table thead th{text-align:center;font-weight:500}
+.split-month-table thead th:first-child{text-align:left}
+.split-month-table small{display:block;font-size:10px;font-weight:400;color:#64748b}
+.split-workspace .split-month-table .split-month-identity{padding:10px 8px;background:#fff;font-weight:400}
+.split-month-group-name{display:block;font-weight:500}.split-month-channel{display:block;color:#6551ae;margin:3px 0}
+.split-month-table .split-distribution-status{margin-top:5px;padding:2px 5px;font-size:10px;white-space:normal}
+.split-month-table .split-distribution-reason,.split-month-table .split-distribution-rule{min-width:0;max-width:100%;white-space:normal;font-size:10px}
+.split-month-rule{margin-top:5px;color:#64748b}
+.split-month-sum,.split-month-value{text-align:center!important;font-variant-numeric:tabular-nums}
+.split-month-table .admin-button{min-width:0;max-width:100%;width:100%;padding:5px 2px;min-height:30px;box-sizing:border-box;font-size:11px;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:700px){
+ .split-month-table,.split-month-table tbody{display:block}
+ .split-month-table colgroup{display:none}
+ .split-month-table thead{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}
+ .split-month-table tbody tr{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));border:1px solid #e6e8f0;border-radius:8px;margin:10px 0;overflow:hidden}
+ .split-workspace .split-month-table .split-month-identity,.split-month-table .split-month-action,.split-month-table .split-month-sum{grid-column:1/-1}
+ .split-month-value::before{content:attr(data-label);display:block;color:#64748b;font-size:10px;margin-bottom:3px}
+ .split-month-table .split-month-sum::before{content:'Сумма: ';font-weight:400}
+ .split-month-table .split-month-sum small{display:inline;margin-left:6px}
+ .split-month-table td[colspan]{grid-column:1/-1}
+}
