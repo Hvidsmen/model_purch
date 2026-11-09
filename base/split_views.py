@@ -89,11 +89,15 @@ def scenario(request, pk):
                      'equal_months': 'Равномерные доли месяцев вручную', 'equal_powers': 'Равномерные доли мощностей вручную',
                      'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам',
                      'add_group': 'Добавлена группа в план', 'remove_group': 'Группа исключена из плана',
-                     'add_channel': 'Добавлен канал в план', 'remove_channel': 'Канал исключён из плана'}.get((action or '').split(':')[0], action))
+                     'add_channel': 'Добавлен канал в план', 'remove_channel': 'Канал исключён из плана',
+                     'add_stock_groups': 'Добавлены группы из стока и товара в пути'}.get((action or '').split(':')[0], action))
             if preview is None and forecast is None or action == 'forecast_apply':
-                if action == 'composition' or (action or '').split(':')[0] in ('add_group', 'remove_group', 'add_channel', 'remove_channel'):
+                if action == 'composition' or (action or '').split(':')[0] in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups'):
                     gid, cid = next(iter(state['groups']), ''), next(iter(state['channels']), '')
-                messages.success(request, 'Изменения сохранены.' if action != 'approve' else 'План утверждён. Редактирование заблокировано.')
+                if action == 'add_stock_groups':
+                    messages.success(request, f"Сток и товар в пути на {item.stock_date:%d.%m.%Y}: найдено групп {len(state['inventory_selection']['groups'])}, добавлено {state['inventory_selection']['added']}. Плановые значения не перезаписаны.")
+                else:
+                    messages.success(request, 'Изменения сохранены.' if action != 'approve' else 'План утверждён. Редактирование заблокировано.')
                 return redirect(return_to(pk, tab, gid, cid))
         except ValidationError as exc:
             error = ' '.join(exc.messages)
@@ -150,5 +154,6 @@ def scenario(request, pk):
         'brands': sorted({brand for group in item.state['groups'].values() for brand in group['ref']['brand'] if brand}),
         'forecast_sources': SplitScenario.objects.filter(status='approved', start__lt=item.start).order_by('-start'),
         'versions': versions, 'comparison': comparison, 'events': item.events.select_related('actor').order_by('-at')[:100]})
+
 
 

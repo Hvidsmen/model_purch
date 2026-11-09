@@ -131,7 +131,9 @@ def changed_state(scenario, post, *, allow_empty=False):
     state = deepcopy(scenario.state)
     action = post.get('action')
     member_action, _, target = (action or '').partition(':')
-    if member_action in ('add_group', 'remove_group', 'add_channel', 'remove_channel'):
+    if member_action in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups'):
+        if scenario.status != 'draft':
+            raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')
         from django.http import QueryDict
         draft = deepcopy(scenario)
         if post.get('with_lines') == '1':
@@ -139,6 +141,18 @@ def changed_state(scenario, post, *, allow_empty=False):
             inputs['action'] = 'lines'
             draft.state = changed_state(scenario, inputs)
         gids, cids = list(draft.state['groups']), list(draft.state['channels'])
+        if member_action == 'add_stock_groups':
+            from .split_stock_groups import groups_from_stock
+            inventory = deepcopy(groups_from_stock(scenario.stock_date))
+            added = [row['id'] for row in inventory['groups'] if row['id'] not in gids]
+            gids.extend(added)
+            inventory['added'] = len(added)
+            draft.state['inventory_selection'] = inventory
+            composition = QueryDict('', mutable=True)
+            composition.update(action='composition', confirm='on')
+            composition.setlist('groups', gids)
+            composition.setlist('channels', cids)
+            return changed_state(draft, composition, allow_empty=True)
         if member_action.startswith('add_'):
             target = post.get('new_group' if member_action == 'add_group' else 'new_channel', '')
         if not target:
@@ -322,5 +336,6 @@ def forecast_preview(destination, source, start, end):
             value = (totals[key] * number((right-left).days + 1) / number(denominator)).quantize(number('.000001'))
             result.append({'gid': gid, 'group': group['ref']['name'], 'month': month, 'value': value})
     return result
+
 
 
