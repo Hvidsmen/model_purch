@@ -1,7 +1,7 @@
 /* Searchable filters keep their native select as the authoritative form value. */
 (() => {
     const normalize = text => text.normalize('NFC').toLocaleLowerCase().trim();
-    document.querySelectorAll('.filters-card select, .coefficient-filters select, #report-filters select, #purchPaymentFilter').forEach(select => {
+    document.querySelectorAll('.filters-card select, .coefficient-filters select, #report-filters select, #purchPaymentFilter, select[data-searchable-select]:not([multiple])').forEach(select => {
         if (select.dataset.searchReady) return;
         select.dataset.searchReady = 'true';
         const root = document.createElement('div');
@@ -9,23 +9,37 @@
         const trigger = document.createElement('button');
         trigger.type = 'button'; trigger.className = 'form-select form-select-sm';
         trigger.setAttribute('aria-expanded', 'false');
-        const label = select.closest('label')?.textContent.trim() || select.parentElement.querySelector('label')?.textContent.trim() || select.getAttribute('aria-label') || 'Фильтр';
+        const label = select.getAttribute('aria-label') || select.closest('label')?.textContent.trim() || select.parentElement.querySelector('label')?.textContent.trim() || 'Фильтр';
         trigger.setAttribute('aria-label', label);
         const popup = document.createElement('div'); popup.className = 'searchable-filter-menu'; popup.hidden = true;
         const search = document.createElement('input'); search.type = 'search'; search.className = 'form-control form-control-sm'; search.placeholder = 'Поиск…'; search.setAttribute('aria-label', `Поиск: ${label}`);
         const list = document.createElement('div'); list.className = 'searchable-filter-options';
-        popup.append(search, list); root.append(trigger, popup);
+        popup.append(search, list); root.append(trigger);
+        const portaled = select.hasAttribute('data-searchable-select');
+        if (portaled) {
+            document.body.append(popup);
+            popup.style.position = 'fixed'; popup.style.minWidth = '0';
+        } else root.append(popup);
+        popup._searchTrigger = trigger;
         select.after(root); select.hidden = true;
         function fitPopup() {
             if (popup.hidden) return;
             const rect=trigger.getBoundingClientRect();
+            if (rect.bottom < 0 || rect.top > window.innerHeight) { close(); return; }
+            if (portaled) popup.style.width=`${Math.min(380,Math.max(rect.width,260),window.innerWidth-24)}px`;
             const below=window.innerHeight-rect.bottom-12, above=rect.top-12;
             const upwards=below<180 && above>below;
             const space=Math.max(80,upwards?above:below);
             list.style.maxHeight=`${Math.max(40,Math.min(240,space-65))}px`;
-            popup.style.top=upwards?'auto':'calc(100% + 4px)';
-            popup.style.bottom=upwards?'calc(100% + 4px)':'auto';
-            popup.style.left=`${Math.min(0,window.innerWidth-12-(rect.left+popup.offsetWidth))}px`;
+            if (portaled) {
+                popup.style.left=`${Math.max(12,Math.min(rect.left,window.innerWidth-popup.offsetWidth-12))}px`;
+                popup.style.top=upwards?'auto':`${rect.bottom+4}px`;
+                popup.style.bottom=upwards?`${window.innerHeight-rect.top+4}px`:'auto';
+            } else {
+                popup.style.top=upwards?'auto':'calc(100% + 4px)';
+                popup.style.bottom=upwards?'calc(100% + 4px)':'auto';
+                popup.style.left=`${Math.min(0,window.innerWidth-12-(rect.left+popup.offsetWidth))}px`;
+            }
         }
         window.addEventListener('resize',fitPopup);
         window.addEventListener('scroll',fitPopup,true);
@@ -46,21 +60,24 @@
             }
             if (!options.length) { const empty = document.createElement('p'); empty.textContent = 'Нет совпадений'; list.append(empty); }
         }
-        function sync() { trigger.textContent = select.selectedOptions[0]?.text || '— Все —'; trigger.disabled = select.disabled; }
+        function sync() { trigger.textContent = select.selectedOptions[0]?.text || '— Все —'; trigger.disabled = select.disabled || select.matches(':disabled'); }
         trigger.addEventListener('click', () => {
             const open = popup.hidden;
-            document.querySelectorAll('.searchable-filter-menu').forEach(menu => { menu.hidden = true; menu.previousElementSibling?.setAttribute('aria-expanded', 'false'); });
+            document.querySelectorAll('.searchable-filter-menu').forEach(menu => { menu.hidden = true; (menu._searchTrigger || menu.previousElementSibling)?.setAttribute('aria-expanded', 'false'); });
             if (open) { popup.hidden = false; trigger.setAttribute('aria-expanded', 'true'); search.value = ''; render(); search.focus(); fitPopup(); requestAnimationFrame(fitPopup); }
         });
         search.addEventListener('input', render);
-        root.addEventListener('keydown', event => {
+        const keyboard = event => {
             if (event.key === 'Escape') { close(); trigger.focus(); }
             if (event.key === 'ArrowDown') { event.preventDefault(); const buttons = [...list.querySelectorAll('button:not(:disabled)')]; buttons[(buttons.indexOf(document.activeElement) + 1) % buttons.length]?.focus(); }
             if (event.key === 'Enter' && event.target === search) { event.preventDefault(); list.querySelector('button:not(:disabled)')?.click(); }
-        });
-        document.addEventListener('click', event => { if (!root.contains(event.target)) close(); });
+        };
+        root.addEventListener('keydown', keyboard);
+        if (portaled) popup.addEventListener('keydown', keyboard);
+        document.addEventListener('click', event => { if (!root.contains(event.target) && !popup.contains(event.target)) close(); });
         select.addEventListener('change', sync);
         select.form?.addEventListener('reset', () => setTimeout(sync, 0));
         sync();
     });
 })();
+

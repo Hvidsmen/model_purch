@@ -1,6 +1,6 @@
 {% extends 'base/portal_shell.html' %}{% load static report_format split_format tz %}
 {% block title %}{{ scenario.title }} · v{{ scenario.version }} · Split{% endblock %}
-{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=matrix2">{% endblock %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=matrix-search3">{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
 {% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='scenarios' %}{% endblock %}
 {% block content %}{% timezone "Europe/Moscow" %}<section class="portal-welcome split-workspace">
@@ -13,8 +13,8 @@
 {% include 'base/_split_composition.html' %}
 <section class="admin-panel"><h2>Объём и наценка по каналам</h2><p>Группы — по строкам, каналы — по столбцам. DDP комплекта общий для каналов. Кнопки «×» исключают элемент только из этого плана; введённые данные сохраняются в архиве черновика.</p>
 <form method="post" id="split-plan-inputs">{% csrf_token %}<input type="hidden" name="revision" value="{{ scenario.revision }}"><input type="hidden" name="with_lines" value="1"><fieldset {% if scenario.status == 'approved' %}disabled{% endif %}>
-<div class="split-matrix-tools"><label>Группа планирования <select name="new_group"><option value="">Выберите группу</option>{% for key,g in composition_groups.items %}{% if key not in state.groups %}<option value="{{ key }}">{{ g.name }}</option>{% endif %}{% endfor %}</select></label><button class="admin-button secondary" name="action" value="add_group">+ Добавить группу</button><button class="admin-button secondary" name="action" value="add_stock_groups">Добавить из стока и в пути</button>
-<label>Канал продаж <select name="new_channel"><option value="">Выберите канал</option>{% for key,ch in composition_channels.items %}{% if key not in state.channels %}<option value="{{ key }}">{{ ch.name }}</option>{% endif %}{% endfor %}</select></label><button class="admin-button secondary" name="action" value="add_channel">+ Добавить канал</button></div>
+<div class="split-matrix-tools"><label>Группа планирования <select name="new_group" data-searchable-select aria-label="Добавляемая группа планирования"><option value="">Выберите группу</option>{% for key,g in composition_groups.items %}{% if key not in state.groups %}<option value="{{ key }}">{{ g.name }}</option>{% endif %}{% endfor %}</select></label><button class="admin-button secondary" name="action" value="add_group">+ Добавить группу</button><button class="admin-button secondary" name="action" value="add_stock_groups">Добавить из стока и в пути</button>
+<label>Канал продаж <select name="new_channel" data-searchable-select aria-label="Добавляемый канал продаж"><option value="">Выберите канал</option>{% for key,ch in composition_channels.items %}{% if key not in state.channels %}<option value="{{ key }}">{{ ch.name }}</option>{% endif %}{% endfor %}</select></label><button class="admin-button secondary" name="action" value="add_channel">+ Добавить канал</button></div>
 <p class="admin-muted">Подбор из стока: срез на {{ scenario.stock_date|date:'d.m.Y' }}, все склады, наличие или товар в пути больше нуля. Только «Бытовые кондиционеры». Это добавление групп, не загрузка плановых количеств.</p>{% if state.inventory_selection %}<p>Последний подбор: {{ state.inventory_selection.date }} · найдено групп {{ state.inventory_selection.groups|length }}.</p>{% endif %}<p class="admin-muted">Добавление и удаление также сохраняет текущий ввод таблицы. После удаления последнего элемента можно добавить его заново.</p>
 <div class="admin-table-scroll"><table class="admin-table split-plan-matrix"><thead><tr><th rowspan="2">Группа планирования</th><th rowspan="2">DDP комплекта, USD</th>{% for channel_id,ch in state.channels.items %}<th colspan="3" class="split-channel-heading" data-plan-channel="{{ channel_id }}">{{ ch.name }} <button type="submit" class="split-remove" name="action" value="remove_channel:{{ channel_id }}" aria-label="Удалить канал {{ ch.name }} из плана" title="Удалить канал из плана">×</button></th>{% endfor %}</tr>
 <tr>{% for channel_id,ch in state.channels.items %}<th>{% if entry_mode == 'annual' %}Годовая цель{% else %}План, компл.{% endif %}</th><th>Факт до начала</th><th>Наценка · ×</th>{% endfor %}</tr></thead><tbody>
@@ -68,6 +68,7 @@
 <section class="admin-panel"><h2>История действий</h2><ul>{% for event in events %}<li>{{ event.at|date:'d.m.Y H:i:s' }} · {{ event.actor }} · r{{ event.revision }} · {{ event.action }}</li>{% endfor %}</ul></section>
 {% endif %}
 </section>{% endtimezone %}{% endblock %}
+
 
 
 
