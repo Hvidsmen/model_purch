@@ -47,6 +47,7 @@ def power_status(group, required, *, models_required=True):
 def overview(scenario, section, filters):
     months = planning_months(scenario)
     rows = []
+    power_columns = list(dict.fromkeys(key for group in scenario.state['groups'].values() for key in group['powers']))
     for gid,group in scenario.state['groups'].items():
         quantities = {}
         for cid,line in group['channels'].items():
@@ -63,6 +64,18 @@ def overview(scenario, section, filters):
                          'status':powers, 'powers':[{'name':key,'share':power.get('share')} for key,power in group['powers'].items()],
                          'source':group.get('distribution_sources',{}).get('powers'),
                          'channel_ids':set(group['channels'])})
+            row = rows[-1]
+            source = row['source']
+            active = [power for power in group['powers'].values() if power['active']]
+            row['auto_fact'] = bool(active) and sales_required and all(power.get('share') in (None,'') for power in active)
+            row['mode'] = 'fact' if row['auto_fact'] else group.get('power_distribution_mode') or ('fact' if source and not source.get('adjusted') else 'manual')
+            row['existing_fact'] = bool(source and not source.get('adjusted'))
+            row['power_cells'] = []
+            for key in power_columns:
+                power = group['powers'].get(key)
+                row['power_cells'].append({'key':key,'power':power,
+                    'indoor_options':[model for model in power['models'] if model['kind'] == 'indoor'] if power else [],
+                    'outdoor_options':[model for model in power['models'] if model['kind'] == 'outdoor'] if power else []})
             continue
         for cid,line in group['channels'].items():
             qty = quantities[cid]
@@ -94,4 +107,4 @@ def overview(scenario, section, filters):
         if filters.get('q') and filters['q'].casefold() not in row['name'].casefold():
             continue
         filtered.append(row)
-    return {'rows':filtered,'counts':counts,'total':len(rows),'shown':len(filtered),'months':months}
+    return {'rows':filtered,'counts':counts,'total':len(rows),'shown':len(filtered),'months':months,'power_columns':power_columns}
