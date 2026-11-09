@@ -82,3 +82,5 @@
 .split-distribution-table th,.split-distribution-table td{white-space:nowrap}
 .split-distribution-table .split-distribution-pinned{position:sticky;left:0;background:#fff;z-index:2;white-space:normal;min-width:200px;max-width:260px;box-shadow:2px 0 0 #e6e8f0}
 .split-distribution-table thead .split-distribution-pinned{background:#f6f7fb;z-index:3}
+
+.split-distribution-rule{min-width:160px;max-width:260px;white-space:normal}
