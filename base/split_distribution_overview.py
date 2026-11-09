@@ -75,7 +75,7 @@ def overview(scenario, section, filters):
                 status = {**status,'key':'not_required','label':'Без плана','reason':'Нет объёма по каналу'}
             rows.append({'gid':gid,'cid':cid,'name':group['ref']['name'],'channel':scenario.state['channels'][cid]['name'],
                          'channel_ids':{cid}, 'quantity':qty,'status':status,'power_status':powers,
-                         'by_quantity':by_quantity,'months':values})
+                         'by_quantity':by_quantity,'months':values,'month_cells':list(zip(months,values))})
             rows[-1]['source'] = group.get('distribution_sources',{}).get('months:'+cid)
     counts = {key:sum(row['status']['key'] == key for row in rows) for key in ('ready','missing','invalid','not_required')}
     filtered = []

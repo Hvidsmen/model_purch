@@ -106,7 +106,7 @@ class DistributionFallbackTests(TestCase):
         source = self.scenario.state['groups'][self.gid]['distribution_sources']['months:'+str(self.channels[1].pk)]
         self.assertEqual(source['rule_key'],'planning_group_all_channels')
         response = self.client.get(self.url,{'tab':'distribution'})
-        self.assertContains(response,'Основа распределения')
+        self.assertContains(response,'split-month-rule')
         self.assertContains(response,'Группа планирования · все каналы')
 
     def test_sql_scopes_are_parameterized_and_retain_stock_cutoff(self):
