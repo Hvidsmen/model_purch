@@ -3,6 +3,7 @@ from datetime import date
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.core import signing
 from django.core.paginator import Paginator
 from django.db import IntegrityError
 from django.http import HttpResponseBadRequest
@@ -34,9 +35,9 @@ def scenarios(request):
         'page': Paginator(SplitScenario.objects.select_related('created_by'), 25).get_page(request.GET.get('page'))})
 
 
-def return_to(pk, tab, gid='', cid=''):
+def return_to(pk, tab, gid='', cid='', section='months'):
     from urllib.parse import urlencode
-    return reverse('split_scenario', args=[pk]) + '?' + urlencode({'tab': tab, 'group': gid, 'channel': cid})
+    return reverse('split_scenario', args=[pk]) + '?' + urlencode({'tab': tab, 'group': gid, 'channel': cid, 'section':section})
 
 
 @login_required
@@ -49,6 +50,9 @@ def scenario(request, pk):
     tab = request.GET.get('tab', 'plan')
     if tab not in ('plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
         tab = 'plan'
+    distribution_section = request.GET.get('section', 'months')
+    if distribution_section not in ('months','powers'):
+        distribution_section = 'months'
     gid = request.POST.get('group') or request.GET.get('group') or next(iter(item.state['groups']), '')
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
@@ -62,6 +66,19 @@ def scenario(request, pk):
                 return redirect('split_scenario', pk=target.pk)
             if action == 'approve':
                 approve(item, request.user, request.POST.get('revision'), request.POST.get('acknowledge') == 'on')
+            elif action == 'fact_distribution':
+                from .split_distribution_history import load_basis, proposal, apply_proposal, metadata
+                if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
+                    raise ValidationError('Обновите черновик перед загрузкой распределения.')
+                state = deepcopy(item.state)
+                target = state['groups'].get(gid)
+                if not target or cid not in target['channels']:
+                    raise ValidationError('Выберите группу и канал.')
+                basis = load_basis(item,target,refresh=True)
+                values = proposal(item,target,state['channels'][cid]['name'],basis,distribution_section)
+                apply_proposal(target,cid,distribution_section,values)
+                target.setdefault('distribution_sources',{})[distribution_section if distribution_section == 'powers' else 'months:'+cid] = metadata(basis)
+                persist(item,request.user,request.POST.get('revision'),state,'Распределение из факта за пять лет · '+distribution_section)
             elif action == 'load_history':
                 from .split_history import load_history
                 if item.status != 'draft' or str(request.POST.get('revision')) != str(item.revision):
@@ -92,10 +109,37 @@ def scenario(request, pk):
                     persist(item, request.user, request.POST.get('revision'), state, f'Прогноз из сценария {source.pk}, v{source.version}; {start}–{end}')
             else:
                 state = changed_state(item, request.POST)
+                if action in ('equal_months','equal_powers'):
+                    source_key = 'months:'+cid if action == 'equal_months' else 'powers'
+                    state['groups'][gid].get('distribution_sources',{}).pop(source_key,None)
+                if action in ('distribution_months','distribution_powers'):
+                    scope = 'months' if action == 'distribution_months' else 'powers'
+                    source_key = 'months:'+cid if scope == 'months' else 'powers'
+                    sources = state['groups'][gid].setdefault('distribution_sources',{})
+                    previous_basis = sources.pop(source_key,None)
+                    actual = state['groups'][gid]['channels'][cid]['months'] if scope == 'months' else {key:power['share'] for key,power in state['groups'][gid]['powers'].items() if power['active']}
+                    token = request.POST.get('basis_token')
+                    if token:
+                        try:
+                            signed = signing.loads(token,salt='split-distribution',max_age=86400)
+                            if signed['identity'] != [item.pk,item.revision,gid,cid,scope]:
+                                raise signing.BadSignature
+                        except (signing.BadSignature,KeyError,TypeError):
+                            raise ValidationError('Основание распределения устарело. Обновите страницу.')
+                        from decimal import Decimal
+                        adjusted = set(actual) != set(signed['shares']) or any(
+                            actual[key] is None or Decimal(actual[key]) != Decimal(signed['shares'][key]) for key in actual)
+                        adjusted = adjusted or (scope == 'months' and state['groups'][gid]['channels'][cid].get('allocation') != 'percent')
+                        sources[source_key] = {**signed['basis'],'adjusted': adjusted}
+                    elif previous_basis:
+                        old = item.state['groups'][gid]
+                        old_shares = old['channels'][cid]['months'] if scope == 'months' else {key:power['share'] for key,power in old['powers'].items() if power['active']}
+                        sources[source_key] = {**previous_basis, 'adjusted': previous_basis.get('adjusted',False) or actual != old_shares or
+                            (scope == 'months' and state['groups'][gid]['channels'][cid].get('allocation') != old['channels'][cid].get('allocation'))}
                 if action == 'bulk' and request.POST.get('confirm') != 'on':
                     raise ValidationError('Подтвердите применение массовой корректировки.')
                 persist(item, request.user, request.POST.get('revision'), state,
-                    {'lines': 'Объёмы, наценки и DDP', 'distribution': 'Месяцы, мощности и модели', 'stock': 'Остатки, поступления и прогноз',
+                    {'lines': 'Объёмы, наценки и DDP', 'distribution': 'Месяцы, мощности и модели', 'distribution_months':'Распределение по месяцам', 'distribution_powers':'Распределение по мощностям', 'stock': 'Остатки, поступления и прогноз',
                      'equal_months': 'Равномерные доли месяцев вручную', 'equal_powers': 'Равномерные доли мощностей вручную',
                      'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам',
                      'add_group': 'Добавлена группа в план', 'remove_group': 'Группа исключена из плана',
@@ -108,7 +152,7 @@ def scenario(request, pk):
                     messages.success(request, f"Сток и товар в пути на {item.stock_date:%d.%m.%Y}: найдено групп {len(state['inventory_selection']['groups'])}, добавлено {state['inventory_selection']['added']}. Плановые значения не перезаписаны.")
                 else:
                     messages.success(request, 'Изменения сохранены.' if action != 'approve' else 'План утверждён. Редактирование заблокировано.')
-                return redirect(return_to(pk, tab, gid, cid))
+                return redirect(return_to(pk, tab, gid, cid, distribution_section))
         except ValidationError as exc:
             error = ' '.join(exc.messages)
         except IntegrityError:
@@ -138,6 +182,22 @@ def scenario(request, pk):
             for month in year['months']:
                 month['by_channel'] = dict(zip(item.state['channels'], month['cells']))
     group = item.state['groups'].get(gid, {'ref': {}, 'powers': {}, 'channels': {}, 'forecast': {}})
+    basis_token, distribution_basis, distribution_warning = '', None, ''
+    source_key = 'months:'+cid if distribution_section == 'months' else 'powers'
+    distribution_basis = group.get('distribution_sources',{}).get(source_key)
+    if tab == 'distribution' and item.status == 'draft' and gid and cid and request.method == 'GET':
+        from .split_distribution_history import needs_default, load_basis, proposal, apply_proposal, metadata
+        if needs_default(group,cid,distribution_section):
+            try:
+                basis = load_basis(item,group)
+                values = proposal(item,group,item.state['channels'][cid]['name'],basis,distribution_section)
+                group = deepcopy(group)
+                apply_proposal(group,cid,distribution_section,values)
+                distribution_basis = metadata(basis)
+                basis_token = signing.dumps({'identity':[item.pk,item.revision,gid,cid,distribution_section],
+                                             'basis':distribution_basis,'shares':values},salt='split-distribution',compress=True)
+            except ValidationError as exc:
+                distribution_warning = ' '.join(exc.messages)
     selected_line = group['channels'].get(cid, {'months': {}})
     detail_rows = [row for row in data['shipments'] if row['group_key'] == group['ref'].get('source_key') and row['channel_id'] == cid]
     monthly = {}
@@ -176,6 +236,8 @@ def scenario(request, pk):
         'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
+        'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
+        'basis_token':basis_token, 'distribution_warning':distribution_warning,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
         'detail_page': Paginator(detail_rows, 100).get_page(request.GET.get('page')),
         'composition_groups': {**{str(group.pk): {'name': group.name} for group in split_groups().filter(is_active=True)},

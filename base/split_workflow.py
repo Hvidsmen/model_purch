@@ -177,7 +177,7 @@ def changed_state(scenario, post, *, allow_empty=False):
                 line.update(input=decimal_input(post, 'q_' + suffix, optional=False), fact=decimal_input(post, 'fact_' + suffix),
                     markup=decimal_input(post, 'markup_' + suffix), lock_qty=post.get('lockq_' + suffix) == 'on',
                     lock_markup=post.get('lockm_' + suffix) == 'on')
-    elif action in ('distribution', 'equal_months', 'equal_powers'):
+    elif action in ('distribution', 'distribution_months', 'distribution_powers', 'equal_months', 'equal_powers'):
         gid, cid, group = selected(state, post)
         if action == 'equal_months':
             group['channels'][cid]['allocation'] = 'percent'
@@ -192,23 +192,25 @@ def changed_state(scenario, post, *, allow_empty=False):
             for key, value in zip(keys, allocate(HUNDRED, [number(1)] * len(keys))):
                 group['powers'][key]['share'] = stored(value)
         else:
-            mode = post.get('monthly_mode', 'percent')
-            if mode not in ('percent', 'quantity'):
-                raise ValidationError('Выберите доли или месячные количества.')
-            group['channels'][cid]['allocation'] = mode
-            group['channels'][cid]['month_quantities'] = {
-                month: decimal_input(post, 'qty_' + month) for month in planning_months(scenario)}
-            for month in planning_months(scenario):
-                group['channels'][cid]['months'][month] = decimal_input(post, 'month_' + month, percentage=True)
-            for index, (key, power) in enumerate(group['powers'].items()):
-                power['share'] = decimal_input(post, 'share_' + str(index), percentage=True)
-                power['factor'] = decimal_input(post, 'factor_' + str(index))
-                power['indoor_cost_percent'] = decimal_input(post, 'cost_' + str(index), percentage=True)
-                for kind in ('indoor', 'outdoor'):
-                    value = post.get(kind + '_' + str(index)) or None
-                    if value is not None and not any(model['id'] == value and model['kind'] == kind for model in power['models']):
-                        raise ValidationError('Выбранная модель не входит в снимок этой мощности.')
-                    power[kind] = value
+            if action != 'distribution_powers':
+                mode = post.get('monthly_mode', 'percent')
+                if mode not in ('percent', 'quantity'):
+                    raise ValidationError('Выберите доли или месячные количества.')
+                group['channels'][cid]['allocation'] = mode
+                group['channels'][cid]['month_quantities'] = {
+                    month: decimal_input(post, 'qty_' + month) for month in planning_months(scenario)}
+                for month in planning_months(scenario):
+                    group['channels'][cid]['months'][month] = decimal_input(post, 'month_' + month, percentage=True)
+            if action != 'distribution_months':
+                for index, (key, power) in enumerate(group['powers'].items()):
+                    power['share'] = decimal_input(post, 'share_' + str(index), percentage=True)
+                    power['factor'] = decimal_input(post, 'factor_' + str(index))
+                    power['indoor_cost_percent'] = decimal_input(post, 'cost_' + str(index), percentage=True)
+                    for kind in ('indoor', 'outdoor'):
+                        value = post.get(kind + '_' + str(index)) or None
+                        if value is not None and not any(model['id'] == value and model['kind'] == kind for model in power['models']):
+                            raise ValidationError('Выбранная модель не входит в снимок этой мощности.')
+                        power[kind] = value
     elif action == 'stock':
         gid, cid, group = selected(state, post)
         group['buy'] = decimal_input(post, 'buy', optional=False)
