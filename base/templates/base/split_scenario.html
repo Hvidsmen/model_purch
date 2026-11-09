@@ -1,6 +1,6 @@
 {% extends 'base/portal_shell.html' %}{% load static report_format split_format tz %}
 {% block title %}{{ scenario.title }} · v{{ scenario.version }} · Split{% endblock %}
-{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=history-columns1">{% endblock %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=history-no-ddp1">{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
 {% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='scenarios' %}{% endblock %}
 {% block content %}{% timezone "Europe/Moscow" %}<section class="portal-welcome split-workspace">
