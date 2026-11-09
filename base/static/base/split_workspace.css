@@ -51,7 +51,7 @@
 .split-history-year summary{cursor:pointer;color:#6551ae;white-space:nowrap;font-weight:500}
 .split-history-year summary small{font-weight:400;color:#718096}
 .split-history-month th{padding-left:28px;font-weight:400}
-.split-history-metrics{display:grid;grid-template-columns:repeat(4,minmax(62px,1fr));gap:8px}
+.split-history-metrics{display:grid;grid-template-columns:repeat(3,minmax(62px,1fr));gap:8px}
 .split-history-metrics span{display:flex;flex-direction:column;gap:3px;white-space:nowrap}
 .split-history-metrics small{font-size:10px;color:#718096;font-weight:400}
 .split-history-metrics strong{font-size:12px;font-weight:500;font-variant-numeric:tabular-nums}
@@ -60,6 +60,6 @@
 .split-matrix-grand-total th,.split-matrix-grand-total strong{font-weight:600}
 
 
-.split-plan-matrix .split-fact-column{background:#f8f6ff;min-width:280px}
+.split-plan-matrix .split-fact-column{background:#f8f6ff;min-width:210px}
 .split-plan-matrix [data-history-month-column][hidden]{display:none}
 .split-fact-column summary{cursor:pointer;color:#6551ae;white-space:nowrap}
