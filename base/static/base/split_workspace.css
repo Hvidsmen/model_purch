@@ -59,3 +59,7 @@
 .split-plan-matrix .split-matrix-grand-total{background:#f5f1ff}
 .split-matrix-grand-total th,.split-matrix-grand-total strong{font-weight:600}
 
+
+.split-plan-matrix .split-fact-column{background:#f8f6ff;min-width:280px}
+.split-plan-matrix [data-history-month-column][hidden]{display:none}
+.split-fact-column summary{cursor:pointer;color:#6551ae;white-space:nowrap}

@@ -4,6 +4,17 @@ from .split_matrix_totals import aggregate, enrich_history, plan_totals
 
 
 class MatrixTotalsTests(SimpleTestCase):
+    def test_fact_zero_is_blank_but_unknown_and_nonzero_are_preserved(self):
+        from django.template.loader import render_to_string
+        from .templatetags.split_format import fact_number, fact_cash
+        self.assertEqual(fact_number(Decimal('0')), '')
+        self.assertEqual(fact_cash(Decimal('0')), '')
+        self.assertEqual(fact_number(None), '—')
+        self.assertEqual(fact_number(Decimal('-2')), '-2')
+        cell = {'qty': Decimal(0), 'revenue': Decimal(0), 'cost': Decimal(0), 'markup': None}
+        self.assertEqual(render_to_string('base/_split_history_metrics.html', {'cell':cell}).strip(), '')
+        self.assertIn('0,00', render_to_string('base/_split_history_metrics.html', {'cell':cell, 'plan_metrics':True}))
+
     def test_weighted_markup_and_unknown_values(self):
         cells = [{'qty': Decimal(2), 'revenue': Decimal(200), 'cost': Decimal(100)},
                  {'qty': Decimal(3), 'revenue': Decimal(1200), 'cost': Decimal(400)}]
