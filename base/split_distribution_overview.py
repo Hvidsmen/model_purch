@@ -61,6 +61,7 @@ def overview(scenario, section, filters):
             rows.append({'gid':gid,'cid':next(iter(group['channels']),''),'name':group['ref']['name'],
                          'channels':list(scenario.state['channels'].values()), 'quantity':sum(quantities.values(),Decimal(0)) if all(qty is not None for qty in quantities.values()) else None,
                          'status':powers, 'powers':[{'name':key,'share':power.get('share')} for key,power in group['powers'].items()],
+                         'source':group.get('distribution_sources',{}).get('powers'),
                          'channel_ids':set(group['channels'])})
             continue
         for cid,line in group['channels'].items():
@@ -75,6 +76,7 @@ def overview(scenario, section, filters):
             rows.append({'gid':gid,'cid':cid,'name':group['ref']['name'],'channel':scenario.state['channels'][cid]['name'],
                          'channel_ids':{cid}, 'quantity':qty,'status':status,'power_status':powers,
                          'by_quantity':by_quantity,'months':values})
+            rows[-1]['source'] = group.get('distribution_sources',{}).get('months:'+cid)
     counts = {key:sum(row['status']['key'] == key for row in rows) for key in ('ready','missing','invalid','not_required')}
     filtered = []
     for row in rows:

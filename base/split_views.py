@@ -72,15 +72,14 @@ def scenario(request, pk):
             if action == 'approve':
                 approve(item, request.user, request.POST.get('revision'), request.POST.get('acknowledge') == 'on')
             elif action == 'fact_distribution':
-                from .split_distribution_history import load_basis, proposal, apply_proposal, metadata
+                from .split_distribution_history import resolve_proposal, apply_proposal, metadata
                 if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
                     raise ValidationError('Обновите черновик перед загрузкой распределения.')
                 state = deepcopy(item.state)
                 target = state['groups'].get(gid)
                 if not target or cid not in target['channels']:
                     raise ValidationError('Выберите группу и канал.')
-                basis = load_basis(item,target,refresh=True)
-                values = proposal(item,target,state['channels'][cid]['name'],basis,distribution_section)
+                values,basis = resolve_proposal(item,target,state['channels'][cid]['name'],distribution_section,refresh=True)
                 apply_proposal(target,cid,distribution_section,values)
                 target.setdefault('distribution_sources',{})[distribution_section if distribution_section == 'powers' else 'months:'+cid] = metadata(basis)
                 persist(item,request.user,request.POST.get('revision'),state,'Распределение из факта за пять лет · '+distribution_section)
@@ -191,11 +190,10 @@ def scenario(request, pk):
     source_key = 'months:'+cid if distribution_section == 'months' else 'powers'
     distribution_basis = group.get('distribution_sources',{}).get(source_key)
     if tab == 'distribution' and distribution_edit and item.status == 'draft' and gid and cid and request.method == 'GET':
-        from .split_distribution_history import needs_default, load_basis, proposal, apply_proposal, metadata
+        from .split_distribution_history import needs_default, resolve_proposal, apply_proposal, metadata
         if needs_default(group,cid,distribution_section):
             try:
-                basis = load_basis(item,group)
-                values = proposal(item,group,item.state['channels'][cid]['name'],basis,distribution_section)
+                values,basis = resolve_proposal(item,group,item.state['channels'][cid]['name'],distribution_section)
                 group = deepcopy(group)
                 apply_proposal(group,cid,distribution_section,values)
                 distribution_basis = metadata(basis)
