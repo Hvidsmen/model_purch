@@ -128,6 +128,9 @@ def scenario(request, pk):
     hide_empty_history_years(historical)
     history_total = enrich_history(historical)
     matrix_totals = plan_totals(data, item.state)
+    plan_lines = {}
+    for line in data['lines']:
+        plan_lines.setdefault(line['gid'], {})[line['cid']] = line
     for historical_group in [*historical['groups'], history_total]:
         for year in historical_group['years']:
             year['by_channel'] = dict(zip(item.state['channels'], year['annual']))
@@ -164,12 +167,12 @@ def scenario(request, pk):
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'history': historical,
-        'history_total': history_total, 'matrix_totals': matrix_totals,
+        'history_total': history_total, 'matrix_totals': matrix_totals, 'plan_lines': plan_lines,
         'history_by_group': {row['gid']: row for row in historical['groups']},
-        'plan_channel_colspan': 3 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 2,
-        'history_channel_colspan': (3 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 2) + (len(historical['years']) if historical['snapshot'] else 0),
+        'plan_channel_colspan': 4 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 3,
+        'history_channel_colspan': (4 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 3) + (len(historical['years']) if historical['snapshot'] else 0),
         'history_total_colspan': 1 + (len(historical['years']) if historical['snapshot'] else 0),
-        'matrix_colspan': 3 + (3 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 2) * len(item.state['channels']) + (len(historical['years']) * (len(item.state['channels'])+1) if historical['snapshot'] else 0),
+        'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + (len(historical['years']) * (len(item.state['channels'])+1) if historical['snapshot'] else 0),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
