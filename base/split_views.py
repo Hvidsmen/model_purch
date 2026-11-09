@@ -124,6 +124,9 @@ def scenario(request, pk):
     data = evaluate(item)
     from .split_history import presentation as history_presentation
     historical = history_presentation(item)
+    from .split_matrix_totals import enrich_history, plan_totals
+    history_total = enrich_history(historical)
+    matrix_totals = plan_totals(data, item.state)
     group = item.state['groups'].get(gid, {'ref': {}, 'powers': {}, 'channels': {}, 'forecast': {}})
     selected_line = group['channels'].get(cid, {'months': {}})
     detail_rows = [row for row in data['shipments'] if row['group_key'] == group['ref'].get('source_key') and row['channel_id'] == cid]
@@ -155,9 +158,10 @@ def scenario(request, pk):
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'history': historical,
+        'history_total': history_total, 'matrix_totals': matrix_totals,
         'history_by_group': {row['gid']: row for row in historical['groups']},
         'plan_channel_colspan': 3 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 2,
-        'matrix_colspan': 2 + (3 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 2) * len(item.state['channels']),
+        'matrix_colspan': 3 + (3 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 2) * len(item.state['channels']),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
