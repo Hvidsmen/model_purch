@@ -124,7 +124,8 @@ def scenario(request, pk):
     data = evaluate(item)
     from .split_history import presentation as history_presentation
     historical = history_presentation(item)
-    from .split_matrix_totals import enrich_history, plan_totals
+    from .split_matrix_totals import enrich_history, plan_totals, hide_empty_history_years
+    hide_empty_history_years(historical)
     history_total = enrich_history(historical)
     matrix_totals = plan_totals(data, item.state)
     for historical_group in [*historical['groups'], history_total]:

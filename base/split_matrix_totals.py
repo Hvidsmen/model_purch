@@ -13,6 +13,19 @@ def aggregate(cells):
     return result
 
 
+def hide_empty_history_years(history):
+    """Filter display columns only; inspect months to retain offsetting sales/returns."""
+    if not history.get('snapshot'):
+        return
+    visible = {year['year'] for group in history['groups'] for year in group['years']
+               if any(cell.get(field) not in (None, 0)
+                      for cells in [year['annual'], *(month['cells'] for month in year['months'])]
+                      for cell in cells for field in ('qty', 'revenue', 'cost'))}
+    history['years'] = [year for year in history['years'] if year in visible]
+    for group in history['groups']:
+        group['years'] = [year for year in group['years'] if year['year'] in visible]
+
+
 def enrich_history(history):
     for group in history['groups']:
         for year in group['years']:

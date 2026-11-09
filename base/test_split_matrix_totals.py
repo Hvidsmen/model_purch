@@ -1,9 +1,29 @@
 from decimal import Decimal
 from django.test import SimpleTestCase
-from .split_matrix_totals import aggregate, enrich_history, plan_totals
+from .split_matrix_totals import aggregate, enrich_history, plan_totals, hide_empty_history_years
 
 
 class MatrixTotalsTests(SimpleTestCase):
+    def test_empty_year_columns_are_removed_but_offsetting_months_remain(self):
+        from copy import deepcopy
+        zero = {'qty': Decimal(0), 'revenue': Decimal(0), 'cost': Decimal(0)}
+        years = [{'year': year, 'annual': [deepcopy(zero)],
+                  'months': [{'cells': [deepcopy(zero)]} for _ in range(12)]} for year in (2024, 2025, 2026)]
+        years[1]['months'][0]['cells'][0]['qty'] = Decimal(5)
+        years[1]['months'][1]['cells'][0]['qty'] = Decimal(-5)
+        years[2]['annual'][0]['cost'] = Decimal(7)
+        history = {'snapshot': {'loaded_at':'test'}, 'years':[2024,2025,2026],
+                   'groups':[{'years':years}, {'years':deepcopy(years)}]}
+        hide_empty_history_years(history)
+        self.assertEqual(history['years'], [2025,2026])
+        self.assertTrue(all([year['year'] for year in group['years']] == [2025,2026] for group in history['groups']))
+        for group in history['groups']:
+            for year in group['years']:
+                year['annual'] = [deepcopy(zero)]
+                year['months'] = [{'cells':[deepcopy(zero)]} for _ in range(12)]
+        hide_empty_history_years(history)
+        self.assertEqual(history['years'], [])
+
     def test_fact_zero_is_blank_but_unknown_and_nonzero_are_preserved(self):
         from django.template.loader import render_to_string
         from .templatetags.split_format import fact_number, fact_cash
