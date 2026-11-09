@@ -37,7 +37,10 @@ def scenarios(request):
 
 def return_to(pk, tab, gid='', cid='', section='months'):
     from urllib.parse import urlencode
-    return reverse('split_scenario', args=[pk]) + '?' + urlencode({'tab': tab, 'group': gid, 'channel': cid, 'section':section})
+    query = {'tab': tab, 'group': gid, 'channel': cid, 'section':section}
+    if tab == 'distribution':
+        query['edit'] = '1'
+    return reverse('split_scenario', args=[pk]) + '?' + urlencode(query)
 
 
 @login_required
@@ -53,6 +56,8 @@ def scenario(request, pk):
     distribution_section = request.GET.get('section', 'months')
     if distribution_section not in ('months','powers'):
         distribution_section = 'months'
+    distribution_edit = request.GET.get('edit') == '1' or request.method == 'POST'
+    distribution_filters = {key:request.GET.get('filter_'+key,'').strip() for key in ('group','channel','status','q')}
     gid = request.POST.get('group') or request.GET.get('group') or next(iter(item.state['groups']), '')
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
@@ -185,7 +190,7 @@ def scenario(request, pk):
     basis_token, distribution_basis, distribution_warning = '', None, ''
     source_key = 'months:'+cid if distribution_section == 'months' else 'powers'
     distribution_basis = group.get('distribution_sources',{}).get(source_key)
-    if tab == 'distribution' and item.status == 'draft' and gid and cid and request.method == 'GET':
+    if tab == 'distribution' and distribution_edit and item.status == 'draft' and gid and cid and request.method == 'GET':
         from .split_distribution_history import needs_default, load_basis, proposal, apply_proposal, metadata
         if needs_default(group,cid,distribution_section):
             try:
@@ -216,6 +221,10 @@ def scenario(request, pk):
             'indoor_options': [model for model in power['models'] if model['kind'] == 'indoor'],
             'outdoor_options': [model for model in power['models'] if model['kind'] == 'outdoor']})
     comparison = None
+    distribution_overview = None
+    if tab == 'distribution':
+        from .split_distribution_overview import overview
+        distribution_overview = overview(item,distribution_section,distribution_filters)
     versions = SplitScenario.objects.filter(family=item.family).order_by('-version')
     compare_id = request.GET.get('compare') or (str(item.parent_id) if item.parent_id else '')
     if compare_id:
@@ -237,6 +246,7 @@ def scenario(request, pk):
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
+        'distribution_overview':distribution_overview,'distribution_edit':distribution_edit,'distribution_filters':distribution_filters,
         'basis_token':basis_token, 'distribution_warning':distribution_warning,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
         'detail_page': Paginator(detail_rows, 100).get_page(request.GET.get('page')),

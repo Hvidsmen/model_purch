@@ -96,7 +96,7 @@ class DistributionHistoryTests(TestCase):
     def test_default_is_read_only_until_saved_and_manual_values_are_not_replaced(self):
         original = deepcopy(self.scenario.state)
         with patch('base.split_distribution_history.load_basis',return_value=self.basis()):
-            response = self.client.get(self.url,{'tab':'distribution','section':'months'})
+            response = self.client.get(self.url,{'tab':'distribution','section':'months','edit':'1'})
         self.assertContains(response,'Сохранить распределение')
         self.assertNotContains(response,'name="share_0"')
         self.assertEqual(Decimal(response.context['months'][0]['value']),50)
@@ -110,7 +110,7 @@ class DistributionHistoryTests(TestCase):
         self.assertEqual(Decimal(self.scenario.state['groups'][self.gid]['channels'][self.cid]['months']['2027-01']),50)
         self.assertFalse(self.scenario.state['groups'][self.gid]['distribution_sources']['months:'+self.cid]['adjusted'])
         with patch('base.split_distribution_history.load_basis') as source:
-            self.client.get(self.url,{'tab':'distribution','section':'months'})
+            self.client.get(self.url,{'tab':'distribution','section':'months','edit':'1'})
             source.assert_not_called()
 
     def test_approved_and_stale_requests_never_query_source(self):
@@ -129,7 +129,7 @@ class DistributionHistoryTests(TestCase):
     def test_source_failure_leaves_manual_form_and_no_state_changes(self):
         original = deepcopy(self.scenario.state)
         with patch('base.split_distribution_history.load_basis',side_effect=ValidationError('Источник недоступен')):
-            response = self.client.get(self.url,{'tab':'distribution'})
+            response = self.client.get(self.url,{'tab':'distribution','edit':'1'})
         self.assertContains(response,'Источник недоступен')
         self.assertContains(response,'name="month_2027-01"')
         self.scenario.refresh_from_db()
