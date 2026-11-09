@@ -123,6 +123,7 @@ def scenario(request, pk):
             error = ' '.join(exc.messages)
     data = evaluate(item)
     from .split_history import presentation as history_presentation
+    historical = history_presentation(item)
     group = item.state['groups'].get(gid, {'ref': {}, 'powers': {}, 'channels': {}, 'forecast': {}})
     selected_line = group['channels'].get(cid, {'months': {}})
     detail_rows = [row for row in data['shipments'] if row['group_key'] == group['ref'].get('source_key') and row['channel_id'] == cid]
@@ -153,7 +154,8 @@ def scenario(request, pk):
     return render(request, 'base/split_scenario.html', {'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
-        'history': history_presentation(item),
+        'history': historical,
+        'history_by_group': {row['gid']: row for row in historical['groups']},
         'plan_channel_colspan': 3 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 2,
         'matrix_colspan': 2 + (3 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 2) * len(item.state['channels']),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,

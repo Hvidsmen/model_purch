@@ -1,0 +1,6 @@
+{% load report_format split_format %}
+{% for year in historical_group.years %}
+<tr class="split-history-year" data-history-year="{{ group_id }}-{{ year.year }}"><th colspan="2"><details data-history-toggle="{{ group_id }}-{{ year.year }}"><summary aria-label="Факт {{ year.year }} {{ g.ref.name }}: раскрыть месяцы">Факт {{ year.year }} <small>· месяцы</small></summary></details></th>
+{% for cell in year.annual %}<td colspan="{{ plan_channel_colspan }}">{% include 'base/_split_history_metrics.html' %}</td>{% endfor %}</tr>
+{% for month in year.months %}<tr class="split-history-month" data-history-month="{{ group_id }}-{{ year.year }}" hidden><th colspan="2">{{ month.month }}</th>{% for cell in month.cells %}<td colspan="{{ plan_channel_colspan }}">{% include 'base/_split_history_metrics.html' %}</td>{% endfor %}</tr>{% endfor %}
+{% endfor %}
