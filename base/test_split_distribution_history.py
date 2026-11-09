@@ -93,24 +93,24 @@ class DistributionHistoryTests(TestCase):
                    'share_0':'100','factor_0':'1','cost_0':'40','indoor_0':str(self.models[0].pk),'outdoor_0':str(self.models[1].pk)})
         self.assertEqual(state['groups'][self.gid]['channels'],old_months)
 
-    def test_default_is_read_only_until_saved_and_manual_values_are_not_replaced(self):
+    def test_preview_is_read_only_until_grid_saved_and_manual_values_are_not_replaced(self):
+        import json
         original = deepcopy(self.scenario.state)
         with patch('base.split_distribution_history.load_basis',return_value=self.basis()):
-            response = self.client.get(self.url,{'tab':'distribution','section':'months','edit':'1'})
-        self.assertContains(response,'Сохранить распределение')
-        self.assertNotContains(response,'name="share_0"')
-        self.assertEqual(Decimal(response.context['months'][0]['value']),50)
+            response = self.client.post(self.url,{'action':'preview_month_grid','revision':self.scenario.revision,'group':self.gid,'channel':self.cid})
+        self.assertEqual(response.status_code,200)
+        data = response.json()
+        self.assertEqual(Decimal(data['values']['2027-01']),50)
         self.scenario.refresh_from_db()
         self.assertEqual(self.scenario.state,original)
-        token = response.context['basis_token']
-        post = {'action':'distribution_months','revision':self.scenario.revision,'group':self.gid,'channel':self.cid,'basis_token':token,
-                **{'month_'+row['key']:row['value'] for row in response.context['months']}}
-        self.client.post(self.url+'?tab=distribution&section=months',post)
+        payload = [{'gid':self.gid,'cid':self.cid,'mode':'fact','unit':'percent','values':data['values'],'token':data['token']}]
+        response = self.client.post(self.url,{'action':'save_month_grid','revision':self.scenario.revision,'grid_payload':json.dumps(payload)})
+        self.assertEqual(response.status_code,200)
         self.scenario.refresh_from_db()
         self.assertEqual(Decimal(self.scenario.state['groups'][self.gid]['channels'][self.cid]['months']['2027-01']),50)
-        self.assertFalse(self.scenario.state['groups'][self.gid]['distribution_sources']['months:'+self.cid]['adjusted'])
+        self.assertFalse(self.scenario.state['groups'][self.gid]['distribution_sources']['months:'+self.cid].get('adjusted',False))
         with patch('base.split_distribution_history.load_basis') as source:
-            self.client.get(self.url,{'tab':'distribution','section':'months','edit':'1'})
+            self.client.get(self.url,{'tab':'distribution'})
             source.assert_not_called()
 
     def test_approved_and_stale_requests_never_query_source(self):
@@ -129,9 +129,9 @@ class DistributionHistoryTests(TestCase):
     def test_source_failure_leaves_manual_form_and_no_state_changes(self):
         original = deepcopy(self.scenario.state)
         with patch('base.split_distribution_history.load_basis',side_effect=ValidationError('Источник недоступен')):
-            response = self.client.get(self.url,{'tab':'distribution','edit':'1'})
-        self.assertContains(response,'Источник недоступен')
-        self.assertContains(response,'name="month_2027-01"')
+            response = self.client.post(self.url,{'action':'preview_month_grid','revision':self.scenario.revision,'group':self.gid,'channel':self.cid})
+        self.assertEqual(response.status_code,400)
+        self.assertIn('Источник недоступен',response.json()['error'])
         self.scenario.refresh_from_db()
         self.assertEqual(self.scenario.state,original)
 

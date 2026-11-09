@@ -182,6 +182,7 @@ def needs_default(group, cid, section):
 def apply_proposal(group, cid, section, values):
     if section == 'months':
         group['channels'][cid]['allocation'] = 'percent'
+        group['channels'][cid]['distribution_mode'] = 'fact'
         group['channels'][cid]['months'] = values
     else:
         for key,power in group['powers'].items():

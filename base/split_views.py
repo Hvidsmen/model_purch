@@ -6,7 +6,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.core import signing
 from django.core.paginator import Paginator
 from django.db import IntegrityError
-from django.http import HttpResponseBadRequest
+from django.http import HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.cache import never_cache
@@ -62,6 +62,18 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
+    if request.method == 'POST' and request.POST.get('action') in ('preview_month_grid','save_month_grid'):
+        try:
+            if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
+                raise ValidationError('Расчёт уже изменён или утверждён. Обновите страницу перед сохранением.')
+            from .split_month_grid import preview as month_preview, apply_grid
+            if request.POST['action'] == 'preview_month_grid':
+                return JsonResponse({'ok':True,**month_preview(item,gid,cid)})
+            state,count = apply_grid(item,request.POST.get('grid_payload',''))
+            persist(item,request.user,request.POST.get('revision'),state,f'Месяцы в таблице · сохранено строк: {count}')
+            return JsonResponse({'ok':True,'revision':item.revision})
+        except ValidationError as exc:
+            return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     error, preview, forecast = '', None, None
     if request.method == 'POST':
         action = request.POST.get('action')
@@ -189,7 +201,7 @@ def scenario(request, pk):
     basis_token, distribution_basis, distribution_warning = '', None, ''
     source_key = 'months:'+cid if distribution_section == 'months' else 'powers'
     distribution_basis = group.get('distribution_sources',{}).get(source_key)
-    if tab == 'distribution' and distribution_edit and item.status == 'draft' and gid and cid and request.method == 'GET':
+    if tab == 'distribution' and distribution_section == 'powers' and distribution_edit and item.status == 'draft' and gid and cid and request.method == 'GET':
         from .split_distribution_history import needs_default, resolve_proposal, apply_proposal, metadata
         if needs_default(group,cid,distribution_section):
             try:

@@ -95,7 +95,8 @@ class DistributionOverviewTests(TestCase):
         self.assertContains(response,'filter_status')
         self.assertContains(response,'Не все доли заполнены')
         self.assertNotContains(response,'name="month_2027-01"')
-        self.assertContains(response,'edit=1')
+        self.assertContains(response,'data-mode-button="manual"')
+        self.assertNotContains(response,'Настроить')
         response = self.client.get(self.url,{'tab':'distribution','filter_channel':self.cids[1]})
         self.assertContains(response,'data-distribution-row=',count=1)
         with self.assertRaises(ValidationError):
