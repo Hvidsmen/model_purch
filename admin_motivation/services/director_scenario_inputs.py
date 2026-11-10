@@ -33,7 +33,7 @@ def read_sources(plans, connector=None):
             cursor.execute("SELECT TOP(1) RunId,State_,Parameters_,CompletedAt FROM motivation.PortalMotivationRun WHERE JSON_VALUE(Parameters_,'$.variant')=? ORDER BY StartedAt DESC",variant)
             run=cursor.fetchone()
             if not run or run[1]!='completed':
-                raise ValidationError(f'Нужен последний успешно завершённый исходный расчёт {year} ({variant}).')
+                raise ValidationError(f'Для директорского расчёта нужен факт {year} из завершённого «'+('Пересчёт 2025' if year==2025 else 'Все кварталы 2026')+'» с выбранным планом. Подготовка продаж сама по себе не рассчитывает денежную базу и сегменты факта.')
             params=json.loads(run[2])
             if params.get('fact_year')!=year or str(params.get('plan_version','')).strip()!=plans[year].source_version.strip():
                 raise ValidationError(f'План {year} не совпадает с планом последнего исходного расчёта. Выберите тот же план или выполните исходный расчёт заново.')
@@ -60,15 +60,7 @@ def read_sources(plans, connector=None):
                     'positive':str(number(positive or 0)),'negative':str(number(negative or 0))})
             if not values:raise ValidationError(f'В исходном факте {year} нет строк Москвы/ТТ. Результат не подменяется нулём.')
             facts[year]=values
-        cursor.execute("""SELECT [Подразделение],[АвторСделки],[КварталМотивации],
- SUM(COALESCE([СуммаМотивацииUSD],0)),SUM(COALESCE([СуммаМотивацииUSDУчетПроцента],0)),SUM(COALESCE([Остаток],0))
- FROM motivation.ReportMotivationByDealAuthorTest2025
- WHERE [Год]=2025 AND LTRIM(RTRIM([ТипКоэф]))=N'Политики' AND [Подразделение] IN (?,?)
- GROUP BY [Подразделение],[АвторСделки],[КварталМотивации]""",*BRANCHES)
-        managers=[{'branch':row[0],'author':row[1],'period':row[2],
-                   'possible':str(number(row[3] or 0)),'paid':str(number(row[4] or 0)),
-                   'bonus':str(number(row[5] or 0))} for row in cursor.fetchall()]
-        return facts,managers,metadata
+        return facts,metadata
     finally:
         if connection is not None:connection.close()
 
