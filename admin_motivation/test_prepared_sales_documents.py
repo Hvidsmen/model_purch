@@ -1,7 +1,7 @@
 """Exercise the producer's actual attribute projection on synthetic documents."""
 import sqlite3
 from django.test import SimpleTestCase
-from .services.prepared_sales import DOCUMENT_VALUES,procedure_sql,DDL
+from .services.prepared_sales import DOCUMENT_VALUES,DOCUMENT_DOMINANCE,procedure_sql,DDL
 
 COLUMNS=('Ссылка','DocumentKey','Номенклатура','ВидЦены','ДаичиТипСкидкиНаДату',
  'даичи_ВидЦеныВходнаяСтоимостьНаименование','Даичи_АвторСделкиНаименование',
@@ -13,8 +13,11 @@ class PreparedDocumentValuesTests(SimpleTestCase):
         with sqlite3.connect(':memory:') as db:
             db.execute('CREATE TABLE document_sales ('+','.join('"'+key+'"' for key in COLUMNS)+')')
             db.executemany('INSERT INTO document_sales VALUES ('+','.join('?' for _ in COLUMNS)+')',rows)
-            projection=DOCUMENT_VALUES.split('INTO #portal_document_sales_values',1)[0]
+            projection=DOCUMENT_VALUES.split('INTO #portal_document_sales_values',1)[0].replace('ISNULL(', 'IFNULL(')
             db.execute('CREATE TABLE prepared_values AS '+projection+' FROM document_sales')
+            # Execute the real producer's dominance predicate with SQLite DELETE syntax.
+            predicate=DOCUMENT_DOMINANCE.split('DELETE d FROM #portal_document_sales_values d',1)[1]
+            db.execute('DELETE FROM prepared_values AS d '+predicate.replace('#portal_document_sales_values','prepared_values'))
             values=db.execute('SELECT * FROM prepared_values').fetchall()
             conflicts=db.execute('SELECT DocumentKey,Номенклатура FROM prepared_values GROUP BY DocumentKey,Номенклатура HAVING COUNT(*)>1').fetchall()
             return values,conflicts
@@ -41,10 +44,35 @@ class PreparedDocumentValuesTests(SimpleTestCase):
                 values,conflicts=self.project([self.base(),self.base(**{field:'Other'})])
                 self.assertEqual(len(values),2);self.assertEqual(conflicts,[('document-1','product-1')])
 
-    def test_nullable_author_and_delivery_are_not_silently_normalized(self):
-        for field in COLUMNS[6:9]:
+    def test_nullable_author_is_not_silently_normalized(self):
+        for field in COLUMNS[6:7]:
             with self.subTest(field=field):
                 values,conflicts=self.project([self.base(**{field:None}),self.base(**{field:''})])
+                self.assertEqual(len(values),2);self.assertTrue(conflicts)
+
+    def test_filled_delivery_wins_over_blank_without_changing_premium_inputs(self):
+        for method,terms in [('Pickup',''),('','Terms'),('Pickup','Terms')]:
+            with self.subTest(method=method,terms=terms):
+                values,conflicts=self.project([self.base(СпособДоставки=method,даичи_УсловияДоставки=terms),
+                    self.base(Ссылка='correction',СпособДоставки='',даичи_УсловияДоставки='')])
+                self.assertEqual(conflicts,[]);self.assertEqual(len(values),1)
+                self.assertEqual(values[0][2:6],('Retail','Promo','USD','Actor'))
+                self.assertEqual(values[0][6:],(method,terms))
+
+    def test_null_and_empty_delivery_are_both_missing(self):
+        values,conflicts=self.project([self.base(СпособДоставки=None,даичи_УсловияДоставки=None),
+            self.base(СпособДоставки='',даичи_УсловияДоставки='')])
+        self.assertEqual(len(values),1);self.assertEqual(conflicts,[])
+
+    def test_complementary_partial_rows_are_not_combined_into_an_invented_tuple(self):
+        values,conflicts=self.project([self.base(даичи_УсловияДоставки=''),self.base(СпособДоставки='')])
+        self.assertEqual(len(values),2);self.assertTrue(conflicts)
+
+    def test_delivery_completeness_never_overrides_a_different_price_or_author(self):
+        for field in COLUMNS[3:7]:
+            with self.subTest(field=field):
+                values,conflicts=self.project([self.base(СпособДоставки='',даичи_УсловияДоставки=''),
+                    self.base(**{field:'Other'})])
                 self.assertEqual(len(values),2);self.assertTrue(conflicts)
 
     def test_binary_delivery_references_keep_original_bytes(self):
