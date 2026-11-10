@@ -44,6 +44,23 @@ from .services.operation_audit import audit_request
 def gloabal_coeff(request, version_form=None):
     context = version_context(request, version_form)
     selected = context['selected_version']
+    if request.method == 'GET' and request.GET.get('export') == 'directors_xlsx':
+        from base.access import role_for, ADMIN, MODELER, DIRECTOR, MOTIVATION_VIEWER
+        from django.core.exceptions import PermissionDenied
+        from django.http import HttpResponse, Http404
+        from .services.director_coeff_export import director_coefficients_workbook
+        if role_for(request.user,'motivation') not in (ADMIN,MODELER,DIRECTOR,MOTIVATION_VIEWER):
+            raise PermissionDenied
+        if selected is None:
+            raise Http404('Нет версии коэффициентов для выгрузки.')
+        try:
+            content = director_coefficients_workbook(selected)
+        except ValidationError as exc:
+            messages.error(request,' '.join(exc.messages))
+            return redirect(reverse('global_coeff_admin_motivation')+'?version='+str(selected.pk))
+        response = HttpResponse(content,content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        response['Content-Disposition'] = f'attachment; filename="motivation-directors-v{selected.pk}.xlsx"'
+        return response
     from .services.coefficient_groups import global_matrix
     from .services.edit_history import history_context
     return render(request, 'admin_motivation/gloabal_coeff.html', {
