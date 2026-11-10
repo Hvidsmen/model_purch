@@ -258,7 +258,7 @@ def prepare(cursor, variant='main'):
     changed = isolate_sales(changed, cursor=cursor)
     from .prepared_sales import install as install_prepared_sales, patch as use_prepared_sales
     install_prepared_sales(cursor)
-    changed = use_prepared_sales(changed)
+    changed = use_prepared_sales(changed,cursor=cursor)
     import logging
     logging.getLogger(__name__).info('Calculation preparation scoped to fact year: %s; variant: %s', performance_marker in changed, variant)
     cursor.execute(changed)

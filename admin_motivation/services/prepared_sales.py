@@ -124,7 +124,7 @@ def signature(sql):
     return tuple(t if re.match(r"N?'",t) else t.strip('[]').casefold() for t in tokens if not t.startswith(('--','/*')))
 
 
-def patch(definition, *, historical_author=False):
+def patch(definition, *, historical_author=False, cursor=None):
     if MARKER in definition:return definition
     from .calculation_sales_isolation import SALES
     if WORKING_TABLE.casefold() not in mask_sql(definition).casefold() and not re.search(SALES,mask_sql(definition),re.I):
@@ -132,7 +132,8 @@ def patch(definition, *, historical_author=False):
     setup,stop=preparation_span(definition)
     body=definition[setup.end():stop]
     canonical=canonical_preparation();expected,end=preparation_span(canonical+'\n;WITH fact AS (SELECT 1)')
-    if signature(body)!=signature(canonical[expected.end():end]):
+    from .prepared_sales_compatibility import compatible
+    if not compatible(body,canonical[expected.end():end],cursor):
         raise ValidationError('Подготовка скидок в исходной процедуре отличается от общего набора. Требуется проверка совместимости; исходная процедура не изменена.')
     original_where=definition[setup.start():setup.end()]
     where=re.search(r'\bWHERE\s+([^;]+);',original_where,re.I)[1]
