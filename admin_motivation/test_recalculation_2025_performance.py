@@ -109,7 +109,7 @@ class Performance2025Tests(SimpleTestCase):
         job=SimpleNamespace(key='job',variant='test_2025',fact_year=2025,plan_version='Plan',
             quarter_share=80,year_share=20,payout_threshold='.8',recalculation_2025=SimpleNamespace(source_sha256='hash'))
         connection,cursor=MagicMock(),MagicMock()
-        cursor.fetchone.side_effect=[(0,),('job','completed','fact25-plan25-v1',json.dumps(parameters(job)))]
+        cursor.fetchone.side_effect=[(0,),('job','completed','fact25-plan25-v2-minimum-fallback',json.dumps(parameters(job)))]
         cursor.fetchall.side_effect=[
             [('Политики','Branch','Author','2 Квартал(1-2 кв)',0,0)],
             [detail()],[('Политики','Branch','Author',2,100,100,70)]]
