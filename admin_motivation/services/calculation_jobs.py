@@ -95,6 +95,17 @@ def calculation_command(job, follow_up=None, *, locked=True, include_separate=Tr
     from .execution_tracking import tracked_statement
     from .calculation_pipeline import validate_pair, main_projection, cache_setup, scoped
     variant = variant_of(job)
+    if variant == 'test_2025':
+        import json
+        from .recalculation_2025 import KINDS
+        saved = getattr(job, 'recalculation_2025', None)
+        if saved is None:
+            raise ValidationError('Для задания 2025 не загружен файл коэффициентов.')
+        records = [dict(planning=r['planning'], goods=r['goods'], brand='' if r['brand']=='*' else r['brand'],
+                        kind=kind, **{f'k{i}': r[kind][i] for i in range(5)})
+                   for r in saved.coefficients for kind in KINDS]
+        payload = json.dumps(records, ensure_ascii=False).replace("'", "''")
+        statement = statement.rstrip(';') + ", @Test2025Coefficients=N'" + payload + "';"
     optimized = follow_up is not None and variant == 'main' and job.fact_year == 2026
     if optimized:
         validate_pair(job, follow_up)
@@ -138,6 +149,10 @@ def validate_sql_parameters(cursor, job):
     cursor.execute('SELECT TOP (1) 1 FROM planning.PlanSales WHERE Version_=?', job.plan_version.strip())
     if not cursor.fetchone():
         raise ValidationError('Указанная версия плана не найдена в MS SQL planning.PlanSales. Проверьте точное название.')
+    if variant_of(job) == 'test_2025':
+        cursor.execute("SELECT TOP(1) 1 FROM planning.PlanSales WHERE Version_=? AND Date_>='20250101' AND Date_<'20260101'", job.plan_version.strip())
+        if not cursor.fetchone():
+            raise ValidationError('В выбранной версии нет плана за 2025 год. Выберите план 2025.')
 
 
 def job_name(job):
@@ -149,6 +164,9 @@ def quote(name):
 
 
 def prepare(cursor, variant='main'):
+    if variant == 'test_2025':
+        from .recalculation_2025_sql import prepare as prepare_2025
+        return prepare_2025(cursor)
     from .calculation_variants import procedure, MAIN, ALL_2026, SEPARATE_2026, isolate, full_year_patch
     proc = procedure(variant)
     cursor.execute("SELECT OBJECT_DEFINITION(OBJECT_ID(N'motivation.sp_CalcBySub')), OBJECT_ID(?)", proc)
@@ -208,6 +226,8 @@ def prepare(cursor, variant='main'):
     changed = parameterize(changed)
     from .director_participation import patch as include_director_subdivisions
     changed = include_director_subdivisions(changed)
+    from .sales_participation import patch as include_sales_channels
+    changed = include_sales_channels(changed)
     from ..models import SubdivisionManagerCoeff
     if SubdivisionManagerCoeff.objects.filter(version__status='approved').exists():
         from .manager_correction import patch
@@ -429,3 +449,4 @@ def sync_merge_configuration(connector=None):
     for log in SubdivisionMergeLog.objects.all():
         log.details = {**log.details, 'sql_synced': True}
         log.save(update_fields=['details'])
+

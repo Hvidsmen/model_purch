@@ -6,7 +6,7 @@ from .pilot_formula import mask_sql
 MOSCOW = 'Д-Москва'
 THERMOTRADE = 'ТЕРМОТРЕЙД'
 SEPARATE = 'separate_2026'
-RULE_VERSION = 'moscow-tt-q4-heat-v1'
+RULE_VERSION = 'moscow-tt-q4-policy-heat-sales-dpp-v2'
 
 
 def patch(definition):
@@ -18,10 +18,10 @@ def patch(definition):
     at = deletes[0].start()
     from .heat_exclusion import predicate as heat_predicate
     definition = definition[:at] + """
--- Approved 2026 transition: HEAT excluded for politicians and sales only.
+-- Approved 2026 transition: HEAT excluded for policies; sales include HEAT and DPP.
 DELETE FROM #pf_base WHERE [Год]=2026
  AND {heat}
- AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики',N'Продажи');
+ AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики');
 """.format(heat=heat_predicate('[ГруппаПлановПродаж]')) + definition[at:]
     # Restrict the input set BEFORE window functions, for both the Q4 and
     # annual output SELECT. Never filter already-calculated annual windows.
@@ -67,3 +67,4 @@ def separate_coefficients(definition):
             'c.Subdivision=COALESCE((SELECT m.TargetName FROM motivation.PortalSubdivisionMerge m WHERE m.SourceName='
             +column+'),'+column+')')
     return definition
+

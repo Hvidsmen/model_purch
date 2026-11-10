@@ -235,7 +235,7 @@
         </details>
     </li>
 {% endif %}
-    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports_next' or request.resolver_match.url_name == 'motivation_report_next' or request.resolver_match.url_name == 'motivation_report_all_2026' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
+    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports_next' or request.resolver_match.url_name == 'motivation_report_next' or request.resolver_match.url_name == 'motivation_report_2025' or request.resolver_match.url_name == 'motivation_report_all_2026' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
 {% if portal_can_administer_motivation %}
     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}" href="{% url 'loader_motive' %}">Выгрузка в DWH</a></li>
 {% endif %}
@@ -251,8 +251,8 @@
 {% endblock %}
 {% block portal_content %}
 <div class="content-wrapper{% if portal_motivation_readonly %} motivation-viewer{% endif %}">
-    {% if portal_motivation_readonly and request.resolver_match.url_name != 'motivation_report_next' and request.resolver_match.url_name != 'motivation_reports_next' and request.resolver_match.url_name != 'motivation_report_all_2026' and request.resolver_match.url_name != 'index_admin_motivation' %}<p class="viewer-notice" role="status">{{ portal_role_label }} · Мотивация · Только просмотр. Изменение коэффициентов недоступно.{% if portal_can_review_motivation %} Согласование и утверждение — в разделе «На проверке».{% endif %}</p>{% endif %}
-    {% if not skip_motivation_workflow and not portal_reports_only and not portal_financier and request.resolver_match.url_name != 'motivation_report_next' and request.resolver_match.url_name != 'motivation_reports_next' and request.resolver_match.url_name != 'motivation_report_all_2026' %}{% if request.resolver_match.url_name != 'index_admin_motivation' or portal_can_edit_motivation %}{% motivation_workflow as workflow %}{% include "admin_motivation/_workflow.html" %}{% endif %}{% endif %}
+    {% if portal_motivation_readonly and request.resolver_match.url_name != 'motivation_report_next' and request.resolver_match.url_name != 'motivation_reports_next' and request.resolver_match.url_name != 'motivation_report_2025' and request.resolver_match.url_name != 'motivation_report_all_2026' and request.resolver_match.url_name != 'index_admin_motivation' %}<p class="viewer-notice" role="status">{{ portal_role_label }} · Мотивация · Только просмотр. Изменение коэффициентов недоступно.{% if portal_can_review_motivation %} Согласование и утверждение — в разделе «На проверке».{% endif %}</p>{% endif %}
+    {% if not skip_motivation_workflow and not portal_reports_only and not portal_financier and request.resolver_match.url_name != 'motivation_report_next' and request.resolver_match.url_name != 'motivation_reports_next' and request.resolver_match.url_name != 'motivation_report_2025' and request.resolver_match.url_name != 'motivation_report_all_2026' %}{% if request.resolver_match.url_name != 'index_admin_motivation' or portal_can_edit_motivation %}{% motivation_workflow as workflow %}{% include "admin_motivation/_workflow.html" %}{% endif %}{% endif %}
     {% if coefficient_attempt %}{{ coefficient_attempt|json_script:'coefficient-attempt' }}{% endif %}
     {% block content %}
     {% endblock content %}
@@ -268,3 +268,4 @@
 
 
 {% endblock %}
+

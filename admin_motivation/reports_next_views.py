@@ -10,6 +10,7 @@ from django.urls import reverse
 from django.views.decorators.http import require_GET
 from base.access import role_for, REPORT_ROLES, ADMIN, BRANCH_DIRECTOR, DEPUTY_DIRECTOR
 from .services.calculation_variants import main_runs
+from .services.transition_2026 import RULE_VERSION
 from .models import MotivationExecution, SalesPlanScenario, Subdivision
 from .services import reports_next as reports
 
@@ -17,8 +18,10 @@ from .services import reports_next as reports
 @require_GET
 def index(request):
     from .services.all_2026_access import can_view
+    from .reports_2025 import can_view as can_view_2025
     return render(request, 'admin_motivation/reports_next/index.html', {
-        'catalog': reports.available(request.user), 'can_view_all_2026': can_view(request.user)})
+        'catalog': reports.available(request.user), 'can_view_all_2026': can_view(request.user),
+        'can_view_2025': can_view_2025(request.user)})
 
 
 def report_navigation(user, kind, query):
@@ -218,7 +221,7 @@ def report(request, kind):
     query.setdefault('director_scope', 'active')
     query.setdefault('currency', 'USD')
     query.setdefault('period', 'all')
-    moscow_only = bool(selected and selected.parameters.get('transition_rule') == 'moscow-tt-q4-heat-v1')
+    moscow_only = bool(selected and str(selected.parameters.get('transition_rule') or '').startswith('moscow-tt-q4-'))
     if moscow_only:
         from .services.calculation_scope import restrict_report
         try:
@@ -343,7 +346,7 @@ def report(request, kind):
     all_types = [all_types] if isinstance(all_types, str) else all_types
     from .services.product_filters import fields as product_fields
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.available(request.user)[kind][0],
-        'premium_rule_outdated': bool(kind != 'executive' and selected and (selected.parameters.get('premium_amount_quarters') != [4] or selected.parameters.get('transition_rule') != 'moscow-tt-q4-heat-v1')),
+        'premium_rule_outdated': bool(kind != 'executive' and selected and (selected.parameters.get('premium_amount_quarters') != [4] or selected.parameters.get('transition_rule') != RULE_VERSION)),
         'employee_report': employee_report, 'employee_filters': employee_filters, 'employee_authors': employee_authors,
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
@@ -352,4 +355,5 @@ def report(request, kind):
         'report_navigation': report_navigation(request.user, kind, query),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})
+
 

@@ -59,7 +59,8 @@ class TransitionSqlTests(SimpleTestCase):
         sales = grouped_sql('SELECT * FROM input', 'Продажи')
         directors = grouped_sql('SELECT * FROM input', 'Директора')
         self.assertIn("N'HEAT'", politicians)
-        self.assertIn("N'HEAT'", sales)
+        self.assertNotIn("N'HEAT'", sales)
+        self.assertNotIn("pf.[Канал]<>N'ДПП'", sales)
         self.assertNotIn("N'HEAT'", directors)
 
     def test_unknown_output_shape_fails_closed(self):
@@ -128,7 +129,7 @@ class TransitionPreparationTests(TestCase):
                 calculation_jobs.prepare(cursor, variant)
                 sql = cursor.execute.call_args.args[0]
                 self.assertEqual(sql.count('FROM #pf_base WHERE (Квартал=4 OR @FactYear<>2026)'), 0 if variant == 'separate_2026' else 2)
-                self.assertIn("[ТипКоэф])) IN (N'Политики',N'Продажи')", sql)
+                self.assertIn("[ТипКоэф])) IN (N'Политики')", sql)
                 self.assertIn('motivation.ReportMotivationByDealAuthor'+suffix, sql)
                 self.assertIn('motivation.AnnualAccrual'+suffix, sql)
                 view = next(call.args[0] for call in cursor.execute.call_args_list if call.args[0].startswith('ALTER VIEW'))
@@ -153,3 +154,4 @@ class TransitionPreparationTests(TestCase):
         self.assertIn('motivation.PortalCalcSeparate2026',command)
         self.assertIn('separate_2026',command)
         self.assertEqual(command.count('sp_getapplock'),1)
+

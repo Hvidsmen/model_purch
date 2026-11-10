@@ -1,4 +1,5 @@
 """Independent 2026 calculation and scoped report; main result tables stay intact."""
+from .services.transition_2026 import RULE_VERSION
 import logging
 from decimal import Decimal
 from django.contrib import messages
@@ -219,5 +220,6 @@ def report(request):
         'job': job, 'pending': pending, 'execution': execution, 'data': data, 'ledger': data,
         'annual_accrual_requires_recalculation': bool(execution and execution.parameters.get('annual_accrual_source') != SNAPSHOT_VERSION),
         'presentation': presentation, 'periods': [{'code': code, 'label': label, 'selected': not query.getlist('period') or code in query.getlist('period')} for code, label in [('1','I квартал'),('2','II квартал'),('3','III квартал'),('4','IV квартал'),('5','Год')] if variant != 'separate_2026' or code in '123'],
-        'rule_outdated': bool(execution and execution.parameters.get('transition_rule') != 'moscow-tt-q4-heat-v1'), 'scenario': query.get('scenario','combined'), 'product_filter_fields': product_fields(query), 'branches': branches, 'selected_subdivisions': query.getlist('subdivision'), 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
+        'rule_outdated': bool(execution and execution.parameters.get('transition_rule') != RULE_VERSION), 'scenario': query.get('scenario','combined'), 'product_filter_fields': product_fields(query), 'branches': branches, 'selected_subdivisions': query.getlist('subdivision'), 'kinds': kinds, 'selected_types': query.getlist('type'), 'page_query': query.urlencode(), 'export_url': '?' + params.urlencode(),
     })
+
