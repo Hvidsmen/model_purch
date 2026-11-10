@@ -1,4 +1,4 @@
-"""Read verified source runs and recover original branches before any scenario merge."""
+"""Read verified 2025 Fact and prepared 2026 sales before any branch merge."""
 import json
 from decimal import Decimal
 from django.core.exceptions import ValidationError
@@ -7,7 +7,7 @@ from .transition_2026 import MOSCOW, THERMOTRADE
 from .sales_plans import number, SEGMENTS
 
 BRANCHES=(MOSCOW,THERMOTRADE)
-SOURCES={2025:('test_2025','FactTest2025'),2026:('all_2026','FactAll2026')}
+SOURCES={2025:('test_2025','FactTest2025')}
 
 
 def norm(value):
@@ -18,7 +18,9 @@ def branch_name(value):
     return next((name for name in BRANCHES if norm(value)==norm(name)),None)
 
 
-def read_sources(plans, connector=None):
+def read_sources(plans, version, connector=None):
+    from .director_prepared_fact import settings_for, read_fact
+    settings=settings_for(plans[2026])
     connection=None
     try:
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
@@ -27,13 +29,13 @@ def read_sources(plans, connector=None):
         row=cursor.fetchone()
         if not row or row[0]<0:raise ValidationError('Сейчас выполняется исходный расчёт. Дождитесь завершения.')
         cursor.execute("SELECT OBJECT_ID(N'motivation.PortalMotivationRun')")
-        if not cursor.fetchone()[0]:raise ValidationError('Сначала выполните исходные расчёты 2025 и «Все кварталы 2026».')
+        if not cursor.fetchone()[0]:raise ValidationError('Сначала выполните «Пересчёт 2025» с выбранным планом.')
         facts,metadata={},{}
         for year,(variant,table) in SOURCES.items():
             cursor.execute("SELECT TOP(1) RunId,State_,Parameters_,CompletedAt FROM motivation.PortalMotivationRun WHERE JSON_VALUE(Parameters_,'$.variant')=? ORDER BY StartedAt DESC",variant)
             run=cursor.fetchone()
             if not run or run[1]!='completed':
-                raise ValidationError(f'Для директорского расчёта нужен факт {year} из завершённого «'+('Пересчёт 2025' if year==2025 else 'Все кварталы 2026')+'» с выбранным планом. Подготовка продаж сама по себе не рассчитывает денежную базу и сегменты факта.')
+                raise ValidationError('Для варианта 2025 нужен факт из завершённого «Пересчёт 2025» с выбранным планом. Для 2026 предварительный расчёт премий не требуется.')
             params=json.loads(run[2])
             if params.get('fact_year')!=year or str(params.get('plan_version','')).strip()!=plans[year].source_version.strip():
                 raise ValidationError(f'План {year} не совпадает с планом последнего исходного расчёта. Выберите тот же план или выполните исходный расчёт заново.')
@@ -60,6 +62,7 @@ def read_sources(plans, connector=None):
                     'positive':str(number(positive or 0)),'negative':str(number(negative or 0))})
             if not values:raise ValidationError(f'В исходном факте {year} нет строк Москвы/ТТ. Результат не подменяется нулём.')
             facts[year]=values
+        facts[2026],metadata['2026']=read_fact(cursor,version,BRANCHES,settings)
         return facts,metadata
     finally:
         if connection is not None:connection.close()

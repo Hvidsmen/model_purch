@@ -63,11 +63,13 @@ def workbook(snapshot):
         {'name':'Факт = план','value':'Оборот заменяется планом с сегментами O0–O4; условия выполнения проверяются заново'},
         {'name':'2026 I–III кварталы','value':'Годовая часть показана как начисленная, в выплату не включена. IV квартал не рассчитывается'},
         {'name':'Поправки','value':'Поправки подразделения по периодам взяты из выбранной версии модели 2026'},
-        {'name':'Менеджеры 2025','value':'Сохранённые выплаты Политики из исходного пересчёта 2025, без применения директорских ставок'},
+        {'name':'Участники 2025','value':'Только два получателя директорских ставок; собственные премии источников ставок не включены'},
         {'name':'Порог','value':'I квартал без порога; II — I+II; III — III; IV и год — весь год; неположительный план не определяет выполнение'}]
     for case in data['scenarios']:parameters.append({'name':f"Вариант {case['id']}",'value':case['title']})
     for year,source in data['sources'].items():
-        parameters.append({'name':f'Источник {year}','value':f"{source['run_id']} · {source['completed_at']} · план {data['plans'][year]['source_version']}"})
+        parameters.append({'name':f'Источник {year}','value':f"{source.get('source','Исходный расчёт')} · {source['run_id']} · {source['completed_at']} · план {data['plans'][year]['source_version']}"})
+        for item in source.get('discount_segments',[]):
+            parameters.append({'name':f"{year}: сегменты {item['type_discount']}",'value':'; '.join(f'{k}={v}' for k,v in item.items() if k!='type_discount')})
         for key,value in source['parameters'].items():parameters.append({'name':f'{year}: {key}','value':str(value)})
     table(book,'Параметры',[('name','Параметр'),('value','Значение')],parameters)
     book['Параметры'].column_dimensions['B'].width=110;book['Параметры'].freeze_panes='A2'
