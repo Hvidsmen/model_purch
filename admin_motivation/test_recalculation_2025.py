@@ -95,7 +95,7 @@ class Recalculation2025UnitTests(SimpleTestCase):
         self.assertEqual(sections[0]['bonus'],Decimal('3.50'))
         self.assertEqual(sections[0]['values'][4],20)
         b = load_workbook(workbook(sections),data_only=False)
-        self.assertEqual(b.sheetnames,['1. Политики','2. Продажи'])
+        self.assertEqual(b.sheetnames,['1. Политики','2. Продажи','3. Выполнение политик','4. Выполнение продаж'])
         self.assertEqual(b.worksheets[0].cell(2,2).value,'Сотрудник')
         self.assertEqual(b.worksheets[0].cell(b.worksheets[0].max_row,9).value,38.5)
         self.assertEqual(b.worksheets[0].cell(b.worksheets[0].max_row,8).value,3.5)
@@ -236,7 +236,7 @@ from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS')=='1','Optional Chromium check')
 class Recalculation2025BrowserTests(StaticLiveServerTestCase):
-    def test_tabs_totals_and_two_sheet_download(self):
+    def test_tabs_totals_and_four_sheet_download(self):
         from playwright.sync_api import sync_playwright, expect
         from django.conf import settings
         from types import SimpleNamespace
@@ -247,6 +247,12 @@ class Recalculation2025BrowserTests(StaticLiveServerTestCase):
         Motivation2025Input.objects.create(job=job,coefficients=rates,source_name='coeffs.xlsx',source_sha256=sha)
         sections=summary([('Политики','Д-Москва','Иванов','1 Квартал',100),
             ('Политики','ТЕРМОТРЕЙД','Петров','Год',50),('Продажи','Д-Москва','Продажи','Год',70)])
+        from .services.recalculation_2025_performance import explain
+        rows = explain([
+            ('Политики','Д-Москва','Иванов','PG','G','B','Подразделение(Глобально)','1 Квартал',100,100,100,100,0),
+            ('Продажи','Д-Москва','Продажи','PG','G','B','Подразделение','Год',100,90,70,70,0)], [], '.8')
+        for section in sections:
+            section['performance'] = [row for row in rows if row['kind'] == section['kind']]
         with patch('admin_motivation.reports_2025.read_results',return_value=sections), patch(
                 'admin_motivation.services.execution_tracking.observe',return_value=SimpleNamespace(state='completed')):
             with sync_playwright() as playwright:
@@ -264,11 +270,13 @@ class Recalculation2025BrowserTests(StaticLiveServerTestCase):
                 expect(page.get_by_role('heading',name='Продажи · USD')).to_be_visible()
                 expect(page.get_by_role('columnheader',name='Сотрудник',exact=True)).to_have_count(0)
                 with page.expect_download() as pending:
-                    page.get_by_role('link',name='Скачать Excel · оба листа').click()
+                    page.get_by_role('link',name='Скачать Excel · 4 листа').click()
                 download=pending.value
                 self.assertEqual(download.suggested_filename,'motivation-2025-usd.xlsx')
                 book=load_workbook(BytesIO(Path(download.path()).read_bytes()))
-                self.assertEqual(book.sheetnames,['1. Политики','2. Продажи'])
+                self.assertEqual(book.sheetnames,['1. Политики','2. Продажи','3. Выполнение политик','4. Выполнение продаж'])
                 self.assertEqual(book.worksheets[0].cell(book.worksheets[0].max_row,9).value,150)
                 self.assertEqual(book.worksheets[1].cell(book.worksheets[1].max_row,8).value,70)
+                self.assertEqual(book.worksheets[2].cell(4,10).value,1)
+                self.assertEqual(book.worksheets[3].cell(4,9).value,.9)
                 browser.close()

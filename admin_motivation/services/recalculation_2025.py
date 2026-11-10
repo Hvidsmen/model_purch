@@ -142,5 +142,7 @@ def workbook(sections):
             sheet.column_dimensions[get_column_letter(index)].width = 42 if policies and index == 2 else 26
         sheet.freeze_panes = 'C3' if policies else 'B3'
         sheet.auto_filter.ref = f'A2:{sheet.cell(2, len(labels)).column_letter}{max(2, sheet.max_row - 1)}'
+    from .recalculation_2025_performance import append_sheets
+    append_sheets(book, sections)
     output = BytesIO(); book.save(output); output.seek(0)
     return output
