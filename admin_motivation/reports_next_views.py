@@ -21,7 +21,7 @@ def index(request):
     from .reports_2025 import can_view as can_view_2025
     return render(request, 'admin_motivation/reports_next/index.html', {
         'catalog': reports.available(request.user), 'can_view_all_2026': can_view(request.user),
-        'can_view_2025': can_view_2025(request.user)})
+        'can_view_2025': can_view_2025(request.user), 'can_view_integral_2026': can_view_2025(request.user)})
 
 
 def report_navigation(user, kind, query):
@@ -355,5 +355,6 @@ def report(request, kind):
         'report_navigation': report_navigation(request.user, kind, query),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})
+
 
 

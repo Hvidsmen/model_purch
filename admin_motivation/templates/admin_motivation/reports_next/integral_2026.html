@@ -1,0 +1,26 @@
+{% extends 'admin_motivation/base.html' %}{% load static %}{% block content %}
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}">
+<section class="content nr-page">
+{% include 'admin_motivation/reports_next/_tabs.html' %}
+<p><a href="{% url 'motivation_reports' %}">← Все отчёты</a></p>
+<h1>Интегральные коэффициенты · План 2026</h1>
+<p>Два коэффициента: «Политики + Продажи» и «Директора». Каждый равен расчётной премии / плану подразделения.</p>
+<p>Выбранная версия коэффициентов применяется ко всем строкам плана за 2026 год. Полная расчётная премия без порогов фактической выплаты и ограничения IV кварталом. Директора — сумма премий действующих привязанных директоров.</p>
+{% if error %}<div class="next-error" role="alert">{{ error }}</div>{% endif %}
+{% if can_calculate %}<details class="next-note" {% if not snapshot or form.errors or error %}open{% endif %}><summary>{% if snapshot %}Рассчитать заново{% else %}Подготовить расчёт{% endif %}</summary>
+<form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Рассчитать и сохранить</button></form></details>{% endif %}
+{% if snapshot %}
+<div class="next-note"><strong>Сохранённый расчёт № {{ snapshot.pk }}</strong> · {{ snapshot.created_at|date:"d.m.Y H:i" }}<br>
+План: {{ data.metadata.scenario }} · {{ data.metadata.source_version }}<br>
+Коэффициенты: {{ data.metadata.coefficient_version }} · с {{ data.metadata.coefficient_effective_from }} · ревизия {{ data.metadata.coefficient_revision }}<br>
+{{ data.metadata.scope }}. Учтённые месяцы: {{ data.metadata.months|join:', ' }}.</div>
+<p><a class="btn btn-outline-primary" href="?calculation={{ snapshot.pk }}&amp;export=xlsx">Скачать Excel</a></p>
+<div style="overflow:auto"><table class="next-table"><thead><tr><th>Подразделение</th><th>План, USD</th><th>Премия Политики + Продажи, USD</th><th>Коэффициент Политики + Продажи</th><th>Премия директоров, USD</th><th>Коэффициент Директора</th><th>Действующих директоров</th><th>Примечание</th></tr></thead><tbody>
+{% for row in data.rows %}<tr><td>{{ row.branch }}</td><td class="num">{{ row.plan|floatformat:2 }}</td><td class="num">{% if row.combined != None %}{{ row.combined|floatformat:2 }}{% else %}—{% endif %}</td><td class="num">{% if row.combined_percent != None %}{{ row.combined_percent|floatformat:4 }}%{% else %}—{% endif %}</td><td class="num">{% if row.directors != None %}{{ row.directors|floatformat:2 }}{% else %}—{% endif %}</td><td class="num">{% if row.directors_percent != None %}{{ row.directors_percent|floatformat:4 }}%{% else %}—{% endif %}</td><td>{{ row.director_count }}</td><td>{{ row.notes|join:'; ' }}</td></tr>{% endfor %}
+<tr style="background:#f1edff;font-weight:600"><td>Итого</td><td>{{ data.total.plan|floatformat:2 }}</td><td>{% if data.total.combined != None %}{{ data.total.combined|floatformat:2 }}{% else %}—{% endif %}</td><td>{% if data.total.combined_percent != None %}{{ data.total.combined_percent|floatformat:4 }}%{% else %}—{% endif %}</td><td>{% if data.total.directors != None %}{{ data.total.directors|floatformat:2 }}{% else %}—{% endif %}</td><td>{% if data.total.directors_percent != None %}{{ data.total.directors_percent|floatformat:4 }}%{% else %}—{% endif %}</td><td>{{ data.total.director_count }}</td><td>Коэффициент итога = сумма премий / сумма плана</td></tr>
+</tbody></table></div>
+<p>Недостающие ставки не выдаются за ноль. Применение минимальных ставок отмечается в примечании. Нулевой план означает, что коэффициент не определён. Количество директоров в итоге — уникальные сотрудники.</p>
+<details><summary>Расшифровка директоров</summary>{% for row in data.rows %}{% if row.staff %}<h3>{{ row.branch }}</h3><table class="next-table"><thead><tr><th>Директор</th><th>Расчётная премия, USD</th></tr></thead><tbody>{% for person in row.staff %}<tr><td>{{ person.name }}</td><td>{% if person.premium != None %}{{ person.premium|floatformat:2 }}{% else %}Нет коэффициентов{% endif %}</td></tr>{% endfor %}</tbody></table>{% endif %}{% endfor %}</details>
+{% else %}<p>Выберите загруженный план 2026 года и утверждённую версию коэффициентов. Результат сохранится отдельно от расчётов фактической премии.</p>{% endif %}
+{% if history %}<details><summary>Сохранённые расчёты</summary><ul>{% for item in history %}<li><a href="?calculation={{ item.pk }}">№ {{ item.pk }} · {{ item.created_at|date:"d.m.Y H:i" }}</a></li>{% endfor %}</ul></details>{% endif %}
+</section>{% endblock %}
