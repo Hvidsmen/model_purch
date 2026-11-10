@@ -1,4 +1,4 @@
-from . import reports_integral_2026, reports_2025, editor_views, reports_next_views, reports_all_2026, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
+from . import reports_director_scenarios, reports_integral_2026, reports_2025, editor_views, reports_next_views, reports_all_2026, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 from . import report_navigation_views
 
@@ -6,6 +6,7 @@ urlpatterns = [
     path('coefficients/editor/check/',editor_views.check,name='motivation_editor_check'),
     path('coefficients/history/<int:log_id>.csv', operation_views.coefficient_edit_log, name='motivation_coefficient_edit_log'),
     path('reports-next/', report_navigation_views.catalog, name='motivation_reports_next'),
+    path('reports-next/director-scenarios/', reports_director_scenarios.report, name='motivation_report_director_scenarios'),
     path('reports-next/integral-2026/', reports_integral_2026.report, name='motivation_report_integral_2026'),
     path('reports-next/year-2025/', reports_2025.report, name='motivation_report_2025'),
     path('reports-next/year-2026/', reports_all_2026.report, name='motivation_report_all_2026'),

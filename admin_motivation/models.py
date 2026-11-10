@@ -923,3 +923,13 @@ class IntegralPlan2026Calculation(models.Model):
         ordering = ['-pk']
 
 
+class DirectorScenarioComparison(models.Model):
+    plan_2025 = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT, related_name='director_comparisons_2025')
+    plan_2026 = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT, related_name='director_comparisons_2026')
+    coefficient_version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
+    configuration = models.JSONField()
+    results = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-pk']

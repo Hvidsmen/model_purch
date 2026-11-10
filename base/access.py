@@ -123,7 +123,7 @@ def motivation_viewer_read_request(request):
 def financier_read_request(request):
     """Finance can only read approved branch settings, discount segments and reports."""
     match = request.resolver_match
-    if match and match.url_name == 'motivation_report_integral_2026':
+    if match and match.url_name in {'motivation_report_integral_2026', 'motivation_report_director_scenarios'}:
         # Derived report snapshots only; the view never changes coefficient/plan inputs.
         return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
     if match and match.url_name in {'motivation_reviews', 'motivation_review'}:
