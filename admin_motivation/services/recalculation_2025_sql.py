@@ -251,6 +251,9 @@ def prepare(cursor):
     # This adapter uses the full historical subdivision set, without the Moscow-only view.
     from .calculation_sales_isolation import patch as private_sales
     source = private_sales(source, cursor=cursor).replace('DataWH.motivation.PortalCalculationSubdivisions', 'DataWH.dbo.Subdivisions')
+    from .prepared_sales import install as install_prepared_sales, patch as use_prepared_sales
+    install_prepared_sales(cursor)
+    source = use_prepared_sales(source, historical_author=True)
     # XML methods require this option at procedure creation, in a separate batch.
     cursor.execute('SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;')
     cursor.execute(source)

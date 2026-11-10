@@ -54,7 +54,7 @@ LOCKED_COMMAND = """SET NOCOUNT ON;
 DECLARE @result int;
 EXEC @result = sys.sp_getapplock @Resource=N'PortalMotivationCalculation',
  @LockMode=N'Exclusive', @LockOwner=N'Session', @LockTimeout=0;
-IF @result < 0 THROW 50001, N'Расчёт мотивации уже выполняется', 1;
+IF @result < 0 THROW 50001, N'Сейчас выполняется расчёт мотивации или подготовка факта', 1;
 BEGIN TRY
 EXEC motivation.PortalCalcBySub;
 END TRY
@@ -94,7 +94,7 @@ def calculation_command(job, follow_up=None, *, locked=True, include_separate=Tr
                  f"@PlanVersion=N'{escaped_plan}', "
                  f"@QuarterShare={fractions[0]:.8f}, @YearShare={fractions[1]:.8f}, @PayoutThreshold={threshold:.8f};")
     from .execution_tracking import tracked_statement
-    from .calculation_pipeline import validate_pair, main_projection, cache_setup, scoped
+    from .calculation_pipeline import validate_pair, main_projection, scoped
     variant = variant_of(job)
     if variant == 'test_2025':
         from xml.etree.ElementTree import Element, SubElement, tostring
@@ -116,9 +116,7 @@ def calculation_command(job, follow_up=None, *, locked=True, include_separate=Tr
     if optimized:
         validate_pair(job, follow_up)
         combined = calculation_command(follow_up, locked=False, include_separate=False)
-        statement = cache_setup(2026) + scoped(combined) + '\n' + main_projection()
-    elif locked and variant == 'all_2026':
-        statement = cache_setup(2026) + statement
+        statement = scoped(combined) + '\n' + main_projection()
     tracked = tracked_statement(job, statement, release_lock=False)
     if optimized or variant == 'all_2026' and include_separate:
         from copy import copy
@@ -258,9 +256,9 @@ def prepare(cursor, variant='main'):
     changed = scope_preparation(changed)
     from .calculation_sales_isolation import patch as isolate_sales
     changed = isolate_sales(changed, cursor=cursor)
-    if variant != MAIN:
-        from .shared_sales_preparation import patch as share_preparation
-        changed = share_preparation(changed, cursor=cursor)
+    from .prepared_sales import install as install_prepared_sales, patch as use_prepared_sales
+    install_prepared_sales(cursor)
+    changed = use_prepared_sales(changed)
     import logging
     logging.getLogger(__name__).info('Calculation preparation scoped to fact year: %s; variant: %s', performance_marker in changed, variant)
     cursor.execute(changed)
