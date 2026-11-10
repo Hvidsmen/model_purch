@@ -910,3 +910,16 @@ class Motivation2025Input(models.Model):
     source_sha256 = models.CharField(max_length=64)
     created_at = models.DateTimeField(auto_now_add=True)
 
+
+
+class IntegralPlan2026Calculation(models.Model):
+    """Saved private report; no changes to plan inputs or coefficient versions."""
+    scenario = models.ForeignKey(SalesPlanScenario, on_delete=models.PROTECT, related_name='integral_2026_calculations')
+    coefficient_version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT)
+    results = models.JSONField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-pk']
+
+

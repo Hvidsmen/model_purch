@@ -123,6 +123,9 @@ def motivation_viewer_read_request(request):
 def financier_read_request(request):
     """Finance can only read approved branch settings, discount segments and reports."""
     match = request.resolver_match
+    if match and match.url_name == 'motivation_report_integral_2026':
+        # Derived report snapshots only; the view never changes coefficient/plan inputs.
+        return request.method in ('GET', 'HEAD', 'OPTIONS', 'POST')
     if match and match.url_name in {'motivation_reviews', 'motivation_review'}:
         return True
     allowed = {
@@ -145,3 +148,4 @@ def motivation_editor_required(request):
     from django.core.exceptions import PermissionDenied
     if not can_access(request.user, 'motivation_editor') and not (request.method in ('GET', 'HEAD', 'OPTIONS') and can_access(request.user, 'motivation')):
         raise PermissionDenied
+
