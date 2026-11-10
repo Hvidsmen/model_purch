@@ -149,6 +149,23 @@ class Recalculation2025WebTests(TestCase):
             self.assertEqual(self.client.post(self.url,dict(action='run',job=main.pk)).status_code,404)
         start.assert_not_called()
 
+    def test_xml_payload_preserves_cyrillic_apostrophes_and_xml_characters(self):
+        from .services.calculation_jobs import calculation_command
+        from xml.etree.ElementTree import fromstring
+        job=self.make_job()
+        saved=job.recalculation_2025
+        saved.coefficients[0]['brand']="Бренд O'Brien & <Тест>"
+        saved.save(update_fields=['coefficients'])
+        job=MotivationCalculationSchedule.objects.get(pk=job.pk)
+        command=calculation_command(job)
+        match=re.search(r"@Test2025Coefficients=N'((?:''|[^'])*)';",command)
+        self.assertIsNotNone(match)
+        root=fromstring(match[1].replace("''", "'"))
+        self.assertEqual(len(root.findall('coefficient')),2)
+        self.assertEqual(root.find('coefficient/brand').text,"Бренд O'Brien & <Тест>")
+        self.assertEqual(root.find('coefficient/k0').text,'0.001600')
+        self.assertEqual([n.find('kind').text for n in root],['Политики','Продажи'])
+
     def test_anonymous_cannot_read_or_start(self):
         self.client.logout()
         self.assertIn(self.client.get(self.url).status_code,(302,403))

@@ -32,6 +32,7 @@ def failure_message(error, reference):
         known = {
             '102': 'Ошибка синтаксиса SQL при подготовке процедуры или задания.',
             '207': 'SQL Server не распознал имя колонки в процедуре.',
+            '319': 'Ошибка синтаксиса SQL рядом с WITH при подготовке процедуры.',
             '208': 'SQL Server не нашёл таблицу или представление.',
             '229': 'Недостаточно прав SQL Server для этой операции.',
             '15151': 'Объект SQL Server не найден или нет прав доступа.',
@@ -96,7 +97,7 @@ def calculation_command(job, follow_up=None, *, locked=True, include_separate=Tr
     from .calculation_pipeline import validate_pair, main_projection, cache_setup, scoped
     variant = variant_of(job)
     if variant == 'test_2025':
-        import json
+        from xml.etree.ElementTree import Element, SubElement, tostring
         from .recalculation_2025 import KINDS
         saved = getattr(job, 'recalculation_2025', None)
         if saved is None:
@@ -104,7 +105,12 @@ def calculation_command(job, follow_up=None, *, locked=True, include_separate=Tr
         records = [dict(planning=r['planning'], goods=r['goods'], brand='' if r['brand']=='*' else r['brand'],
                         kind=kind, **{f'k{i}': r[kind][i] for i in range(5)})
                    for r in saved.coefficients for kind in KINDS]
-        payload = json.dumps(records, ensure_ascii=False).replace("'", "''")
+        root = Element('coefficients')
+        for record in records:
+            node = SubElement(root, 'coefficient')
+            for key, value in record.items():
+                SubElement(node, key).text = str(value)
+        payload = tostring(root, encoding='unicode').replace("'", "''")
         statement = statement.rstrip(';') + ", @Test2025Coefficients=N'" + payload + "';"
     optimized = follow_up is not None and variant == 'main' and job.fact_year == 2026
     if optimized:
