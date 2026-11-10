@@ -192,7 +192,7 @@ class SalesParticipationTests(SimpleTestCase):
 
     def test_private_prepare_uses_full_fact_without_live_writes(self):
         from .services.recalculation_2025_sql import prepare
-        cursor=MagicMock();cursor.fetchone.side_effect=[(source(),None),(0,)]
+        cursor=MagicMock();cursor.fetchone.side_effect=[(None,),(0,)]
         prepare(cursor)
         sql=cursor.execute.call_args.args[0]
         self.assertRegex(sql,r'FROM\s+#portal_motivation_sales s')
@@ -279,4 +279,37 @@ class Recalculation2025BrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(book.worksheets[1].cell(book.worksheets[1].max_row,8).value,70)
                 self.assertEqual(book.worksheets[2].cell(4,10).value,1)
                 self.assertEqual(book.worksheets[3].cell(4,9).value,.9)
+                browser.close()
+
+    def test_failed_launch_preserves_saved_fields_across_browser_refresh(self):
+        from playwright.sync_api import sync_playwright, expect
+        from django.conf import settings
+        authorize_test_case(self)
+        SalesPlanScenario.objects.create(title='План 2025',source_version='Plan 25',loaded_at=timezone.now())
+        job=MotivationCalculationSchedule.objects.create(name='Пересчёт 2025',variant='test_2025',fact_year=2025,
+            plan_version='Plan 25',quarter_share=80,year_share=20,payout_threshold='.8')
+        rates,sha=read_coefficients(file_bytes())
+        Motivation2025Input.objects.create(job=job,coefficients=rates,source_name='coeffs.xlsx',source_sha256=sha)
+        with patch('admin_motivation.services.calculation_jobs.monitor',return_value={}), patch(
+                'admin_motivation.services.calculation_jobs.start_job',side_effect=ValidationError('SQL Server временно недоступен')) as start:
+            with sync_playwright() as playwright:
+                browser=playwright.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE','/usr/bin/chromium'),headless=True)
+                page=browser.new_page(viewport={'width':1440,'height':1000})
+                page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
+                page.goto(self.live_server_url+reverse('motivation_report_2025')+f'?job={job.pk}')
+                page.get_by_role('button',name='Запустить пересчёт 2025',exact=True).click()
+                expect(page.get_by_role('alert')).to_contain_text('SQL Server временно недоступен')
+                expect(page.locator('.errorlist')).to_have_count(0)
+                page.reload()
+                expect(page.get_by_role('alert')).to_contain_text('SQL Server временно недоступен')
+                expect(page.get_by_text('Входные данные сохранены. Запуск не выполнен',exact=False)).to_be_visible()
+                page.get_by_text('Изменить сохранённые входные данные',exact=True).click()
+                expect(page.locator('select[name=plan_version]')).to_have_value('Plan 25')
+                self.assertEqual(float(page.locator('input[name=quarter_share]').input_value()),80)
+                self.assertEqual(float(page.locator('input[name=year_share]').input_value()),20)
+                self.assertEqual(float(page.locator('input[name=payout_threshold]').input_value()),.8)
+                expect(page.locator('.errorlist')).to_have_count(0)
+                self.assertIsNone(page.locator('input[name=coefficients]').get_attribute('required'))
+                page.screenshot(path='/tmp/recalculation-2025-saved-after-failure.png',full_page=True)
+                self.assertEqual(start.call_count,1)
                 browser.close()

@@ -1,7 +1,7 @@
-"""Adapt a recognized warehouse procedure into a private 2025 calculation.
+"""Build a private 2025 calculation from a versioned portal SQL template.
 
 No coefficient export, current employee roster or subdivision merge is used.
-Unknown SQL shapes stop before installation; the warehouse source stays intact.
+The live warehouse procedure is never read or modified.
 """
 import re
 from django.core.exceptions import ValidationError
@@ -51,11 +51,11 @@ ALLOCATION = ALLOCATION.replace('КoэфMissing=1', 'КоэфициентМот�
 def patch_source(source, existing=False):
     code = mask_sql(source)
     if not all(re.search(r'@' + name + r'\b', code, re.I) for name in ('FactYear', 'PlanVersion', 'QuarterShare', 'YearShare')):
-        raise ValidationError('Для пересчёта 2025 нужна параметризованная sp_CalcBySub: год, версия плана и доли.')
+        raise ValidationError('В SQL-шаблоне пересчёта 2025 отсутствуют обязательные параметры: год, версия плана и доли.')
     if any(len(re.findall(r'@' + name + r'\b', code, re.I)) < 2 for name in ('QuarterShare', 'YearShare')):
         raise ValidationError('В исходной процедуре доли должны использоваться в формулах начисления.')
     if re.search(r'#director_employees|PortalSubdivisionMerge|Portal pilot premiums', source, re.I):
-        raise ValidationError('Нужна исходная процедура без переходных правил и нынешнего состава директоров.')
+        raise ValidationError('В SQL-шаблоне пересчёта 2025 обнаружена зависимость от переходных правил или текущего состава директоров.')
     header = re.search(r'\b(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)PROC(?:EDURE)?\s+(?:\[?motivation\]?\s*\.\s*)?\[?sp_CalcBySub\]?\b', code, re.I)
     # mask retains bracketed names; the trailing word boundary is before a closing ].
     if not header:
@@ -187,17 +187,25 @@ def isolate(source):
     return source
 
 
+def template_source():
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[1] / 'sql' / 'templates' / 'recalculation_2025.sql.in'
+    source = path.read_text(encoding='utf-8')
+    if source.count('{{PROCEDURE}}') != 1 or re.search(r'^\s*GO\s*$', source, re.I | re.M):
+        raise ValidationError('Повреждён SQL-шаблон пересчёта 2025.')
+    return source.replace('{{PROCEDURE}}', '[motivation].[sp_CalcBySub]')
+
+
 def prepare(cursor):
-    cursor.execute("SELECT OBJECT_DEFINITION(OBJECT_ID(N'motivation.sp_CalcBySub')),OBJECT_ID(N'motivation.PortalCalcTest2025')")
+    # The source can include current directors or 2026-only windows. Its shape
+    # must not prevent an independent fact-2025 / plan-2025 calculation.
+    cursor.execute("SELECT OBJECT_ID(N'motivation.PortalCalcTest2025')")
     row = cursor.fetchone()
-    if not row or not row[0]:
-        raise ValidationError('Нет определения исходной sp_CalcBySub или права VIEW DEFINITION.')
-    # Read dated formula settings before adapting coefficient joins. Exact formulas
-    # are looked up by the original key; rates themselves come only from the file.
+    existing = bool(row and row[0])
     from .formula_defaults import TABLE_SQL, patch_defaults
     cursor.execute(TABLE_SQL)
-    original, _ = patch_defaults(row[0], required=False)
-    source = patch_source(original, bool(row[1]))
+    original, _ = patch_defaults(template_source(), required=False)
+    source = patch_source(original, existing)
     from .payout_threshold import parameterize
     source = parameterize(source)
     from .first_quarter_inputs import patch as first_quarter

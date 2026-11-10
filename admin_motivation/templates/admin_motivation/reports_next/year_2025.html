@@ -9,20 +9,20 @@
 <p>План политиков распределяется по долям факта 2025 года внутри подразделения и товарного сочетания коэффициентов. Для продаж учитываются HEAT и канал ДПП.</p>
 {% if error %}<div class="next-error" role="alert">{{ error }}</div>{% endif %}
 {% if can_start %}
-<details {% if not job or form.errors %}open{% endif %} class="next-note"><summary>Подготовить входные данные</summary>
+<details {% if not job or form.errors %}open{% endif %} class="next-note"><summary>{% if job %}Изменить сохранённые входные данные{% else %}Подготовить входные данные{% endif %}</summary>
 <form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="action" value="upload">{{ form.as_p }}<button class="btn btn-primary">Сохранить коэффициенты для теста</button></form>
 </details>
 {% endif %}
 {% if job %}
 <div class="next-note"><strong>Входные данные:</strong> {{ input.source_name }} · Товарных сочетаний: {{ input.coefficients|length }}.<br>
 План: {{ job.plan_version }}. Квартальная доля: {{ job.quarter_share|floatformat:"-6" }}%, годовая: {{ job.year_share|floatformat:"-6" }}%, порог выплаты: {{ job.payout_threshold|floatformat:"-8" }}.
-{% if state %}<p>Состояние: {% if state == 'completed' %}Расчёт завершён{% elif state == 'running' %}Выполняется{% elif state == 'failed' %}Ошибка расчёта{% else %}Ожидает подтверждения запуска{% endif %}</p>{% endif %}
+{% if state %}<p>Состояние: {% if state == 'completed' %}Расчёт завершён{% elif state == 'running' %}Выполняется{% elif state == 'start_failed' %}Входные данные сохранены. Запуск не выполнен{% elif state == 'not_started' %}Входные данные сохранены. Расчёт ещё не запускался{% elif state == 'failed' %}Ошибка расчёта{% else %}Ожидает подтверждения запуска{% endif %}</p>{% endif %}
 {% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" {% if state == 'running' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
 </div>
 <nav class="next-filter" aria-label="Отчёты 2025">
-<a class="btn {% if tab != 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?run=1&amp;tab=policies">Политики</a>
-<a class="btn {% if tab == 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?run=1&amp;tab=sales">Продажи</a>
-<a class="btn btn-outline-primary" href="?export=xlsx">Скачать Excel · 4 листа</a>
+<a class="btn {% if tab != 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?job={{ job.pk }}&amp;run=1&amp;tab=policies">Политики</a>
+<a class="btn {% if tab == 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?job={{ job.pk }}&amp;run=1&amp;tab=sales">Продажи</a>
+<a class="btn btn-outline-primary" href="?job={{ job.pk }}&amp;export=xlsx">Скачать Excel · 4 листа</a>
 </nav>
 {% if section %}
 <h2>{{ section.kind }} · USD</h2>

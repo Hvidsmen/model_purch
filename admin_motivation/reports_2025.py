@@ -4,8 +4,9 @@ from django import forms
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import transaction
-from django.http import FileResponse
+from django.http import FileResponse, Http404
 from django.shortcuts import render, redirect, get_object_or_404
+from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from base.access import role_for, can_access, ADMIN, DIRECTOR, FINANCIER, MODELER, MOTIVATION_VIEWER
 from .models import MotivationCalculationSchedule, Motivation2025Input
@@ -27,14 +28,28 @@ class InputForm(forms.Form):
     payout_threshold = forms.DecimalField(label='Порог выплаты (0,8 = 80%)', min_value=0, max_value=1, decimal_places=8, initial='.8')
 
     def __init__(self, *args, **kwargs):
+        self.saved_input = kwargs.pop('saved_input', None)
         super().__init__(*args, **kwargs)
+        for field in self.fields.values():
+            field.error_messages['required'] = 'Обязательное поле.'
+        if self.saved_input is not None:
+            self.fields['coefficients'].required = False
+            self.fields['coefficients'].help_text = 'Новый файл необязателен: используются сохранённые коэффициенты, если его не выбрать.'
         from .operation_views import loaded_plan_versions
-        self.fields['plan_version'].choices = [('', 'Выберите загруженный план')] + [(value, value) for value in loaded_plan_versions()]
+        choices = [('', 'Выберите загруженный план')] + [(value, value) for value in loaded_plan_versions()]
+        saved_plan = self.initial.get('plan_version')
+        if saved_plan and saved_plan not in dict(choices):
+            choices.append((saved_plan, saved_plan + ' · сохранённый план'))
+        self.fields['plan_version'].choices = choices
 
     def clean_coefficients(self):
         file = self.cleaned_data['coefficients']
-        self.rows, self.sha256 = read_coefficients(file)
-        self.source_name = file.name
+        if file is None and self.saved_input is not None:
+            self.rows, self.sha256 = self.saved_input.coefficients, self.saved_input.source_sha256
+            self.source_name = self.saved_input.source_name
+        else:
+            self.rows, self.sha256 = read_coefficients(file)
+            self.source_name = file.name
         return file
 
     def clean(self):
@@ -88,13 +103,24 @@ def report(request):
     if not can_view(request.user):
         raise PermissionDenied
     can_start = can_access(request.user, 'motivation_admin')
-    form = InputForm(request.POST or None, request.FILES or None)
+    if request.method == 'POST' and not can_start:
+        raise PermissionDenied
+    action = request.POST.get('action') if request.method == 'POST' else None
     job = MotivationCalculationSchedule.objects.filter(variant=VARIANT, recalculation_2025__isnull=False).order_by('-pk').first()
-    error, sections, state = '', [], None
+    selected_job = request.POST.get('job') if action == 'run' else request.GET.get('job')
+    if selected_job is not None:
+        try:
+            selected_job = int(selected_job)
+        except (ValueError, TypeError):
+            raise Http404('Задание не найдено.')
+        job = get_object_or_404(MotivationCalculationSchedule, pk=selected_job, variant=VARIANT, recalculation_2025__isnull=False)
+    initial = {key: getattr(job, key) for key in ('plan_version', 'quarter_share', 'year_share', 'payout_threshold')} if job else None
+    form = InputForm(request.POST if action == 'upload' else None, request.FILES if action == 'upload' else None,
+                     initial=initial, saved_input=job.recalculation_2025 if job else None)
+    error, sections, state = job.error if job else '', [], None
     if request.method == 'POST':
         if not can_start:
             raise PermissionDenied
-        action = request.POST.get('action')
         if action == 'upload' and form.is_valid():
             with transaction.atomic():
                 job = MotivationCalculationSchedule.objects.create(name='Пересчёт 2025', variant=VARIANT,
@@ -104,23 +130,30 @@ def report(request):
                 Motivation2025Input.objects.create(job=job, coefficients=form.rows,
                     source_name=form.source_name[:255], source_sha256=form.sha256)
             messages.success(request, 'Коэффициенты сохранены отдельно для теста. Действующие версии не изменены.')
-            return redirect('motivation_report_2025')
+            return redirect(reverse('motivation_report_2025') + f'?job={job.pk}')
         elif action == 'run':
-            job = get_object_or_404(MotivationCalculationSchedule, pk=request.POST.get('job'), variant=VARIANT)
             try:
                 state = calculation_jobs.monitor(job)
                 if state.get('status') in ('Выполняется', 'Ожидает запуска'):
-                    raise ValidationError('Это задание уже выполняется. Дождитесь завершения.')
+                    messages.info(request, 'Это задание уже выполняется. Дождитесь завершения.')
+                    return redirect(reverse('motivation_report_2025') + f'?job={job.pk}')
                 calculation_jobs.start_job(job)
                 job.synced = True; job.error = ''; job.save(update_fields=['synced', 'error'])
                 messages.success(request, 'Тестовый пересчёт 2025 запущен. Обновите отчёт после завершения.')
-                return redirect('motivation_report_2025')
+                return redirect(reverse('motivation_report_2025') + f'?job={job.pk}')
             except ValidationError as exc:
                 error = ' '.join(exc.messages)
-            except Exception:
-                logging.getLogger(__name__).exception('2025 test launch failed')
-                error = 'Не удалось запустить пересчёт 2025. Проверьте подключение DataWH и журнал задания.'
-    if job and job.synced:
+            except Exception as exc:
+                from uuid import uuid4
+                reference = uuid4().hex[:12]
+                logging.getLogger(__name__).exception('2025 test launch failed [%s]', reference)
+                error = calculation_jobs.failure_message(exc, reference)
+            job.error = error
+            job.save(update_fields=['error'])
+            return redirect(reverse('motivation_report_2025') + f'?job={job.pk}')
+    if job and job.error:
+        state = 'start_failed'
+    elif job and job.synced:
         observed = execution_tracking.observe(job, persist=can_start)
         state = observed.state if observed else 'unknown'
         if request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx':
@@ -133,6 +166,8 @@ def report(request):
             except Exception:
                 logging.getLogger(__name__).exception('2025 test report failed')
                 error = 'Не удалось прочитать результат пересчёта 2025. Проверьте подключение DataWH.'
+    elif job:
+        state = 'not_started'
     tab = request.GET.get('tab', 'policies')
     selected = 'Продажи' if tab == 'sales' else 'Политики'
     section = next((s for s in sections if s['kind'] == selected), None)
