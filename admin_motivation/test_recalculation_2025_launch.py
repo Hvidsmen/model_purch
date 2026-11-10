@@ -110,3 +110,29 @@ class Native2025PreparationTests(SimpleTestCase):
         self.assertIn('@PayoutThreshold',sql)
         self.assertNotIn('#director_employees',sql)
         self.assertIn('old.VariationCalculate',sql)
+
+    def test_prepared_procedure_avoids_openjson_at_old_compatibility_levels(self):
+        cursor=MagicMock();cursor.fetchone.side_effect=[(None,),(0,)]
+        prepare(cursor)
+        sql=cursor.execute.call_args.args[0]
+        self.assertNotIn('OPENJSON',sql.upper())
+        self.assertIn("@Test2025Xml.nodes('/coefficients/coefficient')",sql)
+        self.assertIn("r.record.value('(k4/text())[1]','decimal(12,6)')",sql)
+        self.assertRegex(sql,r';\s*WITH fact AS')
+
+    def test_xml_creation_options_are_set_in_a_separate_batch(self):
+        cursor=MagicMock();cursor.fetchone.side_effect=[(None,),(0,)]
+        prepare(cursor)
+        statements=[call.args[0] for call in cursor.execute.call_args_list]
+        self.assertEqual(statements[-2],'SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;')
+        self.assertIn('CREATE PROCEDURE '+PROC,statements[-1])
+        self.assertNotIn('SET QUOTED_IDENTIFIER',statements[-1])
+
+    def test_sql_319_has_a_safe_readable_message(self):
+        import pyodbc
+        from .services.calculation_jobs import JobOperationError,failure_message
+        exc=JobOperationError('Подготовка расчётной процедуры',pyodbc.ProgrammingError('42000','Private SQL text with secret (319)'))
+        message=failure_message(exc,'test-reference')
+        self.assertIn('WITH',message)
+        self.assertIn('SQL 319',message)
+        self.assertNotIn('secret',message)

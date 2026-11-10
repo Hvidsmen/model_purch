@@ -12,13 +12,22 @@ TABLES = ('Fact', 'PlanFact', 'ReportMotivationByDealAuthor', 'AnnualAccrual')
 
 SETUP = """
 IF @FactYear<>2025 THROW 50025,N'Этот вариант предназначен только для 2025 года',1;
-SELECT planning AS PGSales,goods AS Group_,brand AS Brand,kind AS TypeCoeff,
+DECLARE @Test2025Xml xml=TRY_CONVERT(xml,@Test2025Coefficients);
+IF @Test2025Xml IS NULL
+ THROW 50025,N'Не удалось прочитать снимок коэффициентов 2025. Повторите подготовку задания',1;
+SELECT r.record.value('(planning/text())[1]','nvarchar(255)') AS PGSales,
+ r.record.value('(goods/text())[1]','nvarchar(255)') AS Group_,
+ r.record.value('(brand/text())[1]','nvarchar(255)') AS Brand,
+ r.record.value('(kind/text())[1]','nvarchar(30)') AS TypeCoeff,
  CAST('20250101' AS date) AS DateFrom,CAST('20251231' AS date) AS DateTo,
- CAST(NULL AS nvarchar(64)) AS VariationCalculate,k0 AS K0,k1 AS K1,k2 AS K2,k3 AS K3,k4 AS K4
+ CAST(NULL AS nvarchar(64)) AS VariationCalculate,
+ r.record.value('(k0/text())[1]','decimal(12,6)') AS K0,
+ r.record.value('(k1/text())[1]','decimal(12,6)') AS K1,
+ r.record.value('(k2/text())[1]','decimal(12,6)') AS K2,
+ r.record.value('(k3/text())[1]','decimal(12,6)') AS K3,
+ r.record.value('(k4/text())[1]','decimal(12,6)') AS K4
 INTO #test2025_rates
-FROM OPENJSON(@Test2025Coefficients) WITH
- (planning nvarchar(255),goods nvarchar(255),brand nvarchar(255),kind nvarchar(30),
- k0 decimal(12,6),k1 decimal(12,6),k2 decimal(12,6),k3 decimal(12,6),k4 decimal(12,6));
+FROM @Test2025Xml.nodes('/coefficients/coefficient') AS r(record);
 IF NOT EXISTS(SELECT 1 FROM #test2025_rates)
  THROW 50025,N'Не загружены коэффициенты 2025 года',1;
 IF EXISTS(SELECT 1 FROM #test2025_rates GROUP BY PGSales,Group_,Brand,TypeCoeff HAVING COUNT(*)>1)
@@ -223,4 +232,6 @@ def prepare(cursor):
     # This adapter uses the full historical subdivision set, without the Moscow-only view.
     from .calculation_sales_isolation import patch as private_sales
     source = private_sales(source, cursor=cursor).replace('DataWH.motivation.PortalCalculationSubdivisions', 'DataWH.dbo.Subdivisions')
+    # XML methods require this option at procedure creation, in a separate batch.
+    cursor.execute('SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;')
     cursor.execute(source)
