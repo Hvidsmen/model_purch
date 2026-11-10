@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 from base.access import ADMIN, MODELER, DIRECTOR, FINANCIER, role_for
 from .reports_2025 import can_view
 from .models import SalesPlanScenario, SalesPlanLine, GlobalCoeffVersion, DirectorEmployee, DirectorScenarioComparison
-from .services.director_scenarios import calculate
+from .services.director_scenarios import calculate, RULE
 from .services.director_scenario_excel import workbook
 from .services.calculation_jobs import failure_message
 
@@ -79,4 +79,5 @@ def report(request):
         for case in data['scenarios']:cases.append({**case,'rows':[r for r in data['rows'] if r['scenario']==case['id']]})
     return render(request,'admin_motivation/reports_next/director_scenarios.html',{
         'form':form,'can_calculate':can_calculate,'snapshot':snapshot,'data':data,'cases':cases,'error':error,
+        'legacy_result':bool(data and data.get('rule')!=RULE),
         'history':DirectorScenarioComparison.objects.only('pk','created_at')[:20]})

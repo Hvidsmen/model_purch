@@ -15,7 +15,7 @@ from base.testing import authorize_test_case
 from .models import (SalesPlanScenario,SalesPlanLine,GlobalCoeffVersion,SubdivisionDirectorCoeff,
     DirectorEmployee,Chanel,Subdivision,Goods,SegmentCoeff,VariationCalculate,
     DirectorScenarioComparison,KindManagerCoeff,SubdivisionManagerCoeff)
-from .services.director_scenarios import calculate, director_result, manager_result, BRANCHES, Rates
+from .services.director_scenarios import calculate, director_result, BRANCHES, Rates
 from .services.director_scenario_inputs import read_sources, plan_inputs
 from .services.director_scenario_excel import workbook
 
@@ -47,8 +47,7 @@ class DirectorScenarioTests(TestCase):
         self.facts={year:[fact(b,q,'500' if i==0 else '1500') for i,b in enumerate(BRANCHES) for q in range(1,5 if year==2025 else 4)] for year in (2025,2026)}
         self.sources={str(year):{'run_id':f'run{year}','completed_at':'2026-11-10','parameters':
             {'fact_year':year,'plan_version':f'P{year}','quarter_share':'80','year_share':'20','payout_threshold':'.8'}} for year in (2025,2026)}
-        self.ledger=[{'branch':BRANCHES[0],'author':self.people[0].full_name,'period':'1 Квартал','possible':'12','paid':'12','bonus':'0'},
-                     {'branch':BRANCHES[1],'author':self.people[1].full_name,'period':'Год','possible':'20','paid':'18','bonus':'3'}]
+
 
     def line(self,plan,branch,amount,day,brand="Brand"):
         return SalesPlanLine.objects.create(scenario=plan,subdivision=branch,plan_date=day,
@@ -59,22 +58,22 @@ class DirectorScenarioTests(TestCase):
 
     def run_calc(self):
         self.approve()
-        with patch('admin_motivation.services.director_scenarios.read_sources',return_value=(self.facts,self.ledger,self.sources)):
+        with patch('admin_motivation.services.director_scenarios.read_sources',return_value=(self.facts,self.sources)):
             return calculate(self.plans[2025].pk,self.plans[2026].pk,self.version.pk,*[p.pk for p in self.people])
 
     def row(self,data,case,person=0):
         return next(r for r in data['rows'] if r['scenario']==case and r['employee_id']==self.people[person if case!=1 else person+2].pk)
 
-    def test_five_variants_copied_rates_and_manager_results(self):
+    def test_five_variants_only_recipient_pair_in_2025(self):
         data=self.run_calc().results
-        self.assertEqual(len(data['scenarios']),5);self.assertEqual(len(data['rows']),12)
+        self.assertEqual(len(data['scenarios']),5);self.assertEqual(len(data['rows']),10)
         r=self.row(data,1)
         self.assertEqual(r['employee'],self.people[2].full_name)
         self.assertEqual(D(r['total']),4) # copied .01, Q1 only, no annual payout
-        manager=next(r for r in data['rows'] if r['role']=='Менеджер' and r['employee_id']==self.people[0].pk)
-        self.assertEqual(D(manager['total']),12)
-        other=next(r for r in data['rows'] if r['role']=='Менеджер' and r['employee_id']==self.people[1].pk)
-        self.assertEqual(D(other['total']),21)
+        case1=[r for r in data['rows'] if r['scenario']==1]
+        self.assertEqual({r['employee_id'] for r in case1},{p.pk for p in self.people[2:]})
+        self.assertTrue(all(r['role']=='Директор' for r in data['rows']))
+        self.assertNotIn('manager_ledger',data['inputs'])
         for r in data['rows']:
             if r['scenario']>1:self.assertIn(r['employee_id'],[p.pk for p in self.people[:2]])
 
@@ -141,17 +140,12 @@ class DirectorScenarioTests(TestCase):
         with self.assertRaisesMessage(ValidationError,'разных'):
             calculate(self.plans[2025].pk,self.plans[2026].pk,self.version.pk,*([self.people[0].pk]*4))
 
-    def test_missing_manager_is_unknown_not_zero(self):
-        self.ledger=[]
-        row=next(r for r in self.run_calc().results['rows'] if r['role']=='Менеджер')
-        self.assertIsNone(row['total'])
-
     def test_excel_all_cases_execution_percentage_and_literal_names(self):
         self.people[0].full_name='=1+1';self.people[0].save()
         saved=self.run_calc();book=load_workbook(workbook(saved))
         self.assertEqual(book.sheetnames,['Сравнение',*[f'{i} Вариант' for i in range(1,6)],'Выполнение','Ставки','Параметры'])
-        self.assertEqual(book['Сравнение'].max_row,13)
-        self.assertEqual(book['1 Вариант'].max_row,5)
+        self.assertEqual(book['Сравнение'].max_row,11)
+        self.assertEqual(book['1 Вариант'].max_row,3)
         self.assertEqual(book['3 Вариант'].max_row,3)
         self.assertEqual(book['3 Вариант']['J2'].value,None)
         self.assertEqual(book['3 Вариант']['D2'].value,'=1+1')
@@ -164,7 +158,7 @@ class DirectorScenarioTests(TestCase):
         self.approve();url=reverse('motivation_report_director_scenarios')
         payload={'plan_2025':self.plans[2025].pk,'plan_2026':self.plans[2026].pk,'coefficient_version':self.version.pk,
             **dict(zip(('source_moscow','source_tt','target_moscow','target_tt'),[p.pk for p in self.people]))}
-        with patch('admin_motivation.services.director_scenarios.read_sources',return_value=(self.facts,self.ledger,self.sources)):
+        with patch('admin_motivation.services.director_scenarios.read_sources',return_value=(self.facts,self.sources)):
             response=self.client.post(url,payload)
         self.assertEqual(response.status_code,302)
         page=self.client.get(response.url);self.assertContains(page,'Скачать Excel')
@@ -172,6 +166,15 @@ class DirectorScenarioTests(TestCase):
         download=self.client.get(response.url+'&export=xlsx')
         book=load_workbook(BytesIO(b''.join(download.streaming_content)));self.assertEqual(len(book.sheetnames),9)
         self.assertEqual(DirectorScenarioComparison.objects.count(),1)
+
+    def test_previous_snapshot_labelled_without_rewriting_history(self):
+        saved=self.run_calc()
+        saved.results['rule']='director-comparison-five-v1'
+        saved.save(update_fields=['results'])
+        response=self.client.get(reverse('motivation_report_director_scenarios'))
+        self.assertContains(response,'Это результат по прежним правилам')
+        saved.refresh_from_db()
+        self.assertEqual(saved.results['rule'],'director-comparison-five-v1')
 
     def test_global_roles_and_branch_scope(self):
         from base.access import FINANCIER,MODELER,DIRECTOR,MOTIVATION_VIEWER,BRANCH_DIRECTOR
@@ -267,17 +270,19 @@ class SourceReadTests(SimpleTestCase):
             [(BRANCHES[1],2,'1. RAC','AC','Brand','O1',200,0,0)],[]]
 
     def test_verified_sources_original_branch_and_read_only_lock(self):
-        facts,ledger,metadata=read_sources(self.plans,self.connector)
+        facts,metadata=read_sources(self.plans,self.connector)
         self.assertEqual(facts[2025][0]['negative'],'-20')
         sql='\n'.join(call.args[0] for call in self.cursor.execute.call_args_list)
         self.assertIn('s.SubdivisionKey=f.[ПодразделениеДокумент]',sql)
         self.assertIn("@LockMode=N'Shared'",sql)
         self.assertIn('f.[СуммаОтгрузокUSD]<>0',sql)
+        self.assertNotIn('ReportMotivationByDealAuthorTest2025',sql)
+        self.assertNotIn('АвторСделки',sql)
         self.assertNotIn('INSERT',sql);self.conn.close.assert_called_once()
 
     def test_failed_latest_run_rejected_and_connection_closed(self):
         self.cursor.fetchone.side_effect=[(0,),(1,),('r','failed','{}','today')]
-        with self.assertRaisesMessage(ValidationError,'завершённый'):read_sources(self.plans,self.connector)
+        with self.assertRaisesMessage(ValidationError,'завершённого'):read_sources(self.plans,self.connector)
         self.conn.close.assert_called_once()
 
     def test_different_plan_rejected(self):
@@ -308,7 +313,7 @@ class DirectorScenarioBrowserTests(StaticLiveServerTestCase):
         from pathlib import Path
         DirectorScenarioTests.setUp(self)
         QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
-        with patch('admin_motivation.services.director_scenarios.read_sources',return_value=(self.facts,self.ledger,self.sources)):
+        with patch('admin_motivation.services.director_scenarios.read_sources',return_value=(self.facts,self.sources)):
             with sync_playwright() as playwright:
                 browser=playwright.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE','/usr/bin/chromium'),headless=True)
                 page=browser.new_page(viewport={'width':1600,'height':1100})
@@ -336,6 +341,6 @@ class DirectorScenarioBrowserTests(StaticLiveServerTestCase):
                 book=load_workbook(BytesIO(Path(pending.value.path()).read_bytes()))
                 self.assertEqual(book['3 Вариант']['N2'].value,24)
                 self.assertEqual(book['4 Вариант']['N2'].value,48)
-                self.assertEqual(book['1 Вариант'].max_row,5)
+                self.assertEqual(book['1 Вариант'].max_row,3)
                 page.screenshot(path='/tmp/director-scenarios.png',full_page=True)
                 browser.close()

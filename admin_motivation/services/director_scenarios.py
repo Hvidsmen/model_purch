@@ -16,7 +16,7 @@ from .sales_plans import number
 ZERO=Decimal(0)
 MERGED='Д-Москва + ТЕРМОТРЕЙД'
 FORMULAS=('Подразделение(Глобально)','Подразделение','Группа планов продаж','Группа товаров','Марка(Бренд)')
-RULE='director-comparison-five-v1'
+RULE='director-comparison-five-v2-directors-only'
 
 
 class Rates:
@@ -137,25 +137,6 @@ def detail(case,person,source,branch,formula,item,period,plan,fact,execution,dep
         'possible':possible,'paid':paid,'bonus':bonus,'note':note,'rate_origin':origin,'correction':correction}
 
 
-def manager_result(person,ledger):
-    rows=[r for r in ledger if norm(r['author'])==norm(person.full_name)]
-    if not rows:return {'scenario':1,'year':2025,'branch':'Москва/ТТ','employee':person.full_name,
-        'employee_id':person.pk,'role':'Менеджер','rate_source':'Сохранённый расчёт 2025',
-        'quarters':[None]*4,'annual_paid':None,'annual_accrued':None,'bonus':None,'total':None,
-        'notes':['Автор сделки не найден в сохранённом пересчёте 2025; результат не подменён нулём']}
-    values=[ZERO]*4;annual=ZERO;accrued=ZERO;bonus=ZERO
-    for row in rows:
-        code='5' if norm(row['period'])=='год' else str(row['period']).strip()[:1]
-        if code=='5':annual+=number(row['paid']);accrued+=number(row['possible'])
-        elif code in '1234' and len(code)==1:values[int(code)-1]+=number(row['paid'])
-        else:raise ValidationError('Неизвестный период менеджерского результата 2025.')
-        bonus+=number(row['bonus'])
-    return {'scenario':1,'year':2025,'branch':', '.join(sorted({r['branch'] for r in rows})),
-        'employee':person.full_name,'employee_id':person.pk,'role':'Менеджер',
-        'rate_source':'Сохранённый пересчёт 2025: Политики','quarters':values,'annual_paid':annual,
-        'annual_accrued':accrued,'bonus':bonus,'total':sum(values,ZERO)+annual+bonus,
-        'notes':['Менеджерские выплаты скопированы из готового пересчёта 2025, директорские ставки к ним не применяются']}
-
 
 @transaction.atomic
 def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,target_moscow,target_tt,connector=None):
@@ -169,10 +150,8 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
     people={p.pk:p for p in DirectorEmployee.objects.filter(pk__in=ids)}
     if len(people)!=4:raise ValidationError('Один из выбранных сотрудников не найден.')
     actors=[people[i] for i in ids]
-    if norm(actors[0].full_name)==norm(actors[1].full_name):
-        raise ValidationError('ФИО источников ставок совпадают; менеджерские выплаты по ФИО неоднозначны.')
     plan_rows={year:plan_inputs(plan,year) for year,plan in plans.items()}
-    facts,ledger,sources=read_sources(plans,connector)
+    facts,sources=read_sources(plans,connector)
     rates=Rates(version);rows=[];details=[];scenarios=[]
     for case in range(1,6):
         year=2025 if case==1 else 2026;merged=case in (4,5);synthetic=case in (3,5)
@@ -184,7 +163,6 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
             row,items=director_result(case,year,merged,synthetic,recipient,source,branch,
                 facts[year],plan_rows[year],sources[str(year)]['parameters'],rates)
             rows.append(row);details.extend(items)
-    rows.extend(manager_result(person,ledger) for person in actors[:2])
     config={'plan_2025':plan_2025_id,'plan_2026':plan_2026_id,'coefficient_version':version_id,
         'source_moscow':source_moscow,'source_tt':source_tt,'target_moscow':target_moscow,'target_tt':target_tt}
     rate_inputs=[{'version':key[0],'branch':key[1],'employee_id':key[2],
@@ -194,7 +172,7 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
         'version':{'id':version.pk,'title':str(version),'revision':version.revision},
         'corrections':[{ 'branch':b,'period':q,'factor':rates.factor(b,q)} for b in BRANCHES for q in range(1,6)],
         'configuration':config,'plans':{str(y):{'title':p.title,'source_version':p.source_version,'loaded_at':str(p.loaded_at)} for y,p in plans.items()},
-        'inputs':{'facts':facts,'plans':plan_rows,'manager_ledger':ledger}}
+        'inputs':{'facts':facts,'plans':plan_rows}}
     result=json.loads(json.dumps(payload,ensure_ascii=False,default=str))
     return DirectorScenarioComparison.objects.create(plan_2025=plans[2025],plan_2026=plans[2026],
         coefficient_version=version,configuration=config,results=result)
