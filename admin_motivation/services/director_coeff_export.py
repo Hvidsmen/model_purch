@@ -6,20 +6,29 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from ..models import GlobalCoeffVersion, SubdivisionDirectorCoeff
 from .sql_export import director_variation
+from .active_directors import coefficient_rows as active_director_rows
+from .subdivision_aliases import coefficient_rows as merged_rows
 
 
 def director_coefficients_workbook(version):
-    rows = SubdivisionDirectorCoeff.objects.filter(version=version).select_related(
+    source = SubdivisionDirectorCoeff.objects.filter(version=version).select_related(
         'employee','subdivision','goods','variation_calculate').order_by(
         'employee__full_name','employee__employee_code','subdivision__subdivision_key',
         'goods__planning_group_sales','goods__group','goods__brand','goods_id')
+    # Coefficient history is retained after unbinding/archive. Export only the
+    # current roster, then apply the portal's existing subdivision merge policy.
+    current = active_director_rows(source.iterator(chunk_size=2000))
+    rows = list(merged_rows(((row.employee_id,row.subdivision.subdivision_key,row.goods_id,row)
+                            for row in current),1,[0,1,2]))
+    rows.sort(key=lambda item:(item[3].employee.full_name,item[3].employee.employee_code,item[1],
+                               item[3].goods.planning_group_sales,item[3].goods.group,item[3].goods.brand,item[2]))
     book = Workbook()
     sheet = book.active
     sheet.title = 'Директора'
     sheet.sheet_view.showGridLines = False
     sheet.sheet_view.zoomScale = 85
     sheet.merge_cells('A1:L1')
-    sheet['A1'] = (f'Сохранённые коэффициенты директоров · {version} · '
+    sheet['A1'] = (f'Коэффициенты действующих директоров · {version} · '
                    f'{version.get_status_display()} · ревизия {version.revision}')
     sheet['A1'].font = Font(name='Calibri',size=12,bold=True,color='27364D')
     sheet['A1'].alignment = Alignment(vertical='center',wrap_text=True)
@@ -47,9 +56,9 @@ def director_coefficients_workbook(version):
     alignments = {column:Alignment(vertical='center',horizontal='right' if 7 <= column <= 11 else 'left',
                                   wrap_text=column in (2,3,4,5,6,12)) for column in range(1,13)}
     count = 0
-    for count,row in enumerate(rows.iterator(chunk_size=2000),1):
+    for count,(_,subdivision,_,row) in enumerate(rows,1):
         formula = row.variation_calculate.variation_name if row.variation_calculate_id else version.fallback_variation or director_variation(row.goods)
-        values = [count,row.employee.full_name,row.subdivision.subdivision_key,
+        values = [count,row.employee.full_name,subdivision,
                   row.goods.planning_group_sales,row.goods.group,row.goods.brand,
                   *[getattr(row,f'k{index}') for index in range(5)],formula]
         sheet.append(values)
@@ -64,7 +73,7 @@ def director_coefficients_workbook(version):
         sheet.row_dimensions[count+3].height = 29
     if not count:
         sheet.merge_cells('A4:L4')
-        sheet['A4'] = 'Коэффициенты директоров в выбранной версии не заданы.'
+        sheet['A4'] = 'Коэффициенты действующих директоров в выбранной версии не заданы.'
     sheet.freeze_panes = 'G4'
     sheet.auto_filter.ref = f'A3:L{count+3}'
     for column,width in enumerate([6,32,24,25,36,23,11,11,11,11,11,36],1):

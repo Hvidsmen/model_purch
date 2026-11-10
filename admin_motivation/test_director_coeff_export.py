@@ -14,6 +14,7 @@ from .services.director_coeff_export import director_coefficients_workbook
 class DirectorCoefficientExportTests(TestCase):
     def setUp(self):
         test_directors.DirectorCoefficientTests.setUp(self)
+        self.first.subdivisions.add(self.other_sub)
         self.formula = VariationCalculate.objects.create(variation_name='Export explicit')
         self.first_row = SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.sub,employee=self.first,
             goods=self.goods,k0=Decimal('.0016'),k1=Decimal('.0039'),k2=Decimal('.003'),k3=Decimal('.0025'),k4=Decimal('.002'),variation_calculate=self.formula)
@@ -69,14 +70,40 @@ class DirectorCoefficientExportTests(TestCase):
         self.assertContains(page,'Excel — все директора')
         self.assertContains(page,'export=directors_xlsx')
 
-    def test_names_are_literal_and_saved_archived_directors_are_not_lost(self):
-        self.first.full_name = '=NOT_A_FORMULA()'; self.first.is_archived = True; self.first.save()
+    def test_names_are_literal(self):
+        self.first.full_name = '=NOT_A_FORMULA()'; self.first.save()
         self.goods.brand = '+Literal'; self.goods.save()
         book = self.book(); sheet=book.active
         matches=[row for row in sheet.iter_rows(min_row=4) if row[1].value == '=NOT_A_FORMULA()']
         self.assertEqual(len(matches),2)
         self.assertTrue(all(row[1].data_type == 's' and row[5].data_type == 's' for row in matches))
         book.close()
+
+    def test_archived_and_unbound_directors_are_excluded_without_deleting_coefficients(self):
+        self.first.subdivisions.remove(self.other_sub)
+        book=self.book(); rows=list(book.active.iter_rows(min_row=4,values_only=True)); book.close()
+        self.assertNotIn((self.first.full_name,'B'),{(row[1],row[2]) for row in rows})
+        self.assertEqual(len(rows),2)
+        self.first.is_archived=True; self.first.save()
+        book=self.book(); rows=list(book.active.iter_rows(min_row=4,values_only=True)); book.close()
+        self.assertEqual(len(rows),1)
+        self.assertEqual(rows[0][1],self.second.full_name)
+        self.assertEqual(SubdivisionDirectorCoeff.objects.filter(version=self.version).count(),3)
+
+    def test_merged_branches_use_active_roster_and_priority_without_duplicates(self):
+        from .models import Subdivision,DirectorEmployee
+        source=Subdivision.objects.create(subdivision_key='TT',subdivision_name='TT',subdivision_global='TT',chanel=self.sub.chanel,
+                                          merged_into=self.sub,merge_policy='source')
+        stale=DirectorEmployee.objects.create(full_name='Old Moscow director')
+        stale.subdivisions.add(self.other_sub)
+        SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.sub,employee=stale,goods=self.goods,k0='.99')
+        SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=source,employee=self.first,goods=self.goods,k0='.22')
+        book=self.book(); rows=list(book.active.iter_rows(min_row=4,values_only=True)); book.close()
+        moscow=[row for row in rows if row[2]=='A']
+        self.assertEqual({row[1] for row in moscow},{self.first.full_name,self.second.full_name})
+        self.assertEqual(len(moscow),2)
+        self.assertEqual(next(row[6] for row in moscow if row[1]==self.first.full_name),.22)
+        self.assertNotIn('TT',{row[2] for row in rows})
 
     def test_empty_version_and_concurrent_revision_are_explicit(self):
         self.version.refresh_from_db()
