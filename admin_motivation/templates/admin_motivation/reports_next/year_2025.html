@@ -1,4 +1,4 @@
-{% extends 'admin_motivation/base.html' %}{% load static %}{% block content %}
+{% extends 'admin_motivation/base.html' %}{% load static tz %}{% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}">
 <style>.next-table tfoot th,.next-table tfoot td{background:#f1edff;color:#243b53;font-weight:600}</style>
 <section class="content nr-page">
@@ -17,6 +17,13 @@
 <div class="next-note" data-recalculation-state="{{ state }}" data-recalculation-job="{{ job.pk }}"><strong>Входные данные:</strong> {{ input.source_name }} · Товарных сочетаний: {{ input.coefficients|length }}.<br>
 План: {{ job.plan_version }}. Квартальная доля: {{ job.quarter_share|floatformat:"-6" }}%, годовая: {{ job.year_share|floatformat:"-6" }}%, порог выплаты: {{ job.payout_threshold|floatformat:"-8" }}.
 {% if state %}<p>Состояние: {% if state == 'completed' %}Расчёт завершён{% elif state == 'running' %}Выполняется{% elif state == 'queued' %}Ожидает запуска в SQL Agent{% elif state == 'interrupted' %}Пересчёт прерван. Активного задания нет; можно запустить заново{% elif state == 'start_failed' %}Входные данные сохранены. Запуск не выполнен{% elif state == 'not_started' %}Входные данные сохранены. Расчёт ещё не запускался{% elif state == 'failed' %}Ошибка расчёта{% else %}Не удалось подтвердить состояние запуска. Обновите статус{% endif %}</p>{% endif %}
+{% if progress %}<div role="status" aria-live="polite" aria-atomic="true">
+<p>{% localtime off %}Начало: <strong>{{ progress.started|date:'d.m.Y H:i:s' }} МСК</strong>{% if progress.completed %} · Завершение: {{ progress.completed|date:'d.m.Y H:i:s' }} МСК{% endif %}{% endlocaltime %}<br>
+{% if progress.interrupted and not progress.completed %}Время остановки не зафиксировано.{% else %}{% if progress.state_unknown %}С момента запуска{% else %}Длительность{% endif %}: <strong data-elapsed-seconds="{{ progress.elapsed }}" data-elapsed-ticking="{{ progress.ticking|yesno:'true,false' }}">{{ progress.elapsed }} сек.</strong>{% endif %}</p>
+{% if progress.stage %}<p>{% if state == 'failed' or state == 'interrupted' or state == 'unknown' %}Последний записанный этап{% else %}Этап{% endif %}: <strong>{{ progress.stage }}</strong>{% if progress.stage_elapsed != None and state == 'running' %} · <span data-elapsed-seconds="{{ progress.stage_elapsed }}" data-elapsed-ticking="{{ progress.stage_ticking|yesno:'true,false' }}">{{ progress.stage_elapsed }} сек.</span>{% endif %}</p>
+{% elif state == 'running' %}<p>Текущий этап этим запуском не записан. Подробные этапы появятся при новом запуске после обновления портала.</p>{% endif %}
+{% if state == 'running' %}<p>Статус и этап обновляются каждые 10 секунд. Время обновляется каждую секунду. При редактировании параметров автообновление статуса приостанавливается.</p>{% endif %}
+</div>{% endif %}
 {% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" {% if state == 'running' or state == 'queued' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
 </div>
 <nav class="next-filter" aria-label="Отчёты 2025">
@@ -34,4 +41,4 @@
 </tbody><tfoot><tr><th>Итого</th>{% if section.kind == 'Политики' %}<td></td>{% endif %}{% for value in section.values %}<td class="num">{{ value|floatformat:2 }}</td>{% endfor %}<td class="num">{{ section.bonus|floatformat:2 }}</td><td class="num">{{ section.total|floatformat:2 }}</td></tr></tfoot></table></div>
 {% elif not error %}<p>Сохраните входные данные и запустите пересчёт. После завершения откройте «Политики» или «Продажи».</p>{% endif %}
 {% else %}<p>Входные данные пересчёта ещё не сохранены.</p>{% endif %}
-</section><script src="{% static 'admin_motivation/recalculation_2025_status.js' %}" defer></script>{% endblock %}
+</section><script src="{% static 'admin_motivation/recalculation_2025_status.js' %}?v=progress-20261111" defer></script>{% endblock %}

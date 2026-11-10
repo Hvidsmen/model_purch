@@ -1,0 +1,11 @@
+# 2025 recalculation progress
+
+The 2025 report displays UTC SQL audit timestamps converted explicitly to Moscow time, elapsed runtime, the current recorded SQL stage and its elapsed time. Client timers use monotonic elapsed time from the server's initial duration, not the browser wall clock. Existing GET refresh stays pinned to the selected job every ten seconds and pauses during editing. No refresh or timer starts/retries SQL work.
+
+`PortalRecalculation2025Progress` is created during explicit native-2025 preparation. The tracked Agent wrapper sets a session-local run identity; fixed checkpoints in the versioned procedure write the current stage for that identity. Labels cover file coefficients, historical formulas, prepared sales, physical fact/discount segments, policy plan allocation, plan/fact combination, quarterly/annual premiums and catch-up, and publication. Each boundary is checked before the procedure is installed. Financial expressions and the existing transaction are unchanged.
+
+Stage updates inside the long calculation transaction are intentionally read with READUNCOMMITTED **only in this diagnostic table**. They never decide completion, result eligibility, or financial data. The audit and Agent checks remain authoritative. The wrapper preserves the last stage from session context after a handled failure/rollback. A killed process may bypass that handler: show the recorded last stage, avoid claiming an exact interruption time, and stop its timer once Agent/lock checks confirm interruption.
+
+Updating the portal does not instrument an already executing procedure. Its original audit start time can still be displayed, but no phase is invented. Stage details begin with the next explicit launch, which prepares the new private procedure and Agent step automatically. Do not stop a running calculation merely to obtain progress. Missing progress tables/rows or monitoring connection failures gracefully retain the audit time and show unavailable stage information. No Django migration or forced recalculation is needed.
+
+Tests: `admin_motivation.test_recalculation_2025_progress` and existing 2025/Agent/prepared-sales tests. The optional `RecalculationStatusBrowserTests` verifies a ticking duration, displayed phase, automatic interruption detection, no duplicate start, and that editing preserves inputs.

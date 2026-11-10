@@ -109,7 +109,12 @@ class RecalculationStatusBrowserTests(StaticLiveServerTestCase):
         def current(*args):
             calls.append(1)
             return 'running' if force_running[0] or len(calls)==1 else 'interrupted'
-        with patch('admin_motivation.services.execution_tracking.observe',return_value=SimpleNamespace(state='running')),patch(
+        def progress(job,execution,state):
+            from datetime import timezone
+            return {'started':datetime(2026,11,11,1,tzinfo=timezone.utc),'completed':None,
+                'elapsed':3661,'ticking':state=='running','stage':'Исторические формулы 2025',
+                'stage_elapsed':61,'stage_ticking':state=='running','interrupted':state=='interrupted'}
+        with patch('admin_motivation.services.recalculation_2025_progress.display',side_effect=progress),patch('admin_motivation.services.execution_tracking.observe',return_value=SimpleNamespace(state='running')),patch(
                 'admin_motivation.services.execution_tracking.running_state',side_effect=current),patch(
                 'admin_motivation.services.calculation_jobs.start_job') as start:
             with sync_playwright() as p:
@@ -119,6 +124,9 @@ class RecalculationStatusBrowserTests(StaticLiveServerTestCase):
                 page.goto(self.live_server_url+self.url+f'?job={job.pk}')
                 button=page.get_by_role('button',name='Запустить пересчёт 2025',exact=True)
                 expect(button).to_be_disabled()
+                expect(page.get_by_text('Исторические формулы 2025',exact=True)).to_be_visible()
+                timer=page.locator('[data-elapsed-seconds="3661"]')
+                expect(timer).to_have_text('1 ч 1 мин 2 сек',timeout=4000)
                 expect(page.get_by_text('Пересчёт прерван. Активного задания нет; можно запустить заново',exact=False)).to_be_visible(timeout=16000)
                 expect(button).to_be_enabled();start.assert_not_called()
                 force_running[0]=True
