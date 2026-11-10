@@ -244,6 +244,32 @@ class DirectorCoefficientTests(TestCase):
         self.global_url = reverse('motivation_directors_global')
         self.local_url = reverse('motivation_directors_local')
 
+    def test_archive_preserves_employee_without_coefficients_and_historical_selection(self):
+        from .reports_director_scenarios import ComparisonForm
+        from .services.active_directors import bindings
+        url=reverse('motivation_director_directory')
+        self.assertContains(self.client.get(url),'В архив')
+        response=self.client.post(url,{'action':'archive','employee':self.first.pk})
+        self.assertRedirects(response,url+'?archived=1')
+        self.first.refresh_from_db()
+        self.assertTrue(self.first.is_archived)
+        self.assertEqual(self.first.employee_code,'D1')
+        self.assertTrue(self.first.subdivisions.filter(pk=self.sub.pk).exists())
+        self.assertNotIn(self.first.pk,[item['employee_id'] for item in bindings()])
+        self.assertTrue(ComparisonForm().fields['target_moscow'].queryset.filter(pk=self.first.pk).exists())
+        self.assertNotIn(self.first,list(self.client.get(url).context['all_employees']))
+        self.assertIn(self.first,list(self.client.get(url+'?archived=1').context['all_employees']))
+        self.client.post(url,{'action':'archive','employee':self.first.pk})
+        self.assertTrue(DirectorEmployee.objects.filter(pk=self.first.pk,is_archived=True).exists())
+
+    def test_archive_preserves_approved_coefficients(self):
+        from django.db.models import QuerySet
+        row=SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.sub,employee=self.first,goods=self.goods,k0='.12')
+        QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
+        self.client.post(reverse('motivation_director_directory'),{'action':'archive','employee':self.first.pk})
+        row.refresh_from_db();self.assertEqual(row.k0,Decimal('.12'))
+        self.assertEqual(row.employee_id,self.first.pk)
+
     def local_post(self, action, employee=None, **data):
         return self.client.post(self.local_url, {'version': self.version.pk, 'subdivision': self.sub.pk,
             'employee': (employee or self.first).pk, 'action': action, **data})

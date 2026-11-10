@@ -57,6 +57,15 @@ def coefficient_group_copy(request):
 @require_http_methods(['GET', 'POST'])
 def director_directory(request):
     from .services.director_import import template, import_directors
+    if request.method == 'POST' and request.POST.get('action') == 'archive':
+        from base.access import motivation_editor_required as admin_required
+        admin_required(request)
+        with transaction.atomic():
+            employee = get_object_or_404(DirectorEmployee.objects.select_for_update(), pk=request.POST.get('employee'))
+            employee.is_archived = True
+            employee.save(update_fields=['is_archived'])
+        messages.success(request, 'Директор перенесён в архив. Запись, привязки и коэффициенты сохранены; сотрудник доступен для исторического сравнения.')
+        return redirect(reverse('motivation_director_directory') + '?archived=1')
     if request.method == 'POST' and request.POST.get('action') == 'delete':
         from base.access import motivation_editor_required as admin_required
         admin_required(request)
