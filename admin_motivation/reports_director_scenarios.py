@@ -36,6 +36,7 @@ class ComparisonForm(forms.Form):
             field.label_from_instance=lambda obj:f'{obj.title} · {obj.source_version}'
         self.fields['coefficient_version'].queryset=GlobalCoeffVersion.objects.filter(status='approved',effective_from__lt=date(2027,1,1)).order_by('-effective_from','-pk')
         for key in ('source_moscow','source_tt','target_moscow','target_tt'):
+            self.fields[key].widget.attrs.update({'data-searchable-select':'','aria-label':self.fields[key].label})
             self.fields[key].queryset=DirectorEmployee.objects.order_by('full_name','pk')
             self.fields[key].label_from_instance=lambda obj:f'{obj.full_name} · № {obj.pk}'+(' · архив' if obj.is_archived else '')
         for field in self.fields.values():field.error_messages['required']='Обязательное поле.'
