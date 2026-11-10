@@ -254,6 +254,9 @@ def prepare(cursor):
     from .prepared_sales import install as install_prepared_sales, patch as use_prepared_sales
     install_prepared_sales(cursor)
     source = use_prepared_sales(source, historical_author=True)
+    from .recalculation_2025_progress import DDL as progress_ddl,patch as add_progress
+    source=add_progress(source)
+    cursor.execute(progress_ddl)
     # XML methods require this option at procedure creation, in a separate batch.
     cursor.execute('SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;')
     cursor.execute(source)

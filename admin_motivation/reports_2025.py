@@ -118,6 +118,7 @@ def report(request):
     form = InputForm(request.POST if action == 'upload' else None, request.FILES if action == 'upload' else None,
                      initial=initial, saved_input=job.recalculation_2025 if job else None)
     error, sections, state = job.error if job else '', [], None
+    progress=None
     if request.method == 'POST':
         if not can_start:
             raise PermissionDenied
@@ -156,6 +157,9 @@ def report(request):
     elif job and job.synced:
         observed = execution_tracking.observe(job, persist=can_start)
         state = execution_tracking.running_state(job, observed)
+        if state!='queued':
+            from .services.recalculation_2025_progress import display
+            progress=display(job,observed,state)
         if request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx':
             try:
                 sections = read_results(job, include_performance=request.GET.get('export') == 'xlsx')
@@ -173,5 +177,5 @@ def report(request):
     section = next((s for s in sections if s['kind'] == selected), None)
     return render(request, 'admin_motivation/reports_next/year_2025.html', {
         'form': form, 'can_start': can_start, 'job': job, 'section': section,
-        'tab': tab, 'period_labels': PERIODS, 'error': error, 'state': state,
+        'tab': tab, 'period_labels': PERIODS, 'error': error, 'state': state, 'progress':progress,
         'input': job.recalculation_2025 if job else None})

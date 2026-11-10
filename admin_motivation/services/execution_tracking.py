@@ -53,6 +53,10 @@ def tracked_statement(job, statement, *, release_lock=True):
     key = str(job.key)  # UUID model field, never user-provided SQL text.
     caption = {'main': 'Основной запуск', 'all_2026': 'Объединённый расчёт',
                'separate_2026': 'Раздельный расчёт', 'test_2025': 'Пересчёт 2025'}[parameters(job)['variant']]
+    progress_begin=progress_end=progress_failed=''
+    if parameters(job)['variant']=='test_2025':
+        from .recalculation_2025_progress import begin_sql,finish_sql
+        progress_begin=begin_sql();progress_end=finish_sql();progress_failed=finish_sql(failed=True)
     release = "EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';" if release_lock else ''
     from .prepared_sales import RULE as prepared_rule
     prepared_params = f"JSON_MODIFY(JSON_MODIFY(N'{data}','$.prepared_sales_run',(SELECT CONVERT(nvarchar(36),a.RunId) FROM motivation.PortalPreparedSalesActive a JOIN motivation.PortalPreparedSalesRun r ON r.RunId=a.RunId WHERE a.Id=1 AND r.State_=N'completed' AND r.Rule_=N'{prepared_rule}')),'$.prepared_sales_rule',N'{prepared_rule}')"
@@ -61,12 +65,15 @@ INSERT INTO motivation.PortalMotivationRun (RunId,JobKey,StartedAt,State_,Parame
  SELECT @portalRun,'{key}',SYSUTCDATETIME(),N'running',{prepared_params},
  (SELECT Snapshot_ FROM motivation.PortalMotivationExport WHERE Id=1);
 BEGIN TRY
+ {progress_begin}
  {statement}
  PRINT N'{caption}: '+CONVERT(nvarchar(30),DATEDIFF(SECOND,@portalStarted,SYSUTCDATETIME()))+N' сек.';
+ {progress_end}
  UPDATE motivation.PortalMotivationRun SET State_=N'completed',CompletedAt=SYSUTCDATETIME() WHERE RunId=@portalRun;
 END TRY
 BEGIN CATCH
  IF XACT_STATE() <> 0 ROLLBACK;
+ {progress_failed}
  UPDATE motivation.PortalMotivationRun SET State_=N'failed',CompletedAt=SYSUTCDATETIME() WHERE RunId=@portalRun;
  {release}
  THROW;
