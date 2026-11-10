@@ -1,0 +1,30 @@
+{% extends 'admin_motivation/base.html' %}{% load static %}{% block content %}
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}">
+<section class="content nr-page">
+{% include 'admin_motivation/reports_next/_tabs.html' %}
+<p><a href="{% url 'motivation_reports' %}">← Все отчёты</a></p>
+<h1>Сравнение директорских сценариев</h1>
+<p>Пять вариантов · USD · Москва и ТТ. Ставки, формулы и поправки периодов — из выбранной версии модели 2026. Назначения сотрудников в действующей модели не меняются.</p>
+<p>Для расчёта нужны завершённые «Пересчёт 2025» и «Все кварталы 2026» с теми же загруженными планами. В исходных планах Москва и ТТ должны быть сохранены отдельно.</p>
+{% if error %}<div class="next-error" role="alert">{{ error }}</div>{% endif %}
+{% if can_calculate %}<details class="next-note" {% if not snapshot or form.errors or error %}open{% endif %}><summary>{% if snapshot %}Новый расчёт{% else %}Подготовить сравнение{% endif %}</summary>
+<p>Два директора 2026 являются источниками ставок. В варианте 1 эти ставки получает другая пара директоров, а источники остаются менеджерами. Их менеджерские выплаты берутся из сохранённого пересчёта 2025.</p>
+<form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Рассчитать пять вариантов и сохранить</button></form></details>{% endif %}
+{% if snapshot %}
+<div class="next-note"><strong>Сохранённый результат № {{ snapshot.pk }}</strong> · {{ snapshot.created_at|date:'d.m.Y H:i' }}<br>Коэффициенты: {{ data.version.title }} · ревизия {{ data.version.revision }}.<br>При ошибке нового запуска здесь остаётся предыдущий сохранённый результат.</div>
+<p><a class="btn btn-outline-primary" href="?calculation={{ snapshot.pk }}&amp;export=xlsx">Скачать Excel · все пять вариантов</a></p>
+<p>Варианты «факт = план» заменяют оборот плановыми суммами и сегментами O0–O4. Для объединённого филиала выполнение пересчитывается по сумме Москвы и ТТ; каждый из двух директоров получает расчёт по своим ставкам со всего объединённого оборота.</p>
+<nav aria-label="Варианты расчёта">{% for case in cases %}<a href="#scenario-{{ case.id }}">Вариант {{ case.id }}</a>{% if not forloop.last %} · {% endif %}{% endfor %}</nav>
+{% for case in cases %}<h2 id="scenario-{{ case.id }}">{{ case.id }}. {{ case.title }}</h2>
+<div style="overflow:auto"><table class="next-table"><thead><tr><th>Сотрудник / роль</th><th>Подразделение / источник ставок</th><th>I кв.</th><th>II кв.</th><th>III кв.</th><th>IV кв.</th><th>Годовая часть начислена</th><th>Годовая часть выплачена</th><th>Доплата</th><th>К выплате, USD</th><th>Примечание</th></tr></thead><tbody>
+{% for row in case.rows %}<tr><td>{{ row.employee }}<br>{{ row.role }}</td><td>{{ row.branch }}<br>{{ row.rate_source }}</td>
+{% for amount in row.quarters %}<td>{% if case.year == 2026 and forloop.counter == 4 %}—{% elif amount != None %}{{ amount|floatformat:2 }}{% else %}Нет данных{% endif %}</td>{% endfor %}
+<td>{% if row.annual_accrued != None %}{{ row.annual_accrued|floatformat:2 }}{% else %}—{% endif %}</td><td>{% if row.annual_paid != None %}{{ row.annual_paid|floatformat:2 }}{% else %}—{% endif %}</td><td>{% if row.bonus != None %}{{ row.bonus|floatformat:2 }}{% else %}—{% endif %}</td><td>{% if row.total != None %}{{ row.total|floatformat:2 }}{% else %}Нет данных{% endif %}</td><td>{{ row.notes|join:'; ' }}</td></tr>{% endfor %}
+</tbody></table></div>{% endfor %}
+<p>За 2026 рассчитаны выплаты I–III кварталов. Годовая часть показана отдельно как начисленная и в выплату не включена. За полный 2025 год учтена годовая доплата при выполнении условий.</p>
+<details><summary>Выполнение и причины выплаты</summary><div style="overflow:auto"><table class="next-table"><thead><tr><th>Вариант</th><th>Сотрудник</th><th>Период</th><th>Формула / группа / товар / бренд</th><th>План, USD</th><th>Факт, USD</th><th>Выполнение, коэффициент</th><th>Порог</th><th>Поправка</th><th>Выплачено, USD</th><th>Доплата, USD</th><th>Причина</th></tr></thead><tbody>
+{% for row in data.details %}<tr><td>{{ row.scenario }}</td><td>{{ row.employee }}</td><td>{{ row.period }}</td><td>{{ row.formula }} · {{ row.planning }} · {{ row.goods }} · {{ row.brand }}</td><td>{{ row.plan|floatformat:2 }}</td><td>{{ row.fact|floatformat:2 }}</td><td>{% if row.ratio != None %}{{ row.ratio|floatformat:4 }}{% else %}—{% endif %}</td><td>{{ row.threshold|default_if_none:'—' }}</td><td>{{ row.correction }}</td><td>{{ row.paid|floatformat:2 }}</td><td>{{ row.bonus|floatformat:2 }}</td><td>{{ row.note }}</td></tr>{% endfor %}
+</tbody></table></div><p>В Excel выполнение и пороги отображаются в процентах; там также есть выполнение подразделения и правило подбора ставки.</p></details>
+{% endif %}
+{% if history %}<details><summary>История сравнений</summary><ul>{% for item in history %}<li><a href="?calculation={{ item.pk }}">№ {{ item.pk }} · {{ item.created_at|date:'d.m.Y H:i' }}</a></li>{% endfor %}</ul></details>{% endif %}
+</section>{% endblock %}

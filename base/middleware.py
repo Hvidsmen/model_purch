@@ -63,10 +63,10 @@ class PortalAccessMiddleware:
                     'motivation_bulk_formula', 'motivation_editor_check', 'motivation_coefficient_edit_log', 'motivation_copy_group', 'motivation_coefficient_coverage', 'motivation_fallback_formula', 'motivation_coverage_repair', 'motivation_coverage_repair_all', 'motivation_director_coeff_import',
                     'motivation_global_template', 'motivation_subdivision_template', 'motivation_director_directory',
                     'motivation_directors_global', 'motivation_directors_local', 'motivation_coefficient_comparison',
-                    'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report', 'motivation_reports_next', 'motivation_report_next', 'motivation_report_all_2026', 'motivation_report_integral_2026'}
+                    'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report', 'motivation_reports_next', 'motivation_report_next', 'motivation_report_all_2026', 'motivation_report_integral_2026', 'motivation_report_director_scenarios'}
                 if not decisions and name not in allowed:
                     return render(request, 'base/forbidden.html', status=403)
-            if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and name != 'motivation_report_integral_2026' and not motivation_viewer_read_request(request):
+            if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and name not in {'motivation_report_integral_2026', 'motivation_report_director_scenarios'} and not motivation_viewer_read_request(request):
                 return JsonResponse({'error': 'Изменение модели недоступно. Решения принимаются на странице «На проверке».'}, status=403)
         if project == 'motivation' and role_for(request.user, 'motivation') == FINANCIER and not financier_read_request(request):
             if json_request:
