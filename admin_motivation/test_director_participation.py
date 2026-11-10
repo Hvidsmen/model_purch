@@ -70,6 +70,8 @@ class DirectorParticipationTests(SimpleTestCase):
                 for branch in EXCLUDED for quarter in (1, 2, 3, 4)
                 for kind, channel, plan, fact in [('Продажи', 'Dealer', 100, 90),
                     ('Продажи', 'ДПП', 9999, 9999), ('Директора', 'Dealer', 9999, 9999)]])
+            db.execute("ALTER TABLE plan_fact ADD COLUMN ГруппаПлановПродаж DEFAULT '1. RAC'")
+            db.create_function('PATINDEX', 2, lambda pattern, value: next((i + 1 for i, c in enumerate(value or '') if c not in '0123456789. '), 0))
             for kind in ('Директора', 'Продажи', 'Политики'):
                 sql = grouped_sql('SELECT * FROM input', coefficient_type=kind)
                 sql = sql.replace(GLOBAL_PLAN_FACT, 'plan_fact').replace("N'", "'")
@@ -82,6 +84,8 @@ class DirectorParticipationTests(SimpleTestCase):
                     self.assertEqual(values[branch, '1 Квартал'], (10089, 10089))
                     self.assertEqual(values[branch, '2 Квартал(1-2 кв)'], (20198, 20178))
                     self.assertEqual(values[branch, '3 Квартал'], (10099, 10089))
-                    self.assertEqual(values[branch, '4 Квартал(1-4 кв)'], (40396, 40356))
-                    self.assertEqual(values[branch, 'Год'], (40396, 40356))
+                    # The existing 2026 transition uses Q4 inputs for Q4 and annual eligibility.
+                    self.assertEqual(values[branch, '4 Квартал(1-4 кв)'], (10099, 10089))
+                    self.assertEqual(values[branch, 'Год'], (10099, 10089))
                     self.assertEqual(values[branch, 'Итого'], (40396, 40356))
+

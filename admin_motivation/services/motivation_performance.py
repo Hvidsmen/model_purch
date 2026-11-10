@@ -66,8 +66,10 @@ def grouped_sql(source, coefficient_type=None, calculation_variant='all_2026'):
     if str(coefficient_type or '').strip().casefold() != 'директора':
         from .director_participation import EXCLUDED
         excluded = ','.join("N'" + name.replace("'", "''") + "'" for name in EXCLUDED)
-        base_filter = "(pf.[Канал] IS NULL OR pf.[Канал]<>N'ДПП') AND pf.[Подразделение] NOT IN (" + excluded + ')'
-    if str(coefficient_type or '').strip().casefold() != 'директора':
+        base_filter = "pf.[Подразделение] NOT IN (" + excluded + ')'
+        if input_type == 'Политики':
+            base_filter = "(pf.[Канал] IS NULL OR pf.[Канал]<>N'ДПП') AND " + base_filter
+    if input_type == 'Политики':
         from .heat_exclusion import predicate as heat_predicate
         base_filter += " AND NOT (pf.[Год]=2026 AND " + heat_predicate('pf.[ГруппаПлановПродаж]') + ")"
     return (
@@ -107,3 +109,4 @@ def grouped_sql(source, coefficient_type=None, calculation_variant='all_2026'):
         'AND (' + period_coverage('coverage') + ')) '
         'WHERE ' + base_filter + ' '
         'GROUP BY t.[Подразделение],t.[Год],t.[VariationCalculate]')
+

@@ -25,6 +25,16 @@ def parameters(job):
     transition = job.fact_year == 2026
     from .annual_accrual import SNAPSHOT_VERSION
     periods = list('123') if variant == 'separate_2026' else list('12345') if variant == ALL_2026 else list(PERIODS)
+    if variant == 'test_2025':
+        from .recalculation_2025 import RULE_VERSION
+        return {'fact_year': 2025, 'plan_version': job.plan_version,
+                'quarter_share': str(job.quarter_share), 'year_share': str(job.year_share),
+                'payout_threshold': str(job.payout_threshold), 'premium_periods': list('12345'),
+                'quarter_catchup': True, 'premium_amount_quarters': [1,2,3,4],
+                'variant': variant, 'recalculation_rule': RULE_VERSION,
+                'policy_plan_shares': 'fact_2025_by_subdivision_coefficient_goods',
+                'coefficient_sha256': job.recalculation_2025.source_sha256,
+                'calculation_subdivisions': 'all_separate', 'currency': 'USD'}
     return {'fact_year': job.fact_year, 'plan_version': job.plan_version,
             'quarter_share': str(job.quarter_share), 'year_share': str(job.year_share),
             'payout_threshold': str(job.payout_threshold), 'premium_periods': periods,
@@ -42,7 +52,7 @@ def tracked_statement(job, statement, *, release_lock=True):
     data = json.dumps(parameters(job),ensure_ascii=False).replace("'","''")
     key = str(job.key)  # UUID model field, never user-provided SQL text.
     caption = {'main': 'Основной запуск', 'all_2026': 'Объединённый расчёт',
-               'separate_2026': 'Раздельный расчёт'}[parameters(job)['variant']]
+               'separate_2026': 'Раздельный расчёт', 'test_2025': 'Пересчёт 2025'}[parameters(job)['variant']]
     release = "EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation', @LockOwner=N'Session';" if release_lock else ''
     return f"""DECLARE @portalRun uniqueidentifier=NEWID(), @portalStarted datetime2=SYSUTCDATETIME();
 INSERT INTO motivation.PortalMotivationRun (RunId,JobKey,StartedAt,State_,Parameters_,ExportSnapshot)
@@ -106,7 +116,7 @@ def execution_from_row(row, *, persist=False):
 
 def observe_latest(variant='main', connector=None, *, persist=False):
     """Read the newest actual SQL Agent run, including scheduled executions."""
-    if variant not in ('main', 'all_2026', 'separate_2026'):
+    if variant not in ('main', 'all_2026', 'separate_2026', 'test_2025'):
         raise ValidationError('Неизвестный вариант расчёта.')
     connection = None
     try:
@@ -135,3 +145,4 @@ def latest_for_report(fallback=None, *, variant='main', persist=False):
     if latest.state == 'failed':
         raise ValidationError('Последний запуск расчёта завершился ошибкой. Проверьте журнал в «Центре расчётов».')
     return latest
+

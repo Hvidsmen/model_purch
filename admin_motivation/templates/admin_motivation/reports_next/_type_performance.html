@@ -2,9 +2,10 @@
 {% if kind == 'team' %}{% include 'admin_motivation/reports_next/_my_remaining.html' with targets=section.remaining_targets %}{% endif %}
 <div class="nr-all-year-page" data-performance-kind="{{ section.kind }}">
 <div class="nr-section-title"><h3>План-факт мотивации · {{ section.kind }}</h3><span>План и факт — USD</span></div>
-<p class="nr-muted">Показана база выбранного вида мотивации. {% if section.kind == 'Директора' %}Канал ДПП и HEAT включены.{% else %}Применены исключения мотивации; HEAT исключён за 2026 год.{% endif %} При глобальной формуле выполнение проверяется по всему подразделению в пределах этих правил, при личной — по базе сотрудника. За I квартал план мотивации равен факту.</p>
+<p class="nr-muted">Показана база выбранного вида мотивации. {% if section.kind == 'Директора' or section.kind == 'Продажи' %}Канал ДПП и HEAT включены.{% else %}Применены исключения мотивации; HEAT исключён за 2026 год.{% endif %} При глобальной формуле выполнение проверяется по всему подразделению в пределах этих правил, при личной — по базе сотрудника. За I квартал план мотивации равен факту.</p>
 {% include 'admin_motivation/reports_next/_performance_matrix.html' with matrix=section.performance_matrix %}
 <p class="nr-muted">Периоды совпадают с периодами премий: I квартал; I–II кварталы для II; III квартал; только IV квартал для IV квартала и годовой части за 2026 год. «Итого» учитывает выбранные кварталы один раз. Общий план-факт подразделения показан отдельно и не является суммой баз мотивации.</p>
 </div>
 {% endif %}
+
 

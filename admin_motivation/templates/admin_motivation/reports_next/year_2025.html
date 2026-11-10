@@ -1,0 +1,37 @@
+{% extends 'admin_motivation/base.html' %}{% load static %}{% block content %}
+<link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}">
+<style>.next-table tfoot th,.next-table tfoot td{background:#f1edff;color:#243b53;font-weight:600}</style>
+<section class="content nr-page">
+{% include 'admin_motivation/reports_next/_tabs.html' %}
+<p><a href="{% url 'motivation_reports' %}">← Все отчёты</a></p>
+<h1>Пересчёт 2025</h1>
+<p>Факт 2025 · План 2025 · USD. Все подразделения, Москва и ТТ отдельно.</p>
+<p>План политиков распределяется по долям факта 2025 года внутри подразделения и товарного сочетания коэффициентов. Для продаж учитываются HEAT и канал ДПП.</p>
+{% if error %}<div class="next-error" role="alert">{{ error }}</div>{% endif %}
+{% if can_start %}
+<details {% if not job or form.errors %}open{% endif %} class="next-note"><summary>Подготовить входные данные</summary>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}<input type="hidden" name="action" value="upload">{{ form.as_p }}<button class="btn btn-primary">Сохранить коэффициенты для теста</button></form>
+</details>
+{% endif %}
+{% if job %}
+<div class="next-note"><strong>Входные данные:</strong> {{ input.source_name }} · Товарных сочетаний: {{ input.coefficients|length }}.<br>
+План: {{ job.plan_version }}. Квартальная доля: {{ job.quarter_share|floatformat:"-6" }}%, годовая: {{ job.year_share|floatformat:"-6" }}%, порог выплаты: {{ job.payout_threshold|floatformat:"-8" }}.
+{% if state %}<p>Состояние: {% if state == 'completed' %}Расчёт завершён{% elif state == 'running' %}Выполняется{% elif state == 'failed' %}Ошибка расчёта{% else %}Ожидает подтверждения запуска{% endif %}</p>{% endif %}
+{% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" {% if state == 'running' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
+</div>
+<nav class="next-filter" aria-label="Отчёты 2025">
+<a class="btn {% if tab != 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?run=1&amp;tab=policies">Политики</a>
+<a class="btn {% if tab == 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?run=1&amp;tab=sales">Продажи</a>
+<a class="btn btn-outline-primary" href="?export=xlsx">Скачать Excel · оба листа</a>
+</nav>
+{% if section %}
+<h2>{{ section.kind }} · USD</h2>
+<div style="overflow:auto"><table class="next-table"><thead><tr><th>Подразделение</th>{% if section.kind == 'Политики' %}<th>Сотрудник</th>{% endif %}{% for label in period_labels %}<th>{{ label }}</th>{% endfor %}<th>Доплаты за кварталы</th><th>Итого</th></tr></thead><tbody>
+{% for branch in section.branches %}
+<tr style="background:#f1edff;font-weight:600"><td>{{ branch.branch }}</td>{% if section.kind == 'Политики' %}<td>Итого по подразделению</td>{% endif %}{% for value in branch.values %}<td class="num">{{ value|floatformat:2 }}</td>{% endfor %}<td class="num">{{ branch.bonus|floatformat:2 }}</td><td class="num">{{ branch.total|floatformat:2 }}</td></tr>
+{% if section.kind == 'Политики' %}{% for row in branch.rows %}<tr><td>{{ row.branch }}</td><td>{{ row.author }}</td>{% for value in row.values %}<td class="num">{{ value|floatformat:2 }}</td>{% endfor %}<td class="num">{{ row.bonus|floatformat:2 }}</td><td class="num">{{ row.total|floatformat:2 }}</td></tr>{% endfor %}{% endif %}
+{% empty %}<tr><td colspan="9">Нет начислений по выбранному виду мотивации.</td></tr>{% endfor %}
+</tbody><tfoot><tr><th>Итого</th>{% if section.kind == 'Политики' %}<td></td>{% endif %}{% for value in section.values %}<td class="num">{{ value|floatformat:2 }}</td>{% endfor %}<td class="num">{{ section.bonus|floatformat:2 }}</td><td class="num">{{ section.total|floatformat:2 }}</td></tr></tfoot></table></div>
+{% elif not error %}<p>Сохраните входные данные и запустите пересчёт. После завершения откройте «Политики» или «Продажи».</p>{% endif %}
+{% else %}<p>Входные данные пересчёта ещё не сохранены.</p>{% endif %}
+</section>{% endblock %}

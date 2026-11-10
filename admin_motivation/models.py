@@ -704,7 +704,7 @@ class SubdivisionDirectorCoeff(DirectorCoefficientBase):
 
 
 class MotivationCalculationSchedule(models.Model):
-    variant = models.CharField('Вариант расчёта', max_length=20, default='main', choices=[('main', 'Основной · IV квартал'), ('all_2026', 'Все кварталы 2026')])
+    variant = models.CharField('Вариант расчёта', max_length=20, default='main', choices=[('main', 'Основной · IV квартал'), ('all_2026', 'Все кварталы 2026'), ('test_2025', 'Пересчёт 2025')])
     payout_threshold = models.DecimalField('Порог выполнения плана для выплаты', max_digits=9, decimal_places=8, default=Decimal('0.8'))
     fact_year = models.PositiveSmallIntegerField('Год факта', null=True, blank=True)
     plan_version = models.CharField('Версия плана продаж в MS SQL', max_length=500, blank=True)
@@ -900,3 +900,13 @@ class CoefficientEditLog(models.Model):
             from django.core.exceptions import ValidationError
             raise ValidationError('Журнал сохранений не изменяется.')
         return super().save(*args, **kwargs)
+
+
+class Motivation2025Input(models.Model):
+    """A private immutable input snapshot for one test job; never a live coefficient version."""
+    job = models.OneToOneField(MotivationCalculationSchedule, on_delete=models.PROTECT, related_name='recalculation_2025')
+    coefficients = models.JSONField()
+    source_name = models.CharField(max_length=255)
+    source_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
