@@ -25,6 +25,45 @@ IF OBJECT_ID(N'motivation.PortalPreparedSalesRun',N'U') IS NULL
 IF OBJECT_ID(N'motivation.PortalPreparedSalesActive',N'U') IS NULL
  CREATE TABLE motivation.PortalPreparedSalesActive(Id int NOT NULL PRIMARY KEY CHECK(Id=1),
  RunId uniqueidentifier NOT NULL);
+IF OBJECT_ID(N'motivation.PortalPreparedSalesConflict',N'U') IS NULL
+ CREATE TABLE motivation.PortalPreparedSalesConflict(RunId uniqueidentifier NOT NULL,
+ DocumentKey nvarchar(max) NULL,ProductXml nvarchar(max) NULL,VariantsXml nvarchar(max) NULL);
+"""
+
+
+DOCUMENT_VALUES = """
+SELECT DISTINCT DocumentKey,Номенклатура,
+ COALESCE(ВидЦены,'') AS ВидЦены,
+ COALESCE(ДаичиТипСкидкиНаДату,'') AS ДаичиТипСкидкиНаДату,
+ COALESCE(даичи_ВидЦеныВходнаяСтоимостьНаименование,'') AS даичи_ВидЦеныВходнаяСтоимостьНаименование,
+ Даичи_АвторСделкиНаименование,СпособДоставки,[даичи_УсловияДоставки]
+INTO #portal_document_sales_values
+FROM #document_sales;
+IF EXISTS (SELECT 1 FROM #portal_document_sales_values GROUP BY DocumentKey,Номенклатура HAVING COUNT_BIG(*) > 1)
+BEGIN
+ INSERT INTO motivation.PortalPreparedSalesConflict(RunId,DocumentKey,ProductXml,VariantsXml)
+ SELECT TOP(20) @RunId,CONVERT(nvarchar(max),k.DocumentKey),
+  (SELECT k.Номенклатура AS value FOR XML PATH('product'),BINARY BASE64),
+  (SELECT v.Ссылка AS DocumentReference,v.ROW_ID AS RowId,
+   v.ВидЦены AS PriceType,v.ДаичиТипСкидкиНаДату AS DiscountType,
+   v.даичи_ВидЦеныВходнаяСтоимостьНаименование AS EntryPriceType,
+   v.Даичи_АвторСделкиНаименование AS DealAuthor,v.СпособДоставки AS DeliveryMethod,
+   v.[даичи_УсловияДоставки] AS DeliveryTerms
+   FROM #document_sales v WHERE v.DocumentKey=k.DocumentKey AND v.Номенклатура=k.Номенклатура
+   FOR XML PATH('variant'),BINARY BASE64)
+ FROM (SELECT DocumentKey,Номенклатура FROM #portal_document_sales_values
+  GROUP BY DocumentKey,Номенклатура HAVING COUNT_BIG(*) > 1) k ORDER BY k.DocumentKey;
+ DECLARE @ConflictDocument nvarchar(512),@ConflictMessage nvarchar(2048);
+ SELECT TOP(1) @ConflictDocument=CONVERT(nvarchar(512),DocumentKey)
+ FROM #portal_document_sales_values GROUP BY DocumentKey,Номенклатура HAVING COUNT_BIG(*) > 1 ORDER BY DocumentKey;
+ SET @ConflictMessage=N'Разные атрибуты документа и товара: '+COALESCE(@ConflictDocument,N'?')
+  +N'. Примеры сохранены в motivation.PortalPreparedSalesConflict для текущего RunId';
+ THROW 50005,@ConflictMessage,1;
+END;
+IF (SELECT SUM(CASE WHEN max_length<0 OR system_type_id IN (34,35,99,241)
+ THEN 10000 ELSE max_length END) FROM tempdb.sys.columns
+ WHERE object_id=OBJECT_ID('tempdb..#portal_document_sales_values') AND name IN (N'DocumentKey',N'Номенклатура')) BETWEEN 1 AND 900
+ EXEC(N'CREATE INDEX IX_document_sales_match ON #portal_document_sales_values(DocumentKey,Номенклатура)');
 """
 
 
@@ -106,6 +145,13 @@ def procedure_sql():
     body=body.replace('YEAR(s.ClosedDealDate)=@FactYear',"s.ClosedDealDate>='20250101' AND s.ClosedDealDate<@PreparedTo")
     body=body.replace(f'SELECT * INTO {WORKING_TABLE}\nFROM DataWH.dbo.Sales',
         f'SELECT s.*,CONVERT(nvarchar(max),s.Даичи_АвторСделкиНаименование) AS {ORIGINAL_AUTHOR} INTO {WORKING_TABLE}\nFROM DataWH.dbo.Sales s CROSS JOIN (SELECT 1 AS SchemaOnly) schema_only',1)
+    guard="""IF EXISTS (SELECT 1 FROM #document_sales GROUP BY DocumentKey, Номенклатура HAVING COUNT_BIG(*) > 1)
+    THROW 50005, N'Неоднозначное соответствие документа и товара.', 1;
+CREATE INDEX IX_document_sales_match ON #document_sales(DocumentKey, Номенклатура);"""
+    if body.count(guard)!=1:
+        raise ValidationError('Не распознана проверка однозначности документов подготовки.')
+    body=body.replace(guard,DOCUMENT_VALUES,1)
+    body=body.replace('LEFT JOIN #document_sales ds','LEFT JOIN #portal_document_sales_values ds')
     # Progress is committed between stages; publication alone is transactional.
     body=body.replace('SELECT DISTINCT DocumentKey,ModelCodeERP',"UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Подготовка документов' WHERE RunId=@RunId;\nSELECT DISTINCT DocumentKey,ModelCodeERP",1)
     updates=list(re.finditer(r'\bUPDATE\s+s\s+SET\b',mask_sql(body),re.I))
