@@ -216,6 +216,40 @@ class IntegralPlan2026Tests(TestCase):
         self.assertEqual(self.client.get(reverse('motivation_report_integral_2026')).status_code,403)
 
 
+    def test_plan_choices_use_index_probe_and_preserve_year_and_load_filters(self):
+        from .reports_integral_2026 import CalculationForm
+        for title,day,sub,loaded,deleted in [
+            ('Old year',date(2025,1,1),'A',True,False),
+            ('Company only',date(2026,1,1),'',True,False),
+            ('Not loaded',date(2026,1,1),'A',False,False),
+            ('Deleted',date(2026,1,1),'A',True,True),
+        ]:
+            scenario=SalesPlanScenario.objects.create(title=title,source_version=title,
+                loaded_at=timezone.now() if loaded else None,is_deleted=deleted)
+            SalesPlanLine.objects.create(scenario=scenario,plan_date=day,subdivision=sub,
+                planning_group_sales='1. RAC',group='AC',brand='Brand',amount_usd=1)
+        field=CalculationForm().fields['scenario']
+        self.assertEqual(list(field.queryset.values_list('pk',flat=True)),[self.plan.pk])
+        from django.db import connection
+        if connection.vendor=='sqlite':
+            plan=field.queryset.explain()
+            self.assertNotIn('SCAN U0',plan)
+            self.assertIn('USING COVERING INDEX',plan)
+            self.assertIn('scenario_id=? AND plan_date>? AND plan_date<?',plan)
+        # Deferred unused scenario columns must not cause a query per label.
+        with self.assertNumQueries(2):
+            choices=list(field.choices)
+        self.assertEqual(choices[-1][1],'Plan 2026 · P26')
+
+    def test_opening_form_does_not_calculate_or_connect_to_dwh(self):
+        from unittest.mock import patch
+        with patch('admin_motivation.reports_integral_2026.calculate') as calculate_report, \
+             patch('admin_motivation.conns.connect_database') as connect:
+            response=self.client.get(reverse('motivation_report_integral_2026'))
+        self.assertContains(response,'Загруженный план 2026')
+        calculate_report.assert_not_called();connect.assert_not_called()
+
+
 import os
 from unittest import skipUnless
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
@@ -234,7 +268,9 @@ class IntegralPlan2026BrowserTests(StaticLiveServerTestCase):
             browser=playwright.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE','/usr/bin/chromium'),headless=True)
             page=browser.new_page(viewport={'width':1600,'height':1100})
             page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
-            page.goto(self.live_server_url+reverse('motivation_report_integral_2026'))
+            page.goto(self.live_server_url+reverse('motivation_reports'))
+            page.get_by_role('link',name='Интегральные коэффициенты · План 2026',exact=True).click()
+            expect(page.get_by_role('heading',name='Интегральные коэффициенты · План 2026',exact=True)).to_be_visible()
             page.locator('select[name=scenario]').select_option(str(self.plan.pk))
             page.locator('select[name=coefficient_version]').select_option(str(self.version.pk))
             page.get_by_role('button',name='Рассчитать и сохранить',exact=True).click()
