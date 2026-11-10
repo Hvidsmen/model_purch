@@ -162,7 +162,7 @@ class CalculationJobsTests(TestCase):
         self.assertEqual(self.job.fact_year, 2025)
         self.assertEqual(str(self.job.quarter_share), '70.000000')
         sync.side_effect = ValidationError('Unsupported procedure')
-        self.client.post(reverse('motivation_calculations'), {**data, 'fact_year': 2023})
+        self.client.post(reverse('motivation_calculations'), {**data, 'fact_year': 2026})
         self.job.refresh_from_db()
         self.assertEqual(self.job.fact_year, 2025)
         self.assertFalse(self.job.synced)

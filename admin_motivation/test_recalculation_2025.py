@@ -216,7 +216,7 @@ class SalesParticipationTests(SimpleTestCase):
         self.assertNotIn('FROM DataWH.dbo.Sales s',sql)
         self.assertNotIn('PortalCalculationSubdivisions',sql)
         self.assertIn('SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions',sql)
-        self.assertIn("NULLIF(ds.Даичи_АвторСделкиНаименование,N''),s.Даичи_АвторСделкиНаименование",sql)
+        self.assertIn("NULLIF(Даичи_АвторСделкиНаименование,N''),PortalOriginalDealAuthor",sql)
         self.assertIn('THROW 50025',sql)
 
     def test_plan_year_is_checked_before_an_agent_job_is_installed(self):

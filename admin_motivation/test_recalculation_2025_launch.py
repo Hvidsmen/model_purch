@@ -80,7 +80,7 @@ class Native2025PreparationTests(SimpleTestCase):
         self.assertNotIn('{{PROCEDURE}}',sql)
         self.assertNotRegex(sql,r'(?im)^\s*GO\s*$')
         self.assertNotRegex(sql,r'(?i)\bUPDATE\s+DataWH\.dbo\.Sales\b')
-        self.assertIn('FROM #portal_motivation_sales',sql)
+        self.assertRegex(sql,r'FROM\s+#portal_motivation_sales')
         self.assertIn('@QuarterShare',sql)
         self.assertIn('@YearShare',sql)
         self.assertIn('@PayoutThreshold',sql)

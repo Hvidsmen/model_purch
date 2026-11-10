@@ -32,7 +32,7 @@ class JobForm(forms.ModelForm):
         return self.cleaned_data.get('variant') or 'main'
 
     payout_threshold = forms.DecimalField(label='Порог выполнения плана для выплаты', min_value=0, max_value=1, max_digits=9, decimal_places=8, initial='0.8', help_text='Коэффициент: 0,8 = 80%. Это порог выплаты, а не квартальная доля.')
-    fact_year = forms.IntegerField(label='Год факта', min_value=1, max_value=9999)
+    fact_year = forms.IntegerField(label='Год факта', min_value=2025, max_value=9998, help_text='Общий набор факта подготавливается с 2025 года.')
     plan_version = forms.ChoiceField(label='Загруженная версия плана продаж')
     quarter_share = forms.DecimalField(label='Квартальная доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=80)
     year_share = forms.DecimalField(label='Годовая доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=20)
@@ -85,6 +85,17 @@ def admin_required(request):
 @require_http_methods(['GET', 'POST'])
 def calculations(request):
     admin_required(request)
+    if request.method == 'POST' and request.POST.get('action') == 'prepare_sales':
+        from .services import prepared_sales
+        try:
+            prepared_sales.start()
+            messages.success(request, 'Подготовка факта запущена. Ежедневное задание настроено на 08:00 МСК.')
+        except Exception as exc:
+            from uuid import uuid4
+            reference=uuid4().hex[:12]
+            logger.exception('Prepared sales start failed [%s]',reference)
+            messages.error(request, calculation_jobs.failure_message(exc,reference))
+        return redirect('motivation_calculations')
     plan_versions = loaded_plan_versions()
     form = JobForm(plan_versions=plan_versions, main_only=True)
     edited_job_id = None
@@ -141,6 +152,18 @@ def calculations(request):
             job.next_run_label=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M') if job.run_at>timezone.now() else 'Время прошло · проверьте историю'
         job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
     return render(request, 'admin_motivation/calculations.html', {'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions, main_only=True) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
+
+
+@never_cache
+@require_http_methods(['GET'])
+def prepared_sales_monitor(request):
+    admin_required(request)
+    from .services import prepared_sales
+    try:
+        return JsonResponse(prepared_sales.monitor())
+    except Exception:
+        logger.exception('Prepared sales monitoring failed')
+        return JsonResponse({'error':'Не удалось проверить подготовку факта. Повторите обновление статуса.'},status=503)
 
 
 @never_cache
