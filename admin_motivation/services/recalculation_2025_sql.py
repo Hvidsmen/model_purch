@@ -36,6 +36,15 @@ SELECT rates.*,sub.SubdivisionName AS Subdivision
 INTO #test2025_coeff FROM #test2025_rates rates
 CROSS JOIN (SELECT DISTINCT SubdivisionName FROM dbo.Subdivisions) sub;
 CREATE INDEX IX_test2025_coeff ON #test2025_coeff(PGSales,TypeCoeff);
+-- Same fallback as the model Index: one minimum across all K0-K4
+-- in the planning group, then the whole file, separately by coefficient kind.
+SELECT r.PGSales,r.TypeCoeff,MIN(v.Coeff_) AS Minimum_
+INTO #test2025_group_min FROM #test2025_rates r
+CROSS APPLY (VALUES(r.K0),(r.K1),(r.K2),(r.K3),(r.K4)) v(Coeff_)
+GROUP BY r.PGSales,r.TypeCoeff;
+CREATE UNIQUE INDEX IX_test2025_group_min ON #test2025_group_min(PGSales,TypeCoeff);
+SELECT TypeCoeff,MIN(Minimum_) AS Minimum_ INTO #test2025_table_min
+FROM #test2025_group_min GROUP BY TypeCoeff;
 """
 
 
@@ -70,7 +79,7 @@ FROM (SELECT ПодразделениеДокумент,АвторСделки,�
 IF EXISTS(SELECT 1 FROM #percent_plan_menger WHERE Percent_ IS NULL)
  THROW 50025,N'Нулевой общий факт товарного сочетания: план нельзя распределить',1;
 """
-# No hidden fallback when a file does not cover a fact/plan classification.
+# Keep the guard for genuinely unavailable rates after the approved fallback.
 ALLOCATION = ALLOCATION.replace('КoэфMissing=1', 'КоэфициентМотивации IS NULL OR K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL')
 
 
@@ -129,7 +138,17 @@ def patch_source(source, existing=False):
  AND (c.Group_=N'*' OR c.Group_={alias}.GroupERP)
  AND (c.Brand IN (N'*',N'') OR c.Brand={brand})
  ORDER BY CASE WHEN c.Group_=N'*' THEN 0 ELSE 1 END DESC,
- CASE WHEN c.Brand IN (N'*',N'') THEN 0 ELSE 1 END DESC) sc"""
+ CASE WHEN c.Brand IN (N'*',N'') THEN 0 ELSE 1 END DESC) chosen
+ LEFT JOIN #test2025_group_min gm ON gm.PGSales={alias}.PlanningGroupSalesERP AND gm.TypeCoeff=N'{kind[1]}'
+ LEFT JOIN #test2025_table_min tm ON tm.TypeCoeff=N'{kind[1]}'
+ CROSS APPLY (SELECT COALESCE(chosen.PGSales,{alias}.PlanningGroupSalesERP) AS PGSales,
+ COALESCE(chosen.Group_,{alias}.GroupERP,N'') AS Group_,COALESCE(chosen.Brand,{brand},N'') AS Brand,
+ chosen.VariationCalculate,
+ COALESCE(chosen.K0,gm.Minimum_,tm.Minimum_) AS K0,
+ COALESCE(chosen.K1,gm.Minimum_,tm.Minimum_) AS K1,
+ COALESCE(chosen.K2,gm.Minimum_,tm.Minimum_) AS K2,
+ COALESCE(chosen.K3,gm.Minimum_,tm.Minimum_) AS K3,
+ COALESCE(chosen.K4,gm.Minimum_,tm.Minimum_) AS K4) sc"""
         source = source[:join.start()] + replacement + source[join.end():]
     # Use the matched coefficient keys in both fact and plan allocation dimensions.
     source, fact_groups = re.subn(r"CASE\s+WHEN\s+p\.PlanningGroupSalesErp\s+IN\s*\([^)]*\)\s+THEN\s+p\.GroupERP\s+ELSE\s+'[^']*'\s+END\s+GroupERP", 'sc.Group_ GroupERP', source, flags=re.I)
