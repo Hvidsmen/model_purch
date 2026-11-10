@@ -44,7 +44,7 @@ class InputForm(forms.Form):
         return data
 
 
-def read_results(job, connector=None):
+def read_results(job, connector=None, *, include_performance=False):
     """Hold the shared calculation lock while checking run identity AND reading rows."""
     connection = None
     try:
@@ -68,7 +68,16 @@ def read_results(job, connector=None):
  FROM motivation.ReportMotivationByDealAuthorTest2025
  WHERE [Год]=2025 AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики',N'Продажи')
  GROUP BY [ТипКоэф],[Подразделение],[АвторСделки],[КварталМотивации]""")
-        return summary(cursor.fetchall())
+        sections = summary(cursor.fetchall())
+        if include_performance:
+            from .services.recalculation_2025_performance import DETAIL_SQL, gates_sql, explain
+            cursor.execute(DETAIL_SQL)
+            detail = cursor.fetchall()
+            cursor.execute(gates_sql())
+            performance = explain(detail, cursor.fetchall(), job.payout_threshold)
+            for section in sections:
+                section['performance'] = [row for row in performance if row['kind'] == section['kind']]
+        return sections
     finally:
         if connection is not None:
             connection.close()  # Session lock is released even if SQL raised.
@@ -116,7 +125,7 @@ def report(request):
         state = observed.state if observed else 'unknown'
         if request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx':
             try:
-                sections = read_results(job)
+                sections = read_results(job, include_performance=request.GET.get('export') == 'xlsx')
                 if request.GET.get('export') == 'xlsx':
                     return FileResponse(workbook(sections), as_attachment=True, filename='motivation-2025-usd.xlsx')
             except ValidationError as exc:
