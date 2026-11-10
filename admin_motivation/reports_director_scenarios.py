@@ -4,6 +4,7 @@ import logging
 import uuid
 from django import forms
 from django.core.exceptions import PermissionDenied, ValidationError
+from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -28,9 +29,10 @@ class ComparisonForm(forms.Form):
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
         for year in (2025,2026):
-            ids=SalesPlanLine.objects.filter(plan_date__year=year).exclude(subdivision='').values('scenario_id')
+            lines=SalesPlanLine.objects.filter(scenario_id=OuterRef('pk'),
+                plan_date__gte=date(year,1,1),plan_date__lt=date(year+1,1,1)).exclude(subdivision='')
             field=self.fields[f'plan_{year}']
-            field.queryset=SalesPlanScenario.objects.filter(pk__in=ids,is_deleted=False,loaded_at__isnull=False)
+            field.queryset=SalesPlanScenario.objects.filter(Exists(lines),is_deleted=False,loaded_at__isnull=False).only('pk','title','source_version')
             field.label_from_instance=lambda obj:f'{obj.title} · {obj.source_version}'
         self.fields['coefficient_version'].queryset=GlobalCoeffVersion.objects.filter(status='approved',effective_from__lt=date(2027,1,1)).order_by('-effective_from','-pk')
         for key in ('source_moscow','source_tt','target_moscow','target_tt'):

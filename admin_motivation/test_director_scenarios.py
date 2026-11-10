@@ -227,6 +227,35 @@ class DirectorScenarioTests(TestCase):
         self.assertContains(self.client.get(reverse('motivation_reports')),reverse('motivation_report_director_scenarios'))
 
 
+    def test_both_plan_selectors_probe_index_and_filter_year_and_loaded_state(self):
+        from .reports_director_scenarios import ComparisonForm
+        from django.db import connection
+        for title,year,sub,loaded,deleted in [
+            ('Company total',2026,'',True,False),('Unloaded',2025,BRANCHES[0],False,False),
+            ('Deleted',2026,BRANCHES[0],True,True),('Other year',2024,BRANCHES[0],True,False),
+        ]:
+            plan=SalesPlanScenario.objects.create(title=title,source_version=title,is_deleted=deleted,
+                loaded_at=timezone.now() if loaded else None)
+            self.line(plan,sub,1,date(year,1,1))
+        form=ComparisonForm()
+        for year in (2025,2026):
+            field=form.fields[f'plan_{year}']
+            self.assertEqual(list(field.queryset.values_list('pk',flat=True)),[self.plans[year].pk])
+            if connection.vendor=='sqlite':
+                query_plan=field.queryset.explain()
+                self.assertNotIn('SCAN U0',query_plan)
+                self.assertIn('scenario_id=? AND plan_date>? AND plan_date<?',query_plan)
+            with self.assertNumQueries(2):choices=list(field.choices)
+            self.assertEqual(choices[-1][1],f'Plan {year} · P{year}')
+
+    def test_opening_comparison_never_reads_dwh_or_calculates(self):
+        with patch('admin_motivation.reports_director_scenarios.calculate') as calculator, \
+             patch('admin_motivation.services.director_scenarios.read_sources') as reader:
+            response=self.client.get(reverse('motivation_report_director_scenarios'))
+        self.assertContains(response,'Подготовить сравнение')
+        calculator.assert_not_called();reader.assert_not_called()
+
+
 class SourceReadTests(SimpleTestCase):
     def setUp(self):
         self.conn=Mock();self.cursor=Mock();self.connector=Mock(return_value=(self.conn,self.cursor))
@@ -284,7 +313,9 @@ class DirectorScenarioBrowserTests(StaticLiveServerTestCase):
                 browser=playwright.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE','/usr/bin/chromium'),headless=True)
                 page=browser.new_page(viewport={'width':1600,'height':1100})
                 page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
-                page.goto(self.live_server_url+reverse('motivation_report_director_scenarios'))
+                page.goto(self.live_server_url+reverse('motivation_reports'))
+                page.get_by_role('link',name='Сравнение директорских сценариев · 2025 / 2026',exact=True).click()
+                expect(page.get_by_role('heading',name='Сравнение директорских сценариев',exact=True)).to_be_visible()
                 for year in (2025,2026):page.locator(f'select[name=plan_{year}]').select_option(str(self.plans[year].pk))
                 page.locator('select[name=coefficient_version]').select_option(str(self.version.pk))
                 for key,person in zip(('source_moscow','source_tt','target_moscow','target_tt'),self.people):page.locator(f'select[name={key}]').select_option(str(person.pk))
