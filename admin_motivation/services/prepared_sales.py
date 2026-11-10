@@ -31,14 +31,34 @@ IF OBJECT_ID(N'motivation.PortalPreparedSalesConflict',N'U') IS NULL
 """
 
 
+
+# Remove only an incomplete delivery row covered by a real, more complete row
+# with identical price/discount/author inputs. Never synthesize a new tuple or
+# rank contradictory filled values by arbitrary document reference.
+DOCUMENT_DOMINANCE = """
+DELETE d FROM #portal_document_sales_values d
+WHERE EXISTS (SELECT 1 FROM #portal_document_sales_values b
+ WHERE b.DocumentKey=d.DocumentKey AND b.Номенклатура=d.Номенклатура
+ AND b.ВидЦены=d.ВидЦены AND b.ДаичиТипСкидкиНаДату=d.ДаичиТипСкидкиНаДату
+ AND b.даичи_ВидЦеныВходнаяСтоимостьНаименование=d.даичи_ВидЦеныВходнаяСтоимостьНаименование
+ AND (b.Даичи_АвторСделкиНаименование=d.Даичи_АвторСделкиНаименование
+  OR (b.Даичи_АвторСделкиНаименование IS NULL AND d.Даичи_АвторСделкиНаименование IS NULL))
+ AND (NULLIF(d.СпособДоставки,'') IS NULL OR d.СпособДоставки=b.СпособДоставки)
+ AND (NULLIF(d.[даичи_УсловияДоставки],'') IS NULL OR d.[даичи_УсловияДоставки]=b.[даичи_УсловияДоставки])
+ AND ((NULLIF(d.СпособДоставки,'') IS NULL AND NULLIF(b.СпособДоставки,'') IS NOT NULL)
+  OR (NULLIF(d.[даичи_УсловияДоставки],'') IS NULL AND NULLIF(b.[даичи_УсловияДоставки],'') IS NOT NULL)));
+"""
+
 DOCUMENT_VALUES = """
 SELECT DISTINCT DocumentKey,Номенклатура,
  COALESCE(ВидЦены,'') AS ВидЦены,
  COALESCE(ДаичиТипСкидкиНаДату,'') AS ДаичиТипСкидкиНаДату,
  COALESCE(даичи_ВидЦеныВходнаяСтоимостьНаименование,'') AS даичи_ВидЦеныВходнаяСтоимостьНаименование,
- Даичи_АвторСделкиНаименование,СпособДоставки,[даичи_УсловияДоставки]
+ Даичи_АвторСделкиНаименование,ISNULL(СпособДоставки,'') AS СпособДоставки,
+ ISNULL([даичи_УсловияДоставки],'') AS [даичи_УсловияДоставки]
 INTO #portal_document_sales_values
 FROM #document_sales;
+""" + DOCUMENT_DOMINANCE + """
 IF EXISTS (SELECT 1 FROM #portal_document_sales_values GROUP BY DocumentKey,Номенклатура HAVING COUNT_BIG(*) > 1)
 BEGIN
  INSERT INTO motivation.PortalPreparedSalesConflict(RunId,DocumentKey,ProductXml,VariantsXml)
