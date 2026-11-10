@@ -7,6 +7,7 @@
 <h1>Пересчёт 2025</h1>
 <p>Факт 2025 · План 2025 · USD. Все подразделения, Москва и ТТ отдельно.</p>
 <p>План политиков распределяется по долям факта 2025 года внутри подразделения и товарного сочетания коэффициентов. Для продаж учитываются HEAT и канал ДПП.</p>
+<p>При нулевом общем факте план распределяется по положительным итогам авторов внутри того же подразделения и товарного сочетания. Авторы с нулевым или отрицательным итогом получают 0% плана.</p>
 <p>Коэффициенты — из загруженного файла: точное сочетание или строка с *, затем минимум группы планов продаж, затем минимум таблицы отдельно для «Политик» и «Продаж».</p>
 {% if error %}<div class="next-error" role="alert">{{ error }}</div>{% endif %}
 {% if can_start %}
@@ -25,6 +26,11 @@
 {% elif state == 'running' %}<p>Текущий этап этим запуском не записан. Подробные этапы появятся при новом запуске после обновления портала.</p>{% endif %}
 {% if state == 'running' %}<p>Статус и этап обновляются каждые 10 секунд. Время обновляется каждую секунду. При редактировании параметров автообновление статуса приостанавливается.</p>{% endif %}
 </div>{% endif %}
+{% if state == 'failed' and can_start %}<details open class="next-error"><summary>Журнал SQL Agent · последние запуски этого задания</summary>
+<p>Задание: <code>{{ agent_job_name }}</code>. Время — московское. Сверьте начало запуска со временем выше.</p>
+{% for row in agent_history %}<div><strong>{{ row.started }} · {{ row.status }} · {{ row.duration }}</strong><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ row.message }}</pre></div>
+{% empty %}<p>{% if agent_history_unavailable %}Не удалось прочитать журнал SQL Agent.{% else %}Запись запуска ещё не появилась в журнале SQL Agent или история очищена.{% endif %} Обновите страницу или откройте журнал указанного задания в SQL Server Management Studio.</p>{% endfor %}
+</details>{% endif %}
 {% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" {% if state == 'running' or state == 'queued' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
 </div>
 <nav class="next-filter" aria-label="Отчёты 2025">

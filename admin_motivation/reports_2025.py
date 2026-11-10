@@ -119,6 +119,7 @@ def report(request):
                      initial=initial, saved_input=job.recalculation_2025 if job else None)
     error, sections, state = job.error if job else '', [], None
     progress=None
+    agent_history=[];agent_history_unavailable=False;agent_job_name=''
     if request.method == 'POST':
         if not can_start:
             raise PermissionDenied
@@ -160,7 +161,15 @@ def report(request):
         if state!='queued':
             from .services.recalculation_2025_progress import display
             progress=display(job,observed,state)
-        if request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx':
+        if state=='failed':
+            error='Пересчёт завершился с ошибкой. '+('Подробности — в журнале SQL Agent ниже.' if can_start else 'Обратитесь к администратору для проверки журнала SQL Agent.')
+            if can_start:
+                agent_job_name=calculation_jobs.job_name(job)
+                try:agent_history=calculation_jobs.monitor(job).get('history',[])[:5]
+                except Exception:
+                    agent_history_unavailable=True
+                    logging.getLogger(__name__).exception('2025 calculation failure history unavailable')
+        if state not in ('failed','interrupted') and (request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx'):
             try:
                 sections = read_results(job, include_performance=request.GET.get('export') == 'xlsx')
                 if request.GET.get('export') == 'xlsx':
@@ -178,4 +187,5 @@ def report(request):
     return render(request, 'admin_motivation/reports_next/year_2025.html', {
         'form': form, 'can_start': can_start, 'job': job, 'section': section,
         'tab': tab, 'period_labels': PERIODS, 'error': error, 'state': state, 'progress':progress,
+        'agent_history':agent_history,'agent_history_unavailable':agent_history_unavailable,'agent_job_name':agent_job_name,
         'input': job.recalculation_2025 if job else None})
