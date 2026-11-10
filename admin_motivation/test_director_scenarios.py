@@ -167,6 +167,39 @@ class DirectorScenarioTests(TestCase):
         book=load_workbook(BytesIO(b''.join(download.streaming_content)));self.assertEqual(len(book.sheetnames),9)
         self.assertEqual(DirectorScenarioComparison.objects.count(),1)
 
+    def test_real_reader_2026_uses_prepared_fact_and_unexecuted_main_settings(self):
+        from .models import MotivationCalculationSchedule,DiscountSegment
+        DiscountSegment.objects.create(version=self.version,type_discount='MASS',o1=10,o2=20,o3=30,o4=40)
+        job=MotivationCalculationSchedule.objects.create(name='Main settings',variant='main',fact_year=2026,
+            plan_version='P2026',quarter_share=65,year_share=35,payout_threshold='.8')
+        self.approve()
+        connection=Mock();cursor=Mock()
+        cursor.fetchone.side_effect=[(0,),(1,),('r25','completed',json.dumps(self.sources['2025']['parameters']),'date'),
+            (1,1,1),('prepared26','date')]
+        def fact_rows(year):
+            return [(r['branch'],r['quarter'],r['planning'],r['goods'],r['brand'],r['segment'],
+                     D(r['positive']),D(r['negative']),0 if year==2025 else 1) for r in self.facts[year]]
+        cursor.fetchall.side_effect=[fact_rows(2025),fact_rows(2026)]
+        saved=calculate(self.plans[2025].pk,self.plans[2026].pk,self.version.pk,
+            *[p.pk for p in self.people],connector=Mock(return_value=(connection,cursor)))
+        source=saved.results['sources']['2026']
+        self.assertEqual(source['run_id'],'prepared26')
+        self.assertEqual(source['parameters']['settings_job_id'],job.pk)
+        self.assertEqual(D(self.row(saved.results,3)['total']),D('19.5'))
+        sql='\n'.join(c.args[0] for c in cursor.execute.call_args_list)
+        self.assertNotIn('FactAll2026',sql)
+        self.assertNotIn('ReportMotivationByDealAuthor',sql)
+        self.assertNotIn('all_2026',[arg for c in cursor.execute.call_args_list for arg in c.args])
+        connection.close.assert_called_once()
+        params=list(load_workbook(workbook(saved))['Параметры'].values)
+        self.assertTrue(any('settings_job_key' in str(row) and str(job.key) in str(row) for row in params))
+        self.assertTrue(any('Подготовленный факт продаж' in str(row) for row in params))
+        self.assertTrue(any('сегменты MASS' in str(row) for row in params))
+        self.assertFalse(any('Менеджеры 2025' in str(row) for row in params))
+        job.quarter_share=80;job.year_share=20;job.save()
+        saved.refresh_from_db()
+        self.assertEqual(D(saved.results['sources']['2026']['parameters']['quarter_share']),65)
+
     def test_previous_snapshot_labelled_without_rewriting_history(self):
         saved=self.run_calc()
         saved.results['rule']='director-comparison-five-v1'
@@ -264,13 +297,18 @@ class SourceReadTests(SimpleTestCase):
         self.conn=Mock();self.cursor=Mock();self.connector=Mock(return_value=(self.conn,self.cursor))
         self.plans={year:SimpleNamespace(source_version=f'P{year}') for year in (2025,2026)}
         params=lambda year:json.dumps({'fact_year':year,'plan_version':f'P{year}','quarter_share':'80','year_share':'20','payout_threshold':'.8'})
-        self.runs=[('r25','completed',params(2025),'today'),('r26','completed',params(2026),'today')]
+        self.runs=[('r25','completed',params(2025),'today')]
+        self.version=SimpleNamespace()
+        self.settings_patch=patch('admin_motivation.services.director_prepared_fact.settings_for',return_value={})
+        self.prepared_patch=patch('admin_motivation.services.director_prepared_fact.read_fact',return_value=([],{}))
+        self.settings_patch.start();self.prepared=self.prepared_patch.start()
+        self.addCleanup(self.settings_patch.stop);self.addCleanup(self.prepared_patch.stop)
         self.cursor.fetchone.side_effect=[(0,),(1,),*self.runs]
         self.cursor.fetchall.side_effect=[[(BRANCHES[0],1,'1. RAC','AC','Brand','O0',100,-20,0)],
             [(BRANCHES[1],2,'1. RAC','AC','Brand','O1',200,0,0)],[]]
 
     def test_verified_sources_original_branch_and_read_only_lock(self):
-        facts,metadata=read_sources(self.plans,self.connector)
+        facts,metadata=read_sources(self.plans,self.version,self.connector)
         self.assertEqual(facts[2025][0]['negative'],'-20')
         sql='\n'.join(call.args[0] for call in self.cursor.execute.call_args_list)
         self.assertIn('s.SubdivisionKey=f.[ПодразделениеДокумент]',sql)
@@ -278,24 +316,27 @@ class SourceReadTests(SimpleTestCase):
         self.assertIn('f.[СуммаОтгрузокUSD]<>0',sql)
         self.assertNotIn('ReportMotivationByDealAuthorTest2025',sql)
         self.assertNotIn('АвторСделки',sql)
-        self.assertNotIn('INSERT',sql);self.conn.close.assert_called_once()
+        self.assertNotIn('INSERT',sql)
+        self.assertNotIn('all_2026',sql);self.assertNotIn('FactAll2026',sql)
+        self.prepared.assert_called_once_with(self.cursor,self.version,BRANCHES,{})
+        self.conn.close.assert_called_once()
 
     def test_failed_latest_run_rejected_and_connection_closed(self):
         self.cursor.fetchone.side_effect=[(0,),(1,),('r','failed','{}','today')]
-        with self.assertRaisesMessage(ValidationError,'завершённого'):read_sources(self.plans,self.connector)
+        with self.assertRaisesMessage(ValidationError,'завершённого'):read_sources(self.plans,self.version,self.connector)
         self.conn.close.assert_called_once()
 
     def test_different_plan_rejected(self):
         self.plans[2025].source_version='other'
-        with self.assertRaisesMessage(ValidationError,'не совпадает'):read_sources(self.plans,self.connector)
+        with self.assertRaisesMessage(ValidationError,'не совпадает'):read_sources(self.plans,self.version,self.connector)
 
     def test_no_original_branch_or_unknown_segment_rejected(self):
         self.cursor.fetchall.side_effect=[[(BRANCHES[0],1,'PG','G','B','O0',100,0,1)]]
-        with self.assertRaisesMessage(ValidationError,'исходный филиал'):read_sources(self.plans,self.connector)
+        with self.assertRaisesMessage(ValidationError,'исходный филиал'):read_sources(self.plans,self.version,self.connector)
 
     def test_busy_source_rejected(self):
         self.cursor.fetchone.side_effect=[(-1,)]
-        with self.assertRaisesMessage(ValidationError,'выполняется'):read_sources(self.plans,self.connector)
+        with self.assertRaisesMessage(ValidationError,'выполняется'):read_sources(self.plans,self.version,self.connector)
 
 
 import os

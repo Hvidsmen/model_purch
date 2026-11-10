@@ -16,7 +16,7 @@ from .sales_plans import number
 ZERO=Decimal(0)
 MERGED='Д-Москва + ТЕРМОТРЕЙД'
 FORMULAS=('Подразделение(Глобально)','Подразделение','Группа планов продаж','Группа товаров','Марка(Бренд)')
-RULE='director-comparison-five-v2-directors-only'
+RULE='director-comparison-five-v3-prepared-2026'
 
 
 class Rates:
@@ -151,7 +151,7 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
     if len(people)!=4:raise ValidationError('Один из выбранных сотрудников не найден.')
     actors=[people[i] for i in ids]
     plan_rows={year:plan_inputs(plan,year) for year,plan in plans.items()}
-    facts,sources=read_sources(plans,connector)
+    facts,sources=read_sources(plans,version,connector)
     rates=Rates(version);rows=[];details=[];scenarios=[]
     for case in range(1,6):
         year=2025 if case==1 else 2026;merged=case in (4,5);synthetic=case in (3,5)
