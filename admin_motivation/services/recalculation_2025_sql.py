@@ -68,8 +68,14 @@ ALLOCATION = """
 -- Annual 2025 shares, separately by document subdivision and coefficient goods key.
 IF EXISTS(SELECT 1 FROM #fact WHERE КoэфMissing=1)
  THROW 50025,N'Есть факт без полного набора K0–K4 из файла',1;
-SELECT t.*,AmountUSD/NULLIF(SUM(AmountUSD) OVER
- (PARTITION BY ПодразделениеДокумент,ГруппаПлановПродаж,ГруппаТоваров,Марка),0) AS Percent_
+SELECT t.*,CASE WHEN SUM(AmountUSD) OVER
+ (PARTITION BY ПодразделениеДокумент,ГруппаПлановПродаж,ГруппаТоваров,Марка)<>0
+ THEN AmountUSD/NULLIF(SUM(AmountUSD) OVER
+ (PARTITION BY ПодразделениеДокумент,ГруппаПлановПродаж,ГруппаТоваров,Марка),0)
+ ELSE CASE WHEN AmountUSD>0 THEN AmountUSD ELSE 0 END/NULLIF(
+ SUM(CASE WHEN AmountUSD>0 THEN AmountUSD ELSE 0 END) OVER
+ (PARTITION BY ПодразделениеДокумент,ГруппаПлановПродаж,ГруппаТоваров,Марка),0)
+ END AS Percent_
 INTO #percent_plan_menger
 FROM (SELECT ПодразделениеДокумент,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка,
  SUM(СуммаОтгрузокUSD) AS AmountUSD FROM #fact
@@ -77,7 +83,7 @@ FROM (SELECT ПодразделениеДокумент,АвторСделки,�
  GROUP BY ПодразделениеДокумент,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка
  HAVING SUM(СуммаОтгрузокUSD)<>0) t;
 IF EXISTS(SELECT 1 FROM #percent_plan_menger WHERE Percent_ IS NULL)
- THROW 50025,N'Нулевой общий факт товарного сочетания: план нельзя распределить',1;
+ THROW 50025,N'Нет положительного итога авторов для распределения плана при нулевом общем факте',1;
 """
 # Keep the guard for genuinely unavailable rates after the approved fallback.
 ALLOCATION = ALLOCATION.replace('КoэфMissing=1', 'КоэфициентМотивации IS NULL OR K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL')
