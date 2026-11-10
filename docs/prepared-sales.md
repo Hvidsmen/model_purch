@@ -30,3 +30,13 @@ Procedures are generated from the reviewed SQL template. Before replacing a calc
 No Django migration or source configuration secrets are needed. SQL setup occurs only during explicit preparation start or calculation-job synchronization, never on opening the center or polling its monitor. Existing DataWH/Agent permissions are required, including creating tables/procedures, renaming the staging table, configuring jobs and reading Agent activity/history.
 
 The service and tests do not assume real warehouse access in the development environment. Tests cover SQL generation, scopes and temporal guards, publication ordering/rollback boundaries, saved snapshot provenance, registration/time conversion, error handling, cancellation, authorization and the browser card. Generated SQL still needs first-run validation on the actual SQL Server; no real performance duration is claimed by local tests.
+
+## Reviewed legacy helper compatibility
+
+The warehouse may keep document enrichment in parameterless `sp_PrepareSales`, without the old duplicate guard/index and with the original eight-branch discount CASE. The shared producer still performs its stronger independent deduplication/conflict validation. Consumers may omit the old guard/index only when the remainder of the document update and discount preparation matches the reviewed contract.
+
+The reviewed legacy CASE uses `/100` and guarded raw division; the shared CASE uses `/100.0` and defensive NULLIF. Only this whole known CASE is accepted. Before substituting it, preparation checks `dbo.Sales.Discount.system_type_id`: it must be real (59) or float (62), which makes both numeric literals floating operands of the same value. Integer, decimal, money, unknown metadata and an unavailable metadata cursor are rejected. Other changed guards, monetary terms, document fields or price-history joins remain incompatible. There is no generic removal of NULLIF or weakening of financial comparison.
+
+This is a consumer compatibility change; the producer formula and prepared dataset rule are unchanged. Existing compatible ready snapshots remain usable. Updating the portal and launching the saved main job installs the updated private consumers; no rebuild of the ready sales set, live warehouse procedure change or Django migration is required.
+
+`test_prepared_sales_compatibility` covers both floating types, rejected nonfloating/missing types, altered formulas/guards/joins, both CASE expressions on NULL/zero/return and randomized floating inputs, and helper expansion through main/all/separate 2026 preparation. Uploaded procedure definitions are used only for private comparison, never copied into public fixtures.
