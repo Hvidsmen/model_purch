@@ -118,6 +118,7 @@ class Native2025PreparationTests(SimpleTestCase):
         self.assertNotIn('OPENJSON',sql.upper())
         self.assertIn("@Test2025Xml.nodes('/coefficients/coefficient')",sql)
         self.assertIn("r.record.value('(k4/text())[1]','decimal(12,6)')",sql)
+        self.assertIn("COALESCE(r.record.value('(brand/text())[1]','nvarchar(255)'),N'') AS Brand",sql)
         self.assertRegex(sql,r';\s*WITH fact AS')
 
     def test_xml_creation_options_are_set_in_a_separate_batch(self):

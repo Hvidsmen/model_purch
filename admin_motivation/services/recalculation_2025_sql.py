@@ -17,7 +17,7 @@ IF @Test2025Xml IS NULL
  THROW 50025,N'Не удалось прочитать снимок коэффициентов 2025. Повторите подготовку задания',1;
 SELECT r.record.value('(planning/text())[1]','nvarchar(255)') AS PGSales,
  r.record.value('(goods/text())[1]','nvarchar(255)') AS Group_,
- r.record.value('(brand/text())[1]','nvarchar(255)') AS Brand,
+ COALESCE(r.record.value('(brand/text())[1]','nvarchar(255)'),N'') AS Brand,
  r.record.value('(kind/text())[1]','nvarchar(30)') AS TypeCoeff,
  CAST('20250101' AS date) AS DateFrom,CAST('20251231' AS date) AS DateTo,
  CAST(NULL AS nvarchar(64)) AS VariationCalculate,
