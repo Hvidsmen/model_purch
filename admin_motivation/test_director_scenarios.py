@@ -318,7 +318,15 @@ class DirectorScenarioBrowserTests(StaticLiveServerTestCase):
                 expect(page.get_by_role('heading',name='Сравнение директорских сценариев',exact=True)).to_be_visible()
                 for year in (2025,2026):page.locator(f'select[name=plan_{year}]').select_option(str(self.plans[year].pk))
                 page.locator('select[name=coefficient_version]').select_option(str(self.version.pk))
-                for key,person in zip(('source_moscow','source_tt','target_moscow','target_tt'),self.people):page.locator(f'select[name={key}]').select_option(str(person.pk))
+                from .reports_director_scenarios import ComparisonForm
+                for key,person in zip(('source_moscow','source_tt','target_moscow','target_tt'),self.people):
+                    label=ComparisonForm.base_fields[key].label
+                    page.get_by_role('button',name=label,exact=True).click()
+                    search=page.get_by_role('searchbox',name=f'Поиск: {label}',exact=True)
+                    search.fill('No matching employee')
+                    expect(page.locator('.searchable-filter-menu:visible')).to_contain_text('Нет совпадений')
+                    search.fill(person.full_name)
+                    page.get_by_role('button',name=f'{person.full_name} · № {person.pk}',exact=True).click()
                 page.get_by_role('button',name='Рассчитать пять вариантов и сохранить',exact=True).click()
                 expect(page.locator('#scenario-5')).to_contain_text('факт = план')
                 expect(page.locator('table').nth(2)).to_contain_text('24.00')
