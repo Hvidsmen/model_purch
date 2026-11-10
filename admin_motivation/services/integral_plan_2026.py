@@ -19,7 +19,7 @@ from .heat_exclusion import is_heat
 from .sales_plans import number, SEGMENTS
 
 ZERO = Decimal(0)
-RULE = 'integral-plan-2026-v1'
+RULE = 'integral-plan-2026-v2-known-subdivisions'
 
 
 def empty(branch):
@@ -65,16 +65,19 @@ def calculate(scenario_id, version_id):
     policy_index = Index(coefficient_rows([version.pk], subdivision=True))
     director_index = DirectorIndex([version.pk], local=True)
     grouped, months, input_count = {}, set(), 0
+    skipped = {}
     lines = scenario.lines.filter(plan_date__gte=date(2026,1,1),plan_date__lt=date(2027,1,1)).exclude(subdivision='')
     for day, sub, pg, goods, brand, amount, segments in lines.order_by().values_list(
             'plan_date','subdivision','planning_group_sales','group','brand','amount_usd','segment_amounts').iterator(chunk_size=2000):
         if not included(sub, aliases):
             continue
-        months.add(day.strftime('%Y-%m')); input_count += 1
         target = canonical(sub, aliases)
         branch = directory.get(sub) or directory.get(target)
         if branch is None:
-            raise ValidationError(f'Подразделение «{sub}» из плана не найдено в справочнике. Обновите справочник подразделений.')
+            excluded = skipped.setdefault(sub, {'branch':sub,'plan':ZERO,'lines':0})
+            excluded['plan'] += number(amount); excluded['lines'] += 1
+            continue
+        months.add(day.strftime('%Y-%m')); input_count += 1
         dpp = branch.chanel.chanel_name.strip().casefold() == 'дпп'
         if not isinstance(segments,dict) or set(SEGMENTS) - set(segments):
             raise ValidationError(f'{sub}, {pg}: в плане отсутствует распределение O0–O4. Перезагрузите план.')
@@ -85,7 +88,7 @@ def calculate(scenario_id, version_id):
         entry = grouped.setdefault((target,dpp,pg,goods,brand),[ZERO,[ZERO]*5])
         entry[0] += plan
         entry[1] = [a+b for a,b in zip(entry[1],values)]
-    if not grouped:
+    if not grouped and not skipped:
         raise ValidationError('В выбранном загруженном плане нет строк подразделений за 2026 год.')
     buckets, details = {}, []
     for (sub,dpp,pg,goods,brand),(plan,amounts) in sorted(grouped.items()):
@@ -122,7 +125,9 @@ def calculate(scenario_id, version_id):
             local['directors'] = add(local['directors'],value)
         row['directors'] = add(row['directors'],local['directors'])
         details.append(local)
-    company = empty('Итого по выбранному плану')
+    company = empty('Итого по учтённым подразделениям')
+    if skipped:
+        company['notes'].add('Подразделения вне справочника исключены из плана и премий: ' + ', '.join(sorted(skipped)))
     for row in buckets.values():
         for field in ('plan','policies','sales','directors'):
             company[field] = add(company[field],row[field])
@@ -134,7 +139,9 @@ def calculate(scenario_id, version_id):
         'loaded_at':scenario.loaded_at.isoformat(),'coefficient_version':version.title or f'Версия № {version.pk}',
         'coefficient_effective_from':version.effective_from.isoformat(),'coefficient_revision':version.revision,
         'coefficient_version_id':version.pk,'subdivision_mapping':aliases,
-        'scope':'Подразделения из выбранного загруженного плана; действующие объединения',
+        'skipped_subdivisions':[skipped[key] for key in sorted(skipped)],
+        'skipped_plan':sum((item['plan'] for item in skipped.values()),ZERO),
+        'scope':'Только подразделения из справочника портала; действующие объединения',
         'period':'Полный 2026 год, без ограничения IV кварталом',
         'formula':'Политики + Продажи: (премия политиков + премия продаж) / план; Директора: сумма премий действующих директоров / план'}
     payload = json.loads(json.dumps({'metadata':metadata,'rows':rows,'total':total,'details':details},ensure_ascii=False,default=str))
@@ -167,6 +174,13 @@ def workbook(snapshot):
         sheet.append([row['branch'],row['planning'],row['goods'],row['brand'],numeric(row['plan']),
             *map(numeric,row['segments']),numeric(row['policies']),numeric(row['sales']),numeric(row['directors']),'; '.join(row['notes'])])
     style(sheet,2,set(),set(range(5,14)),'E3')
+    skipped=data['metadata'].get('skipped_subdivisions',[])
+    if skipped:
+        sheet=book.create_sheet('Исключённые подразделения')
+        sheet.append(['Подразделения отсутствуют в справочнике: не включены в план и премии'])
+        sheet.append(['Подразделение','Исключённый план, USD','Строк плана'])
+        for item in skipped:sheet.append([item['branch'],numeric(item['plan']),item['lines']])
+        style(sheet,2,set(),{2},'B3')
     output=BytesIO();book.save(output);output.seek(0);return output
 
 

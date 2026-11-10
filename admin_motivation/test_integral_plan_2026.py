@@ -250,6 +250,32 @@ class IntegralPlan2026Tests(TestCase):
         calculate_report.assert_not_called();connect.assert_not_called()
 
 
+    def test_unknown_subdivision_is_excluded_from_plan_premium_and_excel(self):
+        self.line('Missing branch',1000000)
+        self.line('Missing branch',500,date(2026,2,1))
+        saved=self.run_calc();data=saved.results
+        self.assertEqual(Decimal(data['total']['plan']),10000)
+        self.assertEqual(Decimal(data['total']['combined_coefficient']),Decimal('.048'))
+        self.assertEqual(data['metadata']['input_count'],2)
+        self.assertEqual(data['metadata']['skipped_subdivisions'],[
+            {'branch':'Missing branch','plan':'1000500.000000','lines':2}])
+        self.assertNotIn('Missing branch',[r['branch'] for r in data['rows']])
+        self.assertNotIn('Missing branch',[r['branch'] for r in data['details']])
+        book=load_workbook(workbook(saved))
+        self.assertEqual(book['Исключённые подразделения']['B3'].value,1000500)
+        page=self.client.get(reverse('motivation_report_integral_2026')+f'?calculation={saved.pk}')
+        self.assertContains(page,'Исключены подразделения вне справочника')
+        self.assertContains(page,'Missing branch')
+
+    def test_all_unknown_subdivisions_produce_empty_result_without_fake_premiums(self):
+        self.plan.lines.all().delete();self.line('Missing branch',500)
+        data=self.run_calc().results
+        self.assertEqual(data['rows'],[])
+        self.assertEqual(Decimal(data['total']['plan']),0)
+        self.assertIsNone(data['total']['combined_coefficient'])
+        self.assertEqual(Decimal(data['metadata']['skipped_plan']),500)
+
+
 import os
 from unittest import skipUnless
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
