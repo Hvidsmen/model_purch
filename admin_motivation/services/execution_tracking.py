@@ -148,3 +148,40 @@ def latest_for_report(fallback=None, *, variant='main', persist=False):
         raise ValidationError('Последний запуск расчёта завершился ошибкой. Проверьте журнал в «Центре расчётов».')
     return latest
 
+
+
+def running_state(job, execution, connector=None):
+    """Derive a cancelled run without rewriting the warehouse audit on GET.
+
+    Killing a worker can bypass TRY/CATCH. Treat its running journal as stale
+    only when Agent is inactive AND no portal writer holds the application lock.
+    A second journal read avoids calling a just-completed run interrupted.
+    """
+    if execution is None or execution.state != 'running':
+        return execution.state if execution else 'unknown'
+    from .calculation_jobs import job_name
+    connection=None
+    try:
+        connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
+        connection.timeout=10
+        cursor.execute("""SELECT a.start_execution_date,a.stop_execution_date,a.run_requested_date,
+ APPLOCK_TEST(N'public',N'PortalMotivationCalculation',N'Exclusive',N'Session')
+ FROM (SELECT 1 AS probe) p LEFT JOIN msdb.dbo.sysjobs j ON j.name=?
+ LEFT JOIN msdb.dbo.sysjobactivity a ON a.job_id=j.job_id
+ AND a.session_id=(SELECT MAX(session_id) FROM msdb.dbo.syssessions)""",job_name(job))
+        row=cursor.fetchone()
+        if not row or len(row)!=4:return 'unknown'
+        started,stopped,requested,lock_free=row
+        if requested and (not started or stopped and requested>stopped):return 'queued'
+        if started and not stopped:return 'running'
+        if lock_free!=1:return 'unknown'
+        cursor.execute('SELECT State_ FROM motivation.PortalMotivationRun WHERE RunId=?',str(execution.run_id))
+        current=cursor.fetchone()
+        if not current:return 'unknown'
+        if current[0] in ('completed','failed'):return current[0]
+        return 'interrupted' if current[0]=='running' else 'unknown'
+    except Exception:
+        # No reply/permission is not evidence of a cancelled run.
+        return 'unknown'
+    finally:
+        if connection is not None:connection.close()

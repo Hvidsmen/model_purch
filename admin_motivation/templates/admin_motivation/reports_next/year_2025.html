@@ -14,10 +14,10 @@
 </details>
 {% endif %}
 {% if job %}
-<div class="next-note"><strong>Входные данные:</strong> {{ input.source_name }} · Товарных сочетаний: {{ input.coefficients|length }}.<br>
+<div class="next-note" data-recalculation-state="{{ state }}" data-recalculation-job="{{ job.pk }}"><strong>Входные данные:</strong> {{ input.source_name }} · Товарных сочетаний: {{ input.coefficients|length }}.<br>
 План: {{ job.plan_version }}. Квартальная доля: {{ job.quarter_share|floatformat:"-6" }}%, годовая: {{ job.year_share|floatformat:"-6" }}%, порог выплаты: {{ job.payout_threshold|floatformat:"-8" }}.
-{% if state %}<p>Состояние: {% if state == 'completed' %}Расчёт завершён{% elif state == 'running' %}Выполняется{% elif state == 'start_failed' %}Входные данные сохранены. Запуск не выполнен{% elif state == 'not_started' %}Входные данные сохранены. Расчёт ещё не запускался{% elif state == 'failed' %}Ошибка расчёта{% else %}Ожидает подтверждения запуска{% endif %}</p>{% endif %}
-{% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" {% if state == 'running' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
+{% if state %}<p>Состояние: {% if state == 'completed' %}Расчёт завершён{% elif state == 'running' %}Выполняется{% elif state == 'queued' %}Ожидает запуска в SQL Agent{% elif state == 'interrupted' %}Пересчёт прерван. Активного задания нет; можно запустить заново{% elif state == 'start_failed' %}Входные данные сохранены. Запуск не выполнен{% elif state == 'not_started' %}Входные данные сохранены. Расчёт ещё не запускался{% elif state == 'failed' %}Ошибка расчёта{% else %}Не удалось подтвердить состояние запуска. Обновите статус{% endif %}</p>{% endif %}
+{% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" {% if state == 'running' or state == 'queued' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
 </div>
 <nav class="next-filter" aria-label="Отчёты 2025">
 <a class="btn {% if tab != 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?job={{ job.pk }}&amp;run=1&amp;tab=policies">Политики</a>
@@ -34,4 +34,4 @@
 </tbody><tfoot><tr><th>Итого</th>{% if section.kind == 'Политики' %}<td></td>{% endif %}{% for value in section.values %}<td class="num">{{ value|floatformat:2 }}</td>{% endfor %}<td class="num">{{ section.bonus|floatformat:2 }}</td><td class="num">{{ section.total|floatformat:2 }}</td></tr></tfoot></table></div>
 {% elif not error %}<p>Сохраните входные данные и запустите пересчёт. После завершения откройте «Политики» или «Продажи».</p>{% endif %}
 {% else %}<p>Входные данные пересчёта ещё не сохранены.</p>{% endif %}
-</section>{% endblock %}
+</section><script src="{% static 'admin_motivation/recalculation_2025_status.js' %}" defer></script>{% endblock %}

@@ -155,7 +155,7 @@ def report(request):
         state = 'start_failed'
     elif job and job.synced:
         observed = execution_tracking.observe(job, persist=can_start)
-        state = observed.state if observed else 'unknown'
+        state = execution_tracking.running_state(job, observed)
         if request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx':
             try:
                 sections = read_results(job, include_performance=request.GET.get('export') == 'xlsx')
