@@ -121,6 +121,23 @@ class Native2025PreparationTests(SimpleTestCase):
         self.assertIn("COALESCE(r.record.value('(brand/text())[1]','nvarchar(255)'),N'') AS Brand",sql)
         self.assertRegex(sql,r';\s*WITH fact AS')
 
+    def test_historical_formulas_are_materialized_once_before_fact_joins(self):
+        cursor=MagicMock();cursor.fetchone.side_effect=[(None,),(0,)]
+        prepare(cursor)
+        sql=cursor.execute.call_args.args[0]
+        self.assertEqual(sql.count('FROM DataWH.motivation.vSubdivisionMotiveCoeffTo old'),1)
+        self.assertEqual(sql.count('INTO #test2025_formulas'),1)
+        self.assertLess(sql.index('INTO #test2025_formulas'),sql.index('WITH fact AS'))
+        self.assertIn('CREATE INDEX IX_test2025_formulas',sql)
+        self.assertIn('INCLUDE(Subdivision,Group_,Brand,VariationCalculate)',sql)
+        self.assertIn("WHERE old.DateFrom<'20260101' AND old.DateTo>='20250101'",sql)
+        self.assertEqual(sql.count('SELECT DISTINCT old.VariationCalculate FROM #test2025_formulas old'),4)
+        # Historical effective-date, scope and wildcard matching are unchanged.
+        self.assertIn('WHERE s.ClosedDealDate BETWEEN old.DateFrom AND old.DateTo AND old.TypeCoeff=c.TypeCoeff',sql)
+        self.assertIn('WHERE t.Date_ BETWEEN old.DateFrom AND old.DateTo AND old.TypeCoeff=c.TypeCoeff',sql)
+        self.assertIn("COALESCE(NULLIF(old.Brand,N'*'),N'')=COALESCE(NULLIF(c.Brand,N'*'),N'')",sql)
+        self.assertNotIn('MAX(old.VariationCalculate)',sql)
+
     def test_xml_creation_options_are_set_in_a_separate_batch(self):
         cursor=MagicMock();cursor.fetchone.side_effect=[(None,),(0,)]
         prepare(cursor)

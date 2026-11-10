@@ -38,6 +38,23 @@ CROSS JOIN (SELECT DISTINCT SubdivisionName FROM dbo.Subdivisions) sub;
 CREATE INDEX IX_test2025_coeff ON #test2025_coeff(PGSales,TypeCoeff);
 """
 
+
+# Read the historical formula view once, before joining millions of sales rows.
+# Keep original intervals and scalar DISTINCT semantics: conflicting formulas
+# still fail rather than silently picking MAX/TOP(1) and changing eligibility.
+FORMULA_SNAPSHOT = """
+SELECT DISTINCT old.DateFrom,old.DateTo,c.PGSales,c.Group_,c.Brand,c.TypeCoeff,
+ c.Subdivision,old.VariationCalculate
+INTO #test2025_formulas
+FROM DataWH.motivation.vSubdivisionMotiveCoeffTo old
+INNER JOIN #test2025_coeff c ON old.TypeCoeff=c.TypeCoeff
+ AND old.Subdivision=c.Subdivision AND old.PGSales=c.PGSales AND old.Group_=c.Group_
+ AND COALESCE(NULLIF(old.Brand,N'*'),N'')=COALESCE(NULLIF(c.Brand,N'*'),N'')
+WHERE old.DateFrom<'20260101' AND old.DateTo>='20250101';
+CREATE INDEX IX_test2025_formulas ON #test2025_formulas(PGSales,TypeCoeff,DateFrom,DateTo)
+ INCLUDE(Subdivision,Group_,Brand,VariationCalculate);
+"""
+
 ALLOCATION = """
 -- Annual 2025 shares, separately by document subdivision and coefficient goods key.
 IF EXISTS(SELECT 1 FROM #fact WHERE КoэфMissing=1)
@@ -102,7 +119,7 @@ def patch_source(source, existing=False):
             raise ValidationError('Не распознан вид коэффициента в соединении.')
         replacement = f"""OUTER APPLY (SELECT TOP(1) c.PGSales,c.Group_,c.Brand,c.TypeCoeff,c.DateFrom,c.DateTo,c.Subdivision,
  c.K0,c.K1,c.K2,c.K3,c.K4,
- (SELECT DISTINCT old.VariationCalculate FROM DataWH.motivation.vSubdivisionMotiveCoeffTo old
+ (SELECT DISTINCT old.VariationCalculate FROM #test2025_formulas old
  WHERE {date} BETWEEN old.DateFrom AND old.DateTo AND old.TypeCoeff=c.TypeCoeff
  AND old.Subdivision=c.Subdivision AND old.PGSales=c.PGSales AND old.Group_=c.Group_
  AND COALESCE(NULLIF(old.Brand,N'*'),N'')=COALESCE(NULLIF(c.Brand,N'*'),N'')) AS VariationCalculate
@@ -186,7 +203,9 @@ IF EXISTS(SELECT 1 FROM DataWH.motivation.PlanFactTest2025
     labels = re.findall(r"N?'([1-4]\s+Квартал[^']*|Год)'\s+(?:AS\s+)?\[?КварталМотивации\]?", source, re.I)
     if ['5' if x.casefold() == 'год' else x[0] for x in labels] != list('123455'):
         raise ValidationError('Не распознаны четыре квартала и годовая часть 2025 года.')
-    return source
+    if source.count(SETUP)!=1:
+        raise ValidationError('Не найдена точка однократной загрузки формул 2025.')
+    return source.replace(SETUP,SETUP+FORMULA_SNAPSHOT,1)
 
 
 def isolate(source):
