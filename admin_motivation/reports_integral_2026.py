@@ -4,6 +4,7 @@ import logging
 from django import forms
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import OperationalError
+from django.db.models import Exists, OuterRef
 from django.http import FileResponse, Http404
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -20,9 +21,13 @@ class CalculationForm(forms.Form):
 
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
-        ids=SalesPlanLine.objects.filter(plan_date__gte=date(2026,1,1),plan_date__lt=date(2027,1,1)).exclude(subdivision='').values('scenario_id')
+        # Probe the existing (scenario, plan_date, ...) index and stop at the first
+        # matching row. IN over all year rows scans every loaded plan on opening.
+        lines=SalesPlanLine.objects.filter(scenario_id=OuterRef('pk'),
+            plan_date__gte=date(2026,1,1),plan_date__lt=date(2027,1,1)).exclude(subdivision='')
         self.fields['scenario'].label_from_instance=lambda obj: f'{obj.title} · {obj.source_version}'
-        self.fields['scenario'].queryset=SalesPlanScenario.objects.filter(pk__in=ids,is_deleted=False,loaded_at__isnull=False)
+        self.fields['scenario'].queryset=SalesPlanScenario.objects.filter(Exists(lines),is_deleted=False,loaded_at__isnull=False)
+        self.fields['scenario'].queryset=self.fields['scenario'].queryset.only('pk','title','source_version')
         self.fields['coefficient_version'].queryset=GlobalCoeffVersion.objects.filter(status='approved',effective_from__lt=date(2027,1,1)).order_by('-effective_from','-pk')
         for field in self.fields.values():
             field.error_messages['required']='Обязательное поле.'
