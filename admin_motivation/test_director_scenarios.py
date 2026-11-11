@@ -155,6 +155,19 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(book['Выполнение']['L2'].value,.5)
         self.assertEqual(book['3 Вариант']['N2'].value,24)
 
+    def test_excel_parameters_has_no_selections_in_nonexistent_panes(self):
+        from zipfile import ZipFile
+        from xml.etree import ElementTree as ET
+        raw=workbook(self.run_calc())
+        with ZipFile(raw) as archive:
+            root=ET.fromstring(archive.read('xl/worksheets/sheet9.xml'))
+        ns={'s':'http://schemas.openxmlformats.org/spreadsheetml/2006/main'}
+        pane=root.find('.//s:pane',ns)
+        self.assertEqual(pane.get('topLeftCell'),'A2')
+        self.assertIsNone(pane.get('xSplit'))
+        self.assertEqual(pane.get('ySplit'),'1')
+        self.assertEqual([s.get('pane') for s in root.findall('.//s:selection',ns)],['bottomLeft'])
+
     def test_view_prg_persisted_result_and_export(self):
         self.approve();url=reverse('motivation_report_director_scenarios')
         payload={'plan_2025':self.plans[2025].pk,'plan_2026':self.plans[2026].pk,'coefficient_version':self.version.pk,

@@ -18,7 +18,7 @@ MONEY={'q1','q2','q3','q4','annual_accrued','annual_paid','bonus','total','plan'
 PERCENT={'ratio','department_ratio','threshold'}
 
 
-def table(book,title,columns,rows):
+def table(book,title,columns,rows,*,freeze_panes='G2'):
     sheet=book.create_sheet(title);sheet.append([label for key,label in columns])
     for row in rows:
         for col,(key,label) in enumerate(columns,1):
@@ -31,7 +31,7 @@ def table(book,title,columns,rows):
             if key in MONEY:cell.number_format='#,##0.00;[Red]-#,##0.00'
             elif key in PERCENT:cell.number_format='0.00%'
             cell.alignment=Alignment(vertical='top',wrap_text=True)
-    sheet.freeze_panes='G2';sheet.auto_filter.ref=sheet.dimensions
+    sheet.freeze_panes=freeze_panes;sheet.auto_filter.ref=sheet.dimensions
     for cell in sheet[1]:cell.font=Font(bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='6650BE');cell.alignment=Alignment(wrap_text=True)
     sheet.row_dimensions[1].height=44
     for col,(key,label) in enumerate(columns,1):sheet.column_dimensions[get_column_letter(col)].width=32 if key in {'employee','rate_source','branch','note','notes'} else 22
@@ -71,6 +71,6 @@ def workbook(snapshot):
         for item in source.get('discount_segments',[]):
             parameters.append({'name':f"{year}: сегменты {item['type_discount']}",'value':'; '.join(f'{k}={v}' for k,v in item.items() if k!='type_discount')})
         for key,value in source['parameters'].items():parameters.append({'name':f'{year}: {key}','value':str(value)})
-    table(book,'Параметры',[('name','Параметр'),('value','Значение')],parameters)
-    book['Параметры'].column_dimensions['B'].width=110;book['Параметры'].freeze_panes='A2'
+    table(book,'Параметры',[('name','Параметр'),('value','Значение')],parameters,freeze_panes='A2')
+    book['Параметры'].column_dimensions['B'].width=110
     output=BytesIO();book.save(output);output.seek(0);return output
