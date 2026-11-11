@@ -69,7 +69,7 @@ class ProgressDisplayTests(SimpleTestCase):
         self.assertEqual(result['started'].hour,4)
         self.assertEqual(result['elapsed'],7200);self.assertEqual(result['stage_elapsed'],6900)
         self.assertTrue(result['ticking']);self.assertTrue(result['stage_ticking'])
-        sql=self.cursor.execute.call_args.args[0]
+        sql=self.cursor.execute.call_args_list[0].args[0]
         self.assertIn('WITH (READUNCOMMITTED)',sql)
         self.assertIn('p.RunId=? AND r.JobKey=?',sql)
         self.assertNotIn('UPDATE',sql);self.conn.close.assert_called_once()

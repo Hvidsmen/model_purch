@@ -1,0 +1,4 @@
+<div style="overflow-x:auto"><table>
+<thead><tr><th>Этап</th><th>Время, сек.</th><th>CPU, мс</th><th>Логические чтения</th><th>Физические чтения</th><th>Записи</th><th>Результат</th></tr></thead>
+<tbody>{% for row in stages %}<tr><td>{{ row.stage }}</td><td>{{ row.seconds }}</td><td>{{ row.cpu_ms|default_if_none:'—' }}</td><td>{{ row.logical_reads|default_if_none:'—' }}</td><td>{{ row.reads|default_if_none:'—' }}</td><td>{{ row.writes|default_if_none:'—' }}</td><td>{% if row.state == 'failed' %}Ошибка{% else %}Завершено{% endif %}</td></tr>{% endfor %}</tbody>
+</table></div><p>Счётчики — разницы показаний сессии SQL Server. «—» означает, что счётчик недоступен. CPU и длительность не определяют причину ожидания.</p>

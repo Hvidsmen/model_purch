@@ -31,7 +31,7 @@ class PreparedSalesSQLTests(SimpleTestCase):
         self.assertLess(sql.index('IF @Rows=0'),publish)
         self.assertLess(sql.index('CREATE INDEX IX_PortalPreparedSales_Date'),publish)
         self.assertLess(publish,old_drop);self.assertLess(old_drop,active);self.assertLess(active,commit)
-        failure=sql[sql.index('BEGIN CATCH'):]
+        failure=sql[sql.rindex(' IF XACT_STATE()<>0 ROLLBACK TRANSACTION;'):]
         self.assertIn('ROLLBACK TRANSACTION',failure)
         self.assertNotIn('DROP TABLE motivation.PortalPreparedSales',failure)
         self.assertNotIn('DELETE FROM motivation.PortalPreparedSalesActive',failure)

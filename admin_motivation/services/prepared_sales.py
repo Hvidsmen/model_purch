@@ -5,6 +5,9 @@ from ..conns import connect_database
 from .pilot_formula import mask_sql
 from .calculation_sales_isolation import WORKING_TABLE
 
+from . import calculation_stage_profile as profile
+
+PREPARATION_STAGES=('Копирование продаж','Подбор документов','Атрибуты документов','Расчёт скидок','Проверка набора и индекс','Публикация набора')
 JOB='PortalMotivation_PrepareSales'
 PROC='motivation.PortalPrepareSales'
 TABLE='DataWH.motivation.PortalPreparedSales'
@@ -185,11 +188,14 @@ CREATE INDEX IX_document_sales_match ON #document_sales(DocumentKey, Номен�
     body=body.replace('SELECT DISTINCT DocumentKey,ModelCodeERP',"UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Подготовка документов' WHERE RunId=@RunId;\nSELECT DISTINCT DocumentKey,ModelCodeERP",1)
     updates=list(re.finditer(r'\bUPDATE\s+s\s+SET\b',mask_sql(body),re.I))
     for match,label in reversed(list(zip(updates,('Атрибуты документов','Расчёт скидок')))):
-        body=body[:match.start()]+f"UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'{label}' WHERE RunId=@RunId;\n"+body[match.start():]
+        body=body[:match.start()]+profile.mark(PREPARATION_STAGES.index(label),f'prepare_{PREPARATION_STAGES.index(label)}')+f"UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'{label}' WHERE RunId=@RunId;\n"+body[match.start():]
     if '@FactYear' in body:raise ValidationError('В общей подготовке остался фильтр одного года.')
     # Enrich the unpublished staging table directly: avoid copying the entire
     # multi-year set a second time from tempdb before publication.
     body=body.replace(WORKING_TABLE,'DataWH.motivation.PortalPreparedSalesStage')
+    from .calculation_performance import MARKER as documents_marker
+    if body.count(documents_marker)!=1:raise ValidationError('Не распознана граница подбора документов подготовки факта.')
+    body=body.replace(documents_marker,profile.mark(1,'prepare_docs')+"UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Подбор документов' WHERE RunId=@RunId;\n"+documents_marker,1)
     return f"""ALTER PROCEDURE {PROC} AS
 BEGIN
 SET NOCOUNT ON; SET XACT_ABORT ON; SET IMPLICIT_TRANSACTIONS OFF;
@@ -203,13 +209,17 @@ BEGIN TRY
   THROW 50040,N'Конфликт служебного поля подготовки продаж',1;
  INSERT INTO motivation.PortalPreparedSalesRun(RunId,StartedAt,State_,Stage_,Rule_,PreparedFrom,PreparedTo,SourceSchema)
  VALUES(@RunId,SYSUTCDATETIME(),N'running',N'Копирование продаж',N'{RULE}','20250101',@PreparedTo,@SourceSchema);
+ {profile.begin('@RunId',PREPARATION_STAGES)}
  IF OBJECT_ID(N'motivation.PortalPreparedSalesStage',N'U') IS NOT NULL DROP TABLE motivation.PortalPreparedSalesStage;
  {body}
+ {profile.mark(4,'prepare_index')}
+ UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Проверка набора и индекс' WHERE RunId=@RunId;
  SELECT @Rows=COUNT_BIG(*) FROM motivation.PortalPreparedSalesStage;
  IF @Rows=0 THROW 50040,N'Набор продаж с 2025 года пуст: прежний набор сохранён',1;
  IF @SourceSchema<>{SCHEMA} THROW 50040,N'Во время подготовки изменилась структура Sales',1;
- UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Публикация набора' WHERE RunId=@RunId;
  CREATE INDEX IX_PortalPreparedSales_Date ON motivation.PortalPreparedSalesStage(ClosedDealDate);
+ {profile.mark(5,'prepare_publish')}
+ UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Публикация набора' WHERE RunId=@RunId;
  BEGIN TRANSACTION;
  IF OBJECT_ID(N'motivation.PortalPreparedSales',N'U') IS NOT NULL DROP TABLE motivation.PortalPreparedSales;
  EXEC sys.sp_rename N'motivation.PortalPreparedSalesStage',N'PortalPreparedSales';
@@ -217,10 +227,12 @@ BEGIN TRY
  DELETE FROM motivation.PortalPreparedSalesActive;
  INSERT INTO motivation.PortalPreparedSalesActive VALUES(1,@RunId);
  COMMIT TRANSACTION;
+ {profile.finish(PREPARATION_STAGES)}
  EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation',@LockOwner=N'Session';
 END TRY
 BEGIN CATCH
  IF XACT_STATE()<>0 ROLLBACK TRANSACTION;
+ {profile.finish(PREPARATION_STAGES,failed=True)}
  UPDATE motivation.PortalPreparedSalesRun SET State_=N'failed',Stage_=N'Ошибка подготовки',CompletedAt=SYSUTCDATETIME(),ErrorNumber_=ERROR_NUMBER() WHERE RunId=@RunId;
  EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation',@LockOwner=N'Session';
  THROW;
@@ -229,7 +241,7 @@ END;"""
 
 
 def install(cursor):
-    cursor.execute(DDL)
+    cursor.execute(DDL+profile.DDL)
     cursor.execute(f"IF OBJECT_ID(N'{PROC}',N'P') IS NULL EXEC(N'CREATE PROCEDURE {PROC} AS RETURN;');")
     cursor.execute(procedure_sql())
     # The daily schedule is fixed at 08:00 Moscow, converted to server-local time.
@@ -291,7 +303,10 @@ def monitor(connector=None):
         if running and (not history or history[0]['state']!='running'):status='Запуск подготовки'
         if not running and agent and agent[2]==0 and (not history or history[0]['state']=='completed'):
             status='Последний запуск задания завершился ошибкой. Проверьте историю SQL Agent'
-        return {'configured':bool(agent),'status':status,'agent_running':running,'history':history,
+        from .calculation_live_progress import read as live_read
+        live=live_read(cursor,JOB) if running else {}
+        return {'configured':bool(agent),'status':status,'agent_running':running,'history':history,'live':live,
+            'stages':profile.read(cursor,history[0]['run_id']) if history else [],
             'ready':{'run_id':str(ready[0]),'completed_at':ready[1].isoformat()+'Z','row_count':ready[2]} if ready else None}
 
     finally:
