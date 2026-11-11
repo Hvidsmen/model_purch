@@ -43,6 +43,13 @@
  }));
  document.querySelector('[data-executive-expand]')?.addEventListener('click', () => document.querySelectorAll('.nr-exec-node').forEach(node => { node.open = true; }));
  document.querySelector('[data-executive-collapse]')?.addEventListener('click', () => document.querySelectorAll('.nr-exec-node').forEach(node => { node.open = false; }));
+ document.querySelector('[data-global-premium-toggle]')?.addEventListener('click',event=>{
+  const button=event.currentTarget,root=button.closest('.nr-exec-scroll');
+  const expanded=button.getAttribute('aria-expanded')!=='true';
+  button.setAttribute('aria-expanded',String(expanded));root.classList.toggle('nr-exec-global-expanded',expanded);
+  root.querySelectorAll('[data-global-premium-part]').forEach(cell=>{cell.hidden=!expanded;});
+  button.querySelector('[data-global-premium-marker]').textContent=expanded?'−':'＋';
+ });
  const form = document.getElementById('native-report-filters');
  if (form?.hasAttribute('data-employee-report')) {
   form.querySelectorAll('[data-employee-selector]').forEach(select => select.addEventListener('change', () => {

@@ -225,7 +225,7 @@ def planned_budget(execution, scenario, query):
     """Same plan amounts, employees and dated coefficients on both sides."""
     from .comparison import Index, coefficient_rows
     from .director_comparison import DirectorIndex
-    from .plan_summary import empty_bucket, node, add
+    from .plan_summary import empty_bucket, node, add, empty_global_parts
     from .subdivision_aliases import mapping, canonical
     from .subdivision_scope import included
     versions = frozen_versions(execution)
@@ -256,7 +256,9 @@ def planned_budget(execution, scenario, query):
         if query.getlist(field):
             lines = lines.filter(**{model_field + '__in': query.getlist(field)})
     for day, original, pg, group, brand, amount, ddp, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
-        share = ((annual_share if '5' in periods else Decimal(0)) + (quarter_share if '4' in periods else Decimal(0))) if day.month >= 10 else Decimal(0)
+        q_share=quarter_share if day.month>=10 and '4' in periods else Decimal(0)
+        y_share=annual_share if day.month>=10 and '5' in periods else Decimal(0)
+        share=q_share+y_share
         sub = canonical(original, aliases)
         if execution.parameters.get('transition_rule') and original not in ('Д-Москва', 'ТЕРМОТРЕЙД'):
             continue
@@ -269,6 +271,7 @@ def planned_budget(execution, scenario, query):
             raise ValidationError('План не содержит распределение по ступеням O0–O4.')
         amounts = [number(segments[f'O{i}']) for i in range(5)]
         bucket = buckets.setdefault(sub, empty_bucket())
+        parts=bucket.setdefault('global_parts',empty_global_parts())
         bucket['plan'] += amount
         bucket['ddp'] = add(bucket['ddp'], ddp)
         for kind, target in kinds.items():
@@ -279,32 +282,45 @@ def planned_budget(execution, scenario, query):
                 continue
             for side in ('global', 'local'):
                 matrix, _ = indexes[side].coefficients(version.pk, sub if side == 'local' else '', pg, group, brand, kinds=[kind])
-                value = sum((rate * usd for rate, usd in zip(matrix[0], amounts)), Decimal(0)) * share
+                base_value = sum((rate * usd for rate, usd in zip(matrix[0], amounts)), Decimal(0))
+                value=base_value*share
                 bucket[side][target] += value
+                if side=='global':
+                    parts['quarter'][target]+=base_value*q_share
+                    parts['annual'][target]+=base_value*y_share
         if 'directors' in included_kinds:
             staff = directors['local'].by_employee(version.pk, sub, pg, group, brand, amounts)
             if director_scope == 'active':
                 staff = {employee: value for employee, value in staff.items() if employee in active_staff.get(sub, set())}
-            global_amount = directors['global'].motivation(version.pk, '', pg, group, brand, amounts) * share
+            global_base = directors['global'].motivation(version.pk, '', pg, group, brand, amounts)
+            global_amount=global_base*share
+            parts['quarter']['directors']+=global_base*q_share*len(staff)
+            parts['annual']['directors']+=global_base*y_share*len(staff)
             bucket['global']['directors'] += global_amount * len(staff)
             bucket['local']['directors'] += sum(staff.values(), Decimal(0)) * share
             for employee, value in staff.items():
-                entry = bucket['staff'].setdefault(employee, {'plan': Decimal(0), 'ddp': Decimal(0), 'global': Decimal(0), 'local': Decimal(0)})
+                entry = bucket['staff'].setdefault(employee, {'plan': Decimal(0), 'ddp': Decimal(0), 'global': Decimal(0), 'local': Decimal(0), 'global_quarter':Decimal(0),'global_annual':Decimal(0)})
                 entry['plan'] += amount
                 entry['ddp'] = add(entry['ddp'], ddp)
                 entry['global'] += global_amount
+                entry['global_quarter']+=global_base*q_share
+                entry['global_annual']+=global_base*y_share
                 entry['local'] += value * share
     company = empty_bucket()
+    company['global_parts']=empty_global_parts()
     for bucket in buckets.values():
         company['plan'] += bucket['plan']
         company['ddp'] = add(company['ddp'], bucket['ddp'])
         for employee, values in bucket['staff'].items():
-            staff = company['staff'].setdefault(employee, {'plan': Decimal(0), 'ddp': Decimal(0), 'global': Decimal(0), 'local': Decimal(0)})
+            staff = company['staff'].setdefault(employee, {'plan': Decimal(0), 'ddp': Decimal(0), 'global': Decimal(0), 'local': Decimal(0), 'global_quarter':Decimal(0),'global_annual':Decimal(0)})
             for key in staff:
                 staff[key] = add(staff[key], values[key])
         for side in ('global', 'local'):
             for kind in included_kinds:
                 company[side][kind] += bucket[side][kind]
+                if side=='global':
+                    for part in ('quarter','annual'):
+                        company['global_parts'][part][kind]+=bucket['global_parts'][part][kind]
     names = {item['employee_id']: item['employee__full_name'] for item in execution.export_snapshot.get('employees', [])}
     result = [node('Компания', company, names, included_kinds)] if buckets else []
     result += [node(sub, bucket, names, included_kinds) for sub, bucket in sorted(buckets.items())]

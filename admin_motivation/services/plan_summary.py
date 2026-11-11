@@ -133,27 +133,39 @@ def empty_bucket():
     return {'plan': ZERO, 'ddp': ZERO, 'staff': {}, **{side: dict.fromkeys(['policies', 'sales', 'directors'], ZERO) for side in ['global', 'local']}}
 
 
-def row(name, plan, global_value, local_value, children=None, ddp=None):
+def row(name, plan, global_value, local_value, children=None, ddp=None, global_quarter=None, global_annual=None):
     global_markup = motivation_markup(plan, ddp, global_value)
     local_markup = motivation_markup(plan, ddp, local_value)
     return {'name': name, 'plan': plan, 'ddp': ddp,
             'global_markup': global_markup, 'local_markup': local_markup,
             'markup_difference': local_markup - global_markup if global_markup is not None and local_markup is not None else None,
             'global': global_value, 'local': local_value,
+            'global_quarter':global_quarter,'global_annual':global_annual,
             'difference': local_value - global_value if global_value is not None and local_value is not None else None,
             'global_percent': global_value / plan * 100 if plan and global_value is not None else None,
             'local_percent': local_value / plan * 100 if plan and local_value is not None else None,
             'children': children or []}
 
 
+
+def empty_global_parts():
+    return {part:dict.fromkeys(['policies','sales','directors'],ZERO) for part in ('quarter','annual')}
+
+
+def global_part(bucket,part,kind=None):
+    if 'global_parts' not in bucket:return None
+    values=[bucket['global_parts'][part][kind]] if kind else list(bucket['global_parts'][part].values())
+    return None if any(value is None for value in values) else sum(values,ZERO)
+
+
 def node(name, bucket, names, kinds):
     plan = bucket['plan']
-    children = [row(label, plan, bucket['global'][kind], bucket['local'][kind], ddp=bucket['ddp'])
+    children = [row(label, plan, bucket['global'][kind], bucket['local'][kind], ddp=bucket['ddp'],global_quarter=global_part(bucket,'quarter',kind),global_annual=global_part(bucket,'annual',kind))
                 for kind, label in KINDS if kind in kinds]
     for child in children:
         if child['name'] == 'Директор':
-            child['children'] = [row(names.get(staff, str(staff)), value['plan'], value['global'], value['local'], ddp=value['ddp'])
+            child['children'] = [row(names.get(staff, str(staff)), value['plan'], value['global'], value['local'], ddp=value['ddp'],global_quarter=value.get('global_quarter'),global_annual=value.get('global_annual'))
                 for staff, value in sorted(bucket['staff'].items(), key=lambda item: (names.get(item[0], ''), item[0]))]
     total = {side: None if any(value is None for value in bucket[side].values()) else sum(bucket[side].values(), ZERO)
              for side in ['global', 'local']}
-    return row(name, plan, total['global'], total['local'], children, ddp=bucket['ddp'])
+    return row(name, plan, total['global'], total['local'], children, ddp=bucket['ddp'],global_quarter=global_part(bucket,'quarter'),global_annual=global_part(bucket,'annual'))

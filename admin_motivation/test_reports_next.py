@@ -60,6 +60,27 @@ class ReportsNextTests(TestCase):
         with self.assertRaises(ValidationError):
             reports_next.planned_budget(self.run, self.fixture.scenario, query)
 
+    def test_global_premium_parts_respect_selected_periods_at_every_level(self):
+        def check(nodes):
+            for node in nodes:
+                self.assertEqual(node['global_quarter']+node['global_annual'],node['global'])
+                check(node['children'])
+        all_nodes=reports_next.planned_budget(self.run,self.fixture.scenario,QueryDict('period=all'))
+        check(all_nodes)
+        self.assertEqual(all_nodes[0]['global_quarter'],Decimal(180))
+        self.assertEqual(all_nodes[0]['global_annual'],Decimal(45))
+        annual=reports_next.planned_budget(self.run,self.fixture.scenario,QueryDict('period=5'))
+        check(annual);self.assertEqual(annual[0]['global_quarter'],0)
+        self.assertEqual(annual[0]['global_annual'],45)
+        quarter=reports_next.planned_budget(self.run,self.fixture.scenario,QueryDict('period=4'))
+        check(quarter);self.assertEqual(quarter[0]['global_annual'],0)
+        self.assertEqual(quarter[0]['global_quarter'],180)
+        response=self.client.get(reverse('motivation_report_next',args=['executive']),{'run':'1','period':'all'})
+        self.assertContains(response,'data-global-premium-toggle aria-expanded="false"')
+        self.assertContains(response,'data-global-premium-part hidden')
+        self.assertContains(response,'Глобальная: квартальная часть, USD')
+        self.assertContains(response,'Глобальная: годовая часть, USD')
+
     def test_executive_page_uses_plan_selection_and_excel_numbers(self):
         url = reverse('motivation_report_next', args=['executive'])
         response = self.client.get(url, {'run': '1', 'period': 'all'})
