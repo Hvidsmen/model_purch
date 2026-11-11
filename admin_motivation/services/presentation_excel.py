@@ -75,8 +75,11 @@ def workbook(kind, data, metadata, query=None, title=None):
         return ws
 
     period_headers = [column['label'] for column in display['period_columns']]
-    headers = ['Подразделение', 'Вид мотивации', 'Сотрудников', *period_headers, 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency]
-    ws = sheet('Сводка', headers, [28, 24, 16, *([21] * len(period_headers)), 22, 24, 48],
+    show_annual=display.get('has_annual_accrual',False)
+    annual_header=['В годовую премию, '+currency] if show_annual else []
+    from .annual_accrual import total as annual_total
+    headers = ['Подразделение', 'Вид мотивации', 'Сотрудников', *period_headers, *annual_header, 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency]
+    ws = sheet('Сводка', headers, [28, 24, 16, *([21] * len(period_headers)), *([28] if show_annual else []), 22, 24, 48],
                'Итоги по каждому выбранному подразделению и общий итог по выбранным периодам', freeze_panes='D6')
     employees = display['registry_rows']
     def summary_values(items):
@@ -84,7 +87,8 @@ def workbook(kind, data, metadata, query=None, title=None):
         periods = [sum((item['period_values'][index] or ZERO for item in items), ZERO)
                    for index in range(len(period_headers))]
         possible = [item['possible'] for item in items]
-        return [len(people), *periods,
+        annual=[annual_total([source for item in items for source in item['rows']])] if show_annual else []
+        return [len(people), *periods, *annual,
                 sum((item['bonus'] for item in items), ZERO),
                 sum((item['total'] for item in items), ZERO),
                 sum(possible, ZERO) if possible and all(value is not None for value in possible) else None]
@@ -97,9 +101,10 @@ def workbook(kind, data, metadata, query=None, title=None):
         row(ws, [branch, 'ИТОГО по подразделению', *summary_values(branch_rows)], 'subtotal')
     for section in display['team_sections']:
         row(ws, ['Все выбранные подразделения', section['kind'], section['people'], *section['period_totals'],
-                 section['bonus'], section['total'], section['possible']], 'subtotal')
-    row(ws, ['ИТОГО', 'Все выбранные подразделения', display['people'], *display['period_totals'], display['bonus'], display['total'], display['possible']], 'grand')
+                 *([section.get('annual_accrual')] if show_annual else []), section['bonus'], section['total'], section['possible']], 'subtotal')
+    row(ws, ['ИТОГО', 'Все выбранные подразделения', display['people'], *display['period_totals'], *([display.get('annual_accrual')] if show_annual else []), display['bonus'], display['total'], display['possible']], 'grand')
     row(ws, [], 'blank')
+    if show_annual:row(ws, ['«В годовую премию» — начисленная годовая часть за выбранные кварталы до годового условия выплаты; отдельно в итог к выплате не добавляется. Пустое значение означает, что сохранённых данных нет.'], 'note')
     row(ws, ['«Премия без учёта выполнения плана» — сумма по фактическим отгрузкам и коэффициентам без применения условия выполнения плана.'], 'note')
     row(ws, ['Подробности по сотрудникам — на отдельных листах. Состав директоров соответствует текущему справочнику.'], 'note')
 

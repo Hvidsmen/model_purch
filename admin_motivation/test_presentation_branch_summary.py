@@ -55,3 +55,32 @@ class BranchSummaryExcelTests(SimpleTestCase):
         self.assertIsNone(next(row for row in rows if row[:2]==('Термотрейд','ИТОГО по подразделению'))[-1])
         self.assertIsNone(next(row for row in rows if row[0]=='ИТОГО')[-1])
         self.assertEqual(next(row for row in rows if row[0]=='ИТОГО')[-2],545)
+
+    def test_annual_contributions_reconcile_by_branch_kind_and_grand_without_payout_change(self):
+        ledger=self.ledger()
+        for item in ledger['rows']:item['annual_accrual']=item['amount']/4
+        # A displayed year is payout, not another quarter contribution.
+        year=premium('5','Политики','0',branch='Д-Москва')
+        year.update(currency='USD',annual_accrual=D(999));ledger['rows'].append(year)
+        output=workbook('team',ledger,[],QueryDict('period=1&period=2&period=5'))
+        self.addCleanup(output.close)
+        book=load_workbook(output);self.addCleanup(book.close)
+        rows=list(book['Сводка'].values);headers=list(rows[4]);column=headers.index('В годовую премию, USD')
+        get=lambda branch,kind:next(row for row in rows if row[:2]==(branch,kind))
+        self.assertEqual(get('Д-Москва','ИТОГО по подразделению')[column],45)
+        self.assertEqual(get('Термотрейд','ИТОГО по подразделению')[column],90)
+        self.assertEqual([get('Все выбранные подразделения',kind)[column] for kind in ledger['kinds']],[22.5,45,67.5])
+        grand=next(row for row in rows if row[0]=='ИТОГО')
+        self.assertEqual(grand[column],135)
+        self.assertEqual(grand[headers.index('Всего по расчёту')],545)
+
+    def test_missing_annual_data_is_blank_not_estimated_from_quarter_payout(self):
+        ledger=self.ledger()
+        for item in ledger['rows']:item['annual_accrual']=D(1)
+        ledger['rows'][0]['annual_accrual']=None
+        output=workbook('team',ledger,[],QueryDict('period=1&period=2'))
+        self.addCleanup(output.close)
+        book=load_workbook(output);self.addCleanup(book.close)
+        rows=list(book['Сводка'].values);column=list(rows[4]).index('В годовую премию, USD')
+        self.assertIsNone(next(row for row in rows if row[:2]==('Д-Москва','Политики'))[column])
+        self.assertIsNone(next(row for row in rows if row[0]=='ИТОГО')[column])
