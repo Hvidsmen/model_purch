@@ -92,7 +92,32 @@ def suggestions(payload):
     return choices
 
 
+HISTORICAL_DIRECTORS={'волков м':'Кудицкая Татьяна Анатольевна',
+           'волков максим игоревич':'Кудицкая Татьяна Анатольевна',
+           'гадайда д':'Чевокин Сергей Юрьевич',
+           'галайда д':'Чевокин Сергей Юрьевич',
+           'галайда денис владимирович':'Чевокин Сергей Юрьевич'}
+
+
+def historical_director(label_value):
+    """User-specified 2025 replacements; never guess abbreviated database names."""
+    expected=HISTORICAL_DIRECTORS.get(norm(label_value))
+    matches=[person.pk for person in DirectorEmployee.objects.all() if norm(person.full_name)==norm(expected)] if expected else []
+    return matches[0] if len(matches)==1 else None
+
+
+def mappings_for_year(mappings,year):
+    """Keep rate source and recipient distinct; legacy mappings retain their recipient."""
+    return {key:{**value,'employee':(value.get('employee_2025') or value.get('employee')) if int(year)==2025 else value.get('employee')}
+            if key.startswith('directors_') else dict(value) for key,value in mappings.items()}
+
+
 def check_conflicts(payload,mappings):
+    for year in (2025,2026):
+        _check_conflicts(payload,mappings_for_year(mappings,year))
+
+
+def _check_conflicts(payload,mappings):
     assigned={}
     for row in mapping_rows(payload):
         value=mappings.get(row['id'],{});block=payload[row['source']]['blocks'][row['block']]

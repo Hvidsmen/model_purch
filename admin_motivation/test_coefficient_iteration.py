@@ -147,3 +147,49 @@ class MappingTests(TestCase):
         user=User.objects.create_user('no-iteration-right');self.client.force_login(user)
         self.assertEqual(self.client.get(self.url).status_code,403)
         self.assertEqual(self.client.get(url).status_code,403)
+
+
+class HistoricalDirectorMappingTests(TestCase):
+    def test_year_mapping_keeps_original_source_and_uses_2025_recipient(self):
+        from .services.coefficient_iteration import mappings_for_year
+        original={'directors_0_0':{'employee':7,'employee_2025':8,'subdivisions':[1]}}
+        self.assertEqual(mappings_for_year(original,2025)['directors_0_0']['employee'],8)
+        self.assertEqual(mappings_for_year(original,2026)['directors_0_0']['employee'],7)
+        self.assertEqual(mappings_for_year(original,2027)['directors_0_0']['employee'],7)
+        self.assertEqual(original['directors_0_0']['employee'],7)
+
+    def test_archived_historical_director_is_suggested_only_when_unambiguous(self):
+        from .services.coefficient_iteration import historical_director
+        person=DirectorEmployee.objects.create(full_name='Кудицкая Татьяна Анатольевна',employee_code='hist-1',is_archived=True)
+        self.assertEqual(historical_director('Волков М'),person.pk)
+        DirectorEmployee.objects.create(full_name=person.full_name,employee_code='hist-2')
+        self.assertIsNone(historical_director('Волков М'))
+        self.assertIsNone(historical_director('Неизвестный'))
+
+    def test_2025_recipient_is_saved_and_rendered_separately(self):
+        from .coefficient_iteration_views import MappingForm
+        owner=User.objects.create_user('historical-review')
+        person=DirectorEmployee.objects.create(full_name='Кудицкая Татьяна Анатольевна',employee_code='hist-3')
+        obj=CoefficientIteration.objects.create(owner=owner,payload=payload(person='Волков М'),mappings={})
+        form=MappingForm(obj)
+        self.assertEqual(form.fields['directors_0_0_employee_2025'].initial,person.pk)
+        bound=MappingForm(obj,{'revision':obj.revision,'directors_0_0_employee_2025':person.pk})
+        self.assertTrue(bound.is_valid(),bound.errors)
+        self.assertEqual(bound.resolved()['directors_0_0']['employee_2025'],person.pk)
+        self.assertIsNone(bound.resolved()['directors_0_0']['employee'])
+
+    def test_conflicts_are_checked_for_historical_recipients(self):
+        data=payload();block=deepcopy(data['directors']['blocks'][0]);block['labels']=['Другой']
+        block['entries'][0]['rates']=['0.1']*5;data['directors']['blocks'].append(block)
+        mapping={'directors_0_0':{'employee':1,'employee_2025':3,'subdivisions':[1]},
+                 'directors_1_0':{'employee':2,'employee_2025':3,'subdivisions':[1]}}
+        with self.assertRaises(ValidationError):check_conflicts(data,mapping)
+
+    def test_named_replacement_requires_explicit_2025_selection_on_confirmation(self):
+        from .coefficient_iteration_views import MappingForm
+        owner=User.objects.create_user('historical-required')
+        obj=CoefficientIteration.objects.create(owner=owner,payload=payload(person='Волков М'),mappings={})
+        bound=MappingForm(obj,{'revision':obj.revision})
+        self.assertTrue(bound.is_valid())
+        with self.assertRaisesMessage(ValidationError,'директор в 2025 году'):
+            bound.resolved(complete=True)

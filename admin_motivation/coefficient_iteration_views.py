@@ -8,7 +8,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from base.access import can_access
 from .models import CoefficientIteration,Subdivision,DirectorEmployee
-from .services.coefficient_iteration import read_file,mapping_rows,suggestions,check_conflicts
+from .services.coefficient_iteration import read_file,mapping_rows,suggestions,check_conflicts,historical_director,HISTORICAL_DIRECTORS,norm
 
 
 class UploadForm(forms.Form):
@@ -37,14 +37,21 @@ class MappingForm(forms.Form):
                 field.label_from_instance=lambda person:f'{person.full_name} · № {person.pk}'+(' · архив' if person.is_archived else '')
                 field.widget.attrs['data-searchable-select']=''
                 self.fields[name+'_employee']=field
+                historical=value.get('employee_2025') if 'employee_2025' in value else historical_director(row['label'])
+                historical_field=forms.ModelChoiceField(queryset=people,required=False,label='Директор в 2025 году',initial=historical,empty_label='Как в 2026–2027')
+                historical_field.label_from_instance=field.label_from_instance
+                historical_field.widget.attrs['data-searchable-select']=''
+                self.fields[name+'_employee_2025']=historical_field
                 field=forms.ModelMultipleChoiceField(queryset=branches,required=False,label='Подразделения для этой итерации',initial=value.get('subdivisions',[]))
                 field.label_from_instance=lambda sub:f'{sub.subdivision_name} · {sub.subdivision_key} · {sub.chanel}'
                 field.widget.attrs['size']=4
                 self.fields[name+'_branches']=field
-                self.rows.append({**row,'employee':self[name+'_employee'],'branches':self[name+'_branches']})
+                self.rows.append({**row,'employee':self[name+'_employee'],'employee_2025':self[name+'_employee_2025'],'branches':self[name+'_branches']})
 
         for row in self.rows:
             row['complete']=bool(row['subdivision'].value()) if row['source']=='branches' else bool(row['employee'].value() and row['branches'].value())
+            if row['source']=='directors' and norm(row['label']) in HISTORICAL_DIRECTORS:
+                row['complete']=row['complete'] and bool(row['employee_2025'].value())
         self.unresolved=sum(not row['complete'] for row in self.rows)
 
     def resolved(self,complete=False):
@@ -57,8 +64,10 @@ class MappingForm(forms.Form):
                 if not sub:missing.append(row['label'])
             else:
                 person=self.cleaned_data.get(name+'_employee');subs=list(self.cleaned_data.get(name+'_branches',[]))
-                result[name]={'employee':person.pk if person else None,'subdivisions':[sub.pk for sub in subs]}
+                historical=self.cleaned_data.get(name+'_employee_2025')
+                result[name]={'employee':person.pk if person else None,'employee_2025':historical.pk if historical else None,'subdivisions':[sub.pk for sub in subs]}
                 if not person or not subs:missing.append(row['label'])
+                if not historical and norm(row['label']) in HISTORICAL_DIRECTORS:missing.append(row['label']+' — директор в 2025 году')
         if complete and missing:raise ValidationError('Заполните сопоставление: '+', '.join(missing[:12]))
         return result
 
