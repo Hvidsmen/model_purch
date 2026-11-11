@@ -107,6 +107,45 @@ class All2026ViewTests(TestCase):
         return manager_detail_report([dict(detail_rows()[1], АвторСделки=author, Подразделение=branch, КварталМотивации=period)
                                       for period in ('1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', '4 Квартал(1-4 кв)', 'Год')])
 
+    @patch('admin_motivation.services.execution_tracking.observe_latest',return_value=None)
+    def test_detailed_view_and_excel_keep_variant_filters_and_separate_results(self,observe):
+        from urllib.parse import urlsplit
+        from django.http import QueryDict
+        MotivationExecution.objects.create(run_id=uuid4(),job_key=uuid4(),state='completed',
+            started_at=timezone.now(),completed_at=timezone.now(),parameters={'variant':'separate_2026','fact_year':2026})
+        for scenario,variant in [('combined',ALL_2026),('separate','separate_2026')]:
+            source=manager_detail_report([dict(detail_rows()[1],АвторСделки='Person',Подразделение='Д-Москва',
+                КварталМотивации=period) for period in ('1 Квартал','2 Квартал(1-2 кв)')],'RUB')
+            query={'run':'1','detail':'1','scenario':scenario,'type':'Политики','period':['1','2'],
+                'currency':'RUB','subdivision':'Д-Москва','author':'Person','planning':'1. RAC'}
+            with self.subTest(scenario=scenario),patch('admin_motivation.services.reports_next.current_run',return_value=nullcontext()), \
+                 patch('admin_motivation.services.reports_next.load_report',return_value=source) as load:
+                response=self.client.get(self.url,query)
+                self.assertEqual(response.status_code,200)
+                self.assertContains(response,'Расширенная таблица мотивации')
+                self.assertContains(response,'manager_detail.js')
+                self.assertContains(response,'name="detail" value="1"')
+                self.assertFalse(load.call_args.kwargs['summary_only'])
+                self.assertTrue(load.call_args.kwargs['include_performance'])
+                self.assertEqual(load.call_args.kwargs['calculation_variant'],variant)
+                self.assertEqual(load.call_args.kwargs['premium_period'],['1','2'])
+                values=load.call_args.args[1]
+                self.assertEqual(values['DealAuthor'],['Person'])
+                self.assertEqual(values['gp_sales'],['1. RAC'])
+                self.assertEqual(values['Currency'],'RUB')
+                link=response.context['data']['rows'][0]['detail_url']
+                linked=QueryDict(urlsplit(link).query)
+                self.assertEqual(linked['detail'],'1');self.assertEqual(linked['scenario'],scenario)
+                self.assertEqual(linked.getlist('author'),['Person'])
+                exported=self.client.get(self.url,{**query,'export':'xlsx','table':'detail'})
+                self.assertEqual(exported.status_code,200)
+                book=load_workbook(BytesIO(b''.join(exported.streaming_content)))
+                metadata=str(list(book['Параметры отчёта'].values))
+                self.assertIn('раздельно' if scenario=='separate' else 'объединённо',metadata)
+                self.assertIn('Годовая доля',metadata)
+                self.assertEqual(load.call_args.kwargs['calculation_variant'],variant)
+                book.close();exported.close()
+
     def test_extra_report_has_five_periods_and_independent_excel_and_source(self):
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=self.source()) as load:
             response = self.client.get(self.url, {'run':'1', 'type':'Политики'})

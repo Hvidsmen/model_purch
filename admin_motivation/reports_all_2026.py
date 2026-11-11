@@ -53,13 +53,13 @@ def selection(user, query):
     return scope, kinds, periods
 
 
-def data_for(user, execution, query):
+def data_for(user, execution, query, *, detailed=False):
     scope, kinds, periods = selection(user, query)
     variant = selected_variant(query)
     if scope and variant == 'separate_2026':
         from .services.subdivision_aliases import expand, mapping
         scope = {**scope, 'subdivision': expand(scope['subdivision'], mapping())}
-    rows, plan_fact, department = [], [], []
+    rows, plan_fact, department, sections = [], [], [], []
     from .services.annual_accrual import SNAPSHOT_VERSION
     snapshot_options = ({'annual_accrual_snapshot': True}
                         if execution.parameters.get('annual_accrual_source') == SNAPSHOT_VERSION else {})
@@ -69,7 +69,9 @@ def data_for(user, execution, query):
         if scope:
             values = scoped_values('manager-detail', values, scope)
         data = reports_next.load_report('manager-detail', values, access_scope=scope, premium_period=periods,
-                                        summary_only=True, calculation_variant=variant, **snapshot_options)
+                                        summary_only=not detailed, calculation_variant=variant,
+                                        **({'include_performance':True} if detailed else {}), **snapshot_options)
+        if detailed:sections.append({'kind':kind,'data':data})
         from .services.motivation_performance import presentation_rows, DEPARTMENT
         plan_fact.extend(presentation_rows(data.get('motivation_performance', []), kind))
         department.extend(presentation_rows(data.get('department_performance', []), DEPARTMENT))
@@ -83,6 +85,7 @@ def data_for(user, execution, query):
                     continue
                 code = reports_next.period_code(column['label'])
                 target = query.copy()
+                target['detail']='1';target['run']='1';target.pop('export',None)
                 target.setlist('period', [reports_next.period_code(column['label'])])
                 target.setlist('type', [kind]); target.setlist('author', [item['author']]); target.setlist('subdivision', [item['subdivision']])
                 rows.append({'subdivision': item['subdivision'], 'author': item['author'], 'unallocated': item.get('unallocated', False),
@@ -92,7 +95,7 @@ def data_for(user, execution, query):
                     'annual_accrual': annual.get((item['subdivision'], item['author'], code),
                         Decimal(0) if snapshot_options and code in ('1','2','3','4') else None),
                     'detail_url': reverse('motivation_report_all_2026') + '?' + target.urlencode()})
-    return {'rows': rows, 'plan_fact': plan_fact, 'department_plan_fact': department, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in rows),
+    return {'rows': rows, 'sections':sections, 'plan_fact': plan_fact, 'department_plan_fact': department, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in rows),
             'total': sum((row['amount'] for row in rows), Decimal(0)), 'currency': query.get('currency', 'USD')}
 
 
@@ -178,7 +181,8 @@ def report(request):
     if observed and observed.state == 'completed':
         execution = observed
     pending = pending or bool(job and job.synced and not job.error and observed is None and (not execution or execution.job_key != job.key))
-    data, presentation = None, {}
+    data, presentation, detail = None, {}, None
+    is_detail=query.get('detail')=='1'
     if query.get('run') == '1' or query.get('export') == 'xlsx':
         try:
             if observed and observed.state != 'completed':
@@ -186,10 +190,33 @@ def report(request):
             if execution is None:
                 raise ValidationError('Дополнительный расчёт ещё не завершён. Результаты основного варианта здесь не используются.')
             with reports_next.current_run(execution):
-                data = data_for(request.user, execution, query)
+                data = data_for(request.user, execution, query, detailed=is_detail)
             presentation = present('registry', data, data, query.getlist('period') or list('123' if variant == 'separate_2026' else '12345'))
             if query.get('search', '').strip():
                 raise ValidationError('Для отбора сотрудника используйте поле «Сотрудник».')
+            if is_detail and data['sections']:
+                from .services.manager_detail import combine_reports
+                from .services.reports_next_presenter import new_detail_labels
+                detail=new_detail_labels(combine_reports(data['sections'],data['currency']))
+                detail['excel_urls']={}
+                for table in ('all','summary','detail'):
+                    target=query.copy();target['export']='xlsx';target['table']=table
+                    detail['excel_urls'][table]='?'+target.urlencode()
+                if query.get('export')=='xlsx':
+                    from .services.report_excel import report_excel
+                    table=query.get('table','all')
+                    if table not in ('all','summary','detail'):raise ValidationError('Неизвестная таблица для выгрузки.')
+                    output=report_excel(detail,{'Currency':data['currency'],'Years':['2026'],
+                        'TypeCoeff_':query.getlist('type'),'Subdivision':query.getlist('subdivision'),
+                        'DealAuthor':query.getlist('author'),'gp_sales':query.getlist('planning'),
+                        'GPGoods':query.getlist('goods'),'Brend':query.getlist('brand')},table,
+                        provenance=[('Вариант','Москва и ТТ раздельно' if variant=='separate_2026' else 'Москва + ТТ объединённо'),
+                            ('Запуск',str(execution.run_id)),('Завершён',str(execution.completed_at)),
+                            ('План',execution.parameters.get('plan_version','')),
+                            ('Квартальная доля, %',execution.parameters.get('quarter_share','')),
+                            ('Годовая доля, %',execution.parameters.get('year_share','')),
+                            ('Порог выплаты',execution.parameters.get('payout_threshold','')),('Периоды',', '.join(query.getlist('period')) or 'Все доступные')])
+                    return FileResponse(output,as_attachment=True,filename='motivation-all-2026-detail.xlsx')
             if query.get('export') == 'xlsx':
                 from .reports_next_views import workbook
                 output = workbook('registry', data, [('Вариант', 'Москва и ТТ раздельно' if variant == 'separate_2026' else 'Москва + ТТ объединённо'), ('Подразделения', ', '.join(query.getlist('subdivision')) or 'Все доступные'), ('Премиальная база', 'I–III кварталы: выбранный сценарий; IV квартал и годовая часть: только IV квартал'), ('Товарные фильтры', '; '.join(field + ': ' + ', '.join(query.getlist(field)) for field in ('planning','goods','brand') if query.getlist(field))), ('Запуск', str(execution.run_id)), ('Завершён', str(execution.completed_at)), ('План', execution.parameters.get('plan_version', '')), ('Квартальная доля, %', execution.parameters.get('quarter_share', '')), ('Годовая доля, %', execution.parameters.get('year_share', '')), ('Порог выплаты', execution.parameters.get('payout_threshold', ''))], query=query, title='Все кварталы 2026')
@@ -215,7 +242,13 @@ def report(request):
     kinds = scope['type'] if scope else ['Политики', 'Продажи', 'Директора']
     kinds = [kinds] if isinstance(kinds, str) else kinds
     params = query.copy(); params['run'] = '1'; params['export'] = 'xlsx'
+    target=query.copy();target['run']='1';target['detail']='1';target.pop('export',None)
+    detail_url='?'+target.urlencode()
+    target.pop('detail',None);target.pop('table',None)
+    summary_url='?'+target.urlencode()
     return render(request, 'admin_motivation/reports_next/all_2026.html', {
+        'selected_parameters':[{'label':label,'value':', '.join(query.getlist(field)) or 'Все доступные'} for field,label in [('subdivision','Подразделения'),('type','Вид мотивации'),('author','Сотрудник'),('period','Периоды')]],
+        'detail':detail,'is_detail':is_detail,'detail_url':detail_url,'summary_url':summary_url,
         'kind': 'registry', 'all_2026_report': True, 'query': query, 'form': form, 'can_start': can_start, 'error': error,
         'job': job, 'pending': pending, 'execution': execution, 'data': data, 'ledger': data,
         'annual_accrual_requires_recalculation': bool(execution and execution.parameters.get('annual_accrual_source') != SNAPSHOT_VERSION),

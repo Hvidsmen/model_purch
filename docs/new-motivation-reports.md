@@ -173,3 +173,11 @@ quarter_share и year_share в журнале запуска хранятся в
 ### Итоговые карточки личной премии
 
 «Итого» стоит рядом с карточками периодов. Доплата показана только в итоговых блоках и остаётся нулевой в пилоте. Блок цели содержит итог всех денежных показателей; общий остаток, план, факт и процент берутся по последней выбранной накопительной цели, без сложения повторяющихся баз квартала и года. Если выбраны разные виды с разными базами, единая цель не заявляется. Товарная матрица и её Excel содержат полный блок итогов: возможная премия, остаток, процент выполнения, премия по расчёту, доплата и всего.
+
+### Detailed calculation in all quarters 2026
+
+The additional report accepts `detail=1` on its existing route. The «Детальный расчёт · K0–K4» link preserves scenario, original subdivision selection, worker type, author, goods filters, currency and periods; employee/period links now open this view too. Summary requests stay on the lightweight reader; detail requests explicitly request the full manager matrix and performance inputs, combine selected worker types, and render the existing expandable manager detail component.
+
+The same selection/access validation and `current_run` guard apply. Combined and separate reads retain `all_2026` and `separate_2026` respectively; the main calculation is never used as a fallback. No SQL calculation is launched by viewing or exporting. Detailed Excel uses the existing all/summary/detail exporter with scenario, run, completion, plan and payment parameters as provenance. The ordinary presentation workbook remains the default export of the summary page.
+
+Coverage: `test_detailed_view_and_excel_keep_variant_filters_and_separate_results` checks both scenarios, filters, periods, full-reader options and Excel provenance. Optional Chromium test `admin_motivation.test_all_2026_detail_browser` checks expansion, K0–K4 controls and detailed Excel download. The older `test_manager_detail` module has three independently reproduced failures concerning legacy route/catalog expectations and the added director-roster predicate; this feature does not change those paths or assertions.
