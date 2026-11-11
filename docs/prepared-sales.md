@@ -40,3 +40,13 @@ The reviewed legacy CASE uses `/100` and guarded raw division; the shared CASE u
 This is a consumer compatibility change; the producer formula and prepared dataset rule are unchanged. Existing compatible ready snapshots remain usable. Updating the portal and launching the saved main job installs the updated private consumers; no rebuild of the ready sales set, live warehouse procedure change or Django migration is required.
 
 `test_prepared_sales_compatibility` covers both floating types, rejected nonfloating/missing types, altered formulas/guards/joins, both CASE expressions on NULL/zero/return and randomized floating inputs, and helper expansion through main/all/separate 2026 preparation. Uploaded procedure definitions are used only for private comparison, never copied into public fixtures.
+
+## Narrow consumer copies and daily timing
+
+Consumers retain only Sales columns whose identifiers occur in the remaining SQL or input scope, instead of copying unused wide fields into tempdb for every variant. Metadata comes from `dbo.Sales`; unqualified financial fields are included too. The original-author service field is preserved for historical calculations. Unknown metadata, direct star consumers and dynamic SQL retain the full original projection. This does not change prepared-set publication, readiness/schema checks, coefficient rules or turnover arithmetic.
+
+The known year predicate now uses a half-open date range, retaining the original lower bound and replacing YEAR with the next January 1 upper bound. The producer already creates `IX_PortalPreparedSales_Date`. Each consumer prints copied rows, projected-column count and preparation/copy milliseconds into Agent output. Overall Agent duration can include sequential combined/separate calculations; nested journal durations must not be blindly summed.
+
+After deploying, save the existing daily job parameters once to regenerate all consumer procedures and the Agent command. There is no need to rebuild the prepared Sales dataset. The guarded source-compatibility check remains; if it fails, the transaction must not replace the old procedures/command. `admin_motivation/sql/diagnostics/daily_prepared_sales.sql` is read-only and checks actual installed markers, recent per-variant durations and saved command composition.
+
+Local checks cover date boundaries and index eligibility, unused wide payload omission, retained unqualified monetary inputs, returns and author fields, conservative fallback, legacy compatibility and the chained job. Production SQL Server performance is not measured in the development environment; neither a speedup factor nor the cause of an earlier slow run is inferred from these tests.
