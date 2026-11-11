@@ -125,6 +125,7 @@ class DirectorEndToEndTests(ScenarioFlow,TestCase):
         QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='draft')
         DiscountSegment.objects.create(version=self.version,type_discount='ASS',o1=5,o2=15,o3=25,o4=35)
         QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
+        self.warehouse.change("UPDATE PortalPreparedSales SET ДаичиТипСкидкиНаДату='K_MASS'")
         response=self.submit();self.assertContains(response,'несколько типов скидки')
         self.assertEqual(DirectorScenarioComparison.objects.count(),0)
 
@@ -223,3 +224,19 @@ class DirectorEndToEndTests(ScenarioFlow,TestCase):
         self.assertContains(response,self.people[1].full_name+': Нет директорских ставок')
         self.assertEqual(len(self.warehouse.calls),0)
         self.assertEqual(DirectorScenarioComparison.objects.count(),0)
+
+    def test_exact_composite_discount_overrides_both_generic_matches(self):
+        QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='draft')
+        for name,limits in [('KF',(10,50,52,53)),('ACC',(10,36,40,42)),
+                ('KF_ACC',(10,36,40,42)),('PROJECT',(None,None,None,None)),
+                ('WB',(None,None,None,None)),('KF_PROJECT',(None,None,None,None)),
+                ('KF_WB',(None,None,None,None)),('KF_WBC',(None,None,None,None))]:
+            DiscountSegment.objects.create(version=self.version,type_discount=name,
+                **dict(zip(('o1','o2','o3','o4'),limits)))
+        QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
+        from .services.director_scenario_inputs import read_sources
+        for kind,segment in [('KF_ACC','O2'),('KF_PROJECT','O0'),('KF_WB','O0'),('KF_WBC','O0')]:
+            self.warehouse.change('UPDATE PortalPreparedSales SET ДаичиТипСкидкиНаДату=?,DiscountMotivation=38',(kind,))
+            facts,_=read_sources(self.plans,self.version,self.warehouse.connector)
+            self.assertEqual({row['segment'] for row in facts[2026]},{segment},kind)
+            self.assertEqual(sum(D(row['positive']) for row in facts[2026]),6000)

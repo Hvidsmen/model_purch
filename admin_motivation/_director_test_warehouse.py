@@ -119,7 +119,8 @@ class Cursor:
             match=re.search(pattern,adapted)
             if not match:raise AssertionError('Unknown projection APPLY dialect')
             adapted=adapted[:match.start()]+adapted[match.end():]
-            predicate=" FROM director_segments cfg WHERE f.discount_type LIKE '%' || cfg.type_discount || '%'"
+            predicate=" FROM director_segments cfg WHERE "+match.group(0).split(' WHERE ',1)[1].rsplit(') m',1)[0]
+            predicate=predicate.replace("CONCAT('%',cfg.type_discount,'%')","'%' || cfg.type_discount || '%'")
             adapted=adapted.replace('m.matches','(SELECT COUNT(*)'+predicate+') AS matches')
             for key in ('o1','o2','o3','o4'):
                 adapted=adapted.replace('m.'+key,'(SELECT MAX('+key+')'+predicate+')')
