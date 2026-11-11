@@ -23,12 +23,12 @@ class FileRateFallbackTests(SimpleTestCase):
  CREATE TABLE plans(PlanningGroupSalesERP,GroupERP,[Марка(Бренд)],Date_,Subdivision);
  INSERT INTO subs VALUES('M','Branch');''')
         # Min across every K of a kind/group, not one minimum per segment.
-        rows=[('RAC','AC','Exact','Политики',[.03,.02,.01,.04,.05]),
-              ('RAC','AC','Exact','Продажи',[.08,.07,.06,.09,.1]),
+        rows=[('1. RAC','Бытовые кондиционеры','Exact','Политики',[.03,.02,.01,.04,.05]),
+              ('1. RAC','Бытовые кондиционеры','Exact','Продажи',[.08,.07,.06,.09,.1]),
               ('VRF','VRF','*','Политики',[.004,.004,.004,.004,.004]),
               ('VRF','VRF','*','Продажи',[.04,.04,.04,.04,.04]),
-              ('RAC','*','*','Политики',[.015]*5),
-              ('RAC','AC','*','Политики',[.018]*5)]
+              ('1. RAC','*','*','Политики',[.015]*5),
+              ('1. RAC','Бытовые кондиционеры','*','Политики',[.018]*5)]
         for pg,goods,brand,kind,values in rows:
             self.db.execute('INSERT INTO coeff VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',
                 (pg,goods,brand,kind,'20250101','20251231','Branch',*values,'Formula'))
@@ -51,7 +51,9 @@ class FileRateFallbackTests(SimpleTestCase):
         self.db.execute('DELETE FROM sales');self.db.execute('DELETE FROM plans');self.db.execute('DELETE FROM products')
         self.db.execute('INSERT INTO products VALUES (?,?,?,?)',('P',pg,goods,brand))
         self.db.execute('INSERT INTO sales VALUES (?,?,?)',('P','M','20250601'))
-        self.db.execute('INSERT INTO plans VALUES (?,?,?,?,?)',(pg,goods,brand,'20250601','M'))
+        plan_group=goods if pg in ('1. RAC','2. VRF','3. PROF') else ''
+        plan_brand=brand if goods in ('Бытовые кондиционеры','Полупромышленные кондиционеры','Системы мульти-сплит','Системы VRF') else ''
+        self.db.execute('INSERT INTO plans VALUES (?,?,?,?,?)',(pg,plan_group,plan_brand,'20250601','M'))
         match=self.lookups[index]
         lookup='SELECT c.rowid FROM coeff c '+match['lookup']+' LIMIT 1'
         base=('sales s JOIN products p ON p.ProductCode=s.ProductCode JOIN subs sub ON sub.SubdivisionKey=s.Subdivision'
@@ -63,19 +65,19 @@ class FileRateFallbackTests(SimpleTestCase):
 
     def test_exact_rates_preserve_distinct_k_values_in_fact_and_plan(self):
         for index in (0,2):
-            rows=self.query(index,'RAC','AC','Exact')
+            rows=self.query(index,'1. RAC','Бытовые кондиционеры','Exact')
             self.assertEqual(len(rows),1);self.assertEqual(rows[0][-5:],(.03,.02,.01,.04,.05))
 
     def test_goods_and_group_wildcards_precede_minimum_fallback(self):
         for index in (0,2):
-            self.assertEqual(self.query(index,'RAC','AC','Other')[0][-5:],(.018,)*5)
-            self.assertEqual(self.query(index,'RAC','Other','Other')[0][-5:],(.015,)*5)
+            self.assertEqual(self.query(index,'1. RAC','Бытовые кондиционеры','Other')[0][-5:],(.018,)*5)
+            self.assertEqual(self.query(index,'1. RAC','Other','Other')[0][-5:],(.015,)*5)
 
     def test_missing_exact_sales_uses_same_kind_group_minimum_for_all_k(self):
         for index in (1,3):
-            row=self.query(index,'RAC','Other','Other')[0]
+            row=self.query(index,'1. RAC','Other','Other')[0]
             self.assertEqual(row[-5:],(.06,)*5)
-            self.assertEqual(row[:3],('RAC','Other','Other'))
+            self.assertEqual(row[:3],('1. RAC','Other',''))
 
     def test_missing_group_uses_file_table_minimum_without_mixing_kinds(self):
         for index in range(4):
@@ -84,7 +86,7 @@ class FileRateFallbackTests(SimpleTestCase):
 
     def test_exact_zero_is_not_replaced_by_minimum(self):
         self.db.execute("UPDATE coeff SET K0=0 WHERE Brand='Exact' AND TypeCoeff='Политики'")
-        self.assertEqual(self.query(0,'RAC','AC','Exact')[0][-5],0)
+        self.assertEqual(self.query(0,'1. RAC','Бытовые кондиционеры','Exact')[0][-5],0)
 
     def test_genuinely_absent_kind_still_has_no_invented_rate(self):
         self.db.execute("DELETE FROM coeff WHERE TypeCoeff='Продажи'")
@@ -96,7 +98,7 @@ class FileRateFallbackTests(SimpleTestCase):
         from .services.recalculation_2025_sql import validate_rate_projection
         validate_rate_projection(self.sql)
         for index in range(4):
-            for pg,goods,brand in [('RAC','AC','Exact'),('RAC','Other','Other'),('OtherPG','Other','Other')]:
+            for pg,goods,brand in [('1. RAC','Бытовые кондиционеры','Exact'),('1. RAC','Other','Other'),('OtherPG','Other','Other')]:
                 self.query(index,pg,goods,brand)
                 # Execute the real downstream plan expression, with the generated
                 # rate projection as sc. Previously this failed: no TypeCoeff.
@@ -116,3 +118,24 @@ class FileRateFallbackTests(SimpleTestCase):
         for name in ('PGSales','Group_','Brand','VariationCalculate','K0','K1','K2','K3','K4'):
             with self.subTest(column=name),self.assertRaises(ValidationError):
                 validate_rate_projection(self.sql.replace(' AS '+name, ' AS Missing_'+name))
+
+    def test_mobile_brand_is_empty_in_fact_plan_and_wildcard_output(self):
+        for kind in ('Политики','Продажи'):
+            for brand,value in [('*',.025),('Brand A',.9)]:
+                row=('1. RAC','Мобильные кондиционеры',brand,kind,'20250101','20251231','Branch',*([value]*5),'Formula')
+                self.db.execute('INSERT INTO coeff VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',row)
+                self.db.execute('INSERT INTO rates VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)',row)
+        self.refresh_minima()
+        for index in range(4):
+            for brand in ('Brand A','Brand B'):
+                row=self.query(index,'1. RAC','Мобильные кондиционеры',brand)[0]
+                self.assertEqual(row[:3],('1. RAC','Мобильные кондиционеры',''))
+                self.assertEqual(row[-5:],(.025,)*5)
+
+    def test_mobile_fallback_without_matching_file_row_also_has_empty_brand(self):
+        self.db.execute("DELETE FROM coeff WHERE Group_='*'")
+        self.db.execute("DELETE FROM rates WHERE Group_='*'")
+        self.refresh_minima()
+        for index in range(4):
+            row=self.query(index,'1. RAC','Мобильные кондиционеры','Brand A')[0]
+            self.assertEqual(row[:3],('1. RAC','Мобильные кондиционеры',''))
