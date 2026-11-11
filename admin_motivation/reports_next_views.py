@@ -48,7 +48,7 @@ def report_navigation(user, kind, query):
 
 
 def workbook(kind, data, metadata, query=None, title=None):
-    if kind=='executive' and query is not None and query.get('table')=='executive_summary':
+    if kind=='executive':
         from .services.executive_summary_excel import workbook as executive_table_workbook
         return executive_table_workbook(data,metadata,title=title)
     if kind in ('team', 'registry'):
