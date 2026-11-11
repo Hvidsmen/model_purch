@@ -278,6 +278,8 @@ def prepare(cursor):
     cursor.execute(TABLE_SQL)
     original, _ = patch_defaults(template_source(), required=False)
     source = patch_source(original, existing)
+    from .recalculation_2025_share_cache import patch as cache_plan_shares
+    source = cache_plan_shares(source)
     from .payout_threshold import parameterize
     source = parameterize(source)
     from .first_quarter_inputs import patch as first_quarter
