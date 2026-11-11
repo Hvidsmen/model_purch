@@ -132,13 +132,22 @@ class PreparedSalesSQLTests(SimpleTestCase):
         self.assertTrue(data['ready']['completed_at'].endswith('Z'))
         conn.close.assert_called_once()
 
+    def test_running_audit_disables_start_even_before_agent_activity_is_available(self):
+        conn=Mock();cursor=Mock();now=datetime(2026,11,11,5)
+        cursor.fetchone.side_effect=[(1,),None,None]
+        cursor.fetchall.return_value=[('building',now,None,'running','Подготовка документов',None,None)]
+        data=sales.monitor(lambda *_:(conn,cursor))
+        self.assertFalse(data['agent_running'])
+        self.assertTrue(data['running'])
+        self.assertEqual(data['history'][0]['state'],'running')
+
     def test_cancelled_agent_is_not_left_disabled_as_running(self):
         conn=Mock();cursor=Mock();now=datetime(2026,11,11,5)
         cursor.fetchone.side_effect=[(1,),None,(now,now,3)]
         cursor.fetchall.return_value=[('cancelled',now,None,'running','Расчёт скидок',None,None)]
         data=sales.monitor(lambda *_:(conn,cursor))
         self.assertEqual(data['history'][0]['state'],'interrupted')
-        self.assertFalse(data['agent_running'])
+        self.assertFalse(data['agent_running']);self.assertFalse(data['running'])
 
 
 class PreparedSalesViewsTests(TestCase):
@@ -148,7 +157,7 @@ class PreparedSalesViewsTests(TestCase):
         with patch.object(sales,'monitor') as monitor,patch.object(sales,'start') as start:
             response=self.client.get(reverse('motivation_calculations'))
         self.assertContains(response,'Подготовка факта продаж с 2025 года')
-        self.assertContains(response,'08:00 МСК');self.assertContains(response,'Подготовить сейчас')
+        self.assertContains(response,'08:00 МСК');self.assertContains(response,'data-prepared-start disabled')
         monitor.assert_not_called();start.assert_not_called()
 
     def test_post_starts_independent_preparation_not_a_calculation_job(self):

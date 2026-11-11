@@ -1,6 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% load static tz %}
 {% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/calculations.css' %}?v=admin-20261027">
+<link rel="stylesheet" href="{% static 'admin_motivation/calculations.css' %}?v=prepare-button-state-20261111">
 <section class="calculation-page admin-calculations">
 <header class="calculation-heading"><div><p class="calculation-eyebrow">Администрирование · Мотивация</p><h1>Центр расчётов</h1><p>Запускайте расчёт вручную или настройте автоматическое расписание. Время — московское.</p></div>{% if portal_is_admin %}<a class="calculation-button calculation-secondary" href="{% url 'portal_administration' %}">Обзор администратора →</a>{% endif %}</header>
 {% for message in messages %}<div class="calculation-notice {% if message.tags == 'error' %}calculation-error{% endif %}" role="status">{{ message }}</div>{% endfor %}
@@ -8,7 +8,7 @@
 <header><h2>Подготовка факта продаж с 2025 года</h2><p>Ежедневно в 08:00 МСК · Все подразделения · Продажи с 01.01.2025 до конца текущего года.</p></header>
 <p>Атрибуты документов, исторические цены и скидки готовятся один раз. Все расчёты мотивации используют опубликованный набор; коэффициенты и правила выплаты применяются отдельно. При ошибке предыдущий готовый набор сохраняется.</p>
 <p role="status" data-prepared-status>Проверка состояния…</p><p data-prepared-ready></p>
-{% if not portal_motivation_readonly %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="prepare_sales"><button class="calculation-button" type="submit" data-prepared-start>Подготовить сейчас</button></form>{% endif %}
+{% if not portal_motivation_readonly %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="prepare_sales"><button class="calculation-button" type="submit" data-prepared-start disabled aria-busy="true">Проверка состояния…</button></form>{% endif %}
 <p class="calculation-monitor-note">Первый запуск также подключает ежедневное задание на 08:00 МСК. При обновлении SQL-процедур сохраните параметры основного задания один раз; для 2025 запустите пересчёт заново после готовности набора.</p>
 <details><summary>Замеры этапов последней подготовки</summary><div data-prepared-stages>Загрузка…</div></details>
 <details><summary>История подготовки</summary><div data-prepared-history>Загрузка…</div></details>
@@ -37,5 +37,5 @@
 <details class="calculation-help"><summary>Как выполняется расчёт и что нужно для подключения</summary><p>Задания выполняет SQL Server Agent, в том числе после перезапуска портала. Одновременные запуски из портала блокируются.</p><p>Процедура <code>motivation.sp_CalcBySub</code> запускается через подготовленную копию <code>motivation.PortalCalcBySub</code>, которая учитывает объединённые подразделения. Исходная процедура сохраняется.</p><p>Подключение: <code>DWH_SQL_CONN_STR</code>. Нужны работающая служба SQL Server Agent, права на задания msdb, чтение определения исходной процедуры и создание объектов в схеме motivation.</p></details>
 </section>
 <script src="{% static 'admin_motivation/calculation_monitor.js' %}?v=live-sql-progress-20261111" defer></script>
-<script src="{% static 'admin_motivation/prepared_sales.js' %}?v=stage-profile-1" defer></script>
+<script src="{% static 'admin_motivation/prepared_sales.js' %}?v=prepare-button-state-20261111" defer></script>
 {% endblock %}

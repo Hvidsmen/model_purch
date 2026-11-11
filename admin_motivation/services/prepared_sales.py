@@ -306,6 +306,7 @@ def monitor(connector=None):
         from .calculation_live_progress import read as live_read
         live=live_read(cursor,JOB) if running else {}
         return {'configured':bool(agent),'status':status,'agent_running':running,'history':history,'live':live,
+            'running':running or bool(history and history[0]['state']=='running'),
             'stages':profile.read(cursor,history[0]['run_id']) if history else [],
             'ready':{'run_id':str(ready[0]),'completed_at':ready[1].isoformat()+'Z','row_count':ready[2]} if ready else None}
 
