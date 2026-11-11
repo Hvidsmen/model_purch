@@ -19,12 +19,13 @@ def branch_name(value):
     return next((name for name in BRANCHES if norm(value)==norm(name)),None)
 
 
-def read_sources(plans, version, connector=None):
+def read_sources(plans, version, connector=None, progress=None):
     from .director_prepared_fact import settings_for, read_fact
     settings=settings_for(plans[2026])
     connection=None
     stage='Подключение к источникам сравнения директоров'
     try:
+        if progress:progress('Подключение и проверка доступности DWH',3)
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
         connection.timeout=60
         stage='Проверка доступности исходных данных сравнения'
@@ -36,6 +37,7 @@ def read_sources(plans, version, connector=None):
         facts,metadata={},{}
         for year,(variant,table) in SOURCES.items():
             stage=f'Чтение исходного расчёта {year}'
+            if progress:progress(stage,4)
             cursor.execute("SELECT TOP(1) RunId,State_,Parameters_,CompletedAt FROM motivation.PortalMotivationRun WHERE JSON_VALUE(Parameters_,'$.variant')=? ORDER BY StartedAt DESC",variant)
             run=cursor.fetchone()
             if not run or run[1]!='completed':
@@ -71,6 +73,7 @@ def read_sources(plans, version, connector=None):
             if not values:raise ValidationError(f'В исходном факте {year} нет строк Москвы/ТТ. Результат не подменяется нулём.')
             facts[year]=values
         stage='Чтение подготовленного факта 2026'
+        if progress:progress(stage,5)
         facts[2026],metadata['2026']=read_fact(cursor,version,BRANCHES,settings)
         return facts,metadata
     except ValidationError:

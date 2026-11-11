@@ -5,7 +5,7 @@ import uuid
 from django import forms
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db.models import Exists, OuterRef
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -51,6 +51,21 @@ class ComparisonForm(forms.Form):
 def report(request):
     if not can_view(request.user):raise PermissionDenied
     can_calculate=role_for(request.user,'motivation') in (ADMIN,MODELER,DIRECTOR,FINANCIER)
+    from .services.director_scenario_progress import Progress,token_for
+    if request.method=='GET' and request.GET.get('progress'):
+        try:
+            response=JsonResponse(Progress(request.GET['progress'],request.user).read())
+            response['Cache-Control']='no-store'
+            return response
+        except ValidationError as exc:return JsonResponse({'error':' '.join(exc.messages)},status=400)
+    asynchronous=request.method=='POST' and request.headers.get('Accept')=='application/json'
+    progress=None
+    if asynchronous:
+        if not can_calculate:raise PermissionDenied
+        try:
+            progress=Progress(request.POST.get('progress_token',''),request.user)
+            progress.begin()
+        except ValidationError as exc:return JsonResponse({'error':' '.join(exc.messages),'progress_token':token_for(request.user)},status=409)
     snapshot=DirectorScenarioComparison.objects.first()
     if 'calculation' in request.GET:
         try:key=int(request.GET['calculation'])
@@ -64,13 +79,21 @@ def report(request):
             data=form.cleaned_data
             try:
                 result=calculate(data['plan_2025'].pk,data['plan_2026'].pk,data['coefficient_version'].pk,
-                    *[data[k].pk for k in ('source_moscow','source_tt','target_moscow','target_tt')])
-                return redirect(reverse('motivation_report_director_scenarios')+f'?calculation={result.pk}')
+                    *[data[k].pk for k in ('source_moscow','source_tt','target_moscow','target_tt')],
+                    **({'progress':progress.update} if progress else {}))
+                url=reverse('motivation_report_director_scenarios')+f'?calculation={result.pk}'
+                if progress:progress.update('Расчёт завершён',12,state='completed',url=url)
+                if asynchronous:return JsonResponse({'url':url})
+                return redirect(url)
             except ValidationError as exc:error=' '.join(exc.messages)
             except Exception as exc:
                 reference=uuid.uuid4().hex[:12]
                 logging.getLogger(__name__).exception('Director comparison failed [%s]',reference)
                 error=failure_message(exc,reference)
+    if asynchronous:
+        error=error or ' '.join(str(message) for messages in form.errors.values() for message in messages)
+        if progress:progress.update('Расчёт завершился с ошибкой',state='failed')
+        return JsonResponse({'error':error,'progress_token':token_for(request.user)},status=400)
     if request.GET.get('export')=='xlsx' and snapshot:
         return FileResponse(workbook(snapshot),as_attachment=True,filename=f'director-scenarios-{snapshot.pk}.xlsx')
     data=snapshot.results if snapshot else None
@@ -78,6 +101,6 @@ def report(request):
     if data:
         for case in data['scenarios']:cases.append({**case,'rows':[r for r in data['rows'] if r['scenario']==case['id']]})
     return render(request,'admin_motivation/reports_next/director_scenarios.html',{
-        'form':form,'can_calculate':can_calculate,'snapshot':snapshot,'data':data,'cases':cases,'error':error,
+        'progress_token':token_for(request.user),'form':form,'can_calculate':can_calculate,'snapshot':snapshot,'data':data,'cases':cases,'error':error,
         'legacy_result':bool(data and data.get('rule')!=RULE),
         'history':DirectorScenarioComparison.objects.only('pk','created_at')[:20]})

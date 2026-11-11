@@ -163,7 +163,8 @@ def detail(case,person,source,branch,formula,item,period,plan,fact,execution,dep
 
 
 @transaction.atomic
-def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,target_moscow,target_tt,connector=None):
+def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,target_moscow,target_tt,connector=None,progress=None):
+    if progress:progress('Проверка планов и версии модели',1)
     plans={2025:SalesPlanScenario.objects.select_for_update().get(pk=plan_2025_id,is_deleted=False),
            2026:SalesPlanScenario.objects.select_for_update().get(pk=plan_2026_id,is_deleted=False)}
     version=GlobalCoeffVersion.objects.select_for_update().get(pk=version_id)
@@ -177,6 +178,7 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
     for year,plan in plans.items():
         if plan.loaded_at is None:raise ValidationError(f'Сначала загрузите выбранный план {year}.')
     plan_rows={year:plan_inputs(plan,year) for year,plan in plans.items()}
+    if progress:progress('Проверка директорских ставок',2)
     rates=Rates(version)
     # Check model configuration before waiting on the warehouse. Merged cases
     # need each source's rates for the other branch's goods as well.
@@ -189,9 +191,10 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
         except ValidationError as exc:
             rate_errors.extend(f'{source.full_name}: {message}' for message in exc.messages)
     if rate_errors:raise ValidationError(rate_errors)
-    facts,sources=read_sources(plans,version,connector)
+    facts,sources=read_sources(plans,version,connector,progress=progress) if progress else read_sources(plans,version,connector)
     rows=[];details=[];scenarios=[]
     for case in range(1,6):
+        if progress:progress(f'Расчёт варианта {case} из 5',5+case)
         year=2025 if case==1 else 2026;merged=case in (4,5);synthetic=case in (3,5)
         title=('2025 · весь год · филиалы отдельно' if case==1 else
                '2026 · I–III кварталы · '+('объединённый филиал' if merged else 'филиалы отдельно')+' · '+('факт = план' if synthetic else 'фактическое выполнение'))
@@ -213,5 +216,6 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
         'configuration':config,'plans':{str(y):{'title':p.title,'source_version':p.source_version,'loaded_at':str(p.loaded_at)} for y,p in plans.items()},
         'inputs':{'facts':facts,'plans':plan_rows}}
     result=json.loads(json.dumps(payload,ensure_ascii=False,default=str))
+    if progress:progress('Сохранение результата и данных для Excel',11)
     return DirectorScenarioComparison.objects.create(plan_2025=plans[2025],plan_2026=plans[2026],
         coefficient_version=version,configuration=config,results=result)
