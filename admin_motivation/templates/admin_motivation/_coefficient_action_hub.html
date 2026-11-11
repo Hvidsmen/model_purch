@@ -2,6 +2,11 @@
 <section class="coefficient-action-hub" id="coefficient-action-hub" aria-label="Действия с коэффициентами">
 <div class="coefficient-action-row"><strong>Действия</strong><div class="coefficient-action-buttons" data-action-buttons>{% if portal_can_edit_motivation and version_editable %}<a class="btn btn-outline-primary" href="{% url 'motivation_coefficient_balancing' %}?version={{ selected_version.pk }}{% if sub %}&amp;subdivision={{ sub.pk }}{% endif %}">Балансировка премии</a>{% endif %}</div></div>
 <div data-action-panels></div>
+{% if sub and selected_version %}<div class="coefficient-action-row"><strong>Директора</strong><div class="coefficient-action-buttons">
+<a class="btn btn-outline-primary" href="{% url 'coeff_subdivisions_admin_motivation' sub.pk %}?version={{ selected_version.pk }}&amp;export=directors_xlsx">Excel — директора подразделения</a>
+{% if director_export_available %}<a class="btn btn-outline-primary" href="{% url 'coeff_subdivisions_admin_motivation' sub.pk %}?version={{ selected_version.pk }}&amp;employee={{ employee.pk }}&amp;export=director_xlsx">Excel — {{ employee.full_name }}</a>{% endif %}
+<span class="small text-muted">Выбранная версия коэффициентов. ФИО директоров — по колонкам, K0–K4 и настройки формулы.</span>
+</div></div>{% endif %}
 {% if not sub and selected_version %}<div class="coefficient-action-row"><strong>Директора</strong><div class="coefficient-action-buttons"><a class="btn btn-outline-primary" href="{% url 'global_coeff_admin_motivation' %}?version={{ selected_version.pk }}&amp;export=directors_xlsx">Excel — все директора</a><span class="small text-muted">Коэффициенты выбранной версии для действующих привязанных директоров. Подразделения и директора — по колонкам.</span></div></div>{% endif %}
 </section>
 <script src="{% static 'admin_motivation/coefficient_actions.js' %}?v=complete-editor-20261027" defer></script>

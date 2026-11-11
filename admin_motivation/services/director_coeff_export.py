@@ -11,16 +11,22 @@ from .active_directors import coefficient_rows as active_director_rows
 from .subdivision_aliases import coefficient_rows as merged_rows
 
 
-def director_coefficients_workbook(version):
+def director_coefficients_workbook(version, *, subdivision=None, employee=None):
     source = SubdivisionDirectorCoeff.objects.filter(version=version).select_related(
         'employee','subdivision','goods','variation_calculate').order_by(
         'employee__full_name','employee__employee_code','subdivision__subdivision_key',
         'goods__planning_group_sales','goods__group','goods__brand','goods_id')
+    if employee is not None:
+        source=source.filter(employee=employee)
     # Coefficient history is retained after unbinding/archive. Export only the
     # current roster, then apply the portal's existing subdivision merge policy.
     current = active_director_rows(source.iterator(chunk_size=2000))
     rows = list(merged_rows(((row.employee_id,row.subdivision.subdivision_key,row.goods_id,row)
                             for row in current),1,[0,1,2]))
+    if subdivision is not None:
+        from .subdivision_aliases import mapping,canonical
+        selected_key=canonical(subdivision.subdivision_key,mapping())
+        rows=[row for row in rows if row[1]==selected_key]
     pairs = {(subdivision,row.employee_id):row.employee for _,subdivision,_,row in rows}
     pairs = sorted(pairs.items(),key=lambda item:(item[0][0],item[1].full_name,item[1].employee_code,item[0][1]))
     columns = 4+6*len(pairs)
@@ -37,6 +43,8 @@ def director_coefficients_workbook(version):
     sheet.merge_cells(start_row=1,start_column=1,end_row=1,end_column=columns)
     sheet['A1'] = (f'Коэффициенты действующих директоров · {version} · '
                    f'{version.get_status_display()} · ревизия {version.revision}')
+    if subdivision is not None:sheet['A1']=sheet['A1'].value+f' · {subdivision.subdivision_name}'
+    if employee is not None:sheet['A1']=sheet['A1'].value+f' · {employee.full_name}'
     sheet['A1'].font = Font(name='Calibri',size=12,bold=True,color='27364D')
     sheet['A1'].alignment = Alignment(vertical='center',wrap_text=True)
     sheet.row_dimensions[1].height = 35

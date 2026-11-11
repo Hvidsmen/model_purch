@@ -249,10 +249,31 @@ def gloabal_coeff_action(request):
     return redirect(reverse('global_coeff_admin_motivation') + f'?version={version.pk}')
 
 
+def _branch_director_coeff_export(request,version,sub,employee=None):
+    from base.access import role_for,ADMIN,MODELER,DIRECTOR,MOTIVATION_VIEWER
+    from django.core.exceptions import PermissionDenied
+    from django.http import HttpResponse,Http404
+    from .services.director_coeff_export import director_coefficients_workbook
+    if role_for(request.user,'motivation') not in (ADMIN,MODELER,DIRECTOR,MOTIVATION_VIEWER):
+        raise PermissionDenied
+    if version is None:raise Http404('Нет версии коэффициентов для выгрузки.')
+    try:
+        content=director_coefficients_workbook(version,subdivision=sub,employee=employee)
+    except ValidationError as exc:
+        messages.error(request,' '.join(exc.messages))
+        return redirect(reverse('coeff_subdivisions_admin_motivation',args=[sub.pk])+'?version='+str(version.pk))
+    response=HttpResponse(content,content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    person=f'-employee{employee.pk}' if employee is not None else ''
+    response['Content-Disposition']=f'attachment; filename="motivation-directors-v{version.pk}-sub{sub.pk}{person}.xlsx"'
+    return response
+
+
 def coef_one_sub(request, subdivision, version_form=None, employee_form_override=None):
     sub = get_object_or_404(Subdivision, pk=subdivision)
     context = version_context(request, version_form)
     selected = context['selected_version']
+    if request.method=='GET' and request.GET.get('export')=='directors_xlsx':
+        return _branch_director_coeff_export(request,selected,sub)
     if selected is None and not context['versions']:
         return render(request, 'admin_motivation/approved_empty.html', context)
     kinds = list(KindManagerCoeff.objects.order_by('pk'))
@@ -273,9 +294,14 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     if employee_form_override is not None:
         employee_form = employee_form_override
     employee_bound = bool(employee and employee.subdivisions.filter(pk=sub.pk).exists())
+    if request.method=='GET' and request.GET.get('export')=='director_xlsx':
+        from django.http import Http404
+        if not employee_bound:raise Http404('Действующий директор не выбран или не привязан к подразделению.')
+        return _branch_director_coeff_export(request,selected,sub,employee)
     return render(request, 'admin_motivation/coef_one_sub.html', {
         **context, **restore_context(request), 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
         'director_editable': bool(context['version_editable'] and employee_bound),
+        'director_export_available': employee_bound,
         'manager_approved_editable': bool(selected and selected.status == 'approved' and can_access(request.user, 'motivation_admin')),
         'manager_correction_history': ManagerCorrectionLog.objects.filter(version=selected, subdivision=sub).select_related('actor').order_by('-pk')[:30],
         'employee_form': employee_form, 'all_employees': DirectorEmployee.objects.filter(is_archived=False).prefetch_related('subdivisions'),
