@@ -91,8 +91,8 @@ class ReportsNextTests(TestCase):
         exported = self.client.get(url, {'run': '1', 'period': 'all', 'export': 'xlsx'})
         from io import BytesIO
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-        self.assertEqual(book['Премии']['B3'].value, 225)
-        self.assertEqual(book['Премии']['C3'].value, 345)
+        self.assertEqual(book['Сравнение']['D3'].value, 225)
+        self.assertEqual(book['Сравнение']['I3'].value, 345)
         book.close(); exported.close()
 
     def test_executive_table_download_matches_filtered_values_and_folded_columns(self):
@@ -119,6 +119,10 @@ class ReportsNextTests(TestCase):
         self.assertTrue(sheet.column_dimensions['D'].collapsed)
         self.assertFalse(sheet.sheet_properties.outlinePr.summaryRight)
         self.assertEqual(sheet.freeze_panes,'B3')
+        self.assertFalse(sheet.sheet_view.showGridLines)
+        self.assertEqual(sheet['A3'].fill.fgColor.rgb,'0027364D')
+        self.assertTrue(sheet['A3'].font.bold)
+        self.assertEqual(sheet.print_title_rows,'$1:$2')
         def count(nodes):return sum(1+count(row['children']) for row in nodes)
         self.assertEqual(sheet.max_row,3+count(data[1:]))
         self.assertIn('Параметры',book.sheetnames)
@@ -516,7 +520,7 @@ class ReportsNextTests(TestCase):
             {'run': '1', 'period': ['4', '5'], 'plan': self.fixture.scenario.pk, 'export': 'xlsx'})
         from io import BytesIO
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-        self.assertEqual(book['Премии']['B3'].value, 225)
+        self.assertEqual(book['Сравнение']['D3'].value, 225)
         self.assertEqual(dict(book['Параметры'].values)['Период премии'], 'Все доступные периоды')
         book.close(); exported.close()
 
@@ -814,10 +818,10 @@ class ReportsNextTests(TestCase):
         exported = self.client.get(reverse('motivation_report_next', args=['executive']), {'export': 'xlsx'})
         from io import BytesIO
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-        sheet = book['Премии']
-        self.assertEqual(sheet['G3'].value, 1000)
-        self.assertAlmostEqual(sheet['J3'].value, float(root['global_markup']))
-        self.assertEqual(sheet['H3'].number_format, '0.00%')
+        sheet = book['Сравнение']
+        self.assertEqual(sheet['C3'].value, 1000)
+        self.assertAlmostEqual(sheet['H3'].value, float(root['global_markup']))
+        self.assertEqual(sheet['G3'].number_format, '0.00%')
         book.close(); exported.close()
         self.fixture.scenario.lines.filter(subdivision='B').update(amount_ddp_usd=None)
         missing = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('year=2026'))
