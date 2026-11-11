@@ -33,6 +33,28 @@ class SavedRecalculation2025Tests(TestCase):
         self.assertContains(reloaded,'Не удалось подготовить SQL')
         self.assertEqual(reloaded.context['job'].pk,job.pk)
 
+    def test_one_click_redirects_to_live_launch_status(self):
+        job=self.make_job()
+        with patch('admin_motivation.services.calculation_jobs.monitor',return_value={}),patch(
+                'admin_motivation.services.calculation_jobs.start_job') as start:
+            response=self.client.post(self.url,{'action':'run','job':job.pk})
+        self.assertRedirects(response,self.url+f'?job={job.pk}&launch=1',fetch_redirect_response=False)
+        start.assert_called_once()
+
+    def test_queued_launch_hides_previous_completed_result(self):
+        from types import SimpleNamespace
+        job=self.make_job();job.synced=True;job.save(update_fields=['synced'])
+        previous=SimpleNamespace(state='completed')
+        with patch('admin_motivation.services.execution_tracking.observe',return_value=previous),patch(
+                'admin_motivation.services.execution_tracking.running_state',return_value='queued') as state,patch(
+                'admin_motivation.reports_2025.read_results') as read:
+            response=self.client.get(self.url+f'?job={job.pk}&launch=1&run=1')
+        state.assert_called_once_with(job,previous,check_agent=True)
+        self.assertEqual(response.context['state'],'queued')
+        self.assertContains(response,'Ожидает запуска в SQL Agent')
+        self.assertContains(response,'disabled>Запустить пересчёт 2025')
+        read.assert_not_called()
+
     def test_existing_coefficients_can_be_reused_without_another_upload(self):
         old=self.make_job()
         response=self.client.post(self.url,dict(action='upload',plan_version='Plan 25',quarter_share=70,year_share=30,payout_threshold='.9'),follow=True)
@@ -154,3 +176,33 @@ class Native2025PreparationTests(SimpleTestCase):
         self.assertIn('WITH',message)
         self.assertIn('SQL 319',message)
         self.assertNotIn('secret',message)
+
+
+class AcceptedLaunchStateTests(SimpleTestCase):
+    def test_previous_completed_audit_does_not_hide_new_agent_request(self):
+        from types import SimpleNamespace
+        from datetime import datetime,timedelta
+        from uuid import uuid4
+        from .services.execution_tracking import running_state
+        now=datetime(2026,11,11,14)
+        job=SimpleNamespace(key=uuid4())
+        previous=SimpleNamespace(state='completed',run_id=uuid4())
+        for row in [(now-timedelta(hours=1),now-timedelta(minutes=50),now,1),(now,None,now,0)]:
+            conn=MagicMock();cursor=MagicMock();cursor.fetchone.return_value=row
+            state=running_state(job,previous,connector=lambda *_:(conn,cursor),check_agent=True)
+            self.assertEqual(state,'queued');conn.close.assert_called_once()
+
+    def test_inactive_agent_preserves_completed_audit(self):
+        from types import SimpleNamespace
+        from uuid import uuid4
+        from .services.execution_tracking import running_state
+        conn=MagicMock();cursor=MagicMock();cursor.fetchone.return_value=(None,None,None,1)
+        self.assertEqual(running_state(SimpleNamespace(key=uuid4()),SimpleNamespace(state='completed'),
+            connector=lambda *_:(conn,cursor),check_agent=True),'completed')
+
+    def test_default_completed_lookup_stays_lightweight(self):
+        from types import SimpleNamespace
+        from .services.execution_tracking import running_state
+        connector=MagicMock()
+        self.assertEqual(running_state(None,SimpleNamespace(state='completed'),connector=connector),'completed')
+        connector.assert_not_called()

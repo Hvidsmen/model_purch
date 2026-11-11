@@ -138,11 +138,11 @@ def report(request):
                 state = calculation_jobs.monitor(job)
                 if state.get('status') in ('Выполняется', 'Ожидает запуска'):
                     messages.info(request, 'Это задание уже выполняется. Дождитесь завершения.')
-                    return redirect(reverse('motivation_report_2025') + f'?job={job.pk}')
+                    return redirect(reverse('motivation_report_2025') + f'?job={job.pk}&launch=1')
                 calculation_jobs.start_job(job)
                 job.synced = True; job.error = ''; job.save(update_fields=['synced', 'error'])
-                messages.success(request, 'Тестовый пересчёт 2025 запущен. Обновите отчёт после завершения.')
-                return redirect(reverse('motivation_report_2025') + f'?job={job.pk}')
+                messages.success(request, 'Пересчёт 2025 запущен. Статус обновляется автоматически.')
+                return redirect(reverse('motivation_report_2025') + f'?job={job.pk}&launch=1')
             except ValidationError as exc:
                 error = ' '.join(exc.messages)
             except Exception as exc:
@@ -157,7 +157,7 @@ def report(request):
         state = 'start_failed'
     elif job and job.synced:
         observed = execution_tracking.observe(job, persist=can_start)
-        state = execution_tracking.running_state(job, observed)
+        state = execution_tracking.running_state(job, observed,check_agent=True) if request.GET.get('launch')=='1' else execution_tracking.running_state(job, observed)
         if state!='queued':
             from .services.recalculation_2025_progress import display
             progress=display(job,observed,state)
@@ -169,7 +169,7 @@ def report(request):
                 except Exception:
                     agent_history_unavailable=True
                     logging.getLogger(__name__).exception('2025 calculation failure history unavailable')
-        if state not in ('failed','interrupted') and (request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx'):
+        if state == 'completed' and (request.GET.get('run') == '1' or request.GET.get('export') == 'xlsx'):
             try:
                 sections = read_results(job, include_performance=request.GET.get('export') == 'xlsx')
                 if request.GET.get('export') == 'xlsx':

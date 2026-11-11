@@ -160,14 +160,16 @@ def latest_for_report(fallback=None, *, variant='main', persist=False):
 
 
 
-def running_state(job, execution, connector=None):
+def running_state(job, execution, connector=None, *, check_agent=False):
     """Derive a cancelled run without rewriting the warehouse audit on GET.
 
+    check_agent also checks a newly accepted launch before its new audit exists;
+    the previous completed audit must not hide an Agent queue/running worker.
     Killing a worker can bypass TRY/CATCH. Treat its running journal as stale
     only when Agent is inactive AND no portal writer holds the application lock.
     A second journal read avoids calling a just-completed run interrupted.
     """
-    if execution is None or execution.state != 'running':
+    if not check_agent and (execution is None or execution.state != 'running'):
         return execution.state if execution else 'unknown'
     from .calculation_jobs import job_name
     connection=None
@@ -183,7 +185,10 @@ def running_state(job, execution, connector=None):
         if not row or len(row)!=4:return 'unknown'
         started,stopped,requested,lock_free=row
         if requested and (not started or stopped and requested>stopped):return 'queued'
-        if started and not stopped:return 'running'
+        if started and not stopped:
+            return 'running' if execution and execution.state=='running' else 'queued'
+        if execution is None or execution.state!='running':
+            return execution.state if execution else 'unknown'
         if lock_free!=1:return 'unknown'
         cursor.execute('SELECT State_ FROM motivation.PortalMotivationRun WHERE RunId=?',str(execution.run_id))
         current=cursor.fetchone()
