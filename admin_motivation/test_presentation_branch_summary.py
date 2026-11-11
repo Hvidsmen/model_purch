@@ -38,7 +38,12 @@ class BranchSummaryExcelTests(SimpleTestCase):
                     self.assertEqual(subtotal[2],1) # Same author across motivation kinds.
                     self.assertEqual(subtotal[3:7],expected)
                     self.assertEqual(sum(row[6] for row in items),subtotal[6])
+                combined=[row for row in rows if row[0]=='Все выбранные подразделения']
+                self.assertEqual([row[1] for row in combined],['Политики','Продажи','Директора'])
+                self.assertEqual([row[6] for row in combined],[95,180,270])
+                self.assertEqual([row[2] for row in combined],[2,2,2])
                 grand=next(row for row in rows if row[0]=='ИТОГО')
+                self.assertEqual(sum(row[6] for row in combined),grand[6])
                 self.assertEqual(grand[2:7],(2,180,360,5,545))
                 self.assertEqual(grand[-1],540)
 
