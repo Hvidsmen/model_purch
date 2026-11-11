@@ -58,8 +58,8 @@ class Recalculation2025UnitTests(SimpleTestCase):
         self.assertIn('WHERE [Год]<>2025',s)
         self.assertEqual(s.count('SELECT TOP(1) c.PGSales'),4)
         self.assertIn('sc.Group_ [ГруппаТоваров]',s)
-        self.assertIn('sc.Group_=pm.ГруппаТоваров',s)
-        self.assertIn('sc.Brand=pm.Марка',s)
+        self.assertIn('pm.ГруппаТоваров=sc.Group_',s)
+        self.assertIn('pm.Марка=sc.Brand',s)
         self.assertIn('АвторСделки,ГруппаПлановПродаж',s)
         self.assertNotRegex(s,r"\b(?:INTO|FROM|DROP TABLE)\s+DataWH\.motivation\.(?:Fact|PlanFact|ReportMotivationByDealAuthor)\b")
 
@@ -188,7 +188,7 @@ class Recalculation2025WebTests(TestCase):
     def test_read_blocks_old_or_failed_results_under_lock(self):
         from .reports_2025 import read_results
         job=self.make_job();connection,cursor=MagicMock(),MagicMock()
-        cursor.fetchone.side_effect=[(0,),('another-job','completed','fact25-plan25-v5-canonical-classification')]
+        cursor.fetchone.side_effect=[(0,),('another-job','completed','fact25-plan25-v6-author-share-hierarchy')]
         with self.assertRaises(ValidationError):read_results(job,lambda *a:(connection,cursor))
         self.assertFalse(any('ReportMotivationByDealAuthorTest2025' in c.args[0] for c in cursor.execute.call_args_list))
         connection.close.assert_called_once()
@@ -236,12 +236,12 @@ class SalesParticipationTests(SimpleTestCase):
             quarter_share=80,year_share=20,payout_threshold='.8',recalculation_2025=SimpleNamespace(source_sha256='abc'))
         connection,cursor=MagicMock(),MagicMock()
         data=parameters(job)
-        cursor.fetchone.side_effect=[(0,),('1234','completed','fact25-plan25-v5-canonical-classification',json.dumps(data))]
+        cursor.fetchone.side_effect=[(0,),('1234','completed','fact25-plan25-v6-author-share-hierarchy',json.dumps(data))]
         cursor.fetchall.return_value=[('Политики','Д-Москва','A','Год',10)]
         sections=read_results(job,lambda *a:(connection,cursor))
         self.assertEqual(sections[0]['total'],10)
         data['plan_version']='Other'
-        cursor.fetchone.side_effect=[(0,),('1234','completed','fact25-plan25-v5-canonical-classification',json.dumps(data))]
+        cursor.fetchone.side_effect=[(0,),('1234','completed','fact25-plan25-v6-author-share-hierarchy',json.dumps(data))]
         with self.assertRaisesMessage(ValidationError,'изменились'):
             read_results(job,lambda *a:(connection,cursor))
 

@@ -33,6 +33,8 @@ def parameters(job):
                 'quarter_catchup': True, 'premium_amount_quarters': [1,2,3,4],
                 'variant': variant, 'recalculation_rule': RULE_VERSION,
                 'policy_plan_shares': 'fact_2025_by_subdivision_coefficient_goods',
+                'missing_fact_policy_plan_shares': 'goods_without_brand_then_planning_group_then_original_subdivision',
+                'no_subdivision_authors': 'unallocated_plan_zero_premium',
                 'zero_sum_policy_plan_shares': 'positive_author_net_by_original_subdivision_coefficient_goods',
                 'coefficient_sha256': job.recalculation_2025.source_sha256,
                 'calculation_subdivisions': 'all_separate', 'currency': 'USD'}
