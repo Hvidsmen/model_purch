@@ -15,6 +15,11 @@ class GlobalCoeffVersionForm(forms.Form):
 
 
 class SalesPlanScenarioForm(forms.Form):
+    source_type = forms.ChoiceField(label='Источник плана', choices=[('planning','DataWH.planning.PlanSales'),('erp','DataWH.erp.РегистрыНакопления.ПланыПродаж')], initial='planning', required=False)
+
+    def clean_source_type(self):
+        return self.cleaned_data.get('source_type') or 'planning'
+
     title = forms.CharField(label='Название сценария', max_length=255)
     source_version = forms.CharField(label='Версия плана в MS SQL', max_length=255,
                                    widget=forms.TextInput(attrs={'list': 'source-versions'}))

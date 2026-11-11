@@ -848,3 +848,55 @@ class SalesPlanTests(TestCase):
         self.assertEqual(self.client.get(reverse('motivation_sales_plan',args=[older.pk])).context['scenario'].pk,older.pk)
         SalesPlanScenario.objects.update(loaded_at=None)
         self.assertIsNone(self.client.get(reverse('motivation_sales_plans')).context['scenario'])
+
+
+class ERPPlanSourceTests(TestCase):
+    setUp = SalesPlanTests.setUp
+    rows = SalesPlanTests.rows
+
+    def test_erp_import_preserves_output_contract_and_parameter_binding(self):
+        from .services.sales_plans import source_sql
+        self.scenario.source_type='erp';self.scenario.save()
+        self.assertEqual(load_plan(self.scenario.pk,self.connector),2)
+        sql=source_sql('erp')
+        self.cursor.execute.assert_called_once_with(sql,self.scenario.source_version)
+        for fragment in ('DataWH.erp.[РегистрыНакопления.ПланыПродаж]', 'ps.Сценарий = @params_scenario',
+                         'ps.Подразделение', 'ps.Номенклатура', 'SUM(ps.Сумма) AmountUSD', 'SUM(ps.даичи_СуммаДДП) AmountDDP_USD'):
+            self.assertIn(fragment,sql)
+        self.assertNotIn('DataWH.planning.PlanSales',sql)
+        self.assertEqual(self.scenario.lines.get(subdivision='').amount_usd,Decimal('1500'))
+        self.assertIsNone(self.scenario.lines.get(subdivision='').amount_ddp_usd)
+        self.assertNotIn(self.scenario.source_version,sql)
+
+    def test_erp_version_list_and_unknown_source(self):
+        self.cursor.fetchall.return_value=[('План 2027',)]
+        self.assertEqual(source_versions(self.connector,source_type='erp'),['План 2027'])
+        self.assertIn('Сценарий',self.cursor.execute.call_args.args[0])
+        self.connection.close.assert_called_once()
+        from .services.sales_plans import source_sql
+        with self.assertRaises(ValidationError):source_sql('anything')
+
+    def test_switching_source_requires_reset_even_when_version_name_is_identical(self):
+        from .services.plan_scenarios import change_scenario
+        load_plan(self.scenario.pk,self.connector)
+        with self.assertRaises(ValidationError):
+            change_scenario(self.scenario.pk,'ERP',self.scenario.source_version,source_type='erp')
+        change_scenario(self.scenario.pk,'ERP',self.scenario.source_version,source_type='erp',confirm_reset=True)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.source_type,'erp')
+        self.assertIsNone(self.scenario.loaded_at)
+        self.assertFalse(self.scenario.lines.exists())
+
+    def test_create_erp_scenario_and_display_source(self):
+        response=self.client.post(reverse('motivation_sales_plans'),{'action':'create','title':'ERP 2027','source_version':'ERP plan','source_type':'erp'})
+        self.assertEqual(response.status_code,302)
+        scenario=SalesPlanScenario.objects.get(title='ERP 2027')
+        self.assertEqual(scenario.source_type,'erp')
+        self.assertContains(self.client.get(response.url),'DataWH.erp.РегистрыНакопления.ПланыПродаж')
+
+    def test_erp_empty_import_keeps_saved_plan(self):
+        load_plan(self.scenario.pk,self.connector)
+        self.scenario.source_type='erp';self.scenario.save()
+        self.cursor.fetchall.return_value=[]
+        with self.assertRaises(ValidationError):load_plan(self.scenario.pk,self.connector)
+        self.assertEqual(self.scenario.lines.get(subdivision='').amount_usd,Decimal('1500'))

@@ -26,8 +26,9 @@ def sales_plans(request, scenario_id=None):
             return redirect(target + ('?' + query if query else ''))
     form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'create' else None)
     edit_form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'edit' else None,
-        initial={'title': scenario.title, 'source_version': scenario.source_version} if scenario else None)
-    versions = request.session.get('sales_plan_source_versions', [])
+        initial={'title': scenario.title, 'source_version': scenario.source_version, 'source_type':scenario.source_type} if scenario else None)
+    selected_source=scenario.source_type if scenario else request.POST.get('source_type','planning')
+    versions = request.session.get('sales_plan_source_versions_'+selected_source, [])
     if request.method == 'POST':
         action = request.POST.get('action')
         if scenario and action in ['load', 'calculate'] and 'application/x-ndjson' in request.headers.get('Accept', ''):
@@ -49,8 +50,8 @@ def sales_plans(request, scenario_id=None):
                 messages.success(request, 'Сценарий удалён из рабочих списков. Данные, связанные с историей утверждения, сохранены.')
                 return redirect('motivation_sales_plans')
             elif action == 'refresh_sources':
-                versions = source_versions()
-                request.session['sales_plan_source_versions'] = versions
+                versions = source_versions(source_type=scenario.source_type if scenario else request.POST.get('source_type','planning'))
+                request.session['sales_plan_source_versions_'+selected_source] = versions
                 messages.success(request, f'Найдено версий плана: {len(versions)}.')
             elif scenario and action == 'load':
                 with scenario_operation(scenario.pk):
