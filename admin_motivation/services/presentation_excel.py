@@ -95,6 +95,9 @@ def workbook(kind, data, metadata, query=None, title=None):
             if items:
                 row(ws, [branch, section['kind'], *summary_values(items)])
         row(ws, [branch, 'ИТОГО по подразделению', *summary_values(branch_rows)], 'subtotal')
+    for section in display['team_sections']:
+        row(ws, ['Все выбранные подразделения', section['kind'], section['people'], *section['period_totals'],
+                 section['bonus'], section['total'], section['possible']], 'subtotal')
     row(ws, ['ИТОГО', 'Все выбранные подразделения', display['people'], *display['period_totals'], display['bonus'], display['total'], display['possible']], 'grand')
     row(ws, [], 'blank')
     row(ws, ['«Премия без учёта выполнения плана» — сумма по фактическим отгрузкам и коэффициентам без применения условия выполнения плана.'], 'note')
