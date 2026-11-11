@@ -1,0 +1,16 @@
+{% extends 'admin_motivation/base.html' %}{% block content %}
+<section class="content"><p><a href="{% url 'motivation_coefficient_iteration_upload' %}">← Загрузки коэффициентов</a></p>
+<h1>Сопоставление подразделений и директоров · № {{ iteration.pk }}</h1>
+<p>Файлы: {{ iteration.payload.branches.name }} · {{ iteration.payload.directors.name }}</p>
+<p>Предложены только однозначные точные совпадения. Сокращения, опечатки и неоднозначные названия выберите вручную. Архивные директора не сопоставляются автоматически, но доступны для явного выбора в исторических сценариях. Для директора проверьте также подразделения, которым назначаются ставки этого блока.</p>
+<p><strong>{% if iteration.confirmed %}Сопоставление подтверждено для этой итерации.{% else %}Черновик: сопоставление ещё не подтверждено.{% endif %}</strong> Ставки и справочник портала не изменены. Подтверждение не запускает расчёт и не утверждает коэффициенты.</p>
+{% for warning in warnings %}<p role="status">{{ warning }}</p>{% endfor %}
+<p>Получателей в файлах: {{ rows|length }}. Не заполнено сопоставлений: <strong>{{ form.unresolved }}</strong>.</p>
+<form method="post">{% csrf_token %}{{ form.revision }}{{ form.revision.errors }}{{ form.non_field_errors }}
+<div style="overflow:auto"><table class="table"><thead><tr><th>Вид</th><th>Название из файла</th><th>Блок K0–K4</th><th>Товарных сочетаний</th><th>Подразделение</th><th>Директор</th><th>Подразделения директора для этой итерации</th></tr></thead><tbody>
+{% for row in rows %}<tr{% if not row.complete %} class="table-warning"{% endif %}><td>{{ row.kind }}</td><td>{{ row.label }}</td><td>{{ row.range }}</td><td>{{ row.entries }}</td><td>{% if row.subdivision %}{{ row.subdivision }}{{ row.subdivision.errors }}{% endif %}</td><td>{% if row.employee %}{{ row.employee }}{{ row.employee.errors }}{% endif %}</td><td>{% if row.branches %}{{ row.branches }}{{ row.branches.errors }}{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
+<p>Для нескольких подразделений директора в списке используйте Ctrl / Cmd. Эти привязки относятся только к загруженной итерации.</p>
+<button type="submit" name="action" value="save" class="btn btn-outline-primary">Сохранить черновик</button>
+<button type="submit" name="action" value="confirm" class="btn btn-primary">Подтвердить сопоставление</button>
+</form></section>{% endblock %}

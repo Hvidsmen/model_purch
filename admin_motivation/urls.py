@@ -1,8 +1,10 @@
 from . import reports_director_scenarios, reports_integral_2026, reports_2025, editor_views, reports_next_views, reports_all_2026, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
-from . import report_navigation_views
+from . import report_navigation_views,coefficient_iteration_views
 
 urlpatterns = [
+    path('coefficient-iterations/',coefficient_iteration_views.upload,name='motivation_coefficient_iteration_upload'),
+    path('coefficient-iterations/<int:pk>/',coefficient_iteration_views.review,name='motivation_coefficient_iteration_mapping'),
     path('coefficients/editor/check/',editor_views.check,name='motivation_editor_check'),
     path('coefficients/history/<int:log_id>.csv', operation_views.coefficient_edit_log, name='motivation_coefficient_edit_log'),
     path('reports-next/', report_navigation_views.catalog, name='motivation_reports_next'),
