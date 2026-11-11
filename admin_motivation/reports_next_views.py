@@ -48,6 +48,9 @@ def report_navigation(user, kind, query):
 
 
 def workbook(kind, data, metadata, query=None, title=None):
+    if kind=='executive' and query is not None and query.get('table')=='executive_summary':
+        from .services.executive_summary_excel import workbook as executive_table_workbook
+        return executive_table_workbook(data,metadata,title=title)
     if kind in ('team', 'registry'):
         from .services.presentation_excel import workbook as presentation_workbook
         return presentation_workbook(kind, data, metadata, query=query, title=title)
@@ -327,6 +330,11 @@ def report(request, kind):
     period_options = [item for item in reports.PERIODS if not scope or not scope.get('pilot_periods') or item[0] in ('all', '4', '5')]
     export_query = query.copy()
     export_query['export'] = 'xlsx'
+    executive_table_query=export_query.copy()
+    executive_table_query['table']='executive_summary'
+    if kind=='executive':
+        if selected and selected.pk:executive_table_query['execution']=str(selected.pk)
+        if plan:executive_table_query['plan']=str(plan.pk)
     reset_query = query.copy()
     for field in ('period', 'type', 'subdivision', 'author', 'planning', 'goods', 'brand', 'page', 'export', 'table', 'search', 'page_policies', 'page_sales', 'page_directors'):
         reset_query.pop(field, None)
@@ -356,7 +364,7 @@ def report(request, kind):
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,
         'reset_url': '?' + reset_query.urlencode(), 'branch_label': branch_label or 'Все доступные подразделения', 'selected_branches': selected_subs, 'all_types': all_types, 'type_choices': [{'value': value, 'selected': value in query.getlist('type')} for value in all_types], 'type_label': ', '.join(query.getlist('type')) or 'Все доступные виды',
-        'product_filter_fields': product_fields(query, strict=False), 'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(),
+        'product_filter_fields': product_fields(query, strict=False), 'product_filters': [(field, value) for field in ('planning', 'goods', 'brand') for value in query.getlist(field)], 'period_label': reports.period_label(query), 'period_choices': [{'value': code, 'label': label, 'selected': code in query.getlist('period')} for code, label in period_options if code != 'all'], 'periods': period_options, 'branches': branches, 'metadata': metadata, 'error': error, 'export_url': '?' + export_query.urlencode(), 'executive_table_export_url':'?'+executive_table_query.urlencode(),
         'report_navigation': report_navigation(request.user, kind, query),
         'presentation': presentation, 'employee_page': employee_page, 'ledger_page': ledger_page, 'page_query': page_query.urlencode(), 'selected_parameters': [], 'calculation_steps': [{'period': label, 'possible': block[13], 'ratio': block[16], 'calculated': block[17], 'bonus': block[18], 'total': block[19]} for label, block in zip(detail['periods'], detail['detail_totals'])] if detail else [],
         'is_personal': role_for(request.user, 'motivation') in REPORT_ROLES})
