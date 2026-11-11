@@ -7,9 +7,10 @@
 {% for warning in warnings %}<p role="status">{{ warning }}</p>{% endfor %}
 <p>Получателей в файлах: {{ rows|length }}. Не заполнено сопоставлений: <strong>{{ form.unresolved }}</strong>.</p>
 <form method="post">{% csrf_token %}{{ form.revision }}{{ form.revision.errors }}{{ form.non_field_errors }}
-<div style="overflow:auto"><table class="table"><thead><tr><th>Вид</th><th>Название из файла</th><th>Блок K0–K4</th><th>Товарных сочетаний</th><th>Подразделение</th><th>Директор</th><th>Подразделения директора для этой итерации</th></tr></thead><tbody>
-{% for row in rows %}<tr{% if not row.complete %} class="table-warning"{% endif %}><td>{{ row.kind }}</td><td>{{ row.label }}</td><td>{{ row.range }}</td><td>{{ row.entries }}</td><td>{% if row.subdivision %}{{ row.subdivision }}{{ row.subdivision.errors }}{% endif %}</td><td>{% if row.employee %}{{ row.employee }}{{ row.employee.errors }}{% endif %}</td><td>{% if row.branches %}{{ row.branches }}{{ row.branches.errors }}{% endif %}</td></tr>{% endfor %}
+<div style="overflow:auto"><table class="table"><thead><tr><th>Вид</th><th>Название из файла</th><th>Блок K0–K4</th><th>Товарных сочетаний</th><th>Подразделение</th><th>Директор в 2026–2027</th><th>Директор в 2025 году</th><th>Подразделения директора для этой итерации</th></tr></thead><tbody>
+{% for row in rows %}<tr{% if not row.complete %} class="table-warning"{% endif %}><td>{{ row.kind }}</td><td>{{ row.label }}</td><td>{{ row.range }}</td><td>{{ row.entries }}</td><td>{% if row.subdivision %}{{ row.subdivision }}{{ row.subdivision.errors }}{% endif %}</td><td>{% if row.employee %}{{ row.employee }}{{ row.employee.errors }}{% endif %}</td><td>{% if row.employee_2025 %}{{ row.employee_2025 }}{{ row.employee_2025.errors }}{% endif %}</td><td>{% if row.branches %}{{ row.branches }}{{ row.branches.errors }}{% endif %}</td></tr>{% endfor %}
 </tbody></table></div>
+<p>Для 2025 года ставки блока Волкова назначаются Кудицкой Татьяне Анатольевне, блока Галайды (в файле «Гадайда Д») — Чевокину Сергею Юрьевичу. Проверьте и сохраните отдельный выбор в колонке 2025. Пустой выбор означает того же директора, что в 2026–2027. Сохранение не меняет ранее рассчитанные результаты.</p>
 <p>Для нескольких подразделений директора в списке используйте Ctrl / Cmd. Эти привязки относятся только к загруженной итерации.</p>
 <button type="submit" name="action" value="save" class="btn btn-outline-primary">Сохранить черновик</button>
 <button type="submit" name="action" value="confirm" class="btn btn-primary">Подтвердить сопоставление</button>
