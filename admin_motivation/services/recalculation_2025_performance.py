@@ -1,8 +1,6 @@
 """Explain saved 2025 payouts using the same run's eligibility inputs."""
 from collections import defaultdict
 from decimal import Decimal
-from openpyxl.styles import Font, PatternFill, Alignment
-from openpyxl.utils import get_column_letter
 from .recalculation_2025 import decimal
 from .director_participation import EXCLUDED
 from .heat_exclusion import predicate
@@ -105,46 +103,10 @@ def explain(detail_rows, gate_rows, threshold):
             'goods': goods, 'brand': brand, 'formula': formula or 'Подразделение', 'period': period,
             'plan': plan, 'fact': fact, 'ratio': execution, 'threshold': None if code == '1' else threshold,
             'department_ratio': department_ratio, 'author_ratio': personal_ratio,
+            'department_plan': department[0] if department else None,
+            'department_fact': department[2] if department else None,
             'possible': possible, 'paid': paid, 'bonus': bonus, 'total': paid + bonus, 'reason': reason})
     return result
 
 
-def append_sheets(book, sections):
-    for section in sections:
-        policies = section['kind'] == 'Политики'
-        sheet = book.create_sheet('3. Выполнение политик' if policies else '4. Выполнение продаж')
-        sheet.append(['Выполнение плана мотивации · 2025 · USD'])
-        note = ('План/факт — база проверки выбранной формулы, а не сумма повторяющихся окон. '
-                'I квартал: план мотивации равен факту, порог не применяется. '
-                'Общие проценты повторяются у товарных сочетаний; их нельзя складывать. '
-                'Порог проверяется до округления процентов.')
-        sheet.append([note])
-        labels = ['Подразделение'] + (['Сотрудник'] if policies else []) + [
-            'Группа планов продаж','Группа ERP','Бренд','Формула','Период',
-            'План проверки, USD','Факт проверки, USD','Выполнение по формуле, %',
-            'Порог выплаты, %','Выполнение подразделения, %','Выполнение сотрудника, %',
-            'Начислено, USD','К выплате, USD','Доплаты, USD','Итого к выплате, USD','Пояснение']
-        sheet.append(labels)
-        for row in section.get('performance', []):
-            values = [row['branch']] + ([row['author']] if policies else []) + [row[key] for key in (
-                'planning','goods','brand','formula','period','plan','fact','ratio','threshold',
-                'department_ratio','author_ratio','possible','paid','bonus','total','reason')]
-            sheet.append(values)
-        for number in (1,2):
-            sheet.merge_cells(start_row=number,start_column=1,end_row=number,end_column=len(labels))
-        sheet.row_dimensions[2].height = 45
-        sheet.cell(2,1).alignment = Alignment(wrap_text=True,vertical='center')
-        for cell in sheet[3]:
-            cell.font = Font(bold=True,color='243B53');cell.fill = PatternFill('solid',fgColor='EDE9FE')
-            cell.alignment = Alignment(wrap_text=True,vertical='center')
-        sheet.row_dimensions[3].height = 44
-        for index, label in enumerate(labels,1):
-            sheet.column_dimensions[get_column_letter(index)].width = 65 if label == 'Пояснение' else 27
-            for row in range(4,sheet.max_row+1):
-                cell=sheet.cell(row,index)
-                if isinstance(cell.value,str):cell.data_type='s'
-                if label.endswith('%'):cell.number_format='0.00%'
-                elif label.endswith('USD'):cell.number_format='#,##0.00 "USD"'
-                cell.alignment=Alignment(vertical='top',wrap_text=isinstance(cell.value,str))
-        sheet.freeze_panes='C4' if policies else 'B4'
-        sheet.auto_filter.ref=f'A3:{get_column_letter(len(labels))}{max(3,sheet.max_row)}'
+from .recalculation_2025_performance_excel import append_sheets
