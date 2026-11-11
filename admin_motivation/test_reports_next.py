@@ -95,6 +95,35 @@ class ReportsNextTests(TestCase):
         self.assertEqual(book['Премии']['C3'].value, 345)
         book.close(); exported.close()
 
+    def test_executive_table_download_matches_filtered_values_and_folded_columns(self):
+        from io import BytesIO
+        url=reverse('motivation_report_next',args=['executive'])
+        sub=self.fixture.scenario.lines.exclude(subdivision='').first().subdivision
+        response=self.client.get(url,{'run':'1','period':'5','subdivision':sub,'type':'Политики'})
+        self.assertContains(response,'Скачать таблицу Excel')
+        href=response.context['executive_table_export_url']
+        self.assertIn('table=executive_summary',href);self.assertIn('period=5',href)
+        self.assertIn(f'execution={self.run.pk}',href);self.assertIn(f'plan={self.fixture.scenario.pk}',href)
+        data=response.context['data'];root=data[0]
+        exported=self.client.get(url+href)
+        self.assertEqual(exported.status_code,200)
+        book=load_workbook(BytesIO(b''.join(exported.streaming_content)));sheet=book['Сравнение']
+        self.assertEqual(sheet['A3'].value,'Итого по компании')
+        self.assertEqual(Decimal(str(sheet['D3'].value)),root['global'])
+        self.assertEqual(sheet['E3'].value,0)
+        self.assertEqual(Decimal(str(sheet['F3'].value)),root['global_annual'])
+        self.assertEqual(Decimal(str(sheet['I3'].value)),root['local'])
+        self.assertEqual(sheet['G3'].number_format,'0.00%')
+        self.assertTrue(sheet.column_dimensions['E'].hidden)
+        self.assertEqual(sheet.column_dimensions['E'].max,6)
+        self.assertTrue(sheet.column_dimensions['D'].collapsed)
+        self.assertFalse(sheet.sheet_properties.outlinePr.summaryRight)
+        self.assertEqual(sheet.freeze_panes,'B3')
+        def count(nodes):return sum(1+count(row['children']) for row in nodes)
+        self.assertEqual(sheet.max_row,3+count(data[1:]))
+        self.assertIn('Параметры',book.sheetnames)
+        book.close();exported.close()
+
     def test_current_run_guard_never_mislabels_another_or_running_result(self):
         cursor, connection = Mock(), Mock()
         cursor.fetchone.side_effect = [(0,), (self.run.run_id, 'completed')]
