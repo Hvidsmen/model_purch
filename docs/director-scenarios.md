@@ -14,7 +14,7 @@ Only the two source directors participate in cases 2–5. Real employee bindings
 
 ## Sources and accounting
 
-The latest `test_2025` SQL journal must say `completed` and match the selected 2025 plan and fact year. For 2026, read the published `PortalPreparedSales` dataset directly: no `all_2026` run or premium output table is required. Validate the completed active preparation, rule, schema and full 2026 date coverage using the ordinary prepared-sales consumer contract. Both inputs are read under the shared `PortalMotivationCalculation` session lock; concurrent publication/exports/calculations are refused. SQL identifiers are fixed constants; values use bound parameters. Connections close on success and failure.
+The latest `test_2025` SQL journal must say `completed`, match the selected 2025 plan and fact year, and use the current native 2025 recalculation rule. Both selected plans must have been loaded. For 2026, read the published `PortalPreparedSales` dataset directly: no `all_2026` run or premium output table is required. Validate the completed active preparation, rule, schema and full 2026 date coverage using the ordinary prepared-sales consumer contract. Both inputs are read under the shared `PortalMotivationCalculation` session lock; concurrent publication/exports/calculations are refused. SQL identifiers are fixed constants; values use bound parameters. Connections close on success and failure.
 
 For 2025 use Sales-type physical Fact rows (not director copies or windowed PlanFact turnover), recover original branches through `ПодразделениеДокумент → Subdivisions.SubdivisionKey`, and omit zero-turnover placeholder plan rows. For 2026 join prepared sales to original subdivision, product and customer dimensions, include only goods and dates January–September, preserve HEAT and DPP, and use `Price - AmountUSDIt_ITW + BallsOuterUSD`. Group by the original physical invoice/model identity before separating positive and negative amounts. Resolve O0–O4 against the selected local model version’s discount segments, preserving threshold boundaries, missing-threshold sentinel 10000 and unmatched-type O0 behavior. Multiple matching discount types abort instead of multiplying turnover. Empty model segment configuration or an incompatible/unavailable prepared set abort; there is no raw-Sales or completed-premium fallback. Unknown discount segments or missing original branch recovery abort. Existing branch aliases apply only when resolving model rates and period corrections, never to the original plans/fact branch split. A plan containing only premerged totals cannot be split automatically.
 
@@ -32,4 +32,22 @@ Every successful calculation saves private input aggregates, rate values/formula
 
 Excel has nine sheets: Comparison, five scenario sheets, Execution, Rates, Parameters (Russian labels in the workbook). Dollar amounts and execution percentages are numeric; names/text cannot become Excel formulas. Global administrative/model/finance/general-director roles can calculate. The motivation viewer can read/export only; scoped branch directors cannot access this company-wide comparison.
 
-Run Django tests `admin_motivation.test_director_scenarios`; optionally set `RUN_BROWSER_TESTS=1` and `PLAYWRIGHT_CHROMIUM_EXECUTABLE` for the saved-result/download Chromium test. Local SQL input tests use a fake cursor; actual DWH connectivity and source-run availability must be checked on the portal server.
+## Verified inputs and regression coverage
+
+Comparison rule: `director-comparison-five-v4-verified-inputs`. Plan and fact use the same classification: only RAC/VRF/PROF retain goods; only household, semiindustrial, multisplit and VRF retain brands. Other dimensions use `*`. Empty model goods/brand cells and `*` are equivalent exact-match aliases; conflicting alias rates/formulas are rejected rather than selecting an arbitrary row. TT means Thermotrade (`ТЕРМОТРЕЙД`); original branch names are normalized case-insensitively.
+
+Before warehouse access, validate both rate sources against plan goods, including the other branch's goods used by merged scenarios. Before heavy source queries, check all required warehouse columns and report missing names together. Discount thresholds are inserted into a temporary table with bound parameters, without requiring OPENJSON/database compatibility level 130. SQL failures retain the input-reading stage for diagnostics.
+
+Run the regression suite:
+
+```sh
+python manage.py test admin_motivation.test_director_prepared_fact admin_motivation.test_director_scenarios admin_motivation.test_director_scenarios_end_to_end admin_motivation.test_director_scenarios_browser admin_motivation.test_director_participation admin_motivation.test_director_formula --settings=portal.settings_local --noinput
+```
+
+For the full browser path, set `RUN_BROWSER_TESTS=1` and `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium`, then run `admin_motivation.test_director_scenarios_browser`. Set `DIRECTOR_VERIFICATION_OUTPUT` to an absolute XLSX path to retain the controlled workbook, JSON totals report and browser screenshot.
+
+The end-to-end fixture replaces only the warehouse connection boundary. Source financial SELECTs execute against a temporary SQLite warehouse with SQL Server syntax adaptation; source readers, classification, rates, five calculations, snapshot persistence, views and nine-sheet Excel are real application code. SQL Server catalog metadata, application locks and readiness metadata are simulated. The Chromium test submits the actual form, checks all five two-director tables, reloads without warehouse reads, and downloads/verifies Excel.
+
+Independent baseline expected USD totals for the two directors are (4,120), (4,72), (24,48), (48,96), (48,96) for cases 1–5. Additional cases cover brandless goods, exact empty-brand rates, missing branch actuals, returns and negative rates, segment-dependent synthetic turnover, annual recovery, missing columns, stale source rules, ambiguous discounts/rates, concurrent access, immutable snapshots and preserving earlier results after failure.
+
+This verifies the application chain locally, not the production DWH or SQL Server execution plan. The SQL Server container image could not be pulled in the verification environment because its registry redirect was blocked by network policy. SQL Server syntax, driver behavior, live source completeness and performance still require a portal-server run. No production data or procedures were changed by these tests.

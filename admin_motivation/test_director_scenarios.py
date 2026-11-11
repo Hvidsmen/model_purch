@@ -17,11 +17,12 @@ from .models import (SalesPlanScenario,SalesPlanLine,GlobalCoeffVersion,Subdivis
     DirectorScenarioComparison,KindManagerCoeff,SubdivisionManagerCoeff)
 from .services.director_scenarios import calculate, director_result, BRANCHES, Rates
 from .services.director_scenario_inputs import read_sources, plan_inputs
+from .services.recalculation_2025 import RULE_VERSION as SOURCE_RULE
 from .services.director_scenario_excel import workbook
 
 
 def fact(branch,quarter,amount,**extra):
-    return dict(branch=branch,quarter=quarter,planning='1. RAC',goods='AC',brand='Brand',
+    return dict(branch=branch,quarter=quarter,planning='1. RAC',goods='Бытовые кондиционеры',brand='Brand',
         segment='O0',positive=str(max(D(amount),0)),negative=str(min(D(amount),0)),**extra)
 
 
@@ -31,7 +32,7 @@ class DirectorScenarioTests(TestCase):
         self.version=GlobalCoeffVersion.objects.get(effective_from=date(2001,1,1))
         channel,_=Chanel.objects.get_or_create(chanel_name='Dealer')
         self.branches=[Subdivision.objects.create(subdivision_key=b,subdivision_name=b,subdivision_global=b,chanel=channel) for b in BRANCHES]
-        self.good=Goods.objects.create(goods_key='G',planning_group_sales='1. RAC',group='AC',brand='Brand')
+        self.good=Goods.objects.create(goods_key='G',planning_group_sales='1. RAC',group='Бытовые кондиционеры',brand='Brand')
         self.formula,_=VariationCalculate.objects.get_or_create(variation_name='Подразделение(Глобально)')
         self.people=[DirectorEmployee.objects.create(full_name=f'Actor {i}') for i in range(4)]
         for index,person in enumerate(self.people):
@@ -46,12 +47,12 @@ class DirectorScenarioTests(TestCase):
                 for q in range(1,5):self.line(plan,branch,1000,date(year,q*3-2,1))
         self.facts={year:[fact(b,q,'500' if i==0 else '1500') for i,b in enumerate(BRANCHES) for q in range(1,5 if year==2025 else 4)] for year in (2025,2026)}
         self.sources={str(year):{'run_id':f'run{year}','completed_at':'2026-11-10','parameters':
-            {'fact_year':year,'plan_version':f'P{year}','quarter_share':'80','year_share':'20','payout_threshold':'.8'}} for year in (2025,2026)}
+            {'fact_year':year,'plan_version':f'P{year}','quarter_share':'80','year_share':'20','payout_threshold':'.8','recalculation_rule':SOURCE_RULE}} for year in (2025,2026)}
 
 
     def line(self,plan,branch,amount,day,brand="Brand"):
         return SalesPlanLine.objects.create(scenario=plan,subdivision=branch,plan_date=day,
-            planning_group_sales='1. RAC',group='AC',brand=brand,amount_usd=amount,
+            planning_group_sales='1. RAC',group='Бытовые кондиционеры',brand=brand,amount_usd=amount,
             segment_amounts={f'O{i}':str(amount) if i==0 else '0' for i in range(5)})
 
     def approve(self):QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
@@ -180,8 +181,9 @@ class DirectorScenarioTests(TestCase):
             return [(r['branch'],r['quarter'],r['planning'],r['goods'],r['brand'],r['segment'],
                      D(r['positive']),D(r['negative']),0 if year==2025 else 1) for r in self.facts[year]]
         cursor.fetchall.side_effect=[fact_rows(2025),fact_rows(2026)]
-        saved=calculate(self.plans[2025].pk,self.plans[2026].pk,self.version.pk,
-            *[p.pk for p in self.people],connector=Mock(return_value=(connection,cursor)))
+        with patch('admin_motivation.services.director_scenario_inputs.require_columns'),patch('admin_motivation.services.director_prepared_fact.require_columns'):
+            saved=calculate(self.plans[2025].pk,self.plans[2026].pk,self.version.pk,
+                *[p.pk for p in self.people],connector=Mock(return_value=(connection,cursor)))
         source=saved.results['sources']['2026']
         self.assertEqual(source['run_id'],'prepared26')
         self.assertEqual(source['parameters']['settings_job_id'],job.pk)
@@ -246,7 +248,7 @@ class DirectorScenarioTests(TestCase):
     def test_non_global_goods_scope_and_department_gate(self):
         formula,_=VariationCalculate.objects.get_or_create(variation_name='Марка(Бренд)')
         QuerySet(model=SubdivisionDirectorCoeff).update(variation_calculate=formula)
-        other=Goods.objects.create(goods_key='Second',planning_group_sales='1. RAC',group='AC',brand='Other')
+        other=Goods.objects.create(goods_key='Second',planning_group_sales='1. RAC',group='Бытовые кондиционеры',brand='Other')
         for index,person in enumerate(self.people[:2]):
             SubdivisionDirectorCoeff.objects.create(version=self.version,employee=person,subdivision=self.branches[index],
                 goods=other,variation_calculate=formula,**{f'k{i}':'.01' for i in range(5)})
@@ -258,6 +260,23 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(len(matching),1)
         self.assertEqual(D(matching[0]['department_ratio']),D('.05'))
         self.assertEqual(D(matching[0]['paid']),0)
+
+    def test_empty_model_brand_is_an_exact_canonical_rate_not_group_minimum(self):
+        mobile=Goods.objects.create(goods_key='Mobile blank',planning_group_sales='1. RAC',group='Мобильные кондиционеры',brand='')
+        SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.branches[0],employee=self.people[0],
+            goods=mobile,variation_calculate=self.formula,**{f'k{i}':'.03' for i in range(5)})
+        rates=Rates(self.version)
+        values,formula,origin=rates.get(self.people[0],BRANCHES[0],{'planning':'1. RAC','goods':'Мобильные кондиционеры','brand':'*'})
+        self.assertEqual(values,[D('.03')]*5);self.assertEqual(origin,'exact')
+        self.assertEqual(formula,'Подразделение(Глобально)')
+
+    def test_conflicting_empty_and_star_model_cells_are_rejected_before_a_minimum(self):
+        for brand,rate in [('', '.03'),('*','.04')]:
+            good=Goods.objects.create(goods_key='Mobile '+repr(brand),planning_group_sales='1. RAC',group='Мобильные кондиционеры',brand=brand)
+            SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.branches[0],employee=self.people[0],
+                goods=good,variation_calculate=self.formula,**{f'k{i}':rate for i in range(5)})
+        with self.assertRaisesMessage(ValidationError,'Неоднозначные ставки'):
+            Rates(self.version).get(self.people[0],BRANCHES[0],{'planning':'1. RAC','goods':'Мобильные кондиционеры','brand':'*'})
 
     def test_report_catalog_contains_comparison(self):
         self.assertContains(self.client.get(reverse('motivation_reports')),reverse('motivation_report_director_scenarios'))
@@ -296,9 +315,11 @@ class SourceReadTests(SimpleTestCase):
     def setUp(self):
         self.conn=Mock();self.cursor=Mock();self.connector=Mock(return_value=(self.conn,self.cursor))
         self.plans={year:SimpleNamespace(source_version=f'P{year}') for year in (2025,2026)}
-        params=lambda year:json.dumps({'fact_year':year,'plan_version':f'P{year}','quarter_share':'80','year_share':'20','payout_threshold':'.8'})
+        params=lambda year:json.dumps({'fact_year':year,'plan_version':f'P{year}','quarter_share':'80','year_share':'20','payout_threshold':'.8','recalculation_rule':SOURCE_RULE})
         self.runs=[('r25','completed',params(2025),'today')]
         self.version=SimpleNamespace()
+        schema=patch('admin_motivation.services.director_scenario_inputs.require_columns')
+        schema.start();self.addCleanup(schema.stop)
         self.settings_patch=patch('admin_motivation.services.director_prepared_fact.settings_for',return_value={})
         self.prepared_patch=patch('admin_motivation.services.director_prepared_fact.read_fact',return_value=([],{}))
         self.settings_patch.start();self.prepared=self.prepared_patch.start()

@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError
 from ..conns import connect_database
 from .transition_2026 import MOSCOW, THERMOTRADE
 from .sales_plans import number, SEGMENTS
+from .director_input_schema import require_columns
 
 BRANCHES=(MOSCOW,THERMOTRADE)
 SOURCES={2025:('test_2025','FactTest2025')}
@@ -22,9 +23,11 @@ def read_sources(plans, version, connector=None):
     from .director_prepared_fact import settings_for, read_fact
     settings=settings_for(plans[2026])
     connection=None
+    stage='Подключение к источникам сравнения директоров'
     try:
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
         connection.timeout=60
+        stage='Проверка доступности исходных данных сравнения'
         cursor.execute("DECLARE @r int; EXEC @r=sys.sp_getapplock @Resource=N'PortalMotivationCalculation',@LockMode=N'Shared',@LockOwner=N'Session',@LockTimeout=0; SELECT @r;")
         row=cursor.fetchone()
         if not row or row[0]<0:raise ValidationError('Сейчас выполняется исходный расчёт. Дождитесь завершения.')
@@ -32,6 +35,7 @@ def read_sources(plans, version, connector=None):
         if not cursor.fetchone()[0]:raise ValidationError('Сначала выполните «Пересчёт 2025» с выбранным планом.')
         facts,metadata={},{}
         for year,(variant,table) in SOURCES.items():
+            stage=f'Чтение исходного расчёта {year}'
             cursor.execute("SELECT TOP(1) RunId,State_,Parameters_,CompletedAt FROM motivation.PortalMotivationRun WHERE JSON_VALUE(Parameters_,'$.variant')=? ORDER BY StartedAt DESC",variant)
             run=cursor.fetchone()
             if not run or run[1]!='completed':
@@ -39,8 +43,12 @@ def read_sources(plans, version, connector=None):
             params=json.loads(run[2])
             if params.get('fact_year')!=year or str(params.get('plan_version','')).strip()!=plans[year].source_version.strip():
                 raise ValidationError(f'План {year} не совпадает с планом последнего исходного расчёта. Выберите тот же план или выполните исходный расчёт заново.')
+            from .recalculation_2025 import RULE_VERSION
+            if params.get('recalculation_rule')!=RULE_VERSION:
+                raise ValidationError('Исходный пересчёт 2025 выполнен по прежним правилам. Запустите сохранённый пересчёт 2025 после обновления портала.')
             params=validated_parameters(params)
             metadata[str(year)]={'run_id':str(run[0]),'completed_at':str(run[3]),'parameters':params}
+            require_columns(cursor,('motivation.FactTest2025','dbo.Subdivisions'))
             # Fact contains one unreplicated Sales row per document/model/segment.
             # A merged display branch must never be reused as an original branch.
             cursor.execute(f"""SELECT COALESCE(s.SubdivisionName,f.[Подразделение]),f.[Квартал],
@@ -62,8 +70,14 @@ def read_sources(plans, version, connector=None):
                     'positive':str(number(positive or 0)),'negative':str(number(negative or 0))})
             if not values:raise ValidationError(f'В исходном факте {year} нет строк Москвы/ТТ. Результат не подменяется нулём.')
             facts[year]=values
+        stage='Чтение подготовленного факта 2026'
         facts[2026],metadata['2026']=read_fact(cursor,version,BRANCHES,settings)
         return facts,metadata
+    except ValidationError:
+        raise
+    except Exception as exc:
+        from .calculation_jobs import JobOperationError
+        raise JobOperationError(stage,exc) from exc
     finally:
         if connection is not None:connection.close()
 
@@ -87,8 +101,11 @@ def plan_inputs(scenario,year):
         amounts=[number(segments[key]) for key in SEGMENTS];total=number(amount)
         if abs(sum(amounts,Decimal(0))-total)>max(Decimal('.0001'),abs(total)*Decimal('.00000001')):
             raise ValidationError(f'Сумма O0–O4 не совпадает с планом {year}.')
+        raw_goods=goods
+        goods=goods if pg in ('1. RAC','2. VRF','3. PROF') else '*'
+        brand=brand if raw_goods in ('Бытовые кондиционеры','Полупромышленные кондиционеры','Системы мульти-сплит','Системы VRF') else '*'
         for key,value in zip(SEGMENTS,amounts):
-            result.append({'branch':sub,'quarter':(day.month-1)//3+1,'planning':pg,'goods':goods,'brand':brand,
+            result.append({'branch':sub,'quarter':(day.month-1)//3+1,'planning':pg or '*','goods':goods or '*','brand':brand or '*',
                 'segment':key,'positive':str(max(value,0)),'negative':str(min(value,0))})
     for sub in BRANCHES:
         if not any(row['branch']==sub for row in result):

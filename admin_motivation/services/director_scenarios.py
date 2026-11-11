@@ -16,13 +16,13 @@ from .sales_plans import number
 ZERO=Decimal(0)
 MERGED='Д-Москва + ТЕРМОТРЕЙД'
 FORMULAS=('Подразделение(Глобально)','Подразделение','Группа планов продаж','Группа товаров','Марка(Бренд)')
-RULE='director-comparison-five-v3-prepared-2026'
+RULE='director-comparison-five-v4-verified-inputs'
 
 
 class Rates:
     def __init__(self,version):
         self.version=version;self.aliases=mapping();self.index=DirectorIndex([version.pk],local=True)
-        self.formulas={};self.cache={};self.factors={}
+        self.formulas={};self.cache={};self.factors={};self.matched_keys={}
         corrections=SubdivisionManagerCoeff.objects.filter(version=version).values_list(
             "subdivision__subdivision_key","kind__name","coeff")
         for sub,kind,value in coefficient_rows(corrections,0,(0,1)):
@@ -44,9 +44,22 @@ class Rates:
         sub=canonical(branch,self.aliases)
         key=(self.version.pk,sub,source.pk,row['planning'],row['goods'] or '*',row['brand'] or '*')
         if key not in self.cache:
-            values,origin=self.index.coefficients(*key)
+            # Empty classified dimensions are represented as either '' or '*'
+            # in imported model goods. Resolve their equivalent exact cells
+            # before taking a minimum; conflicting aliases must be explicit.
+            groups=(key[4],'') if key[4]=='*' else (key[4],)
+            brands=(key[5],'') if key[5]=='*' else (key[5],)
+            matches=[(*key[:4],group,brand) for group in groups for brand in brands
+                if (*key[:4],group,brand) in self.index.cells]
+            if len(matches)>1:
+                signatures={(tuple(self.index.cells[item]),self.formulas.get(item)) for item in matches}
+                if len(signatures)>1:
+                    raise ValidationError(f'Неоднозначные ставки директора: пустое значение и * в «{branch}», {row["planning"]}.')
+            matched=matches[0] if matches else key
+            self.matched_keys[key]=matched
+            values,origin=self.index.coefficients(*matched)
             if origin=='missing':raise ValidationError(f'Нет директорских ставок выбранного источника для «{branch}». Проверьте сотрудника и версию 2026.')
-            formula=self.formulas.get(key) or self.version.fallback_variation or director_variation(SimpleNamespace(planning_group_sales=row['planning']))
+            formula=self.formulas.get(matched) or self.version.fallback_variation or director_variation(SimpleNamespace(planning_group_sales=row['planning']))
             if formula not in FORMULAS:raise ValidationError(f'Формула «{formula}» не поддерживается сравнением директоров.')
             self.cache[key]=(values,formula,origin)
         return self.cache[key]
@@ -150,9 +163,23 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
     people={p.pk:p for p in DirectorEmployee.objects.filter(pk__in=ids)}
     if len(people)!=4:raise ValidationError('Один из выбранных сотрудников не найден.')
     actors=[people[i] for i in ids]
+    for year,plan in plans.items():
+        if plan.loaded_at is None:raise ValidationError(f'Сначала загрузите выбранный план {year}.')
     plan_rows={year:plan_inputs(plan,year) for year,plan in plans.items()}
+    rates=Rates(version)
+    # Check model configuration before waiting on the warehouse. Merged cases
+    # need each source's rates for the other branch's goods as well.
+    unique={tuple(row[k] for k in ('planning','goods','brand')):row
+            for rows_ in plan_rows.values() for row in rows_}
+    rate_errors=[]
+    for source,branch in zip(actors[:2],BRANCHES):
+        try:
+            for row in unique.values():rates.get(source,branch,row)
+        except ValidationError as exc:
+            rate_errors.extend(f'{source.full_name}: {message}' for message in exc.messages)
+    if rate_errors:raise ValidationError(rate_errors)
     facts,sources=read_sources(plans,version,connector)
-    rates=Rates(version);rows=[];details=[];scenarios=[]
+    rows=[];details=[];scenarios=[]
     for case in range(1,6):
         year=2025 if case==1 else 2026;merged=case in (4,5);synthetic=case in (3,5)
         title=('2025 · весь год · филиалы отдельно' if case==1 else
@@ -167,6 +194,7 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
         'source_moscow':source_moscow,'source_tt':source_tt,'target_moscow':target_moscow,'target_tt':target_tt}
     rate_inputs=[{'version':key[0],'branch':key[1],'employee_id':key[2],
         'employee':people[key[2]].full_name,'planning':key[3],'goods':key[4],'brand':key[5],
+        'matched_goods':rates.matched_keys[key][4],'matched_brand':rates.matched_keys[key][5],
         'values':value[0],'formula':value[1],'origin':value[2]} for key,value in rates.cache.items()]
     payload={'rate_inputs':rate_inputs,'rule':RULE,'scenarios':scenarios,'rows':rows,'details':details,'sources':sources,
         'version':{'id':version.pk,'title':str(version),'revision':version.revision},
