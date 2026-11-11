@@ -9,7 +9,7 @@
 <p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
 {% for message in messages %}<p class="nr-note" role="status">{{ message }}</p>{% endfor %}
 {% if error %}<p class="next-error" role="alert">{{ error }}</p>{% endif %}
-{% if rule_outdated %}<p class="nr-note warning">Показаны сохранённые суммы по прежним правилам. Запустите новый расчёт для применения переходных правил 2026 и исключения HEAT.</p>{% endif %}
+{% if rule_outdated %}<p class="nr-note warning">Показаны сохранённые суммы по прежним правилам. Запустите новый расчёт для применения переходных правил 2026: HEAT исключается только у политиков; у продажников и директоров HEAT и канал ДПП учитываются.</p>{% endif %}
 {% if annual_accrual_requires_recalculation %}<p class="nr-note">Для показателя «В годовую премию» за I–III кварталы нужен новый расчёт после обновления. Эти суммы показываются отдельно и не добавляются к годовой выплате IV квартала.</p>{% endif %}
 {% if pending %}<p class="nr-note" data-all-year-pending role="status">Расчёт выполняется. Страница обновит статус автоматически.</p>{% endif %}
 {% if can_start %}<details class="nr-filter-panel" {% if not execution %}open{% endif %}><summary>Запустить дополнительный расчёт за 2026 год</summary>
