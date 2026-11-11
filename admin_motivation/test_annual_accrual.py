@@ -217,7 +217,7 @@ class AnnualAccrualTests(SimpleTestCase):
             self.assertEqual(annual[-1][3:7], (78, 102, 114, 294))
             self.assertEqual(len(annual[4]), 8)  # quarters 1..3, no duplicate year column
             summary = list(book['Сводка'].values)
-            self.assertEqual(summary[8][7], 720)
+            self.assertEqual(next(row for row in summary if row[0]=='ИТОГО')[-2], 720)
             book.close()
         finally:
             output.close()

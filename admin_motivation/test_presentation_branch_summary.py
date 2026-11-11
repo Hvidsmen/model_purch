@@ -1,0 +1,52 @@
+from decimal import Decimal as D
+from django.http import QueryDict
+from django.test import SimpleTestCase
+from openpyxl import load_workbook
+from .services.presentation_excel import workbook
+from .test_quarter_totals import premium
+
+
+class BranchSummaryExcelTests(SimpleTestCase):
+    def ledger(self,currency='USD',unknown=False):
+        rows=[]
+        for branch,multiplier in [('Д-Москва',1),('Термотрейд',2)]:
+            for kind,rate in [('Политики',1),('Продажи',2),('Директора',3)]:
+                for quarter,value in [('1',10),('2',20)]:
+                    item=premium(quarter,kind,str(value*rate*multiplier),branch=branch)
+                    item['currency']=currency
+                    if branch=='Д-Москва' and kind=='Политики' and quarter=='2':
+                        item['bonus']=D(5);item['total']+=5
+                    if unknown and branch=='Термотрейд' and kind=='Продажи':item['possible']=None
+                    rows.append(item)
+        return {'rows':rows,'total':sum(item['total'] for item in rows),'currency':currency,
+            'kinds':['Политики','Продажи','Директора']}
+
+    def test_each_branch_has_kind_rows_subtotal_and_reconciled_grand_total(self):
+        for currency in ('USD','RUB'):
+            with self.subTest(currency=currency):
+                output=workbook('team',self.ledger(currency),[],QueryDict('period=1&period=2'),title='Все кварталы 2026')
+                self.addCleanup(output.close)
+                book=load_workbook(output);self.addCleanup(book.close)
+                sheet=book['Сводка'];rows=list(sheet.values)
+                self.assertEqual(rows[4][:3],('Подразделение','Вид мотивации','Сотрудников'))
+                self.assertEqual(rows[4][3:5],('Премия за 1 кв.','Премия за 2 кв.'))
+                self.assertEqual(sheet.freeze_panes,'D6')
+                for branch,expected in [('Д-Москва',(60,120,5,185)),('Термотрейд',(120,240,0,360))]:
+                    items=[row for row in rows if row[0]==branch and row[1] in self.ledger()['kinds']]
+                    self.assertEqual(len(items),3)
+                    subtotal=next(row for row in rows if row[:2]==(branch,'ИТОГО по подразделению'))
+                    self.assertEqual(subtotal[2],1) # Same author across motivation kinds.
+                    self.assertEqual(subtotal[3:7],expected)
+                    self.assertEqual(sum(row[6] for row in items),subtotal[6])
+                grand=next(row for row in rows if row[0]=='ИТОГО')
+                self.assertEqual(grand[2:7],(2,180,360,5,545))
+                self.assertEqual(grand[-1],540)
+
+    def test_missing_possible_stays_unknown_in_branch_and_grand_totals(self):
+        output=workbook('team',self.ledger(unknown=True),[],QueryDict('period=1&period=2'))
+        self.addCleanup(output.close)
+        book=load_workbook(output);self.addCleanup(book.close)
+        rows=list(book['Сводка'].values)
+        self.assertIsNone(next(row for row in rows if row[:2]==('Термотрейд','ИТОГО по подразделению'))[-1])
+        self.assertIsNone(next(row for row in rows if row[0]=='ИТОГО')[-1])
+        self.assertEqual(next(row for row in rows if row[0]=='ИТОГО')[-2],545)

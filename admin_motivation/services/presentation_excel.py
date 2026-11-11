@@ -42,7 +42,7 @@ def workbook(kind, data, metadata, query=None, title=None):
             cell.alignment = Alignment(horizontal='right' if isinstance(value, (int, float, Decimal)) else 'left',
                                        vertical='center', wrap_text=style != 'title')
             if isinstance(value, (int, float, Decimal)):
-                cell.number_format = '0' if sheet.title == 'Сводка' and index == 1 else '0.00%' if index in percent_columns else NUMBER
+                cell.number_format = '0' if sheet.title == 'Сводка' and index == 2 else '0.00%' if index in percent_columns else NUMBER
             if style not in ('title', 'note', 'blank'):
                 cell.border = Border(bottom=Side(style='hair', color='DCE2EE'))
             cells.append(cell)
@@ -51,11 +51,11 @@ def workbook(kind, data, metadata, query=None, title=None):
         sheet.row_dimensions[current].height = 40 if style in ('title', 'header') else 30 if style == 'note' else 30
         sheet.append(cells)
 
-    def sheet(name, headers, widths, subtitle):
+    def sheet(name, headers, widths, subtitle, *, freeze_panes='C6'):
         ws = book.create_sheet(name)
         ws.sheet_view.showGridLines = False
         ws.sheet_view.zoomScale = 90
-        ws.freeze_panes = 'C6'
+        ws.freeze_panes = freeze_panes
         for index, width in enumerate(widths, 1):
             ws.column_dimensions[get_column_letter(index)].width = width
         ws.sheet_properties.pageSetUpPr.fitToPage = True
@@ -75,13 +75,27 @@ def workbook(kind, data, metadata, query=None, title=None):
         return ws
 
     period_headers = [column['label'] for column in display['period_columns']]
-    headers = ['Вид мотивации', 'Сотрудников', *period_headers, 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency]
-    ws = sheet('Сводка', headers, [28, 16, *([21] * len(period_headers)), 22, 24, 48],
-               'Итоги по выбранным подразделениям и периодам')
-    for section in display['team_sections']:
-        row(ws, [section['kind'], section['people'], *section['period_totals'],
-                 section['bonus'], section['total'], section['possible']], 'subtotal')
-    row(ws, ['ИТОГО', display['people'], *display['period_totals'], display['bonus'], display['total'], display['possible']], 'grand')
+    headers = ['Подразделение', 'Вид мотивации', 'Сотрудников', *period_headers, 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency]
+    ws = sheet('Сводка', headers, [28, 24, 16, *([21] * len(period_headers)), 22, 24, 48],
+               'Итоги по каждому выбранному подразделению и общий итог по выбранным периодам', freeze_panes='D6')
+    employees = display['registry_rows']
+    def summary_values(items):
+        people = {item['author'] for item in items if not item['unallocated']}
+        periods = [sum((item['period_values'][index] or ZERO for item in items), ZERO)
+                   for index in range(len(period_headers))]
+        possible = [item['possible'] for item in items]
+        return [len(people), *periods,
+                sum((item['bonus'] for item in items), ZERO),
+                sum((item['total'] for item in items), ZERO),
+                sum(possible, ZERO) if possible and all(value is not None for value in possible) else None]
+    for branch in sorted({item['subdivision'] for item in employees}):
+        branch_rows = [item for item in employees if item['subdivision'] == branch]
+        for section in display['team_sections']:
+            items = [item for item in branch_rows if item['kind'] == section['kind']]
+            if items:
+                row(ws, [branch, section['kind'], *summary_values(items)])
+        row(ws, [branch, 'ИТОГО по подразделению', *summary_values(branch_rows)], 'subtotal')
+    row(ws, ['ИТОГО', 'Все выбранные подразделения', display['people'], *display['period_totals'], display['bonus'], display['total'], display['possible']], 'grand')
     row(ws, [], 'blank')
     row(ws, ['«Премия без учёта выполнения плана» — сумма по фактическим отгрузкам и коэффициентам без применения условия выполнения плана.'], 'note')
     row(ws, ['Подробности по сотрудникам — на отдельных листах. Состав директоров соответствует текущему справочнику.'], 'note')

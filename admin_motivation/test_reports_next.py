@@ -639,7 +639,7 @@ class ReportsNextTests(TestCase):
                 exported = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency, 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
-            summary = list(book['Сводка'].iter_rows(min_row=6, max_row=8, values_only=True))
+            summary = [row for row in book['Сводка'].iter_rows(min_row=6, values_only=True) if row[1] in ('Политики','Продажи','Директора')]
             self.assertIn('Премия без учёта выполнения плана, ' + currency,
                           [cell.value for cell in book['Сводка'][5]])
             self.assertEqual(sum(row[-1] for row in summary), expected)
