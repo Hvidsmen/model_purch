@@ -4,7 +4,7 @@ import json
 import re
 import sqlite3
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock,patch
 from django.test import TestCase,SimpleTestCase
 from django.core.exceptions import ValidationError
 from .models import MotivationCalculationSchedule
@@ -44,6 +44,8 @@ class SettingsTests(TestCase):
 
 class PreparedReadTests(SimpleTestCase):
     def setUp(self):
+        check=patch('admin_motivation.services.director_prepared_fact.require_columns')
+        self.schema_check=check.start();self.addCleanup(check.stop)
         self.cursor=Mock()
         self.cursor.fetchone.side_effect=[(1,1,1),('prepared-run','completed-at')]
         self.cursor.fetchall.return_value=[(BRANCHES[0],1,'1. RAC','AC','B','O2',100,-20,1)]
@@ -61,7 +63,8 @@ class PreparedReadTests(SimpleTestCase):
         self.assertIn('r.SourceSchema=',sql)
         call=self.cursor.execute.call_args
         self.assertEqual(call.args[1:5],('20260101','20261001',*BRANCHES))
-        self.assertEqual(json.loads(self.cursor.execute.call_args_list[-2].args[1])[0]['o2'],20)
+        self.assertEqual(self.cursor.executemany.call_args.args[1][0],('MASS',10,20,30,40))
+        self.assertNotIn('OPENJSON',sql)
 
     def test_not_ready_or_old_schema_no_raw_sales_fallback(self):
         self.cursor.fetchone.side_effect=[(1,1,1),None]
@@ -86,7 +89,7 @@ class PreparedReadTests(SimpleTestCase):
 class ProjectionTests(SimpleTestCase):
     """Execute the actual physical aggregation and segment CASE in SQLite.
 
-    Only the dialect-specific OPENJSON/OUTER APPLY configuration reader and
+    Only the dialect-specific OUTER APPLY configuration reader and
     DATEPART syntax are adapted; fact arithmetic and grouping stay unchanged.
     """
     def setUp(self):
@@ -130,8 +133,53 @@ class ProjectionTests(SimpleTestCase):
         self.assertEqual(len(rows),2);self.assertEqual(sum(r[6] for r in rows),300)
         self.assertEqual({r[0] for r in rows},set(BRANCHES))
 
+    def test_all_brand_bearing_groups_and_brandless_groups_follow_the_same_rule(self):
+        groups=('Бытовые кондиционеры','Полупромышленные кондиционеры','Системы мульти-сплит',
+                'Системы VRF','Мобильные кондиционеры','Оконные кондиционеры')
+        for i,group in enumerate(groups):
+            self.db.execute('INSERT INTO products VALUES (?,?,?,?,?,?)',(f'C{i}','1. RAC',group,'Brand',f'Model{i}','Товар'))
+            self.sale(100,product=f'C{i}',doc=f'Class{i}')
+        self.assertEqual({r[3]:r[4] for r in self.rows()},
+            {group:'Brand' if i<4 else '' for i,group in enumerate(groups)})
+
     def test_threshold_boundaries_and_unknown_type_use_original_o0_rule(self):
         for i,value in enumerate((9,10,20,30,40)):
             self.sale(10,doc=str(i),discount=value)
         self.sale(15,doc='Unknown',kind='Other',discount=99)
         self.assertEqual({r[5]:r[6] for r in self.rows()}, {'O0':25,'O1':10,'O2':10,'O3':10,'O4':10})
+
+
+class SourceSchemaTests(SimpleTestCase):
+    def test_missing_columns_are_reported_together_before_projection(self):
+        from .services.director_input_schema import require_columns
+        cursor=Mock();cursor.fetchall.return_value=[('dbo','Product','ProductCode')]
+        with self.assertRaisesMessage(ValidationError,'dbo.Product.BrandName') as error:
+            require_columns(cursor,('dbo.Product',))
+        self.assertIn('dbo.Product.ModelCode',str(error.exception))
+        self.assertEqual(cursor.execute.call_args.args[1:],('dbo.Product',))
+
+    def test_catalog_identifier_case_does_not_change_column_readiness(self):
+        from .services.director_input_schema import require_columns,COLUMNS
+        cursor=Mock();cursor.fetchall.return_value=[('DBO','PRODUCT',name.upper()) for name in COLUMNS['dbo.Product']]
+        require_columns(cursor,('dbo.Product',))
+
+
+class PlanClassificationTests(TestCase):
+    def test_plan_uses_identical_brand_whitelist_and_group_collapse(self):
+        from django.utils import timezone
+        from .models import SalesPlanScenario,SalesPlanLine
+        from .services.director_scenario_inputs import plan_inputs
+        plan=SalesPlanScenario.objects.create(title='Classification',source_version='Class',loaded_at=timezone.now())
+        groups=('Бытовые кондиционеры','Полупромышленные кондиционеры','Системы мульти-сплит',
+                'Системы VRF','Мобильные кондиционеры','Оконные кондиционеры')
+        for i,group in enumerate(groups):
+            SalesPlanLine.objects.create(scenario=plan,plan_date=date(2026,1,1),subdivision=BRANCHES[0],
+                planning_group_sales='1. RAC',group=group,brand='Brand',amount_usd=100,
+                segment_amounts={'O0':'100',**{f'O{k}':'0' for k in range(1,5)}})
+        SalesPlanLine.objects.create(scenario=plan,plan_date=date(2026,1,1),subdivision=BRANCHES[1],
+            planning_group_sales='Other',group='Accessories',brand='Manufacturer',amount_usd=100,
+            segment_amounts={'O0':'100',**{f'O{k}':'0' for k in range(1,5)}})
+        rows=plan_inputs(plan,2026)
+        self.assertEqual({r['goods']:r['brand'] for r in rows if r['branch']==BRANCHES[0]},
+            {group:'Brand' if i<4 else '*' for i,group in enumerate(groups)})
+        self.assertTrue(all(r['goods']=='*' and r['brand']=='*' for r in rows if r['branch']==BRANCHES[1]))

@@ -4,6 +4,7 @@ from django.core.exceptions import ValidationError
 from ..models import MotivationCalculationSchedule
 from .prepared_sales import RULE, SCHEMA
 from .sales_plans import number
+from .director_input_schema import require_columns
 
 # No coefficient/export views, director roster or premium output tables occur
 # here. Group by the original physical Fact identity before splitting signs:
@@ -78,14 +79,20 @@ def read_fact(cursor,version,branches,settings):
  AND r.PreparedTo>='20270101' AND r.SourceSchema={SCHEMA}""",RULE)
     ready=cursor.fetchone()
     if not ready:raise ValidationError('Нет совместимого готового набора продаж за 2026 год. Повторите подготовку факта в Центре расчётов.')
+    require_columns(cursor,('motivation.PortalPreparedSales','dbo.Subdivisions','dbo.Product','dbo.Customer'))
     segment_json=json.dumps(segments,ensure_ascii=False,default=str)
-    cursor.execute("""SELECT * INTO #portal_director_segments FROM OPENJSON(?) WITH
- (type_discount nvarchar(255),o1 decimal(9,4),o2 decimal(9,4),o3 decimal(9,4),o4 decimal(9,4))""",segment_json)
+    cursor.execute("""CREATE TABLE #portal_director_segments(type_discount nvarchar(255) NOT NULL,
+ o1 decimal(9,4) NULL,o2 decimal(9,4) NULL,o3 decimal(9,4) NULL,o4 decimal(9,4) NULL)""")
+    cursor.executemany("INSERT INTO #portal_director_segments(type_discount,o1,o2,o3,o4) VALUES (?,?,?,?,?)",
+        [(item['type_discount'],*[item[key] for key in ('o1','o2','o3','o4')]) for item in segments])
     cursor.execute(PROJECTION,'20260101','20261001',*branches)
     values=[]
     for branch,quarter,planning,goods,brand,segment,positive,negative,matches in cursor.fetchall():
         if matches>1:
             raise ValidationError('В выбранной версии несколько типов скидки соответствуют одной продаже. Уточните сегменты скидок; оборот не дублируется.')
+        from .director_scenario_inputs import branch_name
+        branch=branch_name(branch)
+        if branch is None:raise ValidationError('В подготовленном факте неизвестное исходное подразделение.')
         values.append({'branch':branch,'quarter':int(quarter),'planning':planning or '*',
             'goods':goods or '*','brand':brand or '*','segment':segment,
             'positive':str(number(positive or 0)),'negative':str(number(negative or 0))})
