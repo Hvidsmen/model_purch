@@ -245,6 +245,16 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(D(self.row(data,2,1)['total']),72)
         self.assertEqual(D(self.row(data,4,1)['total']),96)
 
+    def test_mixed_case_thermotrade_uses_merged_moscow_rates(self):
+        self.branches[1].subdivision_key='Термотрейд'
+        self.branches[1].merged_into=self.branches[0]
+        self.branches[1].merge_policy='target'
+        self.branches[1].save()
+        QuerySet(model=SubdivisionDirectorCoeff).filter(employee=self.people[1]).update(subdivision=self.branches[0])
+        data=self.run_calc().results
+        self.assertEqual(D(self.row(data,2,1)['total']),72)
+        self.assertEqual(D(self.row(data,4,1)['total']),96)
+
     def test_non_global_goods_scope_and_department_gate(self):
         formula,_=VariationCalculate.objects.get_or_create(variation_name='Марка(Бренд)')
         QuerySet(model=SubdivisionDirectorCoeff).update(variation_calculate=formula)

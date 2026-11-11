@@ -28,7 +28,7 @@ class Rates:
         for sub,kind,value in coefficient_rows(corrections,0,(0,1)):
             code=norm(kind).replace(" ","").replace(".","")
             period={"1кв":1,"2кв":2,"3кв":3,"4кв":4,"год":5,"year":5}.get(code)
-            if sub not in {canonical(b,self.aliases) for b in BRANCHES}:continue
+            if sub not in {self.rate_branch(b) for b in BRANCHES}:continue
             if period is None:raise ValidationError("Неизвестный период поправки подразделения.")
             if (sub,period) in self.factors:raise ValidationError("Дубли поправок подразделения.")
             self.factors[sub,period]=number(value)
@@ -37,11 +37,22 @@ class Rates:
             'goods__group','goods__brand','variation_calculate__variation_name')
         for row in coefficient_rows(rows,1,range(6)):self.formulas[tuple(row[:6])]=row[6]
 
+    def rate_branch(self, branch):
+        # Historical inputs use the fixed ТЕРМОТРЕЙД spelling; the model may
+        # store Термотрейд. Apply its merge rule before looking up rates.
+        source=next((name for name in self.aliases if norm(name)==norm(branch)),branch)
+        target=canonical(source,self.aliases)
+        names={key[1] for key in self.index.employees}
+        matches=[name for name in names if norm(name)==norm(target)]
+        if len(matches)>1:
+            raise ValidationError('Неоднозначное название подразделения в директорских ставках.')
+        return matches[0] if matches else target
+
     def factor(self,branch,period):
-        return self.factors.get((canonical(branch,self.aliases),period),Decimal(1))
+        return self.factors.get((self.rate_branch(branch),period),Decimal(1))
 
     def get(self,source,branch,row):
-        sub=canonical(branch,self.aliases)
+        sub=self.rate_branch(branch)
         key=(self.version.pk,sub,source.pk,row['planning'],row['goods'] or '*',row['brand'] or '*')
         if key not in self.cache:
             # Empty classified dimensions are represented as either '' or '*'
