@@ -107,6 +107,7 @@ class PreparedSalesSQLTests(SimpleTestCase):
 
     def test_start_configures_commits_releases_lock_before_start_and_closes(self):
         conn=Mock();cursor=Mock()
+        cursor.fetchone.return_value=(0,)
         with patch.object(sales,'install') as install:
             sales.start(lambda *_:(conn,cursor))
         install.assert_called_once_with(cursor)
@@ -117,10 +118,26 @@ class PreparedSalesSQLTests(SimpleTestCase):
 
     def test_failed_install_does_not_start_agent_and_rolls_back(self):
         conn=Mock();cursor=Mock()
+        cursor.fetchone.return_value=(0,)
         with patch.object(sales,'install',side_effect=RuntimeError('failed')):
             with self.assertRaises(RuntimeError):sales.start(lambda *_:(conn,cursor))
         self.assertFalse(any('sp_start_job' in c.args[0] for c in cursor.execute.call_args_list))
         conn.rollback.assert_called_once();conn.close.assert_called_once()
+
+    def test_busy_preparation_is_not_installed_or_started_again(self):
+        conn=Mock();cursor=Mock();cursor.fetchone.return_value=(-1,)
+        with patch.object(sales,'install') as install:
+            with self.assertRaises(sales.PreparationBusy):sales.start(lambda *_:(conn,cursor))
+        install.assert_not_called()
+        self.assertFalse(any('sp_start_job' in call.args[0] for call in cursor.execute.call_args_list))
+        conn.rollback.assert_called_once();conn.close.assert_called_once()
+
+    def test_failed_lock_is_not_misreported_as_running(self):
+        conn=Mock();cursor=Mock();cursor.fetchone.return_value=(-3,)
+        with patch.object(sales,'install') as install:
+            with self.assertRaises(RuntimeError) as caught:sales.start(lambda *_:(conn,cursor))
+        self.assertNotIsInstance(caught.exception,sales.PreparationBusy)
+        install.assert_not_called();conn.close.assert_called_once()
 
     def test_monitor_reports_ready_snapshot_when_latest_build_failed(self):
         conn=Mock();cursor=Mock();now=datetime(2026,11,11,5)
@@ -167,6 +184,18 @@ class PreparedSalesViewsTests(TestCase):
         start.assert_called_once()
         from .models import MotivationCalculationSchedule
         self.assertEqual(MotivationCalculationSchedule.objects.count(),0)
+
+    def test_busy_post_reports_information_instead_of_calculation_failure(self):
+        from django.contrib.messages import get_messages
+        from django.contrib.messages.constants import INFO
+        message='Расчёт или подготовка факта уже выполняется. Дождитесь завершения.'
+        with patch.object(sales,'start',side_effect=sales.PreparationBusy(message)),patch(
+                'admin_motivation.operation_views.logger.exception') as log:
+            response=self.client.post(reverse('motivation_calculations'),{'action':'prepare_sales'})
+        self.assertEqual(response.status_code,302)
+        notifications=list(get_messages(response.wsgi_request))
+        self.assertEqual([(row.level,str(row)) for row in notifications],[(INFO,message)])
+        log.assert_not_called()
 
     def test_monitor_get_is_readonly_and_privileged(self):
         with patch.object(sales,'monitor',return_value={'configured':False,'history':[]}) as monitor,patch.object(sales,'start') as start:

@@ -90,6 +90,8 @@ def calculations(request):
         try:
             prepared_sales.start()
             messages.success(request, 'Подготовка факта запущена. Ежедневное задание настроено на 08:00 МСК.')
+        except prepared_sales.PreparationBusy as exc:
+            messages.info(request,str(exc))
         except Exception as exc:
             from uuid import uuid4
             reference=uuid4().hex[:12]

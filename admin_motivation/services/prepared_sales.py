@@ -264,12 +264,23 @@ BEGIN
 END;""")
 
 
+class PreparationBusy(RuntimeError):
+    """A running calculation owns the shared preparation lock."""
+
+
 def start(connector=None):
     connection=None
     try:
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
         connection.timeout=120
-        cursor.execute("DECLARE @r int; EXEC @r=sys.sp_getapplock @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0; IF @r<0 THROW 50040,N'Сейчас выполняется расчёт или подготовка факта',1;")
+        cursor.execute("DECLARE @r int; EXEC @r=sys.sp_getapplock @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0; SELECT @r;")
+        lock=cursor.fetchone()
+        if not lock or not isinstance(lock[0],int):
+            raise RuntimeError('Не получен результат блокировки подготовки факта')
+        if lock[0]==-1:
+            raise PreparationBusy('Расчёт или подготовка факта уже выполняется. Дождитесь завершения.')
+        if lock[0]<0:
+            raise RuntimeError('Не удалось получить блокировку подготовки факта')
         install(cursor);connection.commit()
         cursor.execute("EXEC sys.sp_releaseapplock @Resource=N'PortalMotivationCalculation',@LockOwner=N'Session';")
         cursor.execute(f"EXEC msdb.dbo.sp_start_job @job_name=N'{JOB}';")
