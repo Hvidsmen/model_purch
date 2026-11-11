@@ -303,3 +303,22 @@ def new_detail_labels(data):
 
 
 
+
+def subdivision_summaries(ledger,columns):
+    """Selected ledger only; keep original branches and annual contributions."""
+    from .annual_accrual import total as annual_total
+    groups=defaultdict(list)
+    for row in ledger['rows']:groups[row['subdivision']].append(row)
+    def values(rows):
+        return {'people':len({row['author'] for row in rows if not row['unallocated']}),
+            'amount':sum((row['amount'] for row in rows),ZERO),
+            'bonus':sum((row['bonus'] for row in rows),ZERO),
+            'total':sum((row['total'] for row in rows),ZERO),
+            'annual_accrual':annual_total(rows),
+            'periods':[{'amount':sum((row['amount'] for row in rows if row['code']==column['code']),ZERO),
+                'annual_accrual':annual_total([row for row in rows if row['code']==column['code']])}
+                for column in columns]}
+    return [{'branch':branch,**values(rows),
+        'types':[{'kind':kind,**values([row for row in rows if row['kind']==kind])}
+                 for kind in ledger['kinds'] if any(row['kind']==kind for row in rows)]}
+        for branch,rows in sorted(groups.items())]

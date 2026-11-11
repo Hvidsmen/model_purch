@@ -28,6 +28,7 @@
 <div class="nr-field" style="grid-column:1/-1">Периоды<div class="nr-controls-row">{% for choice in periods %}<label><input type="checkbox" name="period" value="{{ choice.code }}" {% if choice.selected %}checked{% endif %}> {{ choice.label }}</label>{% endfor %}<small>Пустой выбор — {% if scenario == 'separate' %}все три квартала{% else %}все пять периодов{% endif %}.</small></div></div>
 <div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button>{% if data != None %}<a href="{{ export_url }}">↓ Excel</a>{% if is_detail %}<a href="{{ summary_url }}">← К сводке</a>{% else %}<a class="btn btn-outline-primary" href="{{ detail_url }}">Детальный расчёт · K0–K4</a>{% endif %}{% endif %}</div></form>
 {% if data != None %}{% include 'admin_motivation/reports_next/_team_summary.html' %}
+{% include 'admin_motivation/reports_next/_subdivision_summary.html' %}
 {% include 'admin_motivation/reports_next/_report_period_cards.html' %}
 {% include 'admin_motivation/reports_next/_performance_sections.html' %}
 
