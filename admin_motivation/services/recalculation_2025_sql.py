@@ -149,7 +149,7 @@ def patch_source(source, existing=False):
  LEFT JOIN #test2025_table_min tm ON tm.TypeCoeff=N'{kind[1]}'
  CROSS APPLY (SELECT COALESCE(chosen.PGSales,{alias}.PlanningGroupSalesERP) AS PGSales,
  COALESCE(chosen.Group_,{alias}.GroupERP,N'') AS Group_,COALESCE(chosen.Brand,{brand},N'') AS Brand,
- chosen.VariationCalculate,
+ N'{kind[1]}' AS TypeCoeff,chosen.VariationCalculate AS VariationCalculate,
  COALESCE(chosen.K0,gm.Minimum_,tm.Minimum_) AS K0,
  COALESCE(chosen.K1,gm.Minimum_,tm.Minimum_) AS K1,
  COALESCE(chosen.K2,gm.Minimum_,tm.Minimum_) AS K2,
@@ -230,7 +230,23 @@ IF EXISTS(SELECT 1 FROM DataWH.motivation.PlanFactTest2025
         raise ValidationError('Не распознаны четыре квартала и годовая часть 2025 года.')
     if source.count(SETUP)!=1:
         raise ValidationError('Не найдена точка однократной загрузки формул 2025.')
-    return source.replace(SETUP,SETUP+FORMULA_SNAPSHOT,1)
+    source=source.replace(SETUP,SETUP+FORMULA_SNAPSHOT,1)
+    validate_rate_projection(source,references)
+    return source
+
+
+def validate_rate_projection(source,expected=4):
+    """Every downstream sc reference must bind for exact AND fallback rates."""
+    code=mask_sql(source)
+    projections=list(re.finditer(r'CROSS\s+APPLY\s*\(SELECT\s+COALESCE\(chosen\.PGSales,[\s\S]*?\)\s+sc\b',code,re.I))
+    if len(projections)!=expected:
+        raise ValidationError('Не распознаны проекции коэффициентов факта и плана 2025.')
+    required={name.casefold() for name in re.findall(r'\bsc\.\[?(\w+)',code,re.I)}
+    for projection in projections:
+        exposed={name.casefold() for name in re.findall(r'\bAS\s+\[?(\w+)',projection[0],re.I)}
+        missing=required-exposed
+        if missing:
+            raise ValidationError('В проекции коэффициентов 2025 отсутствуют поля: '+', '.join(sorted(missing)))
 
 
 def isolate(source):

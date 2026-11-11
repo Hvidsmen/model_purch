@@ -58,6 +58,7 @@ class FileRateFallbackTests(SimpleTestCase):
               if index<2 else 'plans t JOIN subs s ON s.SubdivisionKey=t.Subdivision')
         query='SELECT '+match['values']+' FROM '+base+' LEFT JOIN coeff chosen ON chosen.rowid=('+lookup+') '+match['mins']
         query=query.replace('#test2025_group_min','group_min').replace('#test2025_table_min','table_min').replace("N'","'")
+        self.last_query=query
         return self.db.execute(query).fetchall()
 
     def test_exact_rates_preserve_distinct_k_values_in_fact_and_plan(self):
@@ -90,3 +91,28 @@ class FileRateFallbackTests(SimpleTestCase):
         self.db.execute("DELETE FROM rates WHERE TypeCoeff='Продажи'");self.refresh_minima()
         self.assertEqual(self.query(1,'OtherPG','Other','Other')[0][-5:],(None,)*5)
         self.assertIn('КоэфициентМотивации IS NULL OR K0 IS NULL',self.sql)
+
+    def test_real_plan_type_projection_binds_for_exact_group_and_table_fallback(self):
+        from .services.recalculation_2025_sql import validate_rate_projection
+        validate_rate_projection(self.sql)
+        for index in range(4):
+            for pg,goods,brand in [('RAC','AC','Exact'),('RAC','Other','Other'),('OtherPG','Other','Other')]:
+                self.query(index,pg,goods,brand)
+                # Execute the real downstream plan expression, with the generated
+                # rate projection as sc. Previously this failed: no TypeCoeff.
+                rows=self.db.execute('WITH sc AS ('+self.last_query+') SELECT TRIM(sc.TypeCoeff) TypeCoeff_ FROM sc').fetchall()
+                self.assertEqual(rows,[('Политики' if index%2==0 else 'Продажи',)])
+
+    def test_projection_contract_rejects_missing_type_before_sql_installation(self):
+        from django.core.exceptions import ValidationError
+        from .services.recalculation_2025_sql import validate_rate_projection
+        damaged=self.sql.replace("N'Политики' AS TypeCoeff,",'').replace("N'Продажи' AS TypeCoeff,",'')
+        with self.assertRaisesMessage(ValidationError,'typecoeff'):
+            validate_rate_projection(damaged)
+
+    def test_projection_contract_checks_all_other_downstream_columns(self):
+        from django.core.exceptions import ValidationError
+        from .services.recalculation_2025_sql import validate_rate_projection
+        for name in ('PGSales','Group_','Brand','VariationCalculate','K0','K1','K2','K3','K4'):
+            with self.subTest(column=name),self.assertRaises(ValidationError):
+                validate_rate_projection(self.sql.replace(' AS '+name, ' AS Missing_'+name))
