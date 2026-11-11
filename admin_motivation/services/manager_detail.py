@@ -42,6 +42,13 @@ def metrics(rows, currency='USD', overall=False, coefficients=True):
         inputs = annual if annual and {scope(row) for row in annual} == {scope(row) for row in rows} else None
     prefix = 'RUR' if currency == 'RUB' else 'USD'
     plan, fact = (total(inputs, 'СуммаПланUSDКвартал'), total(inputs, 'СуммаОтгрузокUSDКвартал')) if inputs is not None else (None, None)
+    if overall and inputs is None:
+        # Quarter output stores physical shipments separately from cumulative
+        # eligibility windows. They are additive even without a year row.
+        quarters=[row for row in rows if re.match(r'^[1-4]\s*кв',str(row.get('КварталМотивации') or '').strip(),re.I)]
+        if (quarters and {scope(row) for row in quarters}=={scope(row) for row in rows}
+                and all(row.get('СуммаОтгрузокUSDКвартал') is not None for row in quarters)):
+            fact=total(quarters,'СуммаОтгрузокUSDКвартал')
     motive_plan, motive_fact = (total(inputs, 'СуммаПланUSD'), total(inputs, 'СуммаОтгрузокUSD')) if inputs is not None else (None, None)
     paid = total(rows, f'СуммаМотивации{prefix}УчетПроцента')
     bonus = total(rows, 'ОстатокRUR' if currency == 'RUB' else 'Остаток')
@@ -49,7 +56,7 @@ def metrics(rows, currency='USD', overall=False, coefficients=True):
     for index in range(5):
         weight = total(inputs or [], f'K{index}Weight')
         averages.append(total(inputs or [], f'K{index}WeightedSum') / weight if coefficients and weight else None)
-    return [*averages, *[total(inputs, f'O{i}') if inputs is not None else None for i in range(5)], plan, fact, ratio(fact, plan, True),
+    return [*averages, *[total(inputs, f'O{i}') if inputs is not None else None for i in range(5)], plan, fact, ratio(fact, plan, True) if plan is not None else None,
             total(rows, f'СуммаМотивации{prefix}'), motive_plan, motive_fact, ratio(motive_fact, motive_plan, True),
             paid, bonus, paid + bonus]
 
