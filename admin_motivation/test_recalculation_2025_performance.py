@@ -26,9 +26,10 @@ class Performance2025Tests(SimpleTestCase):
         sections[0]['performance']=[row]
         book=load_workbook(workbook(sections))
         sheet=book['3. Выполнение политик']
-        self.assertEqual(sheet.cell(4,2).value,'Не распределён')
-        self.assertEqual(sheet.cell(4,8).value,100)
-        self.assertEqual(sheet.cell(4,17).value,0)
+        self.assertEqual(sheet.cell(6,2).value,'Не распределён')
+        self.assertEqual(sheet.cell(6,18).value,100)
+        self.assertEqual(sheet.cell(6,27).value,0)
+        self.assertTrue(sheet.row_dimensions[6].hidden)
 
     def test_zero_payout_explains_all_legacy_gates(self):
         rows=explain([detail()], [('Политики','Branch','Author',2,100,100,70)],'.8')
@@ -84,12 +85,12 @@ class Performance2025Tests(SimpleTestCase):
         b=load_workbook(workbook(sections))
         self.assertEqual(b.sheetnames,['1. Политики','2. Продажи','3. Выполнение политик','4. Выполнение продаж'])
         s=b.worksheets[2]
-        headers={c.value:c.column for c in s[3]}
-        self.assertEqual(s.cell(4,headers['Выполнение по формуле, %']).value,.7)
-        self.assertEqual(s.cell(4,headers['Выполнение по формуле, %']).number_format,'0.00%')
-        self.assertEqual(s.cell(4,headers['Порог выплаты, %']).value,.8)
-        self.assertEqual(s.cell(4,2).data_type,'s')
-        self.assertEqual(s.freeze_panes,'C4')
+        headers={c.value:c.column for c in list(s[4])[17:28]}
+        self.assertEqual(s.cell(6,headers['Выполнение по формуле, %']).value,.7)
+        self.assertEqual(s.cell(6,headers['Выполнение по формуле, %']).number_format,'0.00%')
+        self.assertEqual(s.cell(6,headers['Порог выплаты, %']).value,.8)
+        self.assertEqual(s.cell(6,2).data_type,'s')
+        self.assertEqual(s.freeze_panes,'G5')
 
     def test_auxiliary_inputs_are_grouped_before_zero_plan_substitution(self):
         sql=gates_sql().replace('motivation.PlanFactTest2025','pf').replace("N'","'")
@@ -132,3 +133,44 @@ class Performance2025Tests(SimpleTestCase):
         sql=[call.args[0] for call in cursor.execute.call_args_list]
         self.assertLess(next(i for i,s in enumerate(sql) if 'PortalMotivationRun' in s),sql.index(DETAIL_SQL))
         connection.close.assert_called_once()
+
+    def test_quarter_columns_department_totals_do_not_sum_repeated_bases(self):
+        rows=explain([detail(goods='A',paid=3),detail(goods='B',paid=4),
+            detail(goods='A',period='3 Квартал',paid=5)],
+            [('Политики','Branch','Author',2,100,100,70),
+             ('Политики','Branch','Author',3,200,200,160)],'.8')
+        sections=summary([('Политики','Branch','Author','Год',12)])
+        sections[0]['performance']=rows
+        sheet=load_workbook(workbook(sections))['3. Выполнение политик']
+        self.assertEqual(sheet.cell(3,18).value,'2 квартал (1–2 кв.)')
+        self.assertEqual(sheet.cell(3,29).value,'3 квартал')
+        self.assertEqual(sheet.cell(5,2).value,'Итого по подразделению')
+        self.assertEqual(sheet.cell(5,18).value,100)
+        self.assertEqual(sheet.cell(5,19).value,70)
+        self.assertEqual(sheet.cell(5,20).value,.7)
+        self.assertEqual(sheet.cell(5,25).value,7)
+        self.assertEqual(sheet.cell(5,29).value,200)
+        self.assertEqual(sheet.cell(5,30).value,160)
+        self.assertEqual(sheet.max_row,7)
+        self.assertFalse(sheet.row_dimensions[5].hidden)
+        self.assertTrue(sheet.row_dimensions[5].collapsed)
+        self.assertFalse(sheet.sheet_properties.outlinePr.summaryBelow)
+        for row in (6,7):
+            self.assertTrue(sheet.row_dimensions[row].hidden)
+            self.assertEqual(sheet.row_dimensions[row].outlineLevel,1)
+
+    def test_sales_branch_totals_remain_visible_and_q1_uses_fact_base(self):
+        rows=explain([detail(kind='Продажи',branch=branch,period='1 Квартал',fact=40,paid=2)
+            for branch in ('А','Б')],
+            [('Продажи',branch,'Author',1,100,100,40) for branch in ('А','Б')],'.8')
+        sections=summary([('Продажи','А','Author','1 Квартал',2),('Продажи','Б','Author','1 Квартал',2)])
+        sections[1]['performance']=rows
+        sheet=load_workbook(workbook(sections))['4. Выполнение продаж']
+        for subtotal,detail_row in ((5,6),(7,8)):
+            self.assertEqual(sheet.cell(subtotal,6).value,40)
+            self.assertEqual(sheet.cell(subtotal,7).value,40)
+            self.assertEqual(sheet.cell(subtotal,8).value,1)
+            self.assertEqual(sheet.cell(subtotal,13).value,2)
+            self.assertFalse(sheet.row_dimensions[subtotal].hidden)
+            self.assertTrue(sheet.row_dimensions[subtotal].collapsed)
+            self.assertTrue(sheet.row_dimensions[detail_row].hidden)
