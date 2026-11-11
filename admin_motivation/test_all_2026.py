@@ -80,6 +80,9 @@ class All2026ViewTests(TestCase):
                 self.assertEqual(response.context['selected_subdivisions'],selected)
                 self.assertEqual(load.call_args.args[1]['Subdivision'],selected)
                 self.assertEqual(response.context['data']['total'],total)
+                groups=response.context['presentation']['subdivision_summaries']
+                self.assertEqual({row['branch'] for row in groups},set(selected or ['Д-Москва','Термотрейд']))
+                self.assertEqual(sum(row['total'] for row in groups),total)
                 self.assertEqual(QueryDict(urlsplit(response.context['export_url']).query).getlist('subdivision'),selected)
                 self.assertContains(response,'type="checkbox" name="subdivision"')
                 self.assertNotContains(response,'select name="subdivision"')

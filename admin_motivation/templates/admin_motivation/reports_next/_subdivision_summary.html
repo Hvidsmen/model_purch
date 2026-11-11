@@ -1,0 +1,16 @@
+{% load report_format %}{% if presentation.subdivision_summaries %}
+<section aria-label="Итоги по выбранным подразделениям">
+<div class="nr-section-title"><h2>Итоги по выбранным подразделениям</h2><span>{{ ledger.currency }} · все страницы</span></div>
+{% for branch in presentation.subdivision_summaries %}
+<article class="nr-report-period-card" data-subdivision-summary="{{ branch.branch }}">
+<h3>{{ branch.branch }}</h3><p>Всего по расчёту: <strong>{{ branch.total|report_cash }} {{ ledger.currency }}</strong> · В годовую премию: <strong>{{ branch.annual_accrual|report_cash }} {{ ledger.currency }}</strong> · Сотрудников: {{ branch.people }}</p>
+<div style="overflow:auto"><table class="nr-table"><thead>
+<tr><th rowspan="2">Вид мотивации</th>{% for column in presentation.period_columns %}<th colspan="2">{{ column.label }}</th>{% endfor %}<th rowspan="2">Годовая доплата</th><th rowspan="2">Всего по расчёту</th><th rowspan="2">В годовую премию</th></tr>
+<tr>{% for column in presentation.period_columns %}<th>Премия</th><th>В годовую премию</th>{% endfor %}</tr>
+</thead><tbody>
+{% for item in branch.types %}<tr><th>{{ item.kind }}</th>{% for period in item.periods %}<td class="num">{{ period.amount|report_cash }}</td><td class="num">{{ period.annual_accrual|report_cash }}</td>{% endfor %}<td class="num">{{ item.bonus|report_cash }}</td><td class="num">{{ item.total|report_cash }}</td><td class="num">{{ item.annual_accrual|report_cash }}</td></tr>{% endfor %}
+</tbody><tfoot><tr class="nr-total-row"><th>ИТОГО по подразделению</th>{% for period in branch.periods %}<td class="num">{{ period.amount|report_cash }}</td><td class="num">{{ period.annual_accrual|report_cash }}</td>{% endfor %}<td class="num">{{ branch.bonus|report_cash }}</td><td class="num">{{ branch.total|report_cash }}</td><td class="num">{{ branch.annual_accrual|report_cash }}</td></tr>
+</tfoot></table></div></article>
+{% endfor %}
+<p class="nr-muted">Годовая часть показана за выбранные кварталы до годового условия выплаты и отдельно к сумме по расчёту не прибавляется. Общие итоги по всем выбранным подразделениям показаны выше.</p>
+</section>{% endif %}

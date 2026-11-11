@@ -192,6 +192,8 @@ def report(request):
             with reports_next.current_run(execution):
                 data = data_for(request.user, execution, query, detailed=is_detail)
             presentation = present('registry', data, data, query.getlist('period') or list('123' if variant == 'separate_2026' else '12345'))
+            from .services.reports_next_presenter import subdivision_summaries
+            presentation['subdivision_summaries']=subdivision_summaries(data,presentation['period_columns'])
             if query.get('search', '').strip():
                 raise ValidationError('Для отбора сотрудника используйте поле «Сотрудник».')
             if is_detail and data['sections']:
