@@ -72,7 +72,7 @@ class BranchSummaryExcelTests(SimpleTestCase):
         self.assertEqual([get('Все выбранные подразделения',kind)[column] for kind in ledger['kinds']],[22.5,45,67.5])
         grand=next(row for row in rows if row[0]=='ИТОГО')
         self.assertEqual(grand[column],135)
-        self.assertEqual(grand[headers.index('Всего по расчёту')],545)
+        self.assertEqual(grand[headers.index('Итого премий за выбранные периоды')],545)
 
     def test_missing_annual_data_is_blank_not_estimated_from_quarter_payout(self):
         ledger=self.ledger()
@@ -84,3 +84,20 @@ class BranchSummaryExcelTests(SimpleTestCase):
         rows=list(book['Сводка'].values);column=list(rows[4]).index('В годовую премию, USD')
         self.assertIsNone(next(row for row in rows if row[:2]==('Д-Москва','Политики'))[column])
         self.assertIsNone(next(row for row in rows if row[0]=='ИТОГО')[column])
+
+    def test_labels_distinguish_quarters_from_selected_year_without_changing_money(self):
+        for include_year in (False,True):
+            ledger=self.ledger()
+            if include_year:
+                year=premium('5','Политики','7',branch='Д-Москва');year['currency']='USD'
+                ledger['rows'].append(year);ledger['total']+=7
+            output=workbook('team',ledger,[],QueryDict('period=1&period=2'+('&period=5' if include_year else '')))
+            self.addCleanup(output.close)
+            book=load_workbook(output);self.addCleanup(book.close)
+            rows=list(book['Сводка'].values);headers=list(rows[4])
+            total_label='Итого премий за выбранные периоды' if include_year else 'Итого квартальных премий'
+            possible_label=('Премии выбранных периодов' if include_year else 'Квартальные премии')+' без учёта выполнения плана, USD'
+            self.assertIn(total_label,headers);self.assertIn(possible_label,headers)
+            self.assertNotIn('Всего по расчёту',headers)
+            grand=next(row for row in rows if row[0]=='ИТОГО')
+            self.assertEqual(grand[headers.index(total_label)],552 if include_year else 545)

@@ -70,6 +70,9 @@ def present(kind, data, ledger=None, period='all'):
     codes = sorted({row['code'] for row in ledger['rows'] if row['code']})
     result['period_totals'] = [sum((row['amount'] for row in ledger['rows'] if row['code'] == code), ZERO) for code in codes]
     result['period_columns'] = [{'code': code, 'label': 'Годовая премия' if code == '5' else f'Премия за {code} кв.'} for code in codes]
+    result['quarters_only']=bool(codes) and all(code in ('1','2','3','4') for code in codes)
+    result['premium_total_label']='Итого квартальных премий' if result['quarters_only'] else 'Итого премий за выбранные периоды'
+    result['premium_possible_label']='Квартальные премии без учёта выполнения плана' if result['quarters_only'] else 'Премии выбранных периодов без учёта выполнения плана'
     for group in [*employees.values(), *registry.values()]:
         group['kinds'] = sorted(group['kinds'])
         group['detail_url'] = url_for_period(group['rows'][0].get('detail_url', ''), period)
