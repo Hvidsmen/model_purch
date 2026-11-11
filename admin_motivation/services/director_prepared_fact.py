@@ -38,7 +38,10 @@ WITH physical AS (
  FROM physical f
  OUTER APPLY (SELECT COUNT(*) AS matches,MAX(o1) AS o1,MAX(o2) AS o2,MAX(o3) AS o3,MAX(o4) AS o4
  FROM #portal_director_segments cfg
- WHERE f.discount_type LIKE CONCAT('%',cfg.type_discount,'%')) m
+ WHERE f.discount_type=cfg.type_discount
+ OR (f.discount_type LIKE CONCAT('%',cfg.type_discount,'%')
+ AND NOT EXISTS(SELECT 1 FROM #portal_director_segments exact_cfg
+ WHERE exact_cfg.type_discount=f.discount_type))) m
 )
 SELECT branch,quarter,planning,goods,brand,segment,
  SUM(CASE WHEN amount>0 THEN amount ELSE 0 END),
