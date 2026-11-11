@@ -97,7 +97,7 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
     year_share=number(settings['year_share'])/100
     threshold=number(settings['payout_threshold'])
     quarters=range(1,5 if year==2025 else 4)
-    paid=[ZERO]*4;annual_paid=ZERO;bonus=ZERO;annual_accrued=ZERO;details=[];notes=set()
+    paid=[ZERO]*4;annual_quarters=[ZERO]*4;annual_paid=ZERO;bonus=ZERO;annual_accrued=ZERO;details=[];notes=set()
     potential=defaultdict(lambda:ZERO);examples={};origins={}
     for row in [*input_plan,*input_facts]:
         values,formula,origin=rates.get(source,branch,row)
@@ -134,6 +134,9 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
             if possible==0:reasons.append('Начисление равно нулю')
             details.append(detail(case,recipient,source,MERGED if merged else branch,formula,example,
                 f'{q} квартал',p,f,execution,department,None if q==1 else threshold,possible,payment,ZERO,'; '.join(reasons),origins[key],rates.factor(branch,q)))
+            contribution=potential[key,q]*year_share*rates.factor(branch,5)
+            annual_quarters[q-1]+=contribution
+            details[-1]['annual_contribution']=contribution
         accrued=sum((potential[key,q] for q in quarters),ZERO)*year_share*rates.factor(branch,5)
         annual_accrued+=accrued
         if year==2025:
@@ -149,6 +152,7 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
     return {'scenario':case,'year':year,'branch':MERGED if merged else branch,'employee':recipient.full_name,
         'employee_id':recipient.pk,'role':'Директор','rate_source':source.full_name,'quarters':paid,
         'annual_paid':annual_paid,'annual_accrued':annual_accrued,'bonus':bonus,
+        **{f'annual_q{q}':annual_quarters[q-1] if year==2025 or q<=3 else None for q in range(1,5)},
         'total':sum(paid,ZERO)+annual_paid+bonus,'notes':sorted(notes)},details
 
 
@@ -210,7 +214,7 @@ def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,targe
         'employee':people[key[2]].full_name,'planning':key[3],'goods':key[4],'brand':key[5],
         'matched_goods':rates.matched_keys[key][4],'matched_brand':rates.matched_keys[key][5],
         'values':value[0],'formula':value[1],'origin':value[2]} for key,value in rates.cache.items()]
-    payload={'rate_inputs':rate_inputs,'rule':RULE,'scenarios':scenarios,'rows':rows,'details':details,'sources':sources,
+    payload={'annual_breakdown':True,'rate_inputs':rate_inputs,'rule':RULE,'scenarios':scenarios,'rows':rows,'details':details,'sources':sources,
         'version':{'id':version.pk,'title':str(version),'revision':version.revision},
         'corrections':[{ 'branch':b,'period':q,'factor':rates.factor(b,q)} for b in BRANCHES for q in range(1,6)],
         'configuration':config,'plans':{str(y):{'title':p.title,'source_version':p.source_version,'loaded_at':str(p.loaded_at)} for y,p in plans.items()},

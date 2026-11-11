@@ -98,6 +98,41 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(D(r['quarters'][3]),0);self.assertEqual(D(r['annual_paid']),0)
         self.assertEqual(D(r['annual_accrued']),6);self.assertEqual(D(r['bonus']),0)
 
+    def test_annual_breakdown_includes_unpaid_quarter(self):
+        snapshot=self.run_calc();data=snapshot.results
+        row=self.row(data,2)
+        self.assertEqual(D(row['quarters'][2]),0)
+        self.assertGreater(D(row['annual_q3']),0)
+        for row in data['rows']:
+            contributions=[D(row[f'annual_q{q}']) for q in range(1,5) if row[f'annual_q{q}'] is not None]
+            self.assertEqual(sum(contributions),D(row['annual_accrued']))
+        self.assertTrue(data['annual_breakdown'])
+        book=load_workbook(workbook(snapshot))
+        headers=[c.value for c in book['2 Вариант'][1]]
+        value=book['2 Вариант'].cell(2,headers.index('В годовую за III квартал, USD')+1)
+        self.assertEqual(D(str(value.value)),D(self.row(data,2)['annual_q3']))
+        self.assertIn('В годовую за квартал, USD',[c.value for c in book['Выполнение'][1]])
+
+    def test_annual_breakdown_uses_year_factor_even_with_zero_quarter_factor(self):
+        for label,value in [('3 кв.',0),('Год',2)]:
+            kind=KindManagerCoeff.objects.create(name=label)
+            SubdivisionManagerCoeff.objects.create(version=self.version,subdivision=self.branches[0],kind=kind,coeff=value)
+        row=self.row(self.run_calc().results,3)
+        self.assertEqual(D(row['quarters'][2]),0)
+        self.assertEqual(D(row['annual_q3']),4)
+        self.assertEqual(D(row['annual_accrued']),12)
+
+    def test_old_comparison_keeps_breakdown_empty_instead_of_inventing_zeroes(self):
+        snapshot=self.run_calc();snapshot.results.pop('annual_breakdown')
+        for row in snapshot.results['rows']:
+            for q in range(1,5):row.pop(f'annual_q{q}')
+        snapshot.save(update_fields=['results'])
+        book=load_workbook(workbook(snapshot))
+        headers=[c.value for c in book['Сравнение'][1]]
+        self.assertIsNone(book['Сравнение'].cell(2,headers.index('В годовую за III квартал, USD')+1).value)
+        response=self.client.get(reverse('motivation_report_director_scenarios')+f'?calculation={snapshot.pk}')
+        self.assertContains(response,'разбивка годовой части по кварталам отсутствует')
+
     def test_annual_catchup_when_year_recovers_but_q2_q3_failed(self):
         self.facts[2025]=[fact(b,q,[100,100,100,3700][q-1]) for b in BRANCHES for q in range(1,5)]
         r=self.row(self.run_calc().results,1)
@@ -153,7 +188,7 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(book['3 Вариант']['E2'].data_type,'s')
         self.assertEqual(book['Выполнение']['L2'].number_format,'0.00%')
         self.assertEqual(book['Выполнение']['L2'].value,.5)
-        self.assertEqual(book['3 Вариант']['O2'].value,24)
+        self.assertEqual(book['3 Вариант'].cell(2,[c.value for c in book['3 Вариант'][1]].index('К выплате, USD')+1).value,24)
 
     def test_excel_explains_every_case_next_to_its_number(self):
         from .services.director_scenario_excel import SCENARIO_DESCRIPTIONS
@@ -314,7 +349,7 @@ class DirectorScenarioTests(TestCase):
             Rates(self.version).get(self.people[0],BRANCHES[0],{'planning':'1. RAC','goods':'Мобильные кондиционеры','brand':'*'})
 
     def test_report_catalog_contains_comparison(self):
-        self.assertContains(self.client.get(reverse('motivation_reports')),reverse('motivation_report_director_scenarios'))
+        self.assertContains(self.client.get(reverse('motivation_reports')+'?section=additional'),reverse('motivation_report_director_scenarios'))
 
 
     def test_both_plan_selectors_probe_index_and_filter_year_and_loaded_state(self):
@@ -436,7 +471,7 @@ class DirectorScenarioBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('#scenario-1')).to_contain_text('2025')
                 with page.expect_download() as pending:page.get_by_role('link',name='Скачать Excel · все пять вариантов',exact=True).click()
                 book=load_workbook(BytesIO(Path(pending.value.path()).read_bytes()))
-                self.assertEqual(book['3 Вариант']['O2'].value,24)
+                self.assertEqual(book['3 Вариант'].cell(2,[c.value for c in book['3 Вариант'][1]].index('К выплате, USD')+1).value,24)
                 self.assertEqual(book['4 Вариант']['O2'].value,48)
                 self.assertEqual(book['1 Вариант'].max_row,3)
                 page.screenshot(path='/tmp/director-scenarios.png',full_page=True)

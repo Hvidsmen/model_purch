@@ -15,14 +15,16 @@ SCENARIO_DESCRIPTIONS={
 
 SUMMARY=[('scenario','Вариант'),('description','Пояснение варианта'),('year','Год'),('branch','Подразделение'),('employee','Сотрудник'),
  ('role','Роль'),('rate_source','Источник ставок'),('q1','I квартал, USD'),('q2','II квартал, USD'),
- ('q3','III квартал, USD'),('q4','IV квартал, USD'),('annual_accrued','Годовая часть начислена, USD'),
+ ('q3','III квартал, USD'),('q4','IV квартал, USD'),
+ *[(f'annual_q{q}',f'В годовую за {label} квартал, USD') for q,label in enumerate(('I','II','III','IV'),1)],
+ ('annual_accrued','Годовая часть начислена, USD'),
  ('annual_paid','Годовая часть выплачена, USD'),('bonus','Доплата, USD'),('total','К выплате, USD'),('notes','Примечание')]
 DETAIL=[('scenario','Вариант'),('employee','Сотрудник'),('rate_source','Источник ставок'),('branch','Подразделение'),
  ('formula','Формула'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд'),
  ('period','Период'),('plan','План, USD'),('fact','Факт, USD'),('ratio','Выполнение'),
  ('department_ratio','Выполнение подразделения'),('threshold','Порог'),('correction','Поправка периода'),
- ('possible','Начислено, USD'),('paid','Выплачено, USD'),('bonus','Доплата, USD'),('rate_origin','Подбор ставки'),('note','Причина')]
-MONEY={'q1','q2','q3','q4','annual_accrued','annual_paid','bonus','total','plan','fact','possible','paid'}
+ ('possible','Начислено, USD'),('annual_contribution','В годовую за квартал, USD'),('paid','Выплачено, USD'),('bonus','Доплата, USD'),('rate_origin','Подбор ставки'),('note','Причина')]
+MONEY={'q1','q2','q3','q4','annual_accrued','annual_paid','bonus','total','plan','fact','possible','paid','annual_contribution',*[f'annual_q{q}' for q in range(1,5)]}
 PERCENT={'ratio','department_ratio','threshold'}
 
 
@@ -78,6 +80,7 @@ def workbook(snapshot):
         {'name':'Поправки','value':'Поправки подразделения по периодам взяты из выбранной версии модели 2026'},
         {'name':'Участники 2025','value':'Только два получателя директорских ставок; собственные премии источников ставок не включены'},
         {'name':'Порог','value':'I квартал без порога; II — I+II; III — III; IV и год — весь год; неположительный план не определяет выполнение'}]
+    parameters.append({'name':'В годовую за квартал','value':'Начисляется до квартальных условий выплаты с поправкой годового периода. Не прибавляется к квартальной выплате. Пустые поля в старом снимке требуют нового сравнения.'})
     for case in data['scenarios']:parameters.append({'name':f"Вариант {case['id']}",'value':SCENARIO_DESCRIPTIONS[case['id']]})
     for year,source in data['sources'].items():
         parameters.append({'name':f'Источник {year}','value':f"{source.get('source','Исходный расчёт')} · {source['run_id']} · {source['completed_at']} · план {data['plans'][year]['source_version']}"})
