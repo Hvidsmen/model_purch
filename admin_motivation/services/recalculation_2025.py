@@ -9,7 +9,7 @@ from openpyxl.styles import Font, PatternFill
 from django.core.exceptions import ValidationError
 
 VARIANT = 'test_2025'
-RULE_VERSION = 'fact25-plan25-v5-canonical-classification'
+RULE_VERSION = 'fact25-plan25-v6-author-share-hierarchy'
 PERIODS = ['1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', '4 Квартал(1-4 кв)', 'Год']
 KINDS = ('Политики', 'Продажи')
 

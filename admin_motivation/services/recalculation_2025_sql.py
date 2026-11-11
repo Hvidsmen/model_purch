@@ -68,7 +68,7 @@ ALLOCATION = """
 -- Annual 2025 shares, separately by document subdivision and coefficient goods key.
 IF EXISTS(SELECT 1 FROM #fact WHERE КoэфMissing=1)
  THROW 50025,N'Есть факт без полного набора K0–K4 из файла',1;
-SELECT t.*,CASE WHEN SUM(AmountUSD) OVER
+SELECT t.*,0 AS AllocationLevel,CASE WHEN SUM(AmountUSD) OVER
  (PARTITION BY ПодразделениеДокумент,ГруппаПлановПродаж,ГруппаТоваров,Марка)<>0
  THEN AmountUSD/NULLIF(SUM(AmountUSD) OVER
  (PARTITION BY ПодразделениеДокумент,ГруппаПлановПродаж,ГруппаТоваров,Марка),0)
@@ -87,6 +87,9 @@ IF EXISTS(SELECT 1 FROM #percent_plan_menger WHERE Percent_ IS NULL)
 """
 # Keep the guard for genuinely unavailable rates after the approved fallback.
 ALLOCATION = ALLOCATION.replace('КoэфMissing=1', 'КоэфициентМотивации IS NULL OR K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL')
+
+from .recalculation_2025_share_fallback import APPEND_SHARES,SHARE_JOIN
+ALLOCATION+=APPEND_SHARES
 
 
 def patch_source(source, existing=False):
@@ -178,7 +181,7 @@ def patch_source(source, existing=False):
             raise ValidationError('Не найдена ставка перед распределением плана.')
         end = join.end() + following.end()
         coeff_join = source[join.end():end]
-        shares = " LEFT JOIN #percent_plan_menger pm ON s.SubdivisionKey=pm.ПодразделениеДокумент AND sc.PGSales=pm.ГруппаПлановПродаж AND sc.Group_=pm.ГруппаТоваров AND sc.Brand=pm.Марка "
+        shares = SHARE_JOIN
         source = source[:join.start()] + coeff_join + shares + source[end:]
     # The historical deal author comes from the sales document, never the current roster.
     source = re.sub(r"N?'Политики'\s+(?:AS\s+)?АвторСделки", "COALESCE(NULLIF(LTRIM(RTRIM(s.Даичи_АвторСделкиНаименование)),N''),N'Не заполнено') АвторСделки", source, count=1, flags=re.I)
@@ -208,7 +211,7 @@ def patch_source(source, existing=False):
     source = source[:select.start()] + ALLOCATION + source[end + alias.end():]
     # Missing plan authors must not silently receive the full plan.
     source = re.sub(r'COALESCE\s*\(\s*\[?АвторСделки\]?\s*,\s*N?\'[^\']*\'\s*\)',
-                    "COALESCE([АвторСделки],N'Нет факта для распределения')", source, flags=re.I)
+                    "COALESCE([АвторСделки],N'Не распределён')", source, flags=re.I)
     source = isolate(source)
     code = mask_sql(source)
     boundary = re.search(r'\bSELECT\b[\s\S]*?\bINTO\s+#pf_base\b', code, re.I)

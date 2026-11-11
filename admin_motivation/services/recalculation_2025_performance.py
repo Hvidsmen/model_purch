@@ -97,6 +97,8 @@ def explain(detail_rows, gate_rows, threshold):
                 if personal_ratio is not None and personal_ratio < threshold:
                     blocked.append('выполнение сотрудника ниже порога')
             reason = '; '.join(blocked) if blocked else 'По показанным процентам блокировки нет; проверить ставки и корректировки'
+        if author=='Не распределён' and possible==0 and paid+bonus==0:
+            reason='План сохранён без распределения: нет исторических итогов авторов подразделения; премия равна нулю'
         if code == '1':
             reason += '. I квартал: порог выплаты не применяется'
         result.append({'kind': kind, 'branch': branch, 'author': author, 'planning': planning,

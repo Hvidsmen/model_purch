@@ -17,6 +17,19 @@ def detail(**changes):
 
 
 class Performance2025Tests(SimpleTestCase):
+    def test_unallocated_plan_remains_visible_in_excel_with_zero_premium(self):
+        row=explain([detail(author='Не распределён',fact=0,possible=0,paid=0)],[],'.8')[0]
+        self.assertEqual(row['plan'],100)
+        self.assertEqual(row['total'],0)
+        self.assertIn('План сохранён без распределения',row['reason'])
+        sections=summary([('Политики','Branch','Не распределён','2 Квартал(1-2 кв)',0)])
+        sections[0]['performance']=[row]
+        book=load_workbook(workbook(sections))
+        sheet=book['3. Выполнение политик']
+        self.assertEqual(sheet.cell(4,2).value,'Не распределён')
+        self.assertEqual(sheet.cell(4,8).value,100)
+        self.assertEqual(sheet.cell(4,17).value,0)
+
     def test_zero_payout_explains_all_legacy_gates(self):
         rows=explain([detail()], [('Политики','Branch','Author',2,100,100,70)],'.8')
         r=rows[0]
@@ -109,7 +122,7 @@ class Performance2025Tests(SimpleTestCase):
         job=SimpleNamespace(key='job',variant='test_2025',fact_year=2025,plan_version='Plan',
             quarter_share=80,year_share=20,payout_threshold='.8',recalculation_2025=SimpleNamespace(source_sha256='hash'))
         connection,cursor=MagicMock(),MagicMock()
-        cursor.fetchone.side_effect=[(0,),('job','completed','fact25-plan25-v5-canonical-classification',json.dumps(parameters(job)))]
+        cursor.fetchone.side_effect=[(0,),('job','completed','fact25-plan25-v6-author-share-hierarchy',json.dumps(parameters(job)))]
         cursor.fetchall.side_effect=[
             [('Политики','Branch','Author','2 Квартал(1-2 кв)',0,0)],
             [detail()],[('Политики','Branch','Author',2,100,100,70)]]

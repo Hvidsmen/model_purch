@@ -56,7 +56,7 @@ class ParticipatingPlanValidationTests(SimpleTestCase):
     def test_heat_and_dpp_policies_do_not_block_before_their_later_exclusion(self):
         self.add(pg='4. HEAT');self.add(pg='HEAT');self.add(channel='ДПП')
         self.assertEqual(self.invalid_count(),0)
-        self.add();self.assertEqual(self.invalid_count(),1)
+        self.add(rate=None);self.assertEqual(self.invalid_count(),1)
 
     def test_heat_and_dpp_sales_still_participate_and_need_complete_rates(self):
         self.add(channel='ДПП',kind='Продажи',pg='4. HEAT',author='Продажи',rate=None)
@@ -67,15 +67,14 @@ class ParticipatingPlanValidationTests(SimpleTestCase):
         self.add(plan=0)
         self.assertEqual(self.invalid_count(),0)
 
-    def test_real_missing_author_or_rates_remain_errors(self):
-        self.add();self.add(author='Known',rate=None)
-        self.assertEqual(self.invalid_count(),2)
+    def test_unallocated_plan_is_allowed_but_missing_rates_remain_errors(self):
+        self.add(author='Не распределён');self.add(author='Known',rate=None)
+        self.assertEqual(self.invalid_count(),1)
         self.add(author='Known')
-        self.assertEqual(self.invalid_count(),2)
+        self.assertEqual(self.invalid_count(),1)
 
     def test_diagnostic_names_actual_goods_and_distinguishes_cause(self):
         for field in ('[Подразделение]','[ГруппаПлановПродаж]','[ГруппаТоваров]','[Марка]','[ТипКоэф]','[СуммаПланUSD]'):
             self.assertIn(field,PLAN_GUARD)
-        self.assertIn('Нет факта авторов для распределения плана',PLAN_GUARD)
         self.assertIn('Нет полного набора K0–K4',PLAN_GUARD)
         self.assertIn('строк с проблемой',PLAN_GUARD)
