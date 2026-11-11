@@ -25,10 +25,22 @@ def number(value):
         raise ValidationError('В плане обнаружена некорректная сумма.')
 
 
-def source_versions(connector=None):
+def source_sql(source_type):
+    if source_type=='planning':return SQL
+    if source_type!='erp':raise ValidationError('Неизвестный источник плана.')
+    return (SQL.replace('DataWH.planning.PlanSales ps','DataWH.erp.[РегистрыНакопления.ПланыПродаж] ps')
+        .replace('ps.Version_','ps.Сценарий').replace('ps.Date_','ps.Период')
+        .replace('ps.Subdivision','ps.Подразделение').replace('ps.GoodsKey','ps.Номенклатура')
+        .replace('ps.AmountUSD','ps.Сумма').replace('ps.AmountDDP_USD','ps.даичи_СуммаДДП'))
+
+
+def source_versions(connector=None, source_type='planning'):
+    source_sql(source_type)  # Validate before opening a connection.
     connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
     try:
-        cursor.execute('SELECT DISTINCT CONVERT(nvarchar(255), Version_) FROM DataWH.planning.PlanSales WHERE Version_ IS NOT NULL ORDER BY 1')
+        query='SELECT DISTINCT CONVERT(nvarchar(255), Version_) FROM DataWH.planning.PlanSales WHERE Version_ IS NOT NULL ORDER BY 1'
+        if source_type=='erp':query='SELECT DISTINCT CONVERT(nvarchar(255), Сценарий) FROM DataWH.erp.[РегистрыНакопления.ПланыПродаж] WHERE Сценарий IS NOT NULL ORDER BY 1'
+        cursor.execute(query)
         return [str(row[0]) for row in cursor.fetchall()]
     finally:
         connection.close()
@@ -82,7 +94,7 @@ def load_plan(scenario_id, connector=None, progress=None):
     scenario = SalesPlanScenario.objects.get(pk=scenario_id, is_deleted=False)
     connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
     try:
-        cursor.execute(SQL, scenario.source_version)
+        cursor.execute(source_sql(scenario.source_type), scenario.source_version)
         columns = result_columns(cursor.description)
         lines = []
         for row_number, row in enumerate(sql_rows(cursor, progress), start=1):
@@ -116,7 +128,7 @@ def load_plan(scenario_id, connector=None, progress=None):
     lines.extend(aggregate_lines(lines, global_plan=True))
     with transaction.atomic():
         locked = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id, is_deleted=False)
-        if locked.source_version != scenario.source_version:
+        if locked.source_version != scenario.source_version or locked.source_type != scenario.source_type:
             raise ValidationError('Источник сценария изменился во время загрузки.')
         locked.lines.all().delete()
         for offset in range(0, len(lines), 1000):
