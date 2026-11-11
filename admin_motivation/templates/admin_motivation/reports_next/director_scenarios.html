@@ -7,9 +7,18 @@
 <p>Пять вариантов · USD · Москва и ТТ. Ставки, формулы и поправки периодов — из выбранной версии модели 2026. Назначения сотрудников в действующей модели не меняются.</p>
 <p>Для варианта 2025 нужен завершённый «Пересчёт 2025» с тем же планом. Для вариантов 2026 нужен готовый набор продаж; доли и порог берутся из основного задания 2026 с выбранным планом. Запускать «Все кварталы 2026» не требуется. В исходных планах Москва и ТТ должны быть сохранены отдельно.</p>
 {% if error %}<div class="next-error" role="alert">{{ error }}</div>{% endif %}
-{% if can_calculate %}<details class="next-note" {% if not snapshot or form.errors or error %}open{% endif %}><summary>{% if snapshot %}Новый расчёт{% else %}Подготовить сравнение{% endif %}</summary>
+{% if can_calculate %}
+<section id="director-progress" class="next-note" hidden role="status" aria-live="polite">
+<strong id="director-progress-state">Запуск расчёта…</strong>
+<p id="director-progress-stage"></p>
+<progress id="director-progress-bar" max="12" style="width:100%" aria-label="Этапы сравнения директоров"></progress>
+<p id="director-progress-time" aria-live="off"></p>
+<p id="director-progress-connection"></p>
+<small>Шкала показывает завершённые этапы, а не долю оставшегося времени.</small>
+</section><div id="director-calculation-error" class="next-error" role="alert" hidden></div>
+<details class="next-note" {% if not snapshot or form.errors or error %}open{% endif %}><summary>{% if snapshot %}Новый расчёт{% else %}Подготовить сравнение{% endif %}</summary>
 <p>В варианте 1 (2025) участвуют только два получателя директорских ставок. Два директора 2026 служат источниками ставок; их собственные премии за 2025 год здесь не рассчитываются.</p>
-<form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Рассчитать пять вариантов и сохранить</button></form></details>{% endif %}
+<form method="post" id="director-calculation-form"><input type="hidden" name="progress_token" value="{{ progress_token }}">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Рассчитать пять вариантов и сохранить</button></form></details>{% endif %}
 {% if snapshot %}
 {% if legacy_result %}<div class="next-note">Это результат по прежним правилам, он может содержать менеджерские премии за 2025 год. Выполните новый расчёт: в варианте 2025 останутся только два получателя директорских ставок.</div>{% endif %}
 <div class="next-note"><strong>Сохранённый результат № {{ snapshot.pk }}</strong> · {{ snapshot.created_at|date:'d.m.Y H:i' }}<br>Коэффициенты: {{ data.version.title }} · ревизия {{ data.version.revision }}.<br>При ошибке нового запуска здесь остаётся предыдущий сохранённый результат.</div>
@@ -28,4 +37,4 @@
 </tbody></table></div><p>В Excel выполнение и пороги отображаются в процентах; там также есть выполнение подразделения и правило подбора ставки.</p></details>
 {% endif %}
 {% if history %}<details><summary>История сравнений</summary><ul>{% for item in history %}<li><a href="?calculation={{ item.pk }}">№ {{ item.pk }} · {{ item.created_at|date:'d.m.Y H:i' }}</a></li>{% endfor %}</ul></details>{% endif %}
-</section>{% endblock %}
+</section><script src="{% static 'admin_motivation/director_scenario_progress.js' %}?v=20261111" defer></script>{% endblock %}

@@ -17,7 +17,13 @@ class DirectorFullBrowserTests(ScenarioFlow,StaticLiveServerTestCase):
         from django.conf import settings
         from openpyxl import load_workbook
         from .reports_director_scenarios import ComparisonForm
-        with patch('admin_motivation.services.director_scenario_inputs.connect_database',self.warehouse.connector):
+        from threading import Event
+        from .services.director_prepared_fact import read_fact
+        release=Event();self.addCleanup(release.set)
+        def slow_read(*args,**kwargs):
+            release.wait(10)
+            return read_fact(*args,**kwargs)
+        with patch('admin_motivation.services.director_scenario_inputs.connect_database',self.warehouse.connector),patch('admin_motivation.services.director_prepared_fact.read_fact',slow_read):
             with sync_playwright() as playwright:
                 browser=playwright.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE','/usr/bin/chromium'),headless=True)
                 page=browser.new_page(viewport={'width':1600,'height':1100})
@@ -34,6 +40,11 @@ class DirectorFullBrowserTests(ScenarioFlow,StaticLiveServerTestCase):
                     option=f'{person.full_name} · № {person.pk}'+(' · архив' if person.is_archived else '')
                     page.get_by_role('button',name=option,exact=True).click()
                 page.get_by_role('button',name='Рассчитать пять вариантов и сохранить',exact=True).click()
+                expect(page.locator('#director-progress')).to_be_visible()
+                expect(page.locator('#director-progress-stage')).to_contain_text('Чтение подготовленного факта 2026',timeout=8000)
+                expect(page.get_by_role('button',name='Рассчитать пять вариантов и сохранить',exact=True)).to_be_disabled()
+                expect(page.locator('#director-progress-time')).to_contain_text('Всего:')
+                release.set()
                 expect(page).to_have_url(re.compile(r'calculation=\d+'))
                 for case in range(1,6):
                     expect(page.locator(f'#scenario-{case}')).to_be_visible()
