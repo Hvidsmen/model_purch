@@ -97,7 +97,7 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
     year_share=number(settings['year_share'])/100
     threshold=number(settings['payout_threshold'])
     quarters=range(1,5 if year==2025 else 4)
-    paid=[ZERO]*4;annual_quarters=[ZERO]*4;annual_paid=ZERO;bonus=ZERO;annual_accrued=ZERO;details=[];notes=set()
+    paid=[ZERO]*4;quarter_possible=[ZERO]*4;annual_quarters=[ZERO]*4;annual_paid=ZERO;bonus=ZERO;annual_accrued=ZERO;details=[];notes=set()
     potential=defaultdict(lambda:ZERO);examples={};origins={}
     for row in [*input_plan,*input_facts]:
         values,formula,origin=rates.get(source,branch,row)
@@ -121,6 +121,7 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
             eligible=q==1 or (execution is not None and execution>=threshold and
                 (formula=='Подразделение(Глобально)' or department is not None and department>=threshold))
             possible=potential[key,q]*quarter_share*rates.factor(branch,q)
+            quarter_possible[q-1]+=possible
             payment=possible if eligible else ZERO
             paid[q-1]+=payment;scope_paid+=payment;scope_quarter_potential+=possible
             reasons=[]
@@ -152,6 +153,7 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
     return {'scenario':case,'year':year,'branch':MERGED if merged else branch,'employee':recipient.full_name,
         'employee_id':recipient.pk,'role':'Директор','rate_source':source.full_name,'quarters':paid,
         'annual_paid':annual_paid,'annual_accrued':annual_accrued,'bonus':bonus,
+        **{f'q{q}_possible':quarter_possible[q-1] if year==2025 or q<=3 else None for q in range(1,5)},
         **{f'annual_q{q}':annual_quarters[q-1] if year==2025 or q<=3 else None for q in range(1,5)},
         'total':sum(paid,ZERO)+annual_paid+bonus,'notes':sorted(notes)},details
 
