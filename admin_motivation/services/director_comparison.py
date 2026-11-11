@@ -15,6 +15,7 @@ class DirectorIndex:
             fields += ['subdivision__subdivision_key', 'employee_id']
         rows = model.objects.filter(version_id__in=versions).order_by().values_list(*fields)
         self.cells, self.minimum, self.table_minimum, self.employees = {}, {}, {}, {}
+        self.budget_cache = {}
         target_sub = subdivision.subdivision_key if subdivision else ''
         target_staff = employee.pk if employee else 0
         present = set()
@@ -54,7 +55,17 @@ class DirectorIndex:
             self.table_minimum[key] = min(self.table_minimum.get(key, minimum), minimum)
 
     def motivation(self, version, sub, pg, group, brand, amounts):
-        return sum(self.by_employee(version, sub, pg, group, brand, amounts).values(), Decimal(0))
+        # Budgets are linear in O0–O4 amounts. Resolve employee fallbacks once
+        # per immutable index/classification, not once per employee/plan month.
+        key=(version,sub,pg,group,brand)
+        if key not in self.budget_cache:
+            totals=[Decimal(0)]*5
+            for staff in self.employees.get((version,sub), ()):
+                values,_=self.coefficients(version,sub,staff,pg,group,brand)
+                totals=[a+b for a,b in zip(totals,values)]
+            if len(self.budget_cache)>=10000:self.budget_cache.clear()
+            self.budget_cache[key]=totals
+        return sum((value*amount for value,amount in zip(self.budget_cache[key],amounts)),Decimal(0))
 
     def by_employee(self, version, sub, pg, group, brand, amounts):
         result = {}
