@@ -5,6 +5,7 @@
 {% include 'admin_motivation/reports_next/_tabs.html' %}
 <p><a href="{% url 'motivation_reports' %}">← Все отчёты</a></p>
 <h1>Пересчёт 2025</h1>
+{% for message in messages %}<div class="next-note" role="status">{{ message }}</div>{% endfor %}
 <p>Факт 2025 · План 2025 · USD. Все подразделения, Москва и ТТ отдельно.</p>
 <p>План политиков распределяется по долям факта 2025 года внутри подразделения и товарного сочетания коэффициентов. Для продаж учитываются HEAT и канал ДПП.</p>
 <p>Если по сочетанию нет долей авторов, используем факт того же подразделения: группа товаров без бренда → группа планов продаж → подразделение целиком. При отсутствии авторов план сохраняется строкой «Не распределён», премия — 0.</p>
@@ -35,7 +36,7 @@
 {% for row in agent_history %}<div><strong>{{ row.started }} · {{ row.status }} · {{ row.duration }}</strong><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ row.message }}</pre></div>
 {% empty %}<p>{% if agent_history_unavailable %}Не удалось прочитать журнал SQL Agent.{% else %}Запись запуска ещё не появилась в журнале SQL Agent или история очищена.{% endif %} Обновите страницу или откройте журнал указанного задания в SQL Server Management Studio.</p>{% endfor %}
 </details>{% endif %}
-{% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" {% if state == 'running' or state == 'queued' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
+{% if can_start %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="run"><input type="hidden" name="job" value="{{ job.pk }}"><button class="btn btn-primary" data-recalculation-start {% if state == 'running' or state == 'queued' %}disabled{% endif %}>Запустить пересчёт 2025</button></form>{% endif %}
 </div>
 <nav class="next-filter" aria-label="Отчёты 2025">
 <a class="btn {% if tab != 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}" href="?job={{ job.pk }}&amp;run=1&amp;tab=policies">Политики</a>
@@ -52,4 +53,4 @@
 </tbody><tfoot><tr><th>Итого</th>{% if section.kind == 'Политики' %}<td></td>{% endif %}{% for value in section.values %}<td class="num">{{ value|floatformat:2 }}</td>{% endfor %}<td class="num">{{ section.bonus|floatformat:2 }}</td><td class="num">{{ section.total|floatformat:2 }}</td></tr></tfoot></table></div>
 {% elif not error %}<p>Сохраните входные данные и запустите пересчёт. После завершения откройте «Политики» или «Продажи».</p>{% endif %}
 {% else %}<p>Входные данные пересчёта ещё не сохранены.</p>{% endif %}
-</section><script src="{% static 'admin_motivation/recalculation_2025_status.js' %}?v=progress-20261111" defer></script>{% endblock %}
+</section><script src="{% static 'admin_motivation/recalculation_2025_status.js' %}?v=launch-state-20261111" defer></script>{% endblock %}

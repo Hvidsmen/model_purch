@@ -139,3 +139,27 @@ class RecalculationStatusBrowserTests(StaticLiveServerTestCase):
                 expect(field).to_have_value('65');self.assertEqual(len(calls),count)
                 start.assert_not_called()
                 browser.close()
+
+    def test_one_click_starts_and_shows_queued_confirmation(self):
+        from playwright.sync_api import sync_playwright,expect
+        from django.conf import settings
+        helpers.Recalculation2025WebTests.setUp(self)
+        job=self.make_job()
+        with patch('admin_motivation.services.calculation_jobs.monitor',return_value={}),patch(
+                'admin_motivation.services.calculation_jobs.start_job') as start,patch(
+                'admin_motivation.services.execution_tracking.observe',return_value=None),patch(
+                'admin_motivation.services.execution_tracking.running_state',return_value='queued'):
+            with sync_playwright() as p:
+                browser=p.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE','/usr/bin/chromium'),headless=True)
+                page=browser.new_page()
+                page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
+                page.goto(self.live_server_url+self.url+f'?job={job.pk}')
+                page.locator('[data-recalculation-start]').click()
+                expect(page).to_have_url(self.live_server_url+self.url+f'?job={job.pk}&launch=1')
+                expect(page.get_by_text('Пересчёт 2025 запущен. Статус обновляется автоматически.',exact=True)).to_be_visible()
+                expect(page.locator('[data-recalculation-state]')).to_contain_text('Ожидает запуска в SQL Agent')
+                expect(page.locator('[data-recalculation-start]')).to_be_disabled()
+                start.assert_called_once()
+                blocked=page.evaluate("!document.querySelector('[data-recalculation-start]').form.dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))")
+                self.assertTrue(blocked);start.assert_called_once()
+                browser.close()

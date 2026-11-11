@@ -122,7 +122,7 @@ class Recalculation2025WebTests(TestCase):
         return job
 
     def test_catalog_and_empty_page(self):
-        self.assertContains(self.client.get(reverse('motivation_reports')),'Пересчёт 2025')
+        self.assertContains(self.client.get(reverse('motivation_reports')+'?section=additional'),'Пересчёт 2025')
         self.assertContains(self.client.get(self.url),'План 2025')
 
     def test_upload_is_private_and_does_not_start_calculation(self):
