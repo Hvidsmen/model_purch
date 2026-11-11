@@ -19,6 +19,24 @@
     const warning = document.getElementById('comparison-warning');
     const dialog = document.getElementById('approval-dialog');
     const commit = document.getElementById('approval-commit');
+    const approvalProgress = document.getElementById('approval-progress');
+    const approvalTime = document.getElementById('approval-progress-time');
+    let approvalClock;
+    function stopApprovalProgress() {
+        clearInterval(approvalClock);
+        approvalProgress.hidden = true;
+    }
+    function startApprovalProgress(stage) {
+        clearInterval(approvalClock);
+        const started = performance.now();
+        approvalProgress.hidden = false;
+        const update = () => {
+            const seconds = Math.floor((performance.now() - started) / 1000);
+            approvalTime.textContent = `${stage} · ${Math.floor(seconds / 60)} мин ${seconds % 60} сек`;
+        };
+        update();
+        approvalClock = setInterval(update, 1000);
+    }
     const money = value => value == null ? '—' : new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 0}).format(Math.abs(Number(value)) < 0.5 ? 0 : Number(value));
     const percent = value => value == null ? '—' : `${new Intl.NumberFormat('ru-RU', {maximumFractionDigits: 1}).format(Math.abs(Number(value)) < 0.05 ? 0 : Number(value))}%`;
     let controller, timer, review, reviewController, revision = 0;
@@ -146,6 +164,7 @@
         commit.disabled = true;
         dialog.setAttribute('aria-busy', 'true');
         document.getElementById('approval-description').textContent = 'Проверяем версию и рассчитываем сравнение мотивации…';
+        startApprovalProgress('Подготовка подтверждения');
         document.getElementById('approval-impact').replaceChildren();
         document.getElementById('approval-replaced').replaceChildren();
         document.getElementById('approval-confirm-label').hidden = true;
@@ -207,16 +226,23 @@
                 document.getElementById('approval-error').textContent = problem.message;
             }
         } finally {
-            if (reviewController === pending) dialog.setAttribute('aria-busy', 'false');
+            if (reviewController === pending) {
+                dialog.setAttribute('aria-busy', 'false');
+                stopApprovalProgress();
+            }
         }
     });
-    dialog.addEventListener('close', () => { reviewController?.abort(); review = null; });
+    dialog.addEventListener('close', () => { reviewController?.abort(); review = null; stopApprovalProgress(); });
     document.getElementById('approval-cancel').addEventListener('click', () => dialog.close());
     commit.addEventListener('click', async () => {
         if (!review || commit.disabled) return;
         const reason = document.getElementById('approval-reason').value.trim();
         if (!reason) { document.getElementById('approval-error').textContent = 'Укажите причину утверждения без прохождения проверок.'; return; }
         commit.disabled = true;
+        document.getElementById('approval-cancel').disabled = true;
+        dialog.setAttribute('aria-busy', 'true');
+        document.getElementById('approval-description').textContent = 'Утверждаем набор и сохраняем историю версий…';
+        startApprovalProgress('Сохранение утверждения');
         try {
             await post({action: 'approve', token: review.token, reason, confirm_overwrite: document.getElementById('approval-confirm').checked});
             document.dispatchEvent(new CustomEvent('motivation:approved'));
@@ -224,6 +250,10 @@
         } catch (problem) {
             document.getElementById('approval-error').textContent = problem.message;
             commit.disabled = false;
+        } finally {
+            stopApprovalProgress();
+            dialog.setAttribute('aria-busy', 'false');
+            document.getElementById('approval-cancel').disabled = false;
         }
     });
     if (plan.value) compare();
