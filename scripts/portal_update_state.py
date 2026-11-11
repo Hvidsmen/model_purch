@@ -36,10 +36,18 @@ def run_directory(root, run_id):
 
 
 def read(path, default=None):
-    try:
-        return json.loads(Path(path).read_text(encoding='utf-8-sig'))
-    except (FileNotFoundError, json.JSONDecodeError):
-        return default
+    # Windows can briefly deny opening a file during atomic replacement or
+    # antivirus inspection. Match the writer's bounded retry, and fail closed
+    # on persistent denial: an unreadable preparation marker is never trusted.
+    for attempt in range(20):
+        try:
+            return json.loads(Path(path).read_text(encoding='utf-8-sig'))
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(.05)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return default
 
 
 def write(path, value):
