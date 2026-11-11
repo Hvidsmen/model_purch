@@ -78,8 +78,8 @@ class ReportsNextTests(TestCase):
         response=self.client.get(reverse('motivation_report_next',args=['executive']),{'run':'1','period':'all'})
         self.assertContains(response,'data-global-premium-toggle aria-expanded="false"')
         self.assertContains(response,'data-global-premium-part hidden')
-        self.assertContains(response,'Глобальная: квартальная часть, USD')
-        self.assertContains(response,'Глобальная: годовая часть, USD')
+        self.assertContains(response,'Глобальная: IV квартал, USD')
+        self.assertContains(response,'Глобальная: годовая часть из IV квартала, USD')
 
     def test_executive_page_uses_plan_selection_and_excel_numbers(self):
         url = reverse('motivation_report_next', args=['executive'])
