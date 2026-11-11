@@ -14,6 +14,17 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 class UpdateProtocolTests(unittest.TestCase):
+    def test_read_retries_transient_windows_access_denial(self):
+        with patch.object(Path,'read_text',side_effect=[PermissionError(13,'busy'),'{"status":"running"}']) as read,patch.object(state.time,'sleep') as sleep:
+            self.assertEqual(state.read('status.json'),{'status':'running'})
+        self.assertEqual(read.call_count,2);sleep.assert_called_once_with(.05)
+
+    def test_read_persistent_denial_is_bounded_and_never_returns_default(self):
+        with patch.object(Path,'read_text',side_effect=PermissionError(13,'denied')) as read,patch.object(state.time,'sleep'):
+            with self.assertRaises(PermissionError):state.read('status.json',{'status':'running'})
+        self.assertEqual(read.call_count,20)
+
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
