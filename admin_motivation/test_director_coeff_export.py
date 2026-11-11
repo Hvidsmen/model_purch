@@ -55,6 +55,53 @@ class DirectorCoefficientExportTests(TestCase):
         self.assertEqual(sheet.auto_filter.ref,'A4:V5')
         book.close()
 
+    def test_branch_export_has_only_its_directors_and_same_template(self):
+        foreign=Goods.objects.create(goods_key='Other branch only',planning_group_sales='Foreign',group='Foreign',brand='Foreign')
+        SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.other_sub,employee=self.first,goods=foreign,k0='.9')
+        url=reverse('coeff_subdivisions_admin_motivation',args=[self.sub.pk])
+        response=self.client.get(url,{'version':self.version.pk,'export':'directors_xlsx','employee':self.first.pk})
+        self.assertEqual(response.status_code,200)
+        book=load_workbook(BytesIO(response.content));sheet=book.active
+        self.assertEqual({pair for pair,column in self.blocks(sheet)},
+            {(self.first.full_name,'A'),(self.second.full_name,'A')})
+        self.assertEqual(sheet.max_column,16);self.assertEqual(sheet.max_row,5);self.assertEqual(sheet.freeze_panes,'E5')
+        self.assertEqual(self.values(sheet)[(('1. RAC','Group','Brand'),(self.first.full_name,'A'))][0],.0016)
+        self.assertIn(f'-sub{self.sub.pk}.xlsx',response['Content-Disposition'])
+        book.close()
+        page=self.client.get(url,{'version':self.version.pk,'employee':self.first.pk})
+        self.assertContains(page,'Excel — директора подразделения')
+        self.assertContains(page,'export=director_xlsx')
+
+    def test_selected_director_export_is_scoped_to_person_and_branch(self):
+        url=reverse('coeff_subdivisions_admin_motivation',args=[self.sub.pk])
+        response=self.client.get(url,{'version':self.version.pk,'export':'director_xlsx','employee':self.first.pk})
+        self.assertEqual(response.status_code,200)
+        book=load_workbook(BytesIO(response.content));sheet=book.active
+        self.assertEqual([pair for pair,column in self.blocks(sheet)],[(self.first.full_name,'A')])
+        self.assertEqual(sheet.max_column,10)
+        self.assertEqual(self.values(sheet)[(('1. RAC','Group','Brand'),(self.first.full_name,'A'))][5],'Export explicit')
+        book.close()
+        self.first.subdivisions.remove(self.sub)
+        response=self.client.get(url,{'version':self.version.pk,'export':'director_xlsx','employee':self.first.pk})
+        self.assertEqual(response.status_code,404)
+
+    def test_branch_export_uses_the_same_merge_precedence_as_all_directors(self):
+        from .models import Subdivision
+        source=Subdivision.objects.create(subdivision_key='TT',subdivision_name='TT',subdivision_global='TT',chanel=self.sub.chanel,merged_into=self.sub,merge_policy='source')
+        SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=source,employee=self.first,goods=self.goods,k0='.22')
+        self.version.refresh_from_db()
+        book=load_workbook(BytesIO(director_coefficients_workbook(self.version,subdivision=self.sub)))
+        self.assertEqual(self.values(book.active)[(('1. RAC','Group','Brand'),(self.first.full_name,'A'))][0],.22)
+        self.assertEqual({pair[1] for pair,column in self.blocks(book.active)},{'A'})
+        book.close()
+
+    def test_invalid_and_unauthorized_branch_exports_are_rejected(self):
+        url=reverse('coeff_subdivisions_admin_motivation',args=[self.sub.pk])
+        self.assertEqual(self.client.get(url,{'version':'bad','export':'directors_xlsx'}).status_code,404)
+        self.assertEqual(self.client.get(url,{'version':self.version.pk,'employee':'bad','export':'director_xlsx'}).status_code,404)
+        user=User.objects.create_user('no-branch-director-export');self.client.force_login(user)
+        self.assertEqual(self.client.get(url,{'version':self.version.pk,'export':'directors_xlsx'}).status_code,403)
+
     def test_formula_uses_row_then_version_then_historical_rule(self):
         self.version.fallback_variation='Подразделение(Глобально)'; self.version.save()
         book=self.book(); values=list(self.values(book.active).values()); book.close()
