@@ -52,3 +52,5 @@
 .calculation-history th,.calculation-history td{padding:8px;text-align:left;border-bottom:1px solid #e6e0f2;vertical-align:top}
 .calculation-history th{white-space:nowrap;background:#f7f5fc}
 .calculation-history td:last-child{min-width:220px;white-space:pre-wrap;overflow-wrap:anywhere}
+
+[data-prepared-sales] [data-prepared-start]:disabled{opacity:.55;cursor:wait;box-shadow:none}
