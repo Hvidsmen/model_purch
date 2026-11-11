@@ -1,0 +1,8 @@
+{% extends 'admin_motivation/base.html' %}{% load tz %}{% block content %}
+<section class="content"><p><a href="{% url 'motivation_reports' %}?section=additional">← Дополнительные отчёты</a></p>
+<h1>Новая итерация коэффициентов</h1>
+<p>Сначала загрузите оба файла. На следующем шаге проверьте подразделения и директоров и вручную заполните отсутствующие соответствия.</p>
+<p>Загрузка сохраняет отдельный снимок для сценариев. Действующие коэффициенты, назначения сотрудников и расчёты не меняются.</p>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary" type="submit">Загрузить и проверить сопоставление</button></form>
+<h2>Мои загрузки</h2>{% for item in iterations %}<p><a href="{% url 'motivation_coefficient_iteration_mapping' item.pk %}">№ {{ item.pk }} · {% timezone 'Europe/Moscow' %}{{ item.created_at|date:'d.m.Y H:i' }} МСК{% endtimezone %} · {% if item.confirmed %}Сопоставление подтверждено{% else %}Черновик сопоставления{% endif %}</a></p>{% empty %}<p>Загрузок пока нет.</p>{% endfor %}
+</section>{% endblock %}

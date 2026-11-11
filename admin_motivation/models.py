@@ -933,3 +933,17 @@ class DirectorScenarioComparison(models.Model):
 
     class Meta:
         ordering = ['-pk']
+
+
+class CoefficientIteration(models.Model):
+    """Private uploaded coefficient inputs and user-reviewed identity mappings."""
+    owner = models.ForeignKey('auth.User', on_delete=models.PROTECT)
+    payload = models.JSONField()
+    mappings = models.JSONField(default=dict)
+    confirmed = models.BooleanField(default=False)
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-pk']
