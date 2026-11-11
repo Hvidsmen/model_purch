@@ -163,6 +163,13 @@ def patch_source(source, existing=False):
         raise ValidationError('Не распознаны товарные ключи двух видов факта.')
     source = re.sub(r't\.GroupERP\s*\[ГруппаТоваров\]', 'sc.Group_ [ГруппаТоваров]', source, flags=re.I)
     source = re.sub(r't\.\[Марка\(Бренд\)\]\s*\[Марка\]', 'sc.Brand [Марка]', source, flags=re.I)
+    # The file lookup uses full ERP classification in fact. Preserve those
+    # same raw keys in plan input BEFORE file/wildcard/minimum matching; the
+    # legacy inner projection erased brands and groups outside a fixed list.
+    source,plan_groups=re.subn(r"CASE\s+WHEN\s+g\.PlanningGroupSalesErp\s+IN\s*\([^)]*\)\s+THEN\s+g\.GroupERP\s+ELSE\s+'[^']*'\s+END",'g.GroupERP',source,flags=re.I)
+    source,plan_brands=re.subn(r"CASE\s+WHEN\s+g\.GroupERP\s+IN\s*\([^)]*\)\s+THEN\s+BrandName\s+ELSE\s+'[^']*'\s+END",'g.BrandName',source,flags=re.I)
+    if plan_groups!=4 or plan_brands!=4:
+        raise ValidationError('Не распознаны полные ERP-ключи двух видов плана 2025.')
     # Match the same wildcard classification when assigning policy plan shares.
     share_joins = list(re.finditer(r'LEFT\s+JOIN\s+#percent_plan_menger\s+pm\s+ON[\s\S]*?AND\s+t\.\[Марка\(Бренд\)\]\s*=\s*pm\.Марка', source, re.I))
     for join in reversed(share_joins):
@@ -211,14 +218,8 @@ def patch_source(source, existing=False):
     # Locate the SELECT immediately preceding INTO, rather than matching all earlier SELECTs.
     into_pf = re.search(r'\bINTO\s+#pf_base\b', code, re.I)
     point = list(re.finditer(r'\bSELECT\b', code[:into_pf.start()], re.I))[-1].start()
-    guard = """
-IF EXISTS(SELECT 1 FROM DataWH.motivation.PlanFactTest2025 WHERE [Год]<>2025)
- THROW 50025,N'Выбранный план содержит данные другого года. Нужен план 2025',1;
-IF EXISTS(SELECT 1 FROM DataWH.motivation.PlanFactTest2025
- WHERE [СуммаПланUSD]<>0 AND ([АвторСделки]=N'Нет факта для распределения'
- OR K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL))
- THROW 50025,N'Есть план без факта для распределения или без коэффициентов файла',1;
-"""
+    from .recalculation_2025_plan import PLAN_GUARD
+    guard=PLAN_GUARD
     source = source[:point] + guard + source[point:]
     from .sales_participation import patch as participation
     source = participation(source, policy_heat_all_years=True)

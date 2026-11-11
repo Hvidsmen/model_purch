@@ -1,0 +1,11 @@
+# Consistent 2025 plan and fact classification
+
+File-rate matching uses the original ERP planning group, goods group and brand. The legacy plan input projection discarded the brand outside four named groups and the goods group outside RAC/VRF/PROF, while the private file fact lookup retained those fields. After minimum fallback, a plan could therefore have an empty key while its actual sales had a populated key: author-share lookup incorrectly appeared to have no fact.
+
+Both plan kinds now retain raw planning.Goods.GroupERP and BrandName through the inner SELECT and GROUP BY, before the same exact/wildcard/minimum file lookup used by fact. Matched wildcard keys still collapse to the coefficient key; fallback still preserves original goods/brand. Raw input plan totals, dates, subdivisions, rate-selection priority, signed/zero-sum allocation and payout rules remain unchanged. The audit rule is `fact25-plan25-v4-consistent-goods-keys`.
+
+Plan validation applies only to participating rows: the existing named subdivision exclusions and HEAT/DPP policy exclusions cannot trigger a missing-author guard before they are later excluded from premium calculation. Sales HEAT/DPP remain participating. No genuinely missing author allocation or missing rate is silently accepted. Error 50025 now distinguishes the cause and provides the first affected subdivision, planning group, goods group, brand, kind, plan amount and total affected row count in the private SQL Agent history. Values are generated from the failing calculation's own PlanFact, not a stale earlier table queried after rollback.
+
+Tests execute both actual inner plan queries in SQLite, reproduce the old erased-brand/group mismatch, and verify preservation of full keys and total plan across dates/versions/subdivisions. The validation predicate is executed on included/excluded cases and genuine missing author/rate cases. Existing rate projection and file-minimum tests remain required. Actual SQL Server execution must be checked on the portal server.
+
+After updating, relaunch the saved 2025 job; the uploaded coefficients and shared prepared sales remain usable. If the remaining issue is genuine missing fact, use the specific new error context to decide the business rule rather than assigning another subdivision's authors or arbitrary equal shares.
