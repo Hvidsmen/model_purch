@@ -18,7 +18,7 @@ BEGIN
  DECLARE {declarations};
  BEGIN TRY
  SELECT {names['cpu']}=CONVERT(bigint,cpu_time),{names['logical']}=logical_reads,
- {names['reads']}=reads,{names['writes']}=writes FROM sys.dm_exec_sessions WHERE session_id=@@SPID;
+ {names['reads']}=reads,{names['writes']}=writes FROM sys.dm_exec_requests WHERE session_id=@@SPID AND request_id=CURRENT_REQUEST_ID();
  END TRY BEGIN CATCH
  SET {names['cpu']}=NULL;SET {names['logical']}=NULL;SET {names['reads']}=NULL;SET {names['writes']}=NULL;
  END CATCH;

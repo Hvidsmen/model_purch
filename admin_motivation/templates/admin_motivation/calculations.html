@@ -37,5 +37,5 @@
 <details class="calculation-help"><summary>Как выполняется расчёт и что нужно для подключения</summary><p>Задания выполняет SQL Server Agent, в том числе после перезапуска портала. Одновременные запуски из портала блокируются.</p><p>Процедура <code>motivation.sp_CalcBySub</code> запускается через подготовленную копию <code>motivation.PortalCalcBySub</code>, которая учитывает объединённые подразделения. Исходная процедура сохраняется.</p><p>Подключение: <code>DWH_SQL_CONN_STR</code>. Нужны работающая служба SQL Server Agent, права на задания msdb, чтение определения исходной процедуры и создание объектов в схеме motivation.</p></details>
 </section>
 <script src="{% static 'admin_motivation/calculation_monitor.js' %}?v=live-sql-progress-20261111" defer></script>
-<script src="{% static 'admin_motivation/prepared_sales.js' %}?v=prepare-button-state-20261111" defer></script>
+<script src="{% static 'admin_motivation/prepared_sales.js' %}?v=discount-cache-20261111" defer></script>
 {% endblock %}
