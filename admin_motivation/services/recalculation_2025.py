@@ -120,12 +120,19 @@ def workbook(sections):
         sheet.append(['Мотивация за 2025 год · ' + section['kind'] + ' · USD'])
         sheet.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(labels))
         sheet.append(labels)
+        if policies:
+            sheet.sheet_properties.outlinePr.summaryBelow = False
+            sheet.sheet_view.showOutlineSymbols = True
+            sheet.sheet_format.outlineLevelRow = 1
         for branch in section['branches']:
             sheet.append([branch['branch']] + (['Итого по подразделению'] if policies else []) + branch['values'] + [branch['bonus'], branch['total']])
             subtotal = sheet.max_row
             if policies:
                 for row in branch['rows']:
                     sheet.append([row['branch'], row['author'], *row['values'], row['bonus'], row['total']])
+                if sheet.max_row > subtotal:
+                    sheet.row_dimensions.group(subtotal + 1, sheet.max_row, outline_level=1, hidden=True)
+                    sheet.row_dimensions[subtotal].collapsed = True
             for cell in sheet[subtotal]:
                 cell.font = Font(bold=True, color='243B53'); cell.fill = PatternFill('solid', fgColor='F1EDFF')
         sheet.append(['Итого'] + ([''] if policies else []) + section['values'] + [section['bonus'], section['total']])
