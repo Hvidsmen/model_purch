@@ -1,0 +1,9 @@
+# Team author cohort by physical premium period
+
+The main Team premiums page and its Excel export restrict authors to those present in saved physical Fact rows for the selected premium period. For the main variant, Q4 and annual both use Q4. This excludes year-wide zero report placeholders for authors who had activity only before October. Presence means a saved fact row, not a nonzero paid/possible premium or nonzero signed turnover: withheld payouts, zero rates and net-zero shipments do not remove an author who had period activity.
+
+The manager-detail loader's opt-in `period_authors_only` flag applies a parameter-bound EXISTS against the saved Fact namespace before summary aggregation. It correlates subdivision, author, coefficient kind and year, and respects the selected product filters. Existing report authorization, subdivision expansion, active-director conditions, pilot period restrictions and current-run guard remain in place. The saved Fact quarter follows the calculation's deal-closing date, not a cumulative execution window: Q2 presence is physical Q2 even when eligibility uses Q1+Q2.
+
+Only the main Team page enables this flag. Registry, personal/detail views and the financial calculations retain their existing behavior. Counts, totals, pagination and the team export are derived from the same filtered rows. No historical financial result or source table is rewritten; an update and page refresh suffice. If a saved Fact source is unavailable, fail rather than silently showing the unfiltered year-wide cohort.
+
+Tests in `test_period_authors` execute the SQL membership predicates on fixtures for prior-quarter-only authors, same-name authors in another branch, product filters, other years/types, zero payment and zero signed fact. Loader tests verify bound values and selection of the saved source; team page/export tests verify the opt-in path. No production timing is inferred from local tests.

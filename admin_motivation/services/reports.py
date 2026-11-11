@@ -370,7 +370,7 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False, annual_accrual_snapshot=False):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False, annual_accrual_snapshot=False, period_authors_only=False):
     if kind == 'manager':
         values = {'GPGoods': [], 'Brend': [], **values}
     from functools import partial
@@ -424,6 +424,10 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             values = {**values, 'PortalDirectorRoster': report_roster()}
             source_sql += ' AND ' + REPORT_CONDITION
             annual_source_sql += ' AND ' + REPORT_CONDITION
+        if period_authors_only:
+            if kind!='manager-detail':raise ValidationError('Состав авторов периода доступен только для детализации мотивации.')
+            from .period_authors import restrict_sql as period_author_sql
+            source_sql=period_author_sql(source_sql,period_codes,calculation_variant)
         sql, args = bind_report_sql(source_sql, values)
         if kind == 'subdivisions' and values.get('PremiumPeriods'):
             periods = values['PremiumPeriods']
