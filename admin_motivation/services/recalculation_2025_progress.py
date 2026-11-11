@@ -6,24 +6,27 @@ from django.core.exceptions import ValidationError
 from django.utils import timezone as clock
 from ..conns import connect_database
 
+from . import calculation_stage_profile as profile
+
 TABLE='motivation.PortalRecalculation2025Progress'
 DDL=f"""IF OBJECT_ID(N'{TABLE}',N'U') IS NULL
  CREATE TABLE {TABLE}(RunId uniqueidentifier NOT NULL PRIMARY KEY,
  Stage_ nvarchar(150) NOT NULL,StageStartedAt datetime2 NOT NULL);"""
+DDL += profile.DDL
 
 
 def begin_sql():
     return f"""EXEC sys.sp_set_session_context @key=N'PortalRecalculation2025Run',@value=@portalRun;
  EXEC sys.sp_set_session_context @key=N'PortalRecalculation2025Stage',@value=N'Начало расчёта';
  EXEC sys.sp_set_session_context @key=N'PortalRecalculation2025StageAt',@value=@portalStarted;
- INSERT INTO {TABLE}(RunId,Stage_,StageStartedAt) VALUES(@portalRun,N'Начало расчёта',SYSUTCDATETIME());"""
+ INSERT INTO {TABLE}(RunId,Stage_,StageStartedAt) VALUES(@portalRun,N'Начало расчёта',SYSUTCDATETIME());"""+profile.begin('@portalRun',('Начало расчёта',*STAGES))
 
 
 def finish_sql(failed=False):
     label="COALESCE(CONVERT(nvarchar(150),SESSION_CONTEXT(N'PortalRecalculation2025Stage')),N'Начало расчёта')" if failed else "N'Расчёт завершён'"
     # After rollback preserve the stage from session context, whose value does
     # not roll back with the procedure's transaction. Keep its original time.
-    return f"""UPDATE {TABLE} SET Stage_={label},StageStartedAt=COALESCE(
+    return profile.finish(('Начало расчёта',*STAGES),failed=failed)+f"""UPDATE {TABLE} SET Stage_={label},StageStartedAt=COALESCE(
  TRY_CONVERT(datetime2,SESSION_CONTEXT(N'PortalRecalculation2025StageAt')),StageStartedAt)
  WHERE RunId=@portalRun;
  EXEC sys.sp_set_session_context @key=N'PortalRecalculation2025Run',@value=NULL;"""
@@ -39,7 +42,7 @@ BEGIN
  EXEC sys.sp_set_session_context @key=N'PortalRecalculation2025StageAt',@value=@portalStageAt_{stage_id(label)};
  UPDATE {TABLE} SET Stage_=N'{label}',StageStartedAt=@portalStageAt_{stage_id(label)}
  WHERE RunId=TRY_CONVERT(uniqueidentifier,SESSION_CONTEXT(N'PortalRecalculation2025Run'));
-END;\n"""
+END;\n"""+profile.mark(stage_id(label),f'recalc_{stage_id(label)}')
 
 
 STAGES=('Загрузка коэффициентов файла','Исторические формулы 2025','Чтение подготовленного факта',
@@ -102,6 +105,11 @@ def display(job,execution,state,connector=None,now=None):
             if isinstance(stage_at,datetime):
                 result['stage_elapsed']=max(0,int(((finished or completed or now)-aware(stage_at)).total_seconds()))
                 result['stage_ticking']=result['ticking']
+        result['stages']=profile.read(cursor,execution.run_id)
+        if result['ticking']:
+            from .calculation_jobs import job_name
+            from .calculation_live_progress import read as live_read
+            result['live']=live_read(cursor,job_name(job))
     except Exception:
         # Older/in-flight jobs cannot gain instrumentation retroactively.
         # Their recorded start time is still useful; never invent an SQL phase.

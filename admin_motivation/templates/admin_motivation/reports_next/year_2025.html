@@ -25,8 +25,11 @@
 {% if progress.interrupted and not progress.completed %}Время остановки не зафиксировано.{% else %}{% if progress.state_unknown %}С момента запуска{% else %}Длительность{% endif %}: <strong data-elapsed-seconds="{{ progress.elapsed }}" data-elapsed-ticking="{{ progress.ticking|yesno:'true,false' }}">{{ progress.elapsed }} сек.</strong>{% endif %}</p>
 {% if progress.stage %}<p>{% if state == 'failed' or state == 'interrupted' or state == 'unknown' %}Последний записанный этап{% else %}Этап{% endif %}: <strong>{{ progress.stage }}</strong>{% if progress.stage_elapsed != None and state == 'running' %} · <span data-elapsed-seconds="{{ progress.stage_elapsed }}" data-elapsed-ticking="{{ progress.stage_ticking|yesno:'true,false' }}">{{ progress.stage_elapsed }} сек.</span>{% endif %}</p>
 {% elif state == 'running' %}<p>Текущий этап этим запуском не записан. Подробные этапы появятся при новом запуске после обновления портала.</p>{% endif %}
+{% if progress.live.waiting %}<p>{{ progress.live.waiting }} · {{ progress.live.wait_ms }} мс (текущее ожидание).</p>{% endif %}
 {% if state == 'running' %}<p>Статус и этап обновляются каждые 10 секунд. Время обновляется каждую секунду. При редактировании параметров автообновление статуса приостанавливается.</p>{% endif %}
-</div>{% endif %}
+</div>
+{% if progress.stages %}<details><summary>Замеры этапов расчёта</summary>{% include 'admin_motivation/includes/calculation_stage_profile.html' with stages=progress.stages %}</details>{% endif %}
+{% endif %}
 {% if state == 'failed' and can_start %}<details open class="next-error"><summary>Журнал SQL Agent · последние запуски этого задания</summary>
 <p>Задание: <code>{{ agent_job_name }}</code>. Время — московское. Сверьте начало запуска со временем выше.</p>
 {% for row in agent_history %}<div><strong>{{ row.started }} · {{ row.status }} · {{ row.duration }}</strong><pre style="white-space:pre-wrap;overflow-wrap:anywhere">{{ row.message }}</pre></div>

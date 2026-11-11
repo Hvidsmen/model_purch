@@ -10,6 +10,7 @@
 <p role="status" data-prepared-status>Проверка состояния…</p><p data-prepared-ready></p>
 {% if not portal_motivation_readonly %}<form method="post">{% csrf_token %}<input type="hidden" name="action" value="prepare_sales"><button class="calculation-button" type="submit" data-prepared-start>Подготовить сейчас</button></form>{% endif %}
 <p class="calculation-monitor-note">Первый запуск также подключает ежедневное задание на 08:00 МСК. При обновлении SQL-процедур сохраните параметры основного задания один раз; для 2025 запустите пересчёт заново после готовности набора.</p>
+<details><summary>Замеры этапов последней подготовки</summary><div data-prepared-stages>Загрузка…</div></details>
 <details><summary>История подготовки</summary><div data-prepared-history>Загрузка…</div></details>
 </article>
 <p class="admin-notice warning">Основной вариант: квартальная и годовая суммы премии учитывают только IV квартал. Дополнительный вариант «Все кварталы 2026»: четыре квартальные премии и годовая часть IV квартала, результаты хранятся отдельно. В 2026 году условие квартальной и годовой выплаты за IV квартал проверяется только по IV кварталу Москвы + ТТ. За I–III кварталы дополнительно сохраняется раздельный сценарий Москвы и ТТ. HEAT исключён только у политиков. У продажников и директоров HEAT и канал ДПП учитываются. Доплат за предыдущие кварталы нет. После обновления запустите расчёт заново. После успешного основного расчёта за 2026 год автоматически выполняется «Все кварталы 2026» с теми же параметрами. При ошибке основного расчёта дополнительный не запускается. Для существующего автоматического задания после обновления один раз сохраните параметры и расписание.</p><div class="calculation-layout">
@@ -36,5 +37,5 @@
 <details class="calculation-help"><summary>Как выполняется расчёт и что нужно для подключения</summary><p>Задания выполняет SQL Server Agent, в том числе после перезапуска портала. Одновременные запуски из портала блокируются.</p><p>Процедура <code>motivation.sp_CalcBySub</code> запускается через подготовленную копию <code>motivation.PortalCalcBySub</code>, которая учитывает объединённые подразделения. Исходная процедура сохраняется.</p><p>Подключение: <code>DWH_SQL_CONN_STR</code>. Нужны работающая служба SQL Server Agent, права на задания msdb, чтение определения исходной процедуры и создание объектов в схеме motivation.</p></details>
 </section>
 <script src="{% static 'admin_motivation/calculation_monitor.js' %}?v=live-sql-progress-20261111" defer></script>
-<script src="{% static 'admin_motivation/prepared_sales.js' %}" defer></script>
+<script src="{% static 'admin_motivation/prepared_sales.js' %}?v=stage-profile-1" defer></script>
 {% endblock %}
