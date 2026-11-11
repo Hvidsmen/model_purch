@@ -204,7 +204,7 @@ class ReportsNextTests(TestCase):
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
             self.assertEqual(book['Политики'].max_row, 131)
             headers = [cell.value for cell in book['Политики'][5]]
-            total_index = headers.index('Всего по расчёту')
+            total_index = next(i for i,label in enumerate(headers) if label in ('Итого квартальных премий','Итого премий за выбранные периоды'))
             self.assertLess(headers.index('Годовая премия'), headers.index('Премия по расчёту'))
             self.assertEqual(sum(row[total_index].value for row in book['Политики'].iter_rows(min_row=6, max_row=130)), 125 * 90)
             book.close(); exported.close()
@@ -631,16 +631,16 @@ class ReportsNextTests(TestCase):
                 self.assertEqual([len(section['rows']) for section in presentation['team_sections']], [2, 2, 2])
                 self.assertEqual([section['people'] for section in presentation['team_sections']], [1, 1, 1])
                 self.assertContains(response, '<table class="nr-table nr-aligned-period-table nr-employee-premium-table"', count=3, html=False)
-                self.assertContains(response, 'Премия без учёта выполнения плана')
+                self.assertContains(response, presentation['premium_possible_label'])
                 self.assertContains(response, 'nr-kpi-types', count=3)
-                self.assertContains(response, 'Премия без учёта выполнения плана, ' + currency, count=3)
+                self.assertContains(response, presentation['premium_possible_label'] + ', ' + currency, count=3)
                 self.assertContains(response, 'class="num nr-possible-cell"', count=9)
                 self.assertTrue(all(row['possible'] == expected / 6 for section in presentation['team_sections'] for row in section['rows']))
                 exported = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency, 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
             summary = [row for row in book['Сводка'].iter_rows(min_row=6, values_only=True) if row[0] == 'Все выбранные подразделения' and row[1] in ('Политики','Продажи','Директора')]
-            self.assertIn('Премия без учёта выполнения плана, ' + currency,
+            self.assertIn(presentation['premium_possible_label'] + ', ' + currency,
                           [cell.value for cell in book['Сводка'][5]])
             self.assertEqual(sum(row[-1] for row in summary), expected)
             self.assertEqual(sum(row[-2] for row in summary), 0)

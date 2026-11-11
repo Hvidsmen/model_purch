@@ -78,7 +78,7 @@ def workbook(kind, data, metadata, query=None, title=None):
     show_annual=display.get('has_annual_accrual',False)
     annual_header=['В годовую премию, '+currency] if show_annual else []
     from .annual_accrual import total as annual_total
-    headers = ['Подразделение', 'Вид мотивации', 'Сотрудников', *period_headers, *annual_header, 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency]
+    headers = ['Подразделение', 'Вид мотивации', 'Сотрудников', *period_headers, *annual_header, 'Годовая доплата', display['premium_total_label'], display['premium_possible_label'] + ', ' + currency]
     ws = sheet('Сводка', headers, [28, 24, 16, *([21] * len(period_headers)), *([28] if show_annual else []), 22, 24, 48],
                'Итоги по каждому выбранному подразделению и общий итог по выбранным периодам', freeze_panes='D6')
     employees = display['registry_rows']
@@ -104,13 +104,14 @@ def workbook(kind, data, metadata, query=None, title=None):
                  *([section.get('annual_accrual')] if show_annual else []), section['bonus'], section['total'], section['possible']], 'subtotal')
     row(ws, ['ИТОГО', 'Все выбранные подразделения', display['people'], *display['period_totals'], *([display.get('annual_accrual')] if show_annual else []), display['bonus'], display['total'], display['possible']], 'grand')
     row(ws, [], 'blank')
+    row(ws, ['Итог содержит премии выбранных периодов и показанную доплату при её наличии. Начисление «В годовую премию» в этот итог не добавляется.'], 'note')
     if show_annual:row(ws, ['«В годовую премию» — начисленная годовая часть за выбранные кварталы до годового условия выплаты; отдельно в итог к выплате не добавляется. Пустое значение означает, что сохранённых данных нет.'], 'note')
-    row(ws, ['«Премия без учёта выполнения плана» — сумма по фактическим отгрузкам и коэффициентам без применения условия выполнения плана.'], 'note')
+    row(ws, [display['premium_possible_label']+' — сумма по выбранным периодам до применения условия выполнения плана. Начисление «В годовую премию» показано отдельно и в эту сумму не добавлено.'], 'note')
     row(ws, ['Подробности по сотрудникам — на отдельных листах. Состав директоров соответствует текущему справочнику.'], 'note')
 
     for section in display['team_sections']:
         ws = sheet(section['kind'][:31], ['Подразделение', 'Сотрудник', *period_headers,
-                   'Премия по расчёту', 'Годовая доплата', 'Всего по расчёту', 'Премия без учёта выполнения плана, ' + currency, 'Статус'],
+                   'Премия по расчёту', 'Годовая доплата', display['premium_total_label'], display['premium_possible_label'] + ', ' + currency, 'Статус'],
                    [26, 44, *([21] * len(period_headers)), 23, 22, 24, 48, 36],
                    section['kind'] + ' · Итоги по всем страницам отчёта')
         for index, employee in enumerate(section['rows']):
@@ -124,7 +125,7 @@ def workbook(kind, data, metadata, query=None, title=None):
                  section['amount'], section['bonus'], section['total'], section['possible'], None], 'grand')
 
     ws = sheet('По периодам', ['Подразделение', 'Сотрудник', 'Вид мотивации', 'Период',
-               'Валюта', 'Премия без учёта выполнения плана, ' + currency, 'Премия по расчёту', 'Годовая доплата', 'Всего по расчёту', 'Пояснение'],
+               'Валюта', display['premium_possible_label'] + ', ' + currency, 'Премия по расчёту', 'Годовая доплата', display['premium_total_label'], 'Пояснение'],
                [26, 44, 22, 26, 12, 48, 24, 22, 24, 62],
                'Расшифровка сумм и нулевых начислений по периодам')
     for index, item in enumerate(data['rows']):
