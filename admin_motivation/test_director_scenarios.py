@@ -148,12 +148,24 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(book['Сравнение'].max_row,11)
         self.assertEqual(book['1 Вариант'].max_row,3)
         self.assertEqual(book['3 Вариант'].max_row,3)
-        self.assertEqual(book['3 Вариант']['J2'].value,None)
-        self.assertEqual(book['3 Вариант']['D2'].value,'=1+1')
-        self.assertEqual(book['3 Вариант']['D2'].data_type,'s')
+        self.assertEqual(book['3 Вариант']['K2'].value,None)
+        self.assertEqual(book['3 Вариант']['E2'].value,'=1+1')
+        self.assertEqual(book['3 Вариант']['E2'].data_type,'s')
         self.assertEqual(book['Выполнение']['L2'].number_format,'0.00%')
         self.assertEqual(book['Выполнение']['L2'].value,.5)
-        self.assertEqual(book['3 Вариант']['N2'].value,24)
+        self.assertEqual(book['3 Вариант']['O2'].value,24)
+
+    def test_excel_explains_every_case_next_to_its_number(self):
+        from .services.director_scenario_excel import SCENARIO_DESCRIPTIONS
+        book=load_workbook(workbook(self.run_calc()))
+        self.assertEqual(book['Сравнение']['B1'].value,'Пояснение варианта')
+        for case in range(1,6):
+            sheet=book[f'{case} Вариант']
+            self.assertEqual(sheet['A2'].value,case)
+            self.assertEqual(sheet['B2'].value,SCENARIO_DESCRIPTIONS[case])
+            self.assertTrue(sheet['B2'].alignment.wrap_text)
+            self.assertEqual(sheet.freeze_panes,'H2')
+            self.assertEqual(book['Сравнение'].cell(case*2,2).value,SCENARIO_DESCRIPTIONS[case])
 
     def test_excel_parameters_has_no_selections_in_nonexistent_panes(self):
         from zipfile import ZipFile
@@ -424,8 +436,8 @@ class DirectorScenarioBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('#scenario-1')).to_contain_text('2025')
                 with page.expect_download() as pending:page.get_by_role('link',name='Скачать Excel · все пять вариантов',exact=True).click()
                 book=load_workbook(BytesIO(Path(pending.value.path()).read_bytes()))
-                self.assertEqual(book['3 Вариант']['N2'].value,24)
-                self.assertEqual(book['4 Вариант']['N2'].value,48)
+                self.assertEqual(book['3 Вариант']['O2'].value,24)
+                self.assertEqual(book['4 Вариант']['O2'].value,48)
                 self.assertEqual(book['1 Вариант'].max_row,3)
                 page.screenshot(path='/tmp/director-scenarios.png',full_page=True)
                 browser.close()

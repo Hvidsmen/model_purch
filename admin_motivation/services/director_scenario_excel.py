@@ -5,7 +5,15 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment
 from openpyxl.utils import get_column_letter
 
-SUMMARY=[('scenario','Вариант'),('year','Год'),('branch','Подразделение'),('employee','Сотрудник'),
+SCENARIO_DESCRIPTIONS={
+    1:'За 2025 год целиком. Москва и Термотрейд отдельно; директорские ставки модели 2026.',
+    2:'За 2026 год, I–III кварталы, как есть — фактическое выполнение. Москва и Термотрейд отдельно.',
+    3:'За 2026 год, I–III кварталы, при выполнении на 100% — факт заменён планом. Москва и Термотрейд отдельно.',
+    4:'Объединённый план Термотрейда и Москвы за I–III кварталы 2026, как есть. Каждый из двух директоров считается со всего объединённого подразделения.',
+    5:'Объединённый план Термотрейда и Москвы за I–III кварталы 2026 при выполнении на 100% — факт заменён планом. Каждый из двух директоров считается со всего объединённого подразделения.',
+}
+
+SUMMARY=[('scenario','Вариант'),('description','Пояснение варианта'),('year','Год'),('branch','Подразделение'),('employee','Сотрудник'),
  ('role','Роль'),('rate_source','Источник ставок'),('q1','I квартал, USD'),('q2','II квартал, USD'),
  ('q3','III квартал, USD'),('q4','IV квартал, USD'),('annual_accrued','Годовая часть начислена, USD'),
  ('annual_paid','Годовая часть выплачена, USD'),('bonus','Доплата, USD'),('total','К выплате, USD'),('notes','Примечание')]
@@ -35,6 +43,10 @@ def table(book,title,columns,rows,*,freeze_panes='G2'):
     for cell in sheet[1]:cell.font=Font(bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='6650BE');cell.alignment=Alignment(wrap_text=True)
     sheet.row_dimensions[1].height=44
     for col,(key,label) in enumerate(columns,1):sheet.column_dimensions[get_column_letter(col)].width=32 if key in {'employee','rate_source','branch','note','notes'} else 22
+    for col,(key,_) in enumerate(columns,1):
+        if key=='description':
+            sheet.column_dimensions[get_column_letter(col)].width=72
+            for row in range(2,sheet.max_row+1):sheet.row_dimensions[row].height=90
     return sheet
 
 
@@ -43,11 +55,12 @@ def workbook(snapshot):
     rows=[]
     for original in data['rows']:
         row=dict(original)
+        row['description']=SCENARIO_DESCRIPTIONS[row['scenario']]
         for q in range(1,5):row[f'q{q}']=row['quarters'][q-1] if row['year']==2025 or q<=3 else None
         rows.append(row)
-    table(book,'Сравнение',SUMMARY,rows)
+    table(book,'Сравнение',SUMMARY,rows,freeze_panes='H2')
     for case in data['scenarios']:
-        table(book,f"{case['id']} Вариант",SUMMARY,[row for row in rows if row['scenario']==case['id']])
+        table(book,f"{case['id']} Вариант",SUMMARY,[row for row in rows if row['scenario']==case['id']],freeze_panes='H2')
     table(book,'Выполнение',DETAIL,data['details'])
     rate_rows=[{**row,**{f'k{i}':value for i,value in enumerate(row['values'])}} for row in data['rate_inputs']]
     table(book,'Ставки',[('employee','Источник ставок'),('branch','Подразделение'),('planning','Группа планов продаж'),
@@ -65,7 +78,7 @@ def workbook(snapshot):
         {'name':'Поправки','value':'Поправки подразделения по периодам взяты из выбранной версии модели 2026'},
         {'name':'Участники 2025','value':'Только два получателя директорских ставок; собственные премии источников ставок не включены'},
         {'name':'Порог','value':'I квартал без порога; II — I+II; III — III; IV и год — весь год; неположительный план не определяет выполнение'}]
-    for case in data['scenarios']:parameters.append({'name':f"Вариант {case['id']}",'value':case['title']})
+    for case in data['scenarios']:parameters.append({'name':f"Вариант {case['id']}",'value':SCENARIO_DESCRIPTIONS[case['id']]})
     for year,source in data['sources'].items():
         parameters.append({'name':f'Источник {year}','value':f"{source.get('source','Исходный расчёт')} · {source['run_id']} · {source['completed_at']} · план {data['plans'][year]['source_version']}"})
         for item in source.get('discount_segments',[]):

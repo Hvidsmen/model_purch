@@ -58,8 +58,8 @@ class DirectorFullBrowserTests(ScenarioFlow,StaticLiveServerTestCase):
                 raw=Path(pending.value.path()).read_bytes();book=load_workbook(BytesIO(raw))
                 self.assertEqual(len(book.sheetnames),9)
                 for case,values in enumerate(GOLDEN,1):
-                    self.assertEqual(book[f'{case} Вариант']['N2'].value,values[0])
-                    self.assertEqual(book[f'{case} Вариант']['N3'].value,values[1])
+                    self.assertEqual(book[f'{case} Вариант']['O2'].value,values[0])
+                    self.assertEqual(book[f'{case} Вариант']['O3'].value,values[1])
                 self.assertEqual(len(self.warehouse.calls),calls)
                 if output:=os.environ.get('DIRECTOR_VERIFICATION_OUTPUT'):
                     Path(output).write_bytes(raw)

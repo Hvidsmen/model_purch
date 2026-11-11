@@ -77,9 +77,9 @@ class DirectorEndToEndTests(ScenarioFlow,TestCase):
         for case,totals in enumerate(GOLDEN,1):
             sheet=book[f'{case} Вариант'];self.assertEqual(sheet.max_row,3)
             for row,value in enumerate(totals,2):
-                self.assertEqual(sheet.cell(row,14).value,value)
-                self.assertEqual(sheet.cell(row,14).data_type,'n')
-            if case>1:self.assertIsNone(sheet['J2'].value)
+                self.assertEqual(sheet.cell(row,15).value,value)
+                self.assertEqual(sheet.cell(row,15).data_type,'n')
+            if case>1:self.assertIsNone(sheet['K2'].value)
         self.assertEqual(book['Выполнение']['L2'].number_format,'0.00%')
         self.assertEqual(book['Ставки']['F2'].number_format,'0.00%')
         metadata=str(list(book['Параметры'].values))
@@ -99,7 +99,7 @@ class DirectorEndToEndTests(ScenarioFlow,TestCase):
         self.warehouse.change("UPDATE PortalPreparedSales SET Price=Price+100 WHERE Subdivision='M' AND ClosedDealDate<'20261001'")
         self.submit();self.assertEqual(DirectorScenarioComparison.objects.count(),2)
         first.refresh_from_db();self.assertEqual(first.results,original)
-        book,raw=self.book(response.url);self.assertEqual(book['2 Вариант']['N2'].value,4)
+        book,raw=self.book(response.url);self.assertEqual(book['2 Вариант']['O2'].value,4)
         newest=DirectorScenarioComparison.objects.first()
         self.assertEqual(D(next(r['total'] for r in newest.results['rows'] if r['scenario']==2 and r['employee_id']==self.people[0].pk)),D('4.8'))
 
@@ -209,13 +209,13 @@ class DirectorEndToEndTests(ScenarioFlow,TestCase):
                 (amount,'M',quarter))
         response=self.submit();self.assertEqual(response.status_code,302)
         book,raw=self.book(response.url)
-        self.assertEqual(book['1 Вариант']['G2'].value,.8)
-        self.assertEqual(book['1 Вариант']['H2'].value,0)
+        self.assertEqual(book['1 Вариант']['H2'].value,.8)
         self.assertEqual(book['1 Вариант']['I2'].value,0)
-        self.assertEqual(book['1 Вариант']['J2'].value,29.6)
-        self.assertEqual(book['1 Вариант']['L2'].value,8)
-        self.assertEqual(book['1 Вариант']['M2'].value,1.6)
-        self.assertEqual(book['1 Вариант']['N2'].value,40)
+        self.assertEqual(book['1 Вариант']['J2'].value,0)
+        self.assertEqual(book['1 Вариант']['K2'].value,29.6)
+        self.assertEqual(book['1 Вариант']['M2'].value,8)
+        self.assertEqual(book['1 Вариант']['N2'].value,1.6)
+        self.assertEqual(book['1 Вариант']['O2'].value,40)
 
     def test_both_missing_rate_sources_are_reported_in_one_preflight(self):
         QuerySet(model=SubdivisionDirectorCoeff).filter(version=self.version,employee__in=self.people[:2]).delete()
