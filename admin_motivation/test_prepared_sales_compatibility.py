@@ -28,7 +28,8 @@ class LegacyPreparationTests(SimpleTestCase):
     def test_canonical_math_without_old_duplicate_guard_needs_no_type_assumption(self):
         source=sales.canonical_preparation().replace(DOCUMENT_GUARD,'')+';WITH fact AS (SELECT 1)'
         cursor=Mock();sql=sales.patch(source,cursor=cursor)
-        self.assertIn(sales.MARKER,sql);cursor.execute.assert_not_called()
+        self.assertIn(sales.MARKER,sql)
+        self.assertFalse(any('SELECT system_type_id' in call.args[0] for call in cursor.execute.call_args_list))
         # The producer's independent conflict validation is still present.
         producer=sales.procedure_sql()
         self.assertIn('COUNT_BIG(*) > 1',producer)

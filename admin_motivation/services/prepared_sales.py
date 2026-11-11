@@ -138,10 +138,13 @@ def patch(definition, *, historical_author=False, cursor=None):
     original_where=definition[setup.start():setup.end()]
     where=re.search(r'\bWHERE\s+([^;]+);',original_where,re.I)[1]
     where=where.replace('AND YEAR(ClosedDealDate)=@FactYear',
-        'AND ClosedDealDate<DATEFROMPARTS(@FactYear+1,1,1) AND YEAR(ClosedDealDate)=@FactYear')
+        'AND ClosedDealDate<DATEFROMPARTS(@FactYear+1,1,1)')
+    from .prepared_sales_projection import columns_for
+    projection,column_count=columns_for(definition[stop:]+'\n'+where,cursor,historical_author=historical_author)
     # Scope is applied while reading the common set, preserving each variant's branches.
     replacement=f"""{MARKER}
-DECLARE @PortalPreparedRun uniqueidentifier,@PortalSalesSchema nvarchar(max)={SCHEMA};
+DECLARE @PortalPreparedRun uniqueidentifier,@PortalSalesSchema nvarchar(max)={SCHEMA},
+ @PortalPreparedReadStarted datetime2=SYSUTCDATETIME();
 SELECT @PortalPreparedRun=r.RunId FROM motivation.PortalPreparedSalesActive a
  JOIN motivation.PortalPreparedSalesRun r ON r.RunId=a.RunId
  WHERE a.Id=1 AND r.State_=N'completed' AND r.Rule_=N'{RULE}'
@@ -149,7 +152,12 @@ SELECT @PortalPreparedRun=r.RunId FROM motivation.PortalPreparedSalesActive a
  AND r.PreparedTo>=DATEFROMPARTS(@FactYear+1,1,1) AND r.SourceSchema=@PortalSalesSchema;
 IF @FactYear<2025 OR @PortalPreparedRun IS NULL OR OBJECT_ID(N'motivation.PortalPreparedSales',N'U') IS NULL
  THROW 50040,N'Нет подходящего готового набора продаж. В Центре расчётов запустите подготовку факта с 2025 года',1;
-SELECT * INTO {WORKING_TABLE} FROM {TABLE} WHERE {where};
+SET @PortalPreparedReadStarted=SYSUTCDATETIME();
+SELECT {projection} INTO {WORKING_TABLE} FROM {TABLE} WHERE {where};
+DECLARE @PortalPreparedRows bigint=@@ROWCOUNT;
+PRINT N'Подготовленный факт: строк='+CONVERT(nvarchar(30),@PortalPreparedRows)
+ +N'; полей={column_count if column_count is not None else 'все'}; копирование, мс='
+ +CONVERT(nvarchar(30),DATEDIFF(MILLISECOND,@PortalPreparedReadStarted,SYSUTCDATETIME()));
 """
     if historical_author:
         replacement+=f"UPDATE {WORKING_TABLE} SET Даичи_АвторСделкиНаименование=COALESCE(NULLIF(Даичи_АвторСделкиНаименование,N''),{ORIGINAL_AUTHOR});\n"
