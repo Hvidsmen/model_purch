@@ -129,7 +129,12 @@ def patch_source(source, existing=False):
         kind = re.search(r"TRIM\(sc\.TypeCoeff\)\s*=\s*N?'(Политики|Продажи)'", text, re.I)
         alias = 'p' if re.search(r'\bp\.PlanningGroupSalesErp', text, re.I) else 't'
         date = 's.ClosedDealDate' if alias == 'p' else 't.Date_'
-        brand = 'p.BrandName' if alias == 'p' else 't.[Марка(Бренд)]'
+        # Classify fact exactly like the legacy plan inner projection. Brand
+        # is intentionally empty for mobile and other non-brand-bearing goods.
+        goods = ("CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE N'' END"
+                 if alias=='p' else 't.GroupERP')
+        brand = ("CASE WHEN p.GroupERP IN ('Бытовые кондиционеры','Полупромышленные кондиционеры','Системы мульти-сплит','Системы VRF') THEN p.BrandName ELSE N'' END"
+                 if alias=='p' else 't.[Марка(Бренд)]')
         if not kind:
             raise ValidationError('Не распознан вид коэффициента в соединении.')
         replacement = f"""OUTER APPLY (SELECT TOP(1) c.PGSales,c.Group_,c.Brand,c.TypeCoeff,c.DateFrom,c.DateTo,c.Subdivision,
@@ -141,14 +146,15 @@ def patch_source(source, existing=False):
  FROM #test2025_coeff c
  WHERE {date} BETWEEN c.DateFrom AND c.DateTo AND c.TypeCoeff=N'{kind[1]}'
  AND c.Subdivision={join['sub']}.SubdivisionName AND c.PGSales={alias}.PlanningGroupSalesERP
- AND (c.Group_=N'*' OR c.Group_={alias}.GroupERP)
+ AND (c.Group_=N'*' OR c.Group_={goods})
  AND (c.Brand IN (N'*',N'') OR c.Brand={brand})
  ORDER BY CASE WHEN c.Group_=N'*' THEN 0 ELSE 1 END DESC,
  CASE WHEN c.Brand IN (N'*',N'') THEN 0 ELSE 1 END DESC) chosen
  LEFT JOIN #test2025_group_min gm ON gm.PGSales={alias}.PlanningGroupSalesERP AND gm.TypeCoeff=N'{kind[1]}'
  LEFT JOIN #test2025_table_min tm ON tm.TypeCoeff=N'{kind[1]}'
  CROSS APPLY (SELECT COALESCE(chosen.PGSales,{alias}.PlanningGroupSalesERP) AS PGSales,
- COALESCE(chosen.Group_,{alias}.GroupERP,N'') AS Group_,COALESCE(chosen.Brand,{brand},N'') AS Brand,
+ CASE WHEN COALESCE({goods},N'')=N'' THEN N'' ELSE COALESCE(chosen.Group_,{goods},N'') END AS Group_,
+ CASE WHEN COALESCE({brand},N'')=N'' THEN N'' ELSE COALESCE(chosen.Brand,{brand},N'') END AS Brand,
  N'{kind[1]}' AS TypeCoeff,chosen.VariationCalculate AS VariationCalculate,
  COALESCE(chosen.K0,gm.Minimum_,tm.Minimum_) AS K0,
  COALESCE(chosen.K1,gm.Minimum_,tm.Minimum_) AS K1,
@@ -163,13 +169,6 @@ def patch_source(source, existing=False):
         raise ValidationError('Не распознаны товарные ключи двух видов факта.')
     source = re.sub(r't\.GroupERP\s*\[ГруппаТоваров\]', 'sc.Group_ [ГруппаТоваров]', source, flags=re.I)
     source = re.sub(r't\.\[Марка\(Бренд\)\]\s*\[Марка\]', 'sc.Brand [Марка]', source, flags=re.I)
-    # The file lookup uses full ERP classification in fact. Preserve those
-    # same raw keys in plan input BEFORE file/wildcard/minimum matching; the
-    # legacy inner projection erased brands and groups outside a fixed list.
-    source,plan_groups=re.subn(r"CASE\s+WHEN\s+g\.PlanningGroupSalesErp\s+IN\s*\([^)]*\)\s+THEN\s+g\.GroupERP\s+ELSE\s+'[^']*'\s+END",'g.GroupERP',source,flags=re.I)
-    source,plan_brands=re.subn(r"CASE\s+WHEN\s+g\.GroupERP\s+IN\s*\([^)]*\)\s+THEN\s+BrandName\s+ELSE\s+'[^']*'\s+END",'g.BrandName',source,flags=re.I)
-    if plan_groups!=4 or plan_brands!=4:
-        raise ValidationError('Не распознаны полные ERP-ключи двух видов плана 2025.')
     # Match the same wildcard classification when assigning policy plan shares.
     share_joins = list(re.finditer(r'LEFT\s+JOIN\s+#percent_plan_menger\s+pm\s+ON[\s\S]*?AND\s+t\.\[Марка\(Бренд\)\]\s*=\s*pm\.Марка', source, re.I))
     for join in reversed(share_joins):

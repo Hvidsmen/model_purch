@@ -27,23 +27,17 @@ class PlanClassificationTests(SimpleTestCase):
             results.append(self.db.execute(query,{'PlanVersion':'Selected','DateFrom':'20250101','DateTo':'20260101'}).fetchall())
         return results
 
-    def test_both_plan_kinds_keep_raw_erp_keys_used_by_fact_rate_lookup(self):
+    def test_both_plan_kinds_keep_canonical_empty_mobile_brand_and_other_group(self):
         before=self.inputs(template_source())
         after=self.inputs(patch_source(template_source()))
-        expected={('M','1. RAC','Мобильные кондиционеры','Brand A'):100,
-            ('M','1. RAC','Мобильные кондиционеры','Brand B'):200,
-            ('M','Other','Accessories','Brand C'):300,
+        expected={('M','1. RAC','Мобильные кондиционеры',''):300,
+            ('M','Other','',''):300,
             ('M','1. RAC','Бытовые кондиционеры','Brand D'):400,
-            ('TT','1. RAC','Мобильные кондиционеры','Brand A'):500}
+            ('TT','1. RAC','Мобильные кондиционеры',''):500}
         for rows in after:
             actual={(r[0],r[1],r[3],r[4]):r[5] for r in rows}
             self.assertEqual(actual,expected)
-        for old,new in zip(before,after):
-            self.assertEqual(sum(r[5] for r in old),sum(r[5] for r in new))
-        # Reproduce the real mismatch: older plan input merged both mobile
-        # brands into '', and erased the non-RAC goods key.
-        self.assertTrue(any(r[3]=='Мобильные кондиционеры' and r[4]=='' and r[5]==300 for r in before[0]))
-        self.assertTrue(any(r[1]=='Other' and r[3]=='' and r[4]=='' for r in before[0]))
+        self.assertEqual(before,after)
 
 
 class ParticipatingPlanValidationTests(SimpleTestCase):
