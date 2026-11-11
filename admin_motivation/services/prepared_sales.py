@@ -193,6 +193,8 @@ CREATE INDEX IX_document_sales_match ON #document_sales(DocumentKey, Номен�
     # Enrich the unpublished staging table directly: avoid copying the entire
     # multi-year set a second time from tempdb before publication.
     body=body.replace(WORKING_TABLE,'DataWH.motivation.PortalPreparedSalesStage')
+    from .prepared_sales_discounts import patch as cache_discount_rates
+    body=cache_discount_rates(body)
     from .calculation_performance import MARKER as documents_marker
     if body.count(documents_marker)!=1:raise ValidationError('Не распознана граница подбора документов подготовки факта.')
     body=body.replace(documents_marker,profile.mark(1,'prepare_docs')+"UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Подбор документов' WHERE RunId=@RunId;\n"+documents_marker,1)

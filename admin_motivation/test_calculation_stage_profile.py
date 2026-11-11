@@ -13,7 +13,8 @@ class StageProfileTests(SimpleTestCase):
             for key in profile.FIELDS:
                 self.assertIn(f"@key=N'PortalProfile_{key}_{index}',@value=NULL",sql)
         self.assertNotIn('OPENJSON',sql)
-        self.assertIn('WHERE session_id=@@SPID',sql)
+        self.assertIn('FROM sys.dm_exec_requests WHERE session_id=@@SPID AND request_id=CURRENT_REQUEST_ID()',sql)
+        self.assertNotIn('sys.dm_exec_sessions',sql)
         self.assertIn('END TRY BEGIN CATCH',sql)
 
     def intervals(self,failed):

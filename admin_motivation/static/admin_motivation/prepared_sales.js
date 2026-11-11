@@ -28,7 +28,7 @@
   const header=table.createTHead().insertRow();for(const [,label] of columns){const cell=document.createElement('th');cell.textContent=label;header.append(cell);}
   const body=table.createTBody();for(const stage of stages){const row=body.insertRow();for(const [key] of columns){row.insertCell().textContent=key==='state'?(labels[stage[key]]||stage[key]):(stage[key]??'—');}}
   const wrapper=document.createElement('div');wrapper.style.overflowX='auto';wrapper.append(table);target.append(wrapper);
-  const note=document.createElement('p');note.textContent='Счётчики — разницы показаний сессии SQL Server. «—» означает, что счётчик недоступен. CPU и длительность не определяют причину ожидания.';target.append(note);
+  const note=document.createElement('p');note.textContent='Счётчики — разницы показаний активного запроса SQL Server. «—» означает, что счётчик недоступен. CPU и длительность не определяют причину ожидания.';target.append(note);
  }
  async function refresh(){
   if(document.hidden||fetching)return;
