@@ -3,8 +3,9 @@
 {% block content %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=all-2026-period-columns-20261103">
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=period-types-fit-20261106">
+{% if is_detail %}<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103">{% endif %}
 <section class="content nr-page nr-all-year-page">
-<div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>Премии команды</h1><p class="nr-subtitle">I–III кварталы: Москва и ТТ раздельно или объединённо. IV квартал и годовая часть: по результатам IV квартала Москвы + ТТ.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
+<div class="nr-heading"><div><span class="nr-eyebrow">Дополнительный вариант · отдельный расчёт</span><h1>{% if is_detail %}Детальный расчёт · Все кварталы 2026{% else %}Премии команды{% endif %}</h1><p class="nr-subtitle">I–III кварталы: Москва и ТТ раздельно или объединённо. IV квартал и годовая часть: по результатам IV квартала Москвы + ТТ.</p></div><span class="nr-status">2026 · отдельные результаты</span></div>
 <p class="nr-note">Основной вариант с начислением только за IV квартал сохраняется. Здесь используются отдельное задание и отдельные результаты. Доплата за прошлые кварталы не начисляется повторно.</p>
 {% for message in messages %}<p class="nr-note" role="status">{{ message }}</p>{% endfor %}
 {% if error %}<p class="next-error" role="alert">{{ error }}</p>{% endif %}
@@ -17,7 +18,7 @@
 {{ form.non_field_errors }}<div class="nr-filter-actions"><button class="btn btn-primary" type="submit">Рассчитать все кварталы 2026</button></div></form></details>{% endif %}
 {% if job %}<p class="nr-muted">Задание: {{ job.name }}{% if job.error %} · {{ job.error }}{% endif %}. <a href="{% url 'motivation_report_all_2026' %}?run=1">Обновить результат</a></p>{% endif %}
 {% if execution %}<p class="nr-context">Последний успешный дополнительный расчёт: {% timezone 'Europe/Moscow' %}{{ execution.completed_at|date:'d.m.Y H:i' }}{% endtimezone %} МСК</p>{% endif %}
-<form method="get" id="native-report-filters" class="next-filter nr-filter-panel"><input type="hidden" name="year" value="2026">
+<form method="get" id="native-report-filters" class="next-filter nr-filter-panel"><input type="hidden" name="year" value="2026">{% if is_detail %}<input type="hidden" name="detail" value="1">{% endif %}
 <label>Сценарий расчёта<select name="scenario"><option value="combined" {% if scenario != 'separate' %}selected{% endif %}>Москва + ТТ · объединённо</option><option value="separate" {% if scenario == 'separate' %}selected{% endif %}>Москва и ТТ · раздельно · I–III кварталы</option></select></label>
 {% include 'admin_motivation/reports_next/_subdivision_select.html' %}
 {% include 'admin_motivation/reports_next/_motivation_types.html' %}
@@ -25,12 +26,12 @@
 <label>Сотрудник<input name="author" value="{{ query.author }}" placeholder="Точное ФИО · пусто — все доступные"></label>
 <label>Валюта<select name="currency"><option {% if query.currency != 'RUB' %}selected{% endif %}>USD</option><option {% if query.currency == 'RUB' %}selected{% endif %}>RUB</option></select></label>
 <div class="nr-field" style="grid-column:1/-1">Периоды<div class="nr-controls-row">{% for choice in periods %}<label><input type="checkbox" name="period" value="{{ choice.code }}" {% if choice.selected %}checked{% endif %}> {{ choice.label }}</label>{% endfor %}<small>Пустой выбор — {% if scenario == 'separate' %}все три квартала{% else %}все пять периодов{% endif %}.</small></div></div>
-<div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button>{% if data != None %}<a href="{{ export_url }}">↓ Excel</a>{% endif %}</div></form>
+<div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button>{% if data != None %}<a href="{{ export_url }}">↓ Excel</a>{% if is_detail %}<a href="{{ summary_url }}">← К сводке</a>{% else %}<a class="btn btn-outline-primary" href="{{ detail_url }}">Детальный расчёт · K0–K4</a>{% endif %}{% endif %}</div></form>
 {% if data != None %}{% include 'admin_motivation/reports_next/_team_summary.html' %}
 {% include 'admin_motivation/reports_next/_report_period_cards.html' %}
 {% include 'admin_motivation/reports_next/_performance_sections.html' %}
 
-{% include 'admin_motivation/reports_next/_all_2026_tables.html' %}
+{% if detail %}<section class="nr-deep"><h2>Детальный расчёт · Все кварталы 2026</h2><p>Сценарий: {% if scenario == 'separate' %}Москва и Термотрейд раздельно{% else %}Москва и Термотрейд объединённо{% endif %}. Данные дополнительного расчёта; основной вариант не подставляется.</p>{% include 'admin_motivation/reports/manager_detail.html' with data=detail new_report_terms=True %}</section>{% else %}{% include 'admin_motivation/reports_next/_all_2026_tables.html' %}{% endif %}
 {% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_team_tabs.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/report_type_filter.js' %}?v=motivation-multi-20261103"></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=motivation-multi-20261103"></script><script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
+{% block module_js %}{{ block.super }}{% if detail %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=detail-fit-20261103" defer></script>{% endif %}<script src="{% static 'admin_motivation/report_team_tabs.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/report_type_filter.js' %}?v=motivation-multi-20261103"></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=motivation-multi-20261103"></script><script>if(document.querySelector('[data-all-year-pending]'))setTimeout(()=>location.reload(),10000);</script>{% endblock %}
