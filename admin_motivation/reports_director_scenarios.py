@@ -96,7 +96,8 @@ def report(request):
         return JsonResponse({'error':error,'progress_token':token_for(request.user)},status=400)
     if request.GET.get('export')=='xlsx' and snapshot:
         return FileResponse(workbook(snapshot),as_attachment=True,filename=f'director-scenarios-{snapshot.pk}.xlsx')
-    data=snapshot.results if snapshot else None
+    from .services.director_scenario_presenter import with_quarter_premiums
+    data=with_quarter_premiums(snapshot.results) if snapshot else None
     cases=[]
     if data:
         for case in data['scenarios']:cases.append({**case,'rows':[r for r in data['rows'] if r['scenario']==case['id']]})

@@ -1,0 +1,3 @@
+<td><details class="director-premium-breakdown"><summary title="Начисленная годовая часть; раскрыть отчисления по кварталам">{% if row.annual_accrued != None %}{{ row.annual_accrued|floatformat:2 }}{% else %}—{% endif %}</summary>
+<p>I кв.: {{ row.annual_q1|floatformat:2|default:'—' }} USD<br>II кв.: {{ row.annual_q2|floatformat:2|default:'—' }} USD<br>III кв.: {{ row.annual_q3|floatformat:2|default:'—' }} USD{% if row.annual_q4 != None %}<br>IV кв.: {{ row.annual_q4|floatformat:2 }} USD{% endif %}</p>
+</details></td>

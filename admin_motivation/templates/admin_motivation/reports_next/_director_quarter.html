@@ -1,0 +1,1 @@
+<td>{% if unavailable %}—{% else %}<details class="director-premium-breakdown"><summary title="К выплате; раскрыть премию без учёта выполнения плана">{% if amount != None %}{{ amount|floatformat:2 }}{% else %}—{% endif %}</summary><p>Без учёта выполнения плана: {% if possible != None %}{{ possible|floatformat:2 }} USD{% else %}нет данных{% endif %}</p></details>{% endif %}</td>

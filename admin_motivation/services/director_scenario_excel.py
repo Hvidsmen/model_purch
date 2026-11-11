@@ -14,8 +14,9 @@ SCENARIO_DESCRIPTIONS={
 }
 
 SUMMARY=[('scenario','Вариант'),('description','Пояснение варианта'),('year','Год'),('branch','Подразделение'),('employee','Сотрудник'),
- ('role','Роль'),('rate_source','Источник ставок'),('q1','I квартал, USD'),('q2','II квартал, USD'),
- ('q3','III квартал, USD'),('q4','IV квартал, USD'),
+ ('role','Роль'),('rate_source','Источник ставок'),
+ *[item for q,label in enumerate(('I','II','III','IV'),1) for item in
+   ((f'q{q}_possible',f'{label} квартал: без учёта выполнения плана, USD'),(f'q{q}',f'{label} квартал: к выплате, USD'))],
  *[(f'annual_q{q}',f'В годовую за {label} квартал, USD') for q,label in enumerate(('I','II','III','IV'),1)],
  ('annual_accrued','Годовая часть начислена, USD'),
  ('annual_paid','Годовая часть выплачена, USD'),('bonus','Доплата, USD'),('total','К выплате, USD'),('notes','Примечание')]
@@ -24,8 +25,25 @@ DETAIL=[('scenario','Вариант'),('employee','Сотрудник'),('rate_s
  ('period','Период'),('plan','План, USD'),('fact','Факт, USD'),('ratio','Выполнение'),
  ('department_ratio','Выполнение подразделения'),('threshold','Порог'),('correction','Поправка периода'),
  ('possible','Начислено, USD'),('annual_contribution','В годовую за квартал, USD'),('paid','Выплачено, USD'),('bonus','Доплата, USD'),('rate_origin','Подбор ставки'),('note','Причина')]
-MONEY={'q1','q2','q3','q4','annual_accrued','annual_paid','bonus','total','plan','fact','possible','paid','annual_contribution',*[f'annual_q{q}' for q in range(1,5)]}
+MONEY={'q1','q2','q3','q4','annual_accrued','annual_paid','bonus','total','plan','fact','possible','paid','annual_contribution',*[f'annual_q{q}' for q in range(1,5)],*[f'q{q}_possible' for q in range(1,5)]}
 PERCENT={'ratio','department_ratio','threshold'}
+
+
+
+def fold_summary(sheet,columns):
+    positions={key:index for index,(key,_) in enumerate(columns,1)}
+    sheet.sheet_properties.outlinePr.summaryRight=True
+    sheet.sheet_properties.outlinePr.showOutlineSymbols=True
+    sheet.sheet_view.showOutlineSymbols=True
+    for key in ('role','rate_source','annual_paid','bonus'):
+        sheet.column_dimensions[get_column_letter(positions[key])].hidden=True
+    for q in range(1,5):
+        letter=get_column_letter(positions[f'q{q}_possible'])
+        sheet.column_dimensions.group(letter,letter,outline_level=1,hidden=True)
+        sheet.column_dimensions[get_column_letter(positions[f'q{q}'])].collapsed=True
+    sheet.column_dimensions.group(get_column_letter(positions['annual_q1']),
+        get_column_letter(positions['annual_q4']),outline_level=1,hidden=True)
+    sheet.column_dimensions[get_column_letter(positions['annual_accrued'])].collapsed=True
 
 
 def table(book,title,columns,rows,*,freeze_panes='G2'):
@@ -49,11 +67,13 @@ def table(book,title,columns,rows,*,freeze_panes='G2'):
         if key=='description':
             sheet.column_dimensions[get_column_letter(col)].width=72
             for row in range(2,sheet.max_row+1):sheet.row_dimensions[row].height=90
+    if columns is SUMMARY:fold_summary(sheet,columns)
     return sheet
 
 
 def workbook(snapshot):
-    data=snapshot.results;book=Workbook();book.remove(book.active)
+    from .director_scenario_presenter import with_quarter_premiums
+    data=with_quarter_premiums(snapshot.results);book=Workbook();book.remove(book.active)
     rows=[]
     for original in data['rows']:
         row=dict(original)

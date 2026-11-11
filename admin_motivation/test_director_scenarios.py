@@ -98,6 +98,44 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(D(r['quarters'][3]),0);self.assertEqual(D(r['annual_paid']),0)
         self.assertEqual(D(r['annual_accrued']),6);self.assertEqual(D(r['bonus']),0)
 
+    def test_possible_quarter_premium_is_visible_when_payment_is_zero(self):
+        from .services.director_scenario_presenter import with_quarter_premiums
+        snapshot=self.run_calc();data=snapshot.results;row=self.row(data,2)
+        self.assertEqual(D(row['quarters'][2]),0)
+        self.assertGreater(D(row['q3_possible']),0)
+        expected=D(row['q3_possible'])
+        for saved in data['rows']:
+            for q in range(1,5):saved.pop(f'q{q}_possible')
+        displayed=with_quarter_premiums(data)
+        self.assertEqual(D(self.row(displayed,2)['q3_possible']),expected)
+        self.assertNotIn('q3_possible',row)  # Display never mutates the snapshot.
+        book=load_workbook(workbook(snapshot));sheet=book['2 Вариант']
+        headers=[c.value for c in sheet[1]]
+        cell=sheet.cell(2,headers.index('III квартал: без учёта выполнения плана, USD')+1)
+        self.assertEqual(D(str(cell.value)),expected)
+        self.assertEqual(cell.number_format,'#,##0.00;[Red]-#,##0.00')
+        self.assertIsNone(self.row(displayed,2)['q4_possible'])
+
+    def test_excel_quarter_bases_and_annual_breakdown_are_collapsed_groups(self):
+        from openpyxl.utils import get_column_letter
+        from .services.director_scenario_excel import SUMMARY
+        book=load_workbook(workbook(self.run_calc()))
+        positions={key:i for i,(key,_) in enumerate(SUMMARY,1)}
+        for name in ['Сравнение',*[f'{case} Вариант' for case in range(1,6)]]:
+            sheet=book[name]
+            self.assertTrue(sheet.sheet_properties.outlinePr.summaryRight)
+            self.assertTrue(sheet.sheet_view.showOutlineSymbols)
+            for key in ('role','rate_source','annual_paid','bonus'):
+                self.assertTrue(sheet.column_dimensions[get_column_letter(positions[key])].hidden)
+            for q in range(1,5):
+                detail=sheet.column_dimensions[get_column_letter(positions[f'q{q}_possible'])]
+                self.assertTrue(detail.hidden);self.assertEqual(detail.outlineLevel,1)
+                summary=sheet.column_dimensions[get_column_letter(positions[f'q{q}'])]
+                self.assertTrue(summary.collapsed);self.assertFalse(summary.hidden)
+            group=sheet.column_dimensions[get_column_letter(positions['annual_q1'])]
+            self.assertTrue(group.hidden);self.assertEqual(group.max,positions['annual_q4'])
+            self.assertTrue(sheet.column_dimensions[get_column_letter(positions['annual_accrued'])].collapsed)
+
     def test_annual_breakdown_includes_unpaid_quarter(self):
         snapshot=self.run_calc();data=snapshot.results
         row=self.row(data,2)
@@ -183,7 +221,7 @@ class DirectorScenarioTests(TestCase):
         self.assertEqual(book['Сравнение'].max_row,11)
         self.assertEqual(book['1 Вариант'].max_row,3)
         self.assertEqual(book['3 Вариант'].max_row,3)
-        self.assertEqual(book['3 Вариант']['K2'].value,None)
+        self.assertIsNone(book['3 Вариант'].cell(2,[c.value for c in book['3 Вариант'][1]].index('IV квартал: к выплате, USD')+1).value)
         self.assertEqual(book['3 Вариант']['E2'].value,'=1+1')
         self.assertEqual(book['3 Вариант']['E2'].data_type,'s')
         self.assertEqual(book['Выполнение']['L2'].number_format,'0.00%')
