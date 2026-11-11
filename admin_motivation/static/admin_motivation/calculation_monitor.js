@@ -15,6 +15,13 @@
   }
   cards.forEach(card=>card.querySelector('[data-report-subdivision]')?.addEventListener('change',()=>{if(card.dataset.reportBase)reportTarget(card,card.dataset.reportBase);}));
   let active = false;
+  setInterval(() => cards.forEach(card => {
+    const timer=card.querySelector('[data-job-elapsed]');
+    if(timer && card.dataset.runStarted) {
+      const seconds=Math.max(0,Math.floor((Date.now()-Number(card.dataset.runStarted))/1000));
+      timer.textContent=`Выполняется: ${Math.floor(seconds/3600)} ч ${Math.floor(seconds/60)%60} мин ${seconds%60} сек`;
+    }
+  }),1000);
   function history(card, runs) {
     const body = card.querySelector('[data-job-history]');
     body.replaceChildren();
@@ -36,16 +43,13 @@
     if (active || document.hidden) return;
     active = true;
     try {
-      let next = 0;
-      async function worker() {
-       while (next < cards.length) {
-        const card = cards[next++];
+      for (const card of cards) {
         const note = card.querySelector('[data-job-monitor-note]');
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 15000);
         try {
-          const monitorUrl = new URL(card.dataset.calculationMonitor, location.origin);
-          monitorUrl.searchParams.set('light', '1');
+          const monitorUrl=new URL(card.dataset.calculationMonitor,location.origin);
+          monitorUrl.searchParams.set('light','1');
           const response = await fetch(monitorUrl, {
             credentials: 'same-origin', cache: 'no-store', signal: controller.signal,
             headers: {'Accept': 'application/json'}
@@ -53,12 +57,20 @@
           if (!response.ok) throw new Error('monitor');
           const data = await response.json();
           card.querySelector('[data-job-status]').textContent = data.status;
+          const progress=card.querySelector('[data-job-progress]');
+          if(progress) {
+            progress.hidden=!['Выполняется','Ожидает запуска'].includes(data.status);
+            card.querySelector('[data-job-stage]').textContent=data.progress?.stage || (data.status==='Ожидает запуска' ? 'Ожидание запуска SQL Agent' : 'Выполняется; текущий этап недоступен');
+            card.querySelector('[data-job-waiting]').textContent=data.progress?.waiting || '';
+            if(data.progress?.elapsed!==undefined)card.dataset.runStarted=String(Date.now()-data.progress.elapsed*1000);
+            else {delete card.dataset.runStarted;card.querySelector('[data-job-elapsed]').textContent='';}
+          }
           if(data.workflow) for(const [selector,label,current] of [['[data-workflow-export]','export_label','export_current'],['[data-workflow-calculation]','calculation_label','calculated_current']]) {
             const node=document.querySelector(selector);if(!node)continue;
             node.textContent=data.workflow[label];node.classList.toggle('state-success',data.workflow[current]);node.classList.toggle('state-warning',!data.workflow[current]);
           }
           history(card, data.history||[]);
-          const last=card.querySelector('[data-job-last]');if(last)last.textContent=data.history?.length ? data.history[0].started+' · '+data.history[0].status : 'Запусков в журнале нет';
+          const last=card.querySelector('[data-job-last]');if(last)last.textContent=data.progress?.started_at ? new Date(data.progress.started_at).toLocaleString('ru-RU',{timeZone:'Europe/Moscow'})+' · Выполняется' : data.history?.length ? data.history[0].started+' · '+data.history[0].status : 'Запусков в журнале нет';
           card.dataset.state=data.status;
           card.querySelectorAll('button[name=action][value=run]').forEach(button=>{button.disabled=button.closest('fieldset[disabled]')!==null||['Выполняется','Ожидает запуска'].includes(data.status);});
           const link = card.querySelector('[data-job-report]');
@@ -68,16 +80,14 @@
             if (data.report_url) {card.dataset.reportBase=data.report_url;reportTarget(card,data.report_url);}
           }
           const provenance = card.querySelector('[data-job-provenance]');
-          if (provenance) provenance.textContent = data.execution ? `Расчёт ${data.execution.completed} МСК · ${data.execution.year} · ${data.execution.plan}${data.execution.pilot_current===false ? ' · Запуск до ограничения пилота: сохраните параметры и повторите расчёт' : data.execution.stale ? ' · Настройки изменены: нужен пересчёт' : data.execution.settings_checked===false ? ' · Актуальность настроек проверьте в разделе выгрузки' : ''}` : 'Версия завершённого расчёта пока не подтверждена. После обновления сохраните параметры задания для регистрации новых запусков.';
+          if (provenance) provenance.textContent = data.execution ? `Расчёт ${data.execution.completed} МСК · ${data.execution.year} · ${data.execution.plan}${data.execution.pilot_current===false ? ' · Запуск до ограничения пилота: сохраните параметры и повторите расчёт' : data.execution.stale ? ' · Настройки изменены: нужен пересчёт' : ''}` : 'Версия завершённого расчёта пока не подтверждена. После обновления сохраните параметры задания для регистрации новых запусков.';
           note.textContent = `Проверено в ${data.checked_at} МСК · автообновление каждые 10 секунд`;
         } catch (_) {
           card.querySelectorAll('button[name=action][value=run]').forEach(button=>button.disabled=true);
           const last=card.querySelector('[data-job-last]');if(last&&last.textContent==='Проверяем…')last.textContent='Статус недоступен';
           note.textContent = 'Не удалось проверить статус. Показаны последние полученные данные; запуск недоступен до восстановления связи. Повтор проверки через 10 секунд.';
         } finally { clearTimeout(timeout); }
-       }
       }
-      await Promise.all(Array.from({length: Math.min(2, cards.length)}, () => worker()));
     } finally { active = false; }
   }
   refresh();

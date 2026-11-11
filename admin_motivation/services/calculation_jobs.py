@@ -419,7 +419,15 @@ def monitor(job, connector=None):
         current = status_label(row[:4])
         if row[4] and (not row[0] or (row[1] and row[4] > row[1])):
             current = 'Ожидает запуска'
-        return {'status': current, 'history': history}
+        progress=None
+        if current=='Выполняется':
+            from .calculation_live_progress import read
+            progress=read(cursor,job_name(job))
+            if row[0]:
+                started=row[0].replace(tzinfo=server_zone) if row[0].tzinfo is None else row[0]
+                progress.update(started_at=started.isoformat(),
+                    elapsed=max(0,int((datetime.now(datetime_timezone.utc)-started).total_seconds())))
+        return {'status': current, 'history': history, 'progress':progress}
     finally:
         if connection is not None:
             connection.close()

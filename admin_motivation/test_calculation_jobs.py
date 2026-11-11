@@ -194,7 +194,7 @@ class CalculationJobsTests(TestCase):
         self.assertEqual(result['history'][0]['duration'], '25:30:45')
         self.assertEqual(result['history'][0]['status'], 'Ошибка')
         self.assertEqual(result['history'][1]['duration'], '00:00:42')
-        self.assertEqual(self.cursor.execute.call_count, 2)
+        self.assertEqual(self.cursor.execute.call_count, 3)
         for call in self.cursor.execute.call_args_list:
             self.assertEqual(call.args[1], jobs.job_name(self.job))
             self.assertTrue(call.args[0].lstrip().startswith('SELECT'))
