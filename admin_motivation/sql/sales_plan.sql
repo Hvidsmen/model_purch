@@ -1,7 +1,7 @@
 DECLARE @params_scenario nvarchar(255) = ?;
 
 ;WITH fact AS (
- SELECT sub.SubdivisionName, p.PlanningGroupSalesErp,
+ SELECT sub.SubdivisionKey, p.PlanningGroupSalesErp,
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE '*' END GroupERP,
  CASE WHEN p.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE '*' END Brand,
  CASE WHEN s.DiscountMotivation >= COALESCE(sm.O4,10000) THEN 'O4'
@@ -20,15 +20,15 @@ DECLARE @params_scenario nvarchar(255) = ?;
  AND sub.Chanel NOT IN (N'ДПП')
  AND sub.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг',N'Прочее',N'Вентиляция')
 ), fact_per AS (
- SELECT SubdivisionName, PlanningGroupSalesErp, GroupERP, Brand,
+ SELECT SubdivisionKey, PlanningGroupSalesErp, GroupERP, Brand,
  CASE WHEN SUM(USD)=0 THEN 1 ELSE SUM(IIF(Segment='O0',USD,0))/SUM(USD) END O0,
  CASE WHEN SUM(USD)=0 THEN 0 ELSE SUM(IIF(Segment='O1',USD,0))/SUM(USD) END O1,
  CASE WHEN SUM(USD)=0 THEN 0 ELSE SUM(IIF(Segment='O2',USD,0))/SUM(USD) END O2,
  CASE WHEN SUM(USD)=0 THEN 0 ELSE SUM(IIF(Segment='O3',USD,0))/SUM(USD) END O3,
  CASE WHEN SUM(USD)=0 THEN 0 ELSE SUM(IIF(Segment='O4',USD,0))/SUM(USD) END O4
- FROM fact GROUP BY SubdivisionName, PlanningGroupSalesErp, GroupERP, Brand
+ FROM fact GROUP BY SubdivisionKey, PlanningGroupSalesErp, GroupERP, Brand
 ), plan_ AS (
- SELECT s.SubdivisionName Subdivision, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date) Date_,
+ SELECT s.SubdivisionKey, s.SubdivisionName Subdivision, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date) Date_,
  CASE WHEN g.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN g.GroupERP ELSE '*' END GroupERP,
  CASE WHEN g.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN g.BrandName ELSE '*' END Brand,
  SUM(ps.AmountUSD) AmountUSD, SUM(ps.AmountDDP_USD) AmountDDP_USD
@@ -38,16 +38,16 @@ DECLARE @params_scenario nvarchar(255) = ?;
  WHERE ps.Version_ = @params_scenario
  AND s.Chanel NOT IN (N'ДПП')
  AND s.SubdivisionName NOT IN (N'ДПП',N'REtail',N'E-Com',N'СНГ',N'Д-Маврикий',N'Буфер',N'Брендинг',N'Прочее',N'Вентиляция')
- GROUP BY s.SubdivisionName, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date),
+ GROUP BY s.SubdivisionKey, s.SubdivisionName, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date),
  CASE WHEN g.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN g.GroupERP ELSE '*' END,
  CASE WHEN g.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN g.BrandName ELSE '*' END
 )
-SELECT plan_.Subdivision,
+SELECT plan_.Subdivision, plan_.SubdivisionKey,
  COALESCE(NULLIF(LTRIM(RTRIM(plan_.PlanningGroupSalesERP)), ''), '9. OTHER') AS PlanningGroupSalesERP,
  plan_.GroupERP,
  plan_.Brand AS [Марка(Бренд)], plan_.Date_, plan_.AmountUSD, plan_.AmountDDP_USD,
  plan_.AmountUSD*COALESCE(f.O0,1) USD_O0, plan_.AmountUSD*COALESCE(f.O1,0) USD_O1,
  plan_.AmountUSD*COALESCE(f.O2,0) USD_O2, plan_.AmountUSD*COALESCE(f.O3,0) USD_O3,
  plan_.AmountUSD*COALESCE(f.O4,0) USD_O4
-FROM plan_ LEFT JOIN fact_per f ON plan_.Subdivision=f.SubdivisionName
+FROM plan_ LEFT JOIN fact_per f ON plan_.SubdivisionKey=f.SubdivisionKey
  AND plan_.PlanningGroupSalesERP=f.PlanningGroupSalesErp AND plan_.GroupERP=f.GroupERP AND plan_.Brand=f.Brand

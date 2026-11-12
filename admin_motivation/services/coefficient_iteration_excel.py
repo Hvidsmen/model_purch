@@ -44,7 +44,7 @@ def table(book,title,headers,rows,text_columns=()):
     return sheet
 
 
-def result_table(book,title,rows,year):
+def result_table(book,title,rows,year,names=None):
     quarters=[4] if year==2026 else [1,2,3,4]
     headers=['Подразделение','Вид мотивации','Сотрудник']
     groups=[]
@@ -58,7 +58,7 @@ def result_table(book,title,rows,year):
     headers.extend(['В годовую премию до условия выплаты, USD','Годовая часть выплачена, USD','Доплата за кварталы, USD','Общая выплата, USD'])
     values=[]
     for row in rows:
-        cells=[row['branch'],row['kind'],row.get('employee','')]
+        cells=[(names or {}).get(row['branch'],row['branch']),row['kind'],row.get('employee','')]
         for q in quarters:cells.extend([row['possible'][q-1],row['quarters'][q-1]])
         cells.append(sum((Decimal(str(value)) for value in row['quarters']),Decimal(0)))
         cells.extend(row['annual_quarters'][q-1] for q in quarters)
@@ -73,6 +73,7 @@ def result_table(book,title,rows,year):
 
 def workbook(run):
     book=Workbook();book.remove(book.active)
+    names={row['branch']:row.get('branch_name',row['branch']) for plan in run.inputs.get('plans',{}).values() for row in plan['rows']}
     from django.utils import timezone
     from zoneinfo import ZoneInfo
     local=lambda value:timezone.localtime(value,ZoneInfo('Europe/Moscow')).isoformat() if value else ''
@@ -93,18 +94,19 @@ def workbook(run):
     for scenario,result in run.results.items():
         if result.get('state')!='completed':meta.append([result.get('title',scenario),result.get('error','Расчёт не завершён')]);continue
         year=result['year'];name='IV кв 2026' if year==2026 else str(year)
-        result_table(book,'Сводка '+name,aggregate_rows(result['rows']),year)
-        result_table(book,'Получатели '+name,result['rows'],year)
+        result_table(book,'Сводка '+name,aggregate_rows(result['rows']),year,names)
+        result_table(book,'Получатели '+name,result['rows'],year,names)
         if result.get('source'):meta.append([f'Источник {year}',str(result['source'])])
         details=result.get('details',[])
         if details:
             headers=['Подразделение','Сотрудник','Вид мотивации','Исходное подразделение','Период','Группа планов','Группа ERP','Бренд','Формула','План USD','Факт USD','Выполнение','Возможная квартальная USD','Квартальная выплата USD','В годовую USD','Основание']
-            table(book,'Расшифровка '+name,headers,[[r.get(k) for k in ('branch','employee','kind','original_branch','date' if year!=2025 else 'period','planning','goods','brand','formula','plan','fact','execution' if year!=2025 else 'ratio','possible','paid','annual_contribution','origin' if year!=2025 else 'note')] for r in details],text_columns=(1,2,3,4,5,6,7,8,9,16))
+            table(book,'Расшифровка '+name,headers,[[(names.get(r.get(k),r.get(k)) if k in ('branch','original_branch') else r.get(k)) for k in ('branch','employee','kind','original_branch','date' if year!=2025 else 'period','planning','goods','brand','formula','plan','fact','execution' if year!=2025 else 'ratio','possible','paid','annual_contribution','origin' if year!=2025 else 'note')] for r in details],text_columns=(1,2,3,4,5,6,7,8,9,16))
+    table(book,'Подразделения',['SubdivisionKey','Название'],sorted(names.items()),text_columns=(1,2))
     parameters=table(book,'Параметры',['Параметр','Значение'],meta,text_columns=(1,2));parameters.column_dimensions['B'].width=110
     from .coefficient_iteration import mapping_rows
     payload=run.inputs.get('payload');mappings=run.inputs.get('mappings',{})
     if payload:
-        values=[];people=run.inputs.get('people',{});subs=run.inputs.get('subdivisions',{})
+        values=[];people=run.inputs.get('people',{});subs=run.inputs.get('subdivision_names',run.inputs.get('subdivisions',{}))
         for row in mapping_rows(payload):
             mapping=mappings.get(row['id'],{});block=payload[row['source']]['blocks'][row['block']]
             targets=[mapping.get('subdivision')] if row['source']=='branches' else mapping.get('subdivisions',[])

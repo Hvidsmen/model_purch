@@ -122,8 +122,8 @@ class NativeSQLTests(SimpleTestCase):
         self.assertIn('GROUP BY Subdivision,PGSales,Group_,Brand,TypeCoeff',sql)
         self.assertIn('GROUP BY r.Subdivision,r.PGSales,r.TypeCoeff',sql)
         self.assertEqual(sql.count('tm.Subdivision='),4)
-        self.assertIn('gm.Subdivision=sub.SubdivisionName',sql)
-        self.assertIn('gm.Subdivision=s.SubdivisionName',sql)
+        self.assertIn('gm.Subdivision=CONVERT(nvarchar(255),sub.SubdivisionKey)',sql)
+        self.assertIn('gm.Subdivision=CONVERT(nvarchar(255),s.SubdivisionKey)',sql)
         self.assertIn('PortalOriginalDealAuthor',sql)
         self.assertIn('decimal(20,18)',sql)
         self.assertIn('FROM #iteration_defaults',sql)
@@ -157,7 +157,8 @@ class CalculationTests(TestCase):
             plan=SalesPlanScenario.objects.create(title=f'Plan {year}',source_version=f'P{year}',loaded_at=timezone.now(),source_type='erp')
             for sub in self.subs:
                 SalesPlanLine.objects.create(scenario=plan,plan_date=date(year,10,1),subdivision=sub.subdivision_key,
-                    planning_group_sales='1. RAC',group='Бытовые кондиционеры',brand='DAIKIN',amount_usd=100,segment_amounts={'O0':'0','O1':'100','O2':'0','O3':'0','O4':'0'})
+                    planning_group_sales='1. RAC',group='Бытовые кондиционеры',brand='DAIKIN',amount_usd=100,segment_amounts={'O0':'0','O1':'100','O2':'0','O3':'0','O4':'0'},
+                    source_subdivisions={sub.subdivision_key:{'amount':'100','segments':{'O0':'0','O1':'100','O2':'0','O3':'0','O4':'0'}}})
             self.plans[year]=plan
         self.version=GlobalCoeffVersion.objects.get(effective_from=date(2001,1,1));self.version.status='approved'
         from django.db.models import QuerySet

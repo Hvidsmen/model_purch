@@ -114,8 +114,12 @@ def load_plan(scenario_id, connector=None, progress=None):
                 raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): ' + ' '.join(error.messages)) from error
             if abs(sum(map(Decimal, amounts.values())) - amount) > max(Decimal('0.0001'), abs(amount)*Decimal('0.00000001')):
                 raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): сумма сегментов O0–O4 не совпадает с AmountUSD.')
+            source_parts={}
+            if 'subdivisionkey' in values:
+                source_key=classification(values['subdivisionkey'],'subdivisionkey',row_number)
+                source_parts[source_key]={'amount':str(amount),'segments':dict(amounts)}
             lines.append(SalesPlanLine(scenario_id=scenario_id, plan_date=on_date, subdivision=sub,
-                planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, amount_ddp_usd=ddp, segment_amounts=amounts))
+                planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, amount_ddp_usd=ddp, segment_amounts=amounts,source_subdivisions=source_parts))
     finally:
         connection.close()
     if not lines:
@@ -164,6 +168,11 @@ def aggregate_lines(lines, global_plan=False):
                 planning_group_sales=line.planning_group_sales, group=line.group, brand=line.brand,
                 amount_usd=Decimal(0), amount_ddp_usd=Decimal(0), segment_amounts={segment: '0' for segment in SEGMENTS})
         total = aggregates[key]
+        if not global_plan:
+            for source_key,part in line.source_subdivisions.items():
+                target=total.source_subdivisions.setdefault(source_key,{'amount':'0','segments':{s:'0' for s in SEGMENTS}})
+                target['amount']=str(Decimal(target['amount'])+number(part['amount']))
+                for segment in SEGMENTS:target['segments'][segment]=str(Decimal(target['segments'][segment])+number(part['segments'][segment]))
         total.amount_usd += line.amount_usd
         total.amount_ddp_usd = total.amount_ddp_usd + line.amount_ddp_usd if total.amount_ddp_usd is not None and line.amount_ddp_usd is not None else None
         for segment in SEGMENTS:
