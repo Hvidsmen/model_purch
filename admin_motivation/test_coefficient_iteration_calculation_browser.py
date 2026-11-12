@@ -16,7 +16,8 @@ class IterationCalculationBrowserTests(StaticLiveServerTestCase):
     def test_plan_selection_progress_results_and_excel(self):
         from playwright.sync_api import expect
         def prepare():
-            case=CalculationTests();case.setUp()
+            from django.test import Client
+            case=CalculationTests();case.client=Client();case.setUp()
             return case.iteration.pk,{year:plan.pk for year,plan in case.plans.items()}
         iteration,plans=self.db(prepare)
         self.page.goto(self.live_server_url+reverse('motivation_coefficient_iteration_mapping',args=[iteration]))

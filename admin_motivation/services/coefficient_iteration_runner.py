@@ -77,7 +77,14 @@ def validate_directors_2025(plans,rates,snapshot):
             adapter=DirectorRates(rates,token,snapshot)
             source=SimpleNamespace(pk=rates.sources[token]['employee'])
             unique={tuple(r[k] for k in ('planning','goods','brand')):r for r in plans if r['branch']==sub}
-            for item in unique.values():adapter.get(source,sub,item)
+            from .director_scenarios import scope
+            for item in unique.values():
+                _,raw_formula,_=adapter.get(source,sub,item)
+                p,g,b=rates.classification(sub,'Продажи',(item['planning'],item['goods'],item['brand']))
+                classified={**item,'planning':p,'goods':g,'brand':b}
+                _,classified_formula,_=adapter.get(source,sub,classified)
+                if raw_formula!=classified_formula or key(scope(raw_formula,item))!=key(scope(raw_formula,classified)):
+                    raise ValidationError('Матрица файла укрупняет товарные ключи, необходимые для формулы директора: '+sub)
 
 
 def directors_2025(cursor,plans,rates,settings,snapshot):
