@@ -1,4 +1,6 @@
 import sqlite3
+import re
+from .services.subdivision_scope import resolve_scope_sql
 from django.test import SimpleTestCase
 from .services.recalculation_2025_sql import ALLOCATION
 
@@ -6,10 +8,12 @@ from .services.recalculation_2025_sql import ALLOCATION
 class ZeroSumPolicyPlanTests(SimpleTestCase):
     def setUp(self):
         self.db=sqlite3.connect(':memory:');self.addCleanup(self.db.close)
+        self.db.create_function('PATINDEX',2,lambda pat,v:(m.start()+1) if (m:=re.search(r'[^0-9. ]',v)) else 0)
+        self.db.create_function('UPPER',1,lambda v:v.upper() if v else v)
         self.db.execute('''CREATE TABLE facts(ПодразделениеДокумент,АвторСделки,
  ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаОтгрузокUSD REAL,ТипКоэф,Год)''')
         self.sql=ALLOCATION[ALLOCATION.index('SELECT t.*'):ALLOCATION.index('IF EXISTS(SELECT 1 FROM #percent_plan_menger')]
-        self.sql=self.sql.replace('INTO #percent_plan_menger','').replace('#fact','facts').replace("N'","'")
+        self.sql=resolve_scope_sql(self.sql).replace('INTO #percent_plan_menger','').replace('#fact','(SELECT *,ПодразделениеДокумент AS Подразделение,NULL AS Канал FROM facts)').replace("N'","'")
 
     def add(self,branch,author,amount,brand='X',group='AC',pg='RAC',kind='Политики',year=2025):
         self.db.execute('INSERT INTO facts VALUES (?,?,?,?,?,?,?,?)',(branch,author,pg,group,brand,amount,kind,year))

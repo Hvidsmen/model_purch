@@ -1,4 +1,5 @@
 """Three read-only budget variants over the same loaded sales plan."""
+from .subdivision_scope import with_exclusions
 from .subdivision_scope import included
 from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
@@ -111,6 +112,7 @@ def coefficient_rows(*args, **kwargs):
     return merged_rows(_coefficient_rows(*args, **kwargs), 1, range(7))
 
 
+@with_exclusions
 def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, deleted=None, all_subdivisions=False, change_subdivision=None, director_changes=None, employee=None):
     from .director_comparison import DirectorIndex
     approved = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
@@ -174,13 +176,17 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             if date_key not in date_cache:
                 chosen = baseline if name == 'baseline' else next((v for v in reversed(versions) if v.effective_from <= on_date), None)
                 date_cache[date_key] = chosen.pk if chosen else None
+            from .sales_plans import policy_segments
+            policy_usd=policy_segments(amounts,pg)
+            kinds=['Политики','Продажи'] if any(policy_usd) else ['Продажи']
             try:
-                matrix, fallbacks = index.coefficients(date_cache[date_key], sub, pg, group, brand)
+                matrix, fallbacks = index.coefficients(date_cache[date_key], sub, pg, group, brand,kinds=kinds)
             except ValidationError as error:
                 results[name] = {'error': ' '.join(error.messages)}
                 continue
-            policies = sum((value * amount for value, amount in zip(matrix[0], usd)), Decimal(0))
-            sales = sum((value * amount for value, amount in zip(matrix[1], usd)), Decimal(0))
+            from .sales_plans import policy_segments
+            policies = sum((value * amount for value, amount in zip(matrix[0],policy_usd)),Decimal(0)) if any(policy_usd) else Decimal(0)
+            sales = sum((value * amount for value, amount in zip(matrix[-1], usd)), Decimal(0))
             results[name]['policies'] += policies
             results[name]['sales'] += sales
             directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, usd)

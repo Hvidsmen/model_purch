@@ -38,6 +38,8 @@ def patch(source):
     into=re.search(r'\bINTO\s+#plan\b',code,re.I)
     if not into:raise ValidationError('Не найдена таблица плана 2025 для кеширования долей.')
     from .recalculation_2025_sql import ALLOCATION
+    from .subdivision_scope import resolve_scope_sql
+    ALLOCATION=resolve_scope_sql(ALLOCATION)
     if source.count(ALLOCATION)!=1:raise ValidationError('Не найдена граница долей плана 2025.')
     boundary=source.index(ALLOCATION)+len(ALLOCATION)
     select=re.search(r'\bSELECT\b',code[boundary:into.start()],re.I)

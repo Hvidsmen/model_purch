@@ -109,8 +109,10 @@ def xml(records):
 
 
 def read_2025(cursor,plan,rates,settings,progress):
-    branches=sorted({row['branch'] for row in motivation_plan_rows(plan,rates)})
-    records=rates.coefficients_2025(branches)
+    named_plan=motivation_plan_rows(plan,rates)
+    branches=sorted({row['branch'] for row in named_plan})
+    policies={row['branch'] for row in named_plan if row['policy_eligible']}
+    records=rates.coefficients_2025(branches,policy_branches=policies)
     progress('2025: проверка подготовленного факта и временного расчёта',5)
     cursor.execute("DECLARE @l int; EXEC @l=sys.sp_getapplock @Resource=N'PortalMotivationCalculation',@LockMode=N'Shared',@LockOwner=N'Session',@LockTimeout=0; SELECT @l;")
     acquired=cursor.fetchone()
@@ -165,9 +167,10 @@ def read_2025(cursor,plan,rates,settings,progress):
             q=int(str(period).strip()[0]);row['quarters'][q-1]+=number(paid or 0);row['possible'][q-1]+=number(possible or 0)
         row['bonus']+=number(bonus or 0)
     from .recalculation_2025_plan import ELIGIBLE
+    from .subdivision_scope import resolve_scope_sql
     cursor.execute('''SELECT LTRIM(RTRIM([ТипКоэф])),[Подразделение],[АвторСделки],[Квартал],
  SUM(CASE WHEN [СуммаМотивацииUSD]>0 THEN [СуммаМотивацииUSD] ELSE 0 END)
- FROM #iteration_fact WHERE [Год]=2025 AND '''+ELIGIBLE+''' GROUP BY [ТипКоэф],[Подразделение],[АвторСделки],[Квартал]''')
+ FROM #iteration_fact WHERE [Год]=2025 AND '''+resolve_scope_sql(ELIGIBLE)+''' GROUP BY [ТипКоэф],[Подразделение],[АвторСделки],[Квартал]''')
     for kind,sub,author,q,potential in cursor.fetchall():
         author=str(author or '') if kind=='Политики' else '';identity=(branch(sub),kind,author)
         if identity in grouped:grouped[identity]['annual_quarters'][int(q)-1]+=number(potential or 0)*number(settings['year_share'])/100

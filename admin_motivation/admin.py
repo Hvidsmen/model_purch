@@ -78,3 +78,11 @@ class GlobalDirectorAdmin(GlobalCoeffAdmin):
 class LocalDirectorAdmin(GlobalCoeffAdmin):
     list_display = ('version', 'subdivision', 'employee', 'goods', 'k0', 'k1', 'k2', 'k3', 'k4')
     list_filter = ('version', 'subdivision', 'employee')
+
+
+@admin.register(MotivationSubdivisionExclusion)
+class MotivationSubdivisionExclusionAdmin(admin.ModelAdmin):
+    list_display = ('subdivision_name', 'enabled', 'comment')
+    list_filter = ('enabled',)
+    search_fields = ('subdivision_name', 'comment')
+    list_editable = ('enabled',)

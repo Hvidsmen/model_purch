@@ -2,7 +2,7 @@
 from collections import defaultdict
 from decimal import Decimal
 from .recalculation_2025 import decimal
-from .director_participation import EXCLUDED
+from .subdivision_scope import EXCLUDED,sql_predicate
 from .heat_exclusion import predicate
 
 # Projected plan/fact are already window totals: never SUM them across goods rows.
@@ -31,14 +31,14 @@ def gates_sql():
     Legacy personal formulae substitute 1 for a zero plan per grouped input row;
     global department mode uses the genuine plan sum. Keep both denominators.
     """
-    excluded = ','.join("N'" + name.replace("'", "''") + "'" for name in EXCLUDED)
+    scope = sql_predicate('[Подразделение]')
     return """
 WITH base AS (
  SELECT LTRIM(RTRIM([ТипКоэф])) AS Kind_,[Подразделение],[АвторСделки],[Квартал],
  SUM([СуммаПланUSD]) AS Plan_,SUM([СуммаОтгрузокUSD]) AS Fact_
  FROM motivation.PlanFactTest2025
  WHERE [Год]=2025 AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики',N'Продажи')
- AND [Подразделение] NOT IN (""" + excluded + """)
+ AND """ + scope + """
  AND (LTRIM(RTRIM([ТипКоэф]))<>N'Политики' OR
  (([Канал] IS NULL OR [Канал]<>N'ДПП') AND NOT (""" + predicate('[ГруппаПлановПродаж]') + """)))
  GROUP BY [ТипКоэф],[Подразделение],[ПодразделениеДокумент],[Канал],[Год],[Квартал],

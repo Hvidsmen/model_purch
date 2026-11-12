@@ -71,8 +71,11 @@ class Recalculation2025UnitTests(SimpleTestCase):
 
     def test_distribution_uses_annual_fact_per_branch_goods_and_author(self):
         sql = ALLOCATION[ALLOCATION.index('SELECT t.*'):ALLOCATION.index('IF EXISTS(SELECT 1 FROM #percent_plan_menger')]
-        sql = sql.replace('INTO #percent_plan_menger','').replace('#fact','facts').replace("N'","'")
+        from .services.subdivision_scope import resolve_scope_sql
+        sql = resolve_scope_sql(sql).replace('INTO #percent_plan_menger','').replace('#fact','(SELECT *,ПодразделениеДокумент AS Подразделение,NULL AS Канал FROM facts)').replace("N'","'")
         with sqlite3.connect(':memory:') as db:
+            db.create_function('PATINDEX',2,lambda pat,v:next((i+1 for i,c in enumerate(v) if c not in '0123456789. '),0))
+            db.create_function('UPPER',1,lambda v:v.upper() if v else v)
             db.execute('CREATE TABLE facts (ПодразделениеДокумент,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаОтгрузокUSD REAL,ТипКоэф,Год)')
             data = [('M','A','RAC','AC','X',30,'Политики',2025),('M','B','RAC','AC','X',70,'Политики',2025),
                     ('TT','A','RAC','AC','X',100,'Политики',2025),('M','A','RAC','AC','Y',100,'Политики',2025),
@@ -194,7 +197,7 @@ class Recalculation2025WebTests(TestCase):
         connection.close.assert_called_once()
 
 
-class SalesParticipationTests(SimpleTestCase):
+class SalesParticipationTests(TestCase):
     def test_dpp_channel_survives_for_sales_and_directors_only(self):
         from .services.sales_participation import patch as participation
         from .services.director_participation import patch as directors

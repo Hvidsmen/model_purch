@@ -3,6 +3,7 @@
 No coefficient export, current employee roster or subdivision merge is used.
 The live warehouse procedure is never read or modified.
 """
+from .subdivision_scope import with_exclusions
 import re
 from django.core.exceptions import ValidationError
 from .pilot_formula import mask_sql, closing
@@ -86,7 +87,9 @@ IF EXISTS(SELECT 1 FROM #percent_plan_menger WHERE Percent_ IS NULL)
  THROW 50025,N'Нет положительного итога авторов для распределения плана при нулевом общем факте',1;
 """
 # Keep the guard for genuinely unavailable rates after the approved fallback.
-ALLOCATION = ALLOCATION.replace('КoэфMissing=1', 'КоэфициентМотивации IS NULL OR K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL')
+from .recalculation_2025_plan import ELIGIBLE
+ALLOCATION = ALLOCATION.replace('КoэфMissing=1', '(КоэфициентМотивации IS NULL OR K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL) AND '+ELIGIBLE)
+ALLOCATION = ALLOCATION.replace("WHERE LTRIM(RTRIM(ТипКоэф))=N'Политики' AND Год=2025","WHERE LTRIM(RTRIM(ТипКоэф))=N'Политики' AND Год=2025 AND "+ELIGIBLE)
 
 from .recalculation_2025_share_fallback import APPEND_SHARES,SHARE_JOIN
 ALLOCATION+=APPEND_SHARES
@@ -224,6 +227,8 @@ def patch_source(source, existing=False):
     guard=PLAN_GUARD
     source = source[:point] + guard + source[point:]
     from .sales_participation import patch as participation
+    from .director_participation import patch as directory_scope
+    source = directory_scope(source)
     source = participation(source, policy_heat_all_years=True)
     from .pilot_calculation import normalize_q4_rur
     source = normalize_q4_rur(source)
@@ -235,7 +240,9 @@ def patch_source(source, existing=False):
         raise ValidationError('Не найдена точка однократной загрузки формул 2025.')
     source=source.replace(SETUP,SETUP+FORMULA_SNAPSHOT,1)
     validate_rate_projection(source,references)
-    return source
+    from .director_participation import patch as directory_scope
+    from .subdivision_scope import resolve_scope_sql
+    return resolve_scope_sql(source)
 
 
 def validate_rate_projection(source,expected=4):
@@ -268,6 +275,7 @@ def template_source():
     return source.replace('{{PROCEDURE}}', '[motivation].[sp_CalcBySub]')
 
 
+@with_exclusions
 def prepare(cursor):
     # The source can include current directors or 2026-only windows. Its shape
     # must not prevent an independent fact-2025 / plan-2025 calculation.

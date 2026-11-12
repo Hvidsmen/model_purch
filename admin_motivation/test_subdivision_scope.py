@@ -66,8 +66,8 @@ class SubdivisionScopeTests(TestCase):
         self.assertEqual(self.fixture.load(),2)
         self.assertEqual(self.plan.lines.get(subdivision='').amount_usd,Decimal(1500))
         self.assertFalse(self.plan.lines.filter(subdivision__icontains='Вентиляция').exists())
-        from .services.sales_plans import SQL
-        self.assertEqual(SQL.count("N'Вентиляция'"),2)
+        from .services.sales_plans import source_sql
+        self.assertEqual(source_sql('planning').count("N'Вентиляция'"),2)
 
     def test_legacy_reports_remove_branch_and_global_contribution_without_overwriting_audit(self):
         from .services.plan_report import period_report

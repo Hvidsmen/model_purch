@@ -1,5 +1,5 @@
 """Read-only DWH import and atomic, dated motivation calculation."""
-from .subdivision_scope import included
+from .subdivision_scope import included,sql_predicate,with_exclusions
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -12,7 +12,9 @@ from ..models import SalesPlanScenario, SalesPlanLine, GlobalCoeffVersion, Subdi
 
 SEGMENTS = [f'O{i}' for i in range(5)]
 KINDS = ['Политики', 'Продажи']
-SQL = (Path(__file__).resolve().parents[1] / 'sql' / 'sales_plan.sql').read_text(encoding='utf-8')
+_SQL_TEMPLATE = (Path(__file__).resolve().parents[1] / 'sql' / 'sales_plan.sql').read_text(encoding='utf-8')
+
+SQL = _SQL_TEMPLATE.replace('__PLAN_FACT_SCOPE__',sql_predicate('sub.SubdivisionName')).replace('__PLAN_SCOPE__',sql_predicate('s.SubdivisionName'))
 
 
 def number(value):
@@ -25,6 +27,13 @@ def number(value):
         raise ValidationError('В плане обнаружена некорректная сумма.')
 
 
+def policy_segments(segments, planning_group):
+    """P0-P4 preserve the policy-only base alongside the full O0-O4 plan."""
+    from .heat_exclusion import is_heat
+    if is_heat(planning_group):return [Decimal(0)]*5
+    return [number(segments.get(f'P{i}',segments.get(f'O{i}',0))) for i in range(5)]
+
+
 def import_number(value,column):
     try:return number(value)
     except ValidationError:
@@ -33,9 +42,10 @@ def import_number(value,column):
 
 
 def source_sql(source_type):
-    if source_type=='planning':return SQL
+    source = _SQL_TEMPLATE.replace('__PLAN_FACT_SCOPE__',sql_predicate('sub.SubdivisionName')).replace('__PLAN_SCOPE__',sql_predicate('s.SubdivisionName'))
+    if source_type=='planning':return source
     if source_type!='erp':raise ValidationError('Неизвестный источник плана.')
-    return (SQL.replace('DataWH.planning.PlanSales ps','DataWH.erp.[РегистрыНакопления.ПланыПродаж] ps')
+    return (source.replace('DataWH.planning.PlanSales ps','DataWH.erp.[РегистрыНакопления.ПланыПродаж] ps')
         .replace('ps.Version_','ps.Сценарий').replace('ps.Date_','ps.Период')
         .replace('ps.Subdivision','ps.Подразделение').replace('ps.GoodsKey','ps.Номенклатура')
         .replace('ps.AmountUSD','ps.Сумма').replace('ps.AmountDDP_USD','ps.даичи_СуммаДДП'))
@@ -96,6 +106,7 @@ def classification(value, column, row_number):
     return value
 
 
+@with_exclusions
 def load_plan(scenario_id, connector=None, progress=None):
     report(progress, 'Запрос плана и распределения сегментов в MS SQL', None)
     scenario = SalesPlanScenario.objects.get(pk=scenario_id, is_deleted=False)
@@ -124,7 +135,9 @@ def load_plan(scenario_id, connector=None, progress=None):
             source_parts={}
             if 'subdivisionkey' in values:
                 source_key=classification(values['subdivisionkey'],'subdivisionkey',row_number)
-                source_parts[source_key]={'amount':str(amount),'segments':dict(amounts)}
+                source_parts[source_key]={'amount':str(amount),'segments':dict(amounts),'channel':str(values.get('chanel') or '')}
+            policy = [Decimal(0)]*5 if str(values.get('chanel') or '').strip().casefold()=='дпп' else policy_segments(amounts,pg)
+            amounts.update({f'P{i}':str(value) for i,value in enumerate(policy)})
             lines.append(SalesPlanLine(scenario_id=scenario_id, plan_date=on_date, subdivision=sub,
                 planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, amount_ddp_usd=ddp, segment_amounts=amounts,source_subdivisions=source_parts))
     finally:
@@ -178,8 +191,11 @@ def aggregate_lines(lines, global_plan=False):
         if not global_plan:
             for source_key,part in line.source_subdivisions.items():
                 target=total.source_subdivisions.setdefault(source_key,{'amount':'0','segments':{s:'0' for s in SEGMENTS}})
+                target['channel']=part.get('channel','')
                 target['amount']=str(Decimal(target['amount'])+number(part['amount']))
                 for segment in SEGMENTS:target['segments'][segment]=str(Decimal(target['segments'][segment])+number(part['segments'][segment]))
+        for i,value in enumerate(policy_segments(line.segment_amounts,line.planning_group_sales)):
+            total.segment_amounts[f'P{i}']=str(Decimal(total.segment_amounts.get(f'P{i}',0))+value)
         total.amount_usd += line.amount_usd
         total.amount_ddp_usd = total.amount_ddp_usd + line.amount_ddp_usd if total.amount_ddp_usd is not None and line.amount_ddp_usd is not None else None
         for segment in SEGMENTS:
@@ -193,6 +209,7 @@ def aggregate_lines(lines, global_plan=False):
     return list(aggregates.values())
 
 
+@with_exclusions
 @transaction.atomic
 def calculate_plan(scenario_id, progress=None):
     scenario = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id, is_deleted=False)
@@ -261,6 +278,10 @@ def calculate_plan(scenario_id, progress=None):
         version_id = version.pk if version else None
         result, totals = {}, []
         for kind in KINDS:
+            if kind=='Политики' and not any(policy_segments(line.segment_amounts,line.planning_group_sales)):
+                result[kind]={s:{'coefficient':'0','usd':'0','motivation':'0','source':'policy_scope'} for s in SEGMENTS}
+                totals.append(Decimal(0))
+                continue
             details, total = {}, Decimal(0)
             for segment in SEGMENTS:
                 lookup = (cache_key, kind, segment)
@@ -291,7 +312,7 @@ def calculate_plan(scenario_id, progress=None):
                         coefficient_cache.clear()
                     cached = coefficient_cache[lookup] = (coefficient, metadata)
                 coefficient, metadata = cached
-                usd = number(line.segment_amounts.get(segment))
+                usd = policy_segments(line.segment_amounts,line.planning_group_sales)[SEGMENTS.index(segment)] if kind=='Политики' else number(line.segment_amounts.get(segment))
                 contribution = coefficient * usd
                 details[segment] = {**metadata, 'usd': str(usd), 'motivation': str(contribution)}
                 total += contribution

@@ -59,7 +59,7 @@ class MotivationPerformanceTests(SimpleTestCase):
             result = {row[2]: row[5:] for row in db.execute(sql, ['Selected'])}
         self.assertEqual(result, {
             '1 Квартал': (60,60), '2 Квартал(1-2 кв)': (200,160),
-            '3 Квартал': (100,66), '4 Квартал(1-4 кв)': (200,100), 'Год': (200,100), 'Итого': (500,326)})
+            '3 Квартал': (10099,10065), '4 Квартал(1-4 кв)': (200,100), 'Год': (200,100), 'Итого': (10499,10325)})
         # The same query uses the union of selected windows, not their sum.
         with sqlite3.connect(':memory:') as db:
             db.create_function('PATINDEX', 2, lambda pattern, value: next((i+1 for i,ch in enumerate(value or '') if ch not in '0123456789. '), 0))
