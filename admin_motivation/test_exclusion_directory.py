@@ -14,10 +14,11 @@ from .test_coefficient_iteration_calculation import inputs,row
 class ExclusionDirectoryTests(TestCase):
     def test_seed_names_are_shared_across_years_sources_and_sql(self):
         self.assertSetEqual(set(MotivationSubdivisionExclusion.objects.values_list('subdivision_name',flat=True)),
-            {'E-Com','Retail','Брендинг','Прочее','СНГ','Д-Маврикий','Буфер','Вентиляция'})
+            {'E-Com','Retail','Брендинг','Прочее','СНГ','Д-Маврикий','Буфер','Вентиляция','ДПП'})
         with exclusion_scope():
             self.assertFalse(included('  retail '));self.assertFalse(included('вЕнТиЛяЦиЯ'))
-            self.assertTrue(included('ДПП'))  # DPP is a channel rule for policies only.
+            self.assertFalse(included('ДПП'))
+            self.assertTrue(included('Д-Москва'))  # Channel DPP remains a separate policy-only rule.
             for source in ('planning','erp'):
                 sql=source_sql(source)
                 self.assertIn("UPPER(N'Буфер')",sql);self.assertIn("UPPER(N'Прочее')",sql)

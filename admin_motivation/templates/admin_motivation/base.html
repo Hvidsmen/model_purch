@@ -243,9 +243,10 @@
 {% endblock %}
 {% block module_administration %}
 {% if not portal_reports_only and not portal_motivation_readonly %}
-<details class="portal-section-nav" {% if request.resolver_match.url_name == 'motivation_director_directory' %}open{% endif %}>
+<details class="portal-section-nav" {% if request.resolver_match.url_name == 'motivation_director_directory' or request.resolver_match.url_name == 'motivation_exclusion_directory' %}open{% endif %}>
 <summary class="nav-link">Справочники</summary>
 <a class="nav-link {% if request.resolver_match.url_name == 'motivation_director_directory' %}active{% endif %}" href="{% url 'motivation_director_directory' %}">Справочник директоров</a>
+<a class="nav-link {% if request.resolver_match.url_name == 'motivation_exclusion_directory' %}active{% endif %}" href="{% url 'motivation_exclusion_directory' %}">Справочник исключений</a>
 </details>
 {% endif %}
 {% endblock %}

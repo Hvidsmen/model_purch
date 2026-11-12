@@ -3,7 +3,7 @@ from django.db import migrations, models
 
 def seed(apps, schema_editor):
     model = apps.get_model('admin_motivation', 'MotivationSubdivisionExclusion')
-    for name in ('E-Com','Retail','Брендинг','Прочее','СНГ','Д-Маврикий','Буфер','Вентиляция'):
+    for name in ('E-Com','Retail','Брендинг','Прочее','СНГ','Д-Маврикий','Буфер','Вентиляция','ДПП'):
         model.objects.using(schema_editor.connection.alias).get_or_create(subdivision_name=name)
 
 
