@@ -949,3 +949,19 @@ class CoefficientIteration(models.Model):
 
     class Meta:
         ordering = ['-pk']
+
+
+class CoefficientIterationRun(models.Model):
+    iteration = models.ForeignKey(CoefficientIteration, on_delete=models.PROTECT, related_name='runs')
+    key = models.UUIDField(default=uuid4, unique=True, editable=False)
+    state = models.CharField(max_length=16, default='running')
+    configuration = models.JSONField()
+    inputs = models.JSONField(default=dict)
+    results = models.JSONField(default=dict)
+    error = models.TextField(blank=True)
+    started_at = models.DateTimeField(auto_now_add=True)
+    completed_at = models.DateTimeField(null=True)
+
+    class Meta:
+        ordering = ['-pk']
+        constraints = [models.UniqueConstraint(fields=['iteration'], condition=models.Q(state='running'), name='one_running_coefficient_iteration')]
