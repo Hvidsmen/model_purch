@@ -834,17 +834,23 @@ class SalesPlanTests(TestCase):
         self.assertEqual(report['filter_choices']['subdivision'], ['A', 'B'])
 
 
-    def test_plan_index_opens_latest_uploaded_scenario_and_keeps_explicit_selection(self):
+    def test_plan_index_skips_report_and_keeps_explicit_selection(self):
         from datetime import timedelta
         from django.utils import timezone
         self.load()
         older=SalesPlanScenario.objects.create(title='Older upload with newer ID',source_version='older',loaded_at=timezone.now()-timedelta(days=1))
         SalesPlanScenario.objects.create(title='Not loaded',source_version='empty')
         SalesPlanScenario.objects.create(title='Deleted newest upload',source_version='deleted',loaded_at=timezone.now()+timedelta(minutes=1),is_deleted=True)
-        self.assertRedirects(self.client.get(reverse('motivation_sales_plans')),reverse('motivation_sales_plan',args=[self.scenario.pk]),fetch_redirect_response=False)
-        page=self.client.get(reverse('motivation_sales_plans'),follow=True)
+        from django.test.utils import CaptureQueriesContext
+        from django.db import connection
+        with patch('admin_motivation.plan_views.period_report') as report, patch('admin_motivation.services.sales_plans.connect_database') as dwh, CaptureQueriesContext(connection) as queries:
+            page=self.client.get(reverse('motivation_sales_plans'))
         self.assertEqual(page.status_code,200)
-        self.assertEqual(page.context['scenario'].pk,self.scenario.pk)
+        self.assertIsNone(page.context['scenario'])
+        self.assertContains(page,'Выберите сценарий для просмотра')
+        self.assertContains(page,'Создать сценарий')
+        report.assert_not_called();dwh.assert_not_called()
+        self.assertFalse(any('admin_motivation_salesplanline' in query['sql'].lower() for query in queries))
         self.assertEqual(self.client.get(reverse('motivation_sales_plan',args=[older.pk])).context['scenario'].pk,older.pk)
         SalesPlanScenario.objects.update(loaded_at=None)
         self.assertIsNone(self.client.get(reverse('motivation_sales_plans')).context['scenario'])

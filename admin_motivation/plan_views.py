@@ -4,7 +4,7 @@ import logging
 from django.contrib import messages
 from django.core.exceptions import ValidationError
 from django.http import HttpResponse
-from django.db.models import F, QuerySet
+from django.db.models import QuerySet
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from .forms import SalesPlanScenarioForm
@@ -18,12 +18,6 @@ logger = logging.getLogger(__name__)
 
 def sales_plans(request, scenario_id=None):
     scenario = get_object_or_404(SalesPlanScenario, pk=scenario_id, is_deleted=False) if scenario_id else None
-    if scenario is None and request.method == 'GET':
-        scenario = SalesPlanScenario.objects.filter(is_deleted=False, loaded_at__isnull=False).order_by(F('loaded_at').desc(), '-pk').first()
-        if scenario:
-            target = reverse('motivation_sales_plan', args=[scenario.pk])
-            query = request.GET.urlencode()
-            return redirect(target + ('?' + query if query else ''))
     form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'create' else None)
     edit_form = SalesPlanScenarioForm(request.POST if request.method == 'POST' and request.POST.get('action') == 'edit' else None,
         initial={'title': scenario.title, 'source_version': scenario.source_version, 'source_type':scenario.source_type} if scenario else None)
