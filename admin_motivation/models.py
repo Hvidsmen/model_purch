@@ -575,6 +575,7 @@ class SalesPlanLine(models.Model):
 
     class Meta:
         ordering = ['plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand']
+        indexes = [models.Index(fields=['scenario','subdivision'], name='mot_plan_scenario_sub_idx')]
         constraints = [models.UniqueConstraint(fields=['scenario', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand'], name='unique_motivation_sales_plan_line')]
 
 

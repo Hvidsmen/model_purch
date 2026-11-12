@@ -4,8 +4,8 @@ from decimal import Decimal
 from .subdivision_scope import excluded_plan_names
 
 
-def global_lines_without_excluded(scenario, *, input_only=False):
-    excluded = excluded_plan_names(scenario)
+def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, summary_only=False):
+    excluded = excluded_plan_names(scenario) if excluded is None else excluded
     if not excluded:
         return None
     from .sales_plans import SEGMENTS, KINDS, number
@@ -26,16 +26,33 @@ def global_lines_without_excluded(scenario, *, input_only=False):
             data['usd'][index] += value
             if branch is not None:
                 branch[index] += value
-    originals = {(line.plan_date, line.planning_group_sales, line.group, line.brand): line
-                 for line in (scenario.lines.filter(subdivision='').select_related('coefficient_version') if not input_only else ())}
+    original_lines=scenario.lines.filter(subdivision='')
+    if summary_only:
+        original_lines=original_lines.only('scenario_id','plan_date','planning_group_sales','group','brand','calculation','total_usd').order_by()
+    else:
+        original_lines=original_lines.select_related('coefficient_version')
+    def entries():
+        if summary_only and not input_only:
+            # Consume one bounded batch of audit JSON at a time; do not retain
+            # every original snapshot merely to display aggregated amounts.
+            for original in original_lines.iterator(chunk_size=128):
+                key=(original.plan_date,original.planning_group_sales,original.group,original.brand)
+                data=grouped.pop(key,None)
+                if data is not None:yield key,data,original
+            for key,data in grouped.items():yield key,data,None
+        else:
+            originals={(line.plan_date,line.planning_group_sales,line.group,line.brand):line
+                       for line in (original_lines.iterator(chunk_size=2000) if not input_only else ())}
+            for key,data in grouped.items():yield key,data,originals.get(key)
     result = []
-    for (day, pg, group, brand), data in grouped.items():
-        original = originals.get((day, pg, group, brand))
+    for (day, pg, group, brand), data, original in entries():
         line = copy(original) if original else SalesPlanLine(scenario=scenario, subdivision='', plan_date=day,
                                                            planning_group_sales=pg, group=group, brand=brand)
+        line.subdivision=''
         line.amount_usd, line.amount_ddp_usd = data['plan'], data['ddp']
         line.segment_amounts = dict(zip(SEGMENTS, map(str, data['usd'])))
-        line.calculation = deepcopy(original.calculation) if original else {}
+        line.calculation = deepcopy(original.calculation) if original and not summary_only else {}
+        records=original.calculation if original and summary_only else line.calculation
         line.policies_usd = line.sales_usd = line.directors_usd = line.total_usd = None
         if original and original.total_usd is not None:
             totals = []
@@ -43,13 +60,13 @@ def global_lines_without_excluded(scenario, *, input_only=False):
                 for kind in KINDS:
                     total = Decimal(0)
                     for segment, amount in zip(SEGMENTS, data['usd']):
-                        record = line.calculation[kind][segment]
+                        record = records[kind][segment]
                         value = number(record['coefficient']) * amount
-                        record.update(usd=str(amount), motivation=str(value))
+                        if not summary_only:record.update(usd=str(amount), motivation=str(value))
                         total += value
                     totals.append(total)
-                employees = []
-                for record in line.calculation['Директора']['employees']:
+                employees = [];directors=Decimal(0)
+                for record in records['Директора']['employees']:
                     branches = {canonical(sub, names) for sub in record['subdivisions'] if sub not in excluded}
                     branches &= data['branches'].keys()
                     if not branches:
@@ -58,10 +75,11 @@ def global_lines_without_excluded(scenario, *, input_only=False):
                     if len(record['coefficients']) != 5:
                         raise KeyError('Incomplete director rates')
                     value = sum((number(rate) * amount for rate, amount in zip(record['coefficients'], amounts)), Decimal(0))
-                    record.update(subdivisions=sorted(branches), segment_amounts=list(map(str, amounts)), motivation=str(value))
-                    employees.append(record)
-                directors = sum((number(record['motivation']) for record in employees), Decimal(0))
-                line.calculation['Директора'] = {'employees': employees, 'motivation': str(directors)}
+                    directors+=number(value)
+                    if not summary_only:
+                        record.update(subdivisions=sorted(branches), segment_amounts=list(map(str, amounts)), motivation=str(value))
+                        employees.append(record)
+                if not summary_only:line.calculation['Директора'] = {'employees': employees, 'motivation': str(directors)}
                 line.policies_usd, line.sales_usd = totals
                 line.directors_usd, line.total_usd = directors, sum(totals) + directors
             except (KeyError, TypeError):

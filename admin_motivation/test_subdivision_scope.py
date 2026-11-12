@@ -132,7 +132,42 @@ class SubdivisionScopeTests(TestCase):
         report=period_report(self.plan,'global',{})
         self.assertEqual(report['totals']['directors'],Decimal(10))
         self.assertEqual(report['totals']['total'],Decimal(235))
+        compact=period_report(self.plan,'global',{},include_details=False)
+        self.assertEqual(compact['totals'],report['totals'])
+        self.assertEqual(compact['report_rows'],report['report_rows'])
         records=report['report_lines'][0].calculation['Директора']['employees']
         self.assertEqual(len(records),1)
         self.assertEqual(records[0]['subdivisions'],['A'])
         original.refresh_from_db();self.assertEqual(original.directors_usd,Decimal(30))
+
+    def test_compact_report_matches_audit_without_duplicate_scan_or_aggregate(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from .services.plan_report import period_report
+        self.legacy_ventilation()
+        audit=period_report(self.plan,'global',{})
+        with CaptureQueriesContext(connection) as captured:
+            compact=period_report(self.plan,'global',{},include_details=False)
+        self.assertEqual(compact['totals'],audit['totals'])
+        self.assertEqual(compact['report_rows'],audit['report_rows'])
+        self.assertEqual(compact['report_nodes'],audit['report_nodes'])
+        self.assertTrue(all(not line.calculation for line in compact['report_lines']))
+        self.assertTrue(audit['report_lines'][0].calculation)
+        queries=[q['sql'] for q in captured if 'admin_motivation_salesplanline' in q['sql'].lower()]
+        self.assertEqual(len(queries),3)  # Names once, participating inputs, streamed original rates.
+        self.assertFalse(any('SUM(' in sql.upper() for sql in queries))
+        self.assertFalse(any('JOIN' in sql.upper() for sql in queries))
+        original=self.plan.lines.get(subdivision='')
+        self.assertEqual(original.total_usd,Decimal(375))
+
+    def test_compact_report_preserves_missing_ddp_and_unknown_saved_rates(self):
+        from .services.plan_report import period_report
+        self.legacy_ventilation()
+        self.plan.lines.filter(subdivision='A').update(amount_ddp_usd=None)
+        for missing_rates in (False,True):
+            if missing_rates:self.plan.lines.filter(subdivision='').update(calculation={})
+            audit=period_report(self.plan,'global',{})
+            compact=period_report(self.plan,'global',{},include_details=False)
+            self.assertEqual(compact['report_rows'],audit['report_rows'])
+            self.assertEqual(compact['totals'],audit['totals'])
+            self.assertIsNone(compact['totals']['ddp'])
