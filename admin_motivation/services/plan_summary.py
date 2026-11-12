@@ -1,4 +1,5 @@
 """Read-only comparison of global and branch budgets over identical plan lines."""
+from .subdivision_scope import with_exclusions
 from decimal import Decimal
 from django.core.exceptions import ValidationError
 from ..models import DirectorEmployee, Subdivision, SubdivisionDirectorCoeff
@@ -41,6 +42,7 @@ def summary_filters(scenario, params, allowed_subdivisions=None):
         for value, label in sorted(choices, key=lambda item: item[1])]} for field, choices in options.items()]
 
 
+@with_exclusions
 def summary_report(scenario, params, allowed_subdivisions=None):
     selected_types = selections(params, 'type')
     if set(selected_types) - {key for key, label in KINDS}:
@@ -76,6 +78,7 @@ def summary_report(scenario, params, allowed_subdivisions=None):
         plan = Decimal(values['plan'])
         ddp = Decimal(values['ddp']) if values['ddp'] is not None else None
         amounts = [Decimal(value) for value in values['segments']]
+        policy_amounts=[Decimal(value) for value in values.get('policy_segments',values['segments'])]
         staff_values = directors['local'].by_employee(version, sub, pg, group, brand, amounts) if 'directors' in kinds or selected_staff else {}
         if selected_staff:
             staff_values = {staff: value for staff, value in staff_values.items() if staff in selected_staff}
@@ -85,16 +88,17 @@ def summary_report(scenario, params, allowed_subdivisions=None):
         bucket['plan'] += plan
         bucket['ddp'] = add(bucket['ddp'], ddp)
         global_director = directors['global'].motivation(version, '', pg, group, brand, amounts) if 'directors' in kinds else ZERO
-        if policy_kinds:
+        active_kinds=[item for item in policy_kinds if item[1]!='Политики' or any(policy_amounts)]
+        if active_kinds:
             for side in ['global', 'local']:
                 try:
                     matrix, _ = indexes[side].coefficients(version, sub if side == 'local' else '', pg, group, brand,
-                                                          kinds=[source for key, source in policy_kinds])
-                    values = [sum((k * usd for k, usd in zip(row, amounts)), ZERO) for row in matrix]
+                                                          kinds=[source for key, source in active_kinds])
+                    values = [sum((k * usd for k, usd in zip(row, policy_amounts if source=='Политики' else amounts)), ZERO) for (_,source),row in zip(active_kinds,matrix)]
                 except ValidationError:
-                    values = [None] * len(policy_kinds)
+                    values = [None] * len(active_kinds)
                     missing.add(side)
-                for (kind, source), value in zip(policy_kinds, values):
+                for (kind, source), value in zip(active_kinds, values):
                     bucket[side][kind] = add(bucket[side][kind], value)
         if 'directors' in kinds:
             bucket['global']['directors'] += global_director * len(staff_values)

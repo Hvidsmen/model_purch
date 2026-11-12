@@ -19,9 +19,37 @@ class Chanel(models.Model):
         return self.chanel_name
 
 
+class MotivationSubdivisionExclusion(models.Model):
+    subdivision_name = models.CharField('SubdivisionName', max_length=255, unique=True)
+    enabled = models.BooleanField('Исключать из мотивации', default=True)
+    comment = models.CharField('Комментарий', max_length=500, blank=True)
+
+    class Meta:
+        ordering = ('subdivision_name',)
+        verbose_name = 'исключение подразделения из мотивации'
+        verbose_name_plural = 'исключения подразделений из мотивации'
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        self.subdivision_name = self.subdivision_name.strip()
+        if not self.subdivision_name:
+            raise ValidationError({'subdivision_name': 'Укажите SubdivisionName.'})
+        if type(self).objects.exclude(pk=self.pk).filter(subdivision_name__iexact=self.subdivision_name).exists():
+            raise ValidationError({'subdivision_name': 'Такое имя уже есть в справочнике.'})
+
+    def __str__(self):
+        return self.subdivision_name
+
+
 class ActiveSubdivisionManager(models.Manager):
     def get_queryset(self):
-        return super().get_queryset().filter(merged_into__isnull=True).exclude(subdivision_key__in=['Вентиляция', 'вентиляция', 'ВЕНТИЛЯЦИЯ'])
+        import re
+        from .services.subdivision_scope import excluded_names
+        queryset = super().get_queryset().filter(merged_into__isnull=True)
+        names = excluded_names()
+        if names:
+            queryset = queryset.exclude(subdivision_name__iregex=r'^\s*(' + '|'.join(re.escape(n) for n in names) + r')\s*$')
+        return queryset
 
 
 class Subdivision(models.Model):
@@ -53,10 +81,12 @@ class Subdivision(models.Model):
                         DataWH.dbo.Subdivisions
                     WHERE
                         Chanel = 'Дилерский'
-                        AND SubdivisionName NOT IN( 'Прочее','БУФЕР','Буфер дилерский канал','Дилерский канал','Вентиляция')
+
                     """, con=engine)
+        from .services.subdivision_scope import included
         for i, row in df.iterrows():
             subdivision_key, subdivision_name, subdivision_global, chanel = row
+            if not included(subdivision_name):continue
             chanel = Chanel.objects.get(chanel_name=chanel)
             if len(cls.all_objects.filter(subdivision_key=subdivision_key)) == 0:
                 no = cls.objects.create(subdivision_key=subdivision_key,subdivision_name=subdivision_name,subdivision_global=subdivision_global,chanel=chanel)

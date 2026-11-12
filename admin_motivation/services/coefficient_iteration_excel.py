@@ -81,6 +81,8 @@ def workbook(run):
           ['Начало, МСК',local(run.started_at)],['Завершение, МСК',local(run.completed_at)],['Ошибка',run.error],
           ['Квартальная доля, %',run.configuration.get('quarter_share')],['Годовая доля, %',run.configuration.get('year_share')],
           ['Порог выплаты',run.configuration.get('payout_threshold')],
+          ['Исключённые SubdivisionName',', '.join(run.inputs.get('excluded_subdivision_names',[]))],
+          ['Правило участия подразделений',run.inputs.get('subdivision_policy','')],
           ['Примечание','Годовая часть не включена в сумму квартальных. Общая выплата = квартальные + годовая выплата + доплата.'],
           ['2026','Москва + ТТ; только IV квартал и годовая часть из IV квартала; факт = план.'],
           ['2027','Четыре квартала и годовая часть из всех кварталов; факт = план; политики общим планом.'],
@@ -105,8 +107,9 @@ def workbook(run):
     for year,plan in run.inputs.get('plans',{}).items():
         for row in plan['rows']:
             receipts.append([year,row.get('date'),row['branch'],row.get('branch_name',row['branch']),
-                row.get('planning'),row.get('goods'),row.get('brand'),row.get('amount'),*row.get('segments',[None]*5)])
-    table(book,'Источники плана',['Год','Дата','SubdivisionKey','SubdivisionName','Группа планов','Группа ERP','Бренд','План USD','O0','O1','O2','O3','O4'],receipts,text_columns=range(1,8))
+                row.get('channel',''),row.get('planning'),row.get('goods'),row.get('brand'),row.get('amount'),
+                sum((Decimal(str(v)) for v in row.get('policy_segments',row.get('segments',[]))),Decimal(0)),*row.get('segments',[None]*5)])
+    table(book,'Источники плана',['Год','Дата','SubdivisionKey','SubdivisionName','Канал','Группа планов','Группа ERP','Бренд','План USD','База политиков USD','O0','O1','O2','O3','O4'],receipts,text_columns=range(1,9))
     table(book,'Подразделения',['SubdivisionKey','Название'],sorted(names.items()),text_columns=(1,2))
     parameters=table(book,'Параметры',['Параметр','Значение'],meta,text_columns=(1,2));parameters.column_dimensions['B'].width=110
     from .coefficient_iteration import mapping_rows

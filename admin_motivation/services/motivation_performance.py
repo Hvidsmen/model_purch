@@ -62,16 +62,13 @@ def grouped_sql(source, coefficient_type=None, calculation_variant='all_2026'):
     brand = "CASE WHEN [VariationCalculate]=N'Марка(Бренд)' THEN [Марка] ELSE N'' END"
     dimensions = '[Подразделение],[Год],[КварталМотивации],[VariationCalculate]'
     keys = ','.join((author, planning, goods, brand))
-    base_filter = '1=1'
-    if str(coefficient_type or '').strip().casefold() != 'директора':
-        from .director_participation import EXCLUDED
-        excluded = ','.join("N'" + name.replace("'", "''") + "'" for name in EXCLUDED)
-        base_filter = "pf.[Подразделение] NOT IN (" + excluded + ')'
-        if input_type == 'Политики':
-            base_filter = "(pf.[Канал] IS NULL OR pf.[Канал]<>N'ДПП') AND " + base_filter
+    from .subdivision_scope import sql_predicate
+    base_filter = sql_predicate('pf.[Подразделение]')
+    if input_type == 'Политики':
+        base_filter = "(pf.[Канал] IS NULL OR pf.[Канал]<>N'ДПП') AND " + base_filter
     if input_type == 'Политики':
         from .heat_exclusion import predicate as heat_predicate
-        base_filter += " AND NOT (pf.[Год]=2026 AND " + heat_predicate('pf.[ГруппаПлановПродаж]') + ")"
+        base_filter += " AND NOT (" + heat_predicate('pf.[ГруппаПлановПродаж]') + ")"
     return (
         'WITH input_rows AS (' + source + '), personal_windows AS ('
         'SELECT ' + dimensions + ',' + author + ' AS ScopeAuthor,' + planning + ' AS ScopePlanning,'

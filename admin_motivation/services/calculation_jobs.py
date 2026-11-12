@@ -1,4 +1,5 @@
 """Durable SQL Server Agent jobs for the portal's motivation calculation."""
+from .subdivision_scope import with_exclusions
 import re
 from decimal import Decimal, InvalidOperation
 from datetime import datetime, timedelta, timezone as datetime_timezone
@@ -167,6 +168,7 @@ def quote(name):
     return '[' + name.replace(']', ']]') + ']'
 
 
+@with_exclusions
 def prepare(cursor, variant='main'):
     if variant == 'test_2025':
         from .recalculation_2025_sql import prepare as prepare_2025
@@ -231,7 +233,7 @@ def prepare(cursor, variant='main'):
     from .director_participation import patch as include_director_subdivisions
     changed = include_director_subdivisions(changed)
     from .sales_participation import patch as include_sales_channels
-    changed = include_sales_channels(changed)
+    changed = include_sales_channels(changed,policy_heat_all_years=True)
     from ..models import SubdivisionManagerCoeff
     if SubdivisionManagerCoeff.objects.filter(version__status='approved').exists():
         from .manager_correction import patch
@@ -264,6 +266,7 @@ def prepare(cursor, variant='main'):
     cursor.execute(changed)
 
 
+@with_exclusions
 def sync_job(job, connector=None):
     command = calculation_command(job)
     follow_up = additional_job(job)
@@ -433,6 +436,7 @@ def monitor(job, connector=None):
             connection.close()
 
 
+@with_exclusions
 def sync_merge_configuration(connector=None):
     from .sql_export import export_motivation
     from ..models import SubdivisionMergeLog

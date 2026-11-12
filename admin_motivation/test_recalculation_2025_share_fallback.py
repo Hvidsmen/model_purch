@@ -8,6 +8,7 @@ from .services.recalculation_2025_share_fallback import BASE_QUERY,BROAD_SHARES,
 class HistoricalAuthorShareFallbackTests(SimpleTestCase):
     def setUp(self):
         self.db=sqlite3.connect(':memory:');self.addCleanup(self.db.close)
+        self.db.create_function('UPPER',1,lambda v:v.upper() if v else v)
         self.db.create_function('PATINDEX',2,lambda pat,text:(m.start()+1) if (m:=re.search(r'[^0-9. ]',text)) else 0)
         self.db.execute('''CREATE TABLE facts(ПодразделениеДокумент,АвторСделки,
  ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаОтгрузокUSD REAL,ТипКоэф,Год,Подразделение,Канал)''')
@@ -18,7 +19,8 @@ class HistoricalAuthorShareFallbackTests(SimpleTestCase):
             (branch,author,pg,goods,brand,amount,kind,year,branch,channel))
 
     def adapt(self,sql):
-        return sql.replace("N'","'").replace('#fact','facts').replace('#test2025_share_base','base')
+        from .services.subdivision_scope import resolve_scope_sql
+        return resolve_scope_sql(sql).replace("N'","'").replace('#fact','facts').replace('#test2025_share_base','base')
 
     def build(self):
         self.db.execute('DROP TABLE IF EXISTS shares');self.db.execute('DROP TABLE IF EXISTS base')
@@ -92,3 +94,11 @@ class HistoricalAuthorShareFallbackTests(SimpleTestCase):
         self.add('M','DPP','RAC','AC','X',1000,channel='ДПП')
         self.build()
         self.assertEqual(self.allocate('M','New','New','New'),[('Не распределён',120,None)])
+
+
+    def test_dpp_and_heat_do_not_enter_exact_author_weights(self):
+        self.add('M','Eligible','RAC','AC','X',100)
+        self.add('M','DPP','RAC','AC','X',900,channel='ДПП')
+        self.add('M','Heat','5. HEAT','Heat','X',1000)
+        self.build()
+        self.assertEqual(self.allocate('M','RAC','AC','X'),[('Eligible',120,0)])

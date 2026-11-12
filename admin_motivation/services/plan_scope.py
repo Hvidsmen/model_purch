@@ -8,7 +8,7 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
     excluded = excluded_plan_names(scenario) if excluded is None else excluded
     if not excluded:
         return None
-    from .sales_plans import SEGMENTS, KINDS, number
+    from .sales_plans import SEGMENTS, KINDS, number,policy_segments
     from .subdivision_aliases import mapping, canonical
     from ..models import SalesPlanLine
     names = mapping()
@@ -17,10 +17,11 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
     for day, sub, pg, group, brand, amount, ddp, segments in source.order_by().values_list(
             'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
         key = (day, pg, group, brand)
-        data = grouped.setdefault(key, {'plan': Decimal(0), 'ddp': Decimal(0), 'usd': [Decimal(0)] * 5, 'branches': {}})
+        data = grouped.setdefault(key, {'plan': Decimal(0), 'ddp': Decimal(0), 'usd': [Decimal(0)] * 5, 'policy': [Decimal(0)] * 5, 'branches': {}})
         data['plan'] += amount
         data['ddp'] = data['ddp'] + ddp if data['ddp'] is not None and ddp is not None else None
         branch = data['branches'].setdefault(canonical(sub, names), [Decimal(0)] * 5) if not input_only else None
+        for i,value in enumerate(policy_segments(segments,pg)):data['policy'][i]+=value
         for index, segment in enumerate(SEGMENTS):
             value = number(segments.get(segment))
             data['usd'][index] += value
@@ -51,6 +52,7 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
         line.subdivision=''
         line.amount_usd, line.amount_ddp_usd = data['plan'], data['ddp']
         line.segment_amounts = dict(zip(SEGMENTS, map(str, data['usd'])))
+        line.segment_amounts.update({f'P{i}':str(value) for i,value in enumerate(data['policy'])})
         line.calculation = deepcopy(original.calculation) if original and not summary_only else {}
         records=original.calculation if original and summary_only else line.calculation
         line.policies_usd = line.sales_usd = line.directors_usd = line.total_usd = None
@@ -59,7 +61,7 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
             try:
                 for kind in KINDS:
                     total = Decimal(0)
-                    for segment, amount in zip(SEGMENTS, data['usd']):
+                    for segment, amount in zip(SEGMENTS, data['policy'] if kind=='Политики' else data['usd']):
                         record = records[kind][segment]
                         value = number(record['coefficient']) * amount
                         if not summary_only:record.update(usd=str(amount), motivation=str(value))

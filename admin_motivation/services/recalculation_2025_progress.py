@@ -55,6 +55,8 @@ def stage_id(label):return STAGES.index(label)+1
 
 def patch(source):
     from .recalculation_2025_sql import SETUP,FORMULA_SNAPSHOT,ALLOCATION
+    from .subdivision_scope import resolve_scope_sql
+    ALLOCATION=resolve_scope_sql(ALLOCATION)
     from .prepared_sales import MARKER
     anchors=(SETUP,FORMULA_SNAPSHOT,MARKER,';WITH fact AS (',ALLOCATION,
         "IF OBJECT_ID('DataWH.motivation.PlanFactTest2025')",

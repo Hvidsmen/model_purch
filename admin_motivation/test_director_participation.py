@@ -16,9 +16,10 @@ WHERE Подразделение IN ('ДПП','REtail','E-Com','СНГ','Д-Ма
 
 
 class DirectorParticipationTests(SimpleTestCase):
-    def test_directors_survive_both_filters_while_other_types_keep_exclusions(self):
+    def test_name_exclusions_apply_to_every_kind(self):
         sql = patch(SOURCE).replace('#pf_base', 'base').replace("N'", "'")
         with sqlite3.connect(':memory:') as db:
+            db.create_function('UPPER',1,lambda value:value.upper() if value else value)
             db.execute('CREATE TABLE base (Подразделение,ТипКоэф,Канал)')
             rows = [(branch, kind, channel) for branch in (*EXCLUDED, 'Д-Москва')
                     for kind in ('Директора', 'Политики', 'Продажи', None)
@@ -27,9 +28,7 @@ class DirectorParticipationTests(SimpleTestCase):
             db.executemany('INSERT INTO base VALUES (?,?,?)', rows)
             db.executescript(sql)
             actual = db.execute('SELECT * FROM base').fetchall()
-        expected = [(branch, 'Директора', channel) for branch in (*EXCLUDED, 'Д-Москва') for channel in ('Dealer', 'ДПП')]
-        expected += [('Д-Москва', kind, 'Dealer') for kind in ('Политики', 'Продажи', None)]
-        expected.append(('REtail', '  Директора  ', 'Dealer'))
+        expected = [('Д-Москва', kind, 'Dealer') for kind in ('Директора','Политики','Продажи',None)]
         self.assertCountEqual(actual, expected)
 
     def test_patch_supports_original_and_refactored_procedures(self):
@@ -39,10 +38,11 @@ class DirectorParticipationTests(SimpleTestCase):
                 original = (root / name).read_text()
                 updated = patch(original)
                 self.assertEqual(updated.count(MARKER), 1)
-                self.assertEqual(updated.count("COALESCE(LTRIM(RTRIM([ТипКоэф])),N'')<>N'Директора'"), 2)
+                self.assertIn("UPPER(N'Вентиляция')",updated)
+                self.assertNotIn("<>N'Директора'",updated)
                 self.assertEqual(patch(updated), updated)
                 channel = re.search(r"DELETE FROM #pf_base\s+WHERE\s+Канал ='ДПП'", original)[0]
-                self.assertIn(channel + " AND COALESCE(LTRIM(RTRIM([ТипКоэф])),N'')<>N'Директора'", updated)
+                self.assertIn(channel, updated)
 
     def test_unknown_or_ambiguous_filters_fail_before_calculation(self):
         for source in (SOURCE.replace("'Брендинг'", "'Другой'"), SOURCE + SOURCE,
@@ -59,6 +59,7 @@ class DirectorParticipationTests(SimpleTestCase):
     def test_report_uses_same_director_scope_for_quarters_year_and_total(self):
         with sqlite3.connect(':memory:') as db:
             db.create_function('LOWER', 1, lambda value: value.lower() if value else value)
+            db.create_function('UPPER', 1, lambda value: value.upper() if value else value)
             db.execute('CREATE TABLE input (Подразделение,Год,КварталМотивации,VariationCalculate,АвторСделки,ГруппаПлановПродаж,ГруппаТоваров,Марка,СуммаПланUSD,СуммаОтгрузокUSD)')
             periods = ['1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', '4 Квартал(1-4 кв)', 'Год']
             db.executemany('INSERT INTO input VALUES (?,?,?,?,?,?,?,?,?,?)', [
@@ -76,16 +77,4 @@ class DirectorParticipationTests(SimpleTestCase):
                 sql = grouped_sql('SELECT * FROM input', coefficient_type=kind)
                 sql = sql.replace(GLOBAL_PLAN_FACT, 'plan_fact').replace("N'", "'")
                 result = db.execute(sql).fetchall()
-                if kind != 'Директора':
-                    self.assertEqual(result, [])
-                    continue
-                values = {(row[0], row[2]): row[5:] for row in result}
-                for branch in EXCLUDED:
-                    self.assertEqual(values[branch, '1 Квартал'], (10089, 10089))
-                    self.assertEqual(values[branch, '2 Квартал(1-2 кв)'], (20198, 20178))
-                    self.assertEqual(values[branch, '3 Квартал'], (10099, 10089))
-                    # The existing 2026 transition uses Q4 inputs for Q4 and annual eligibility.
-                    self.assertEqual(values[branch, '4 Квартал(1-4 кв)'], (10099, 10089))
-                    self.assertEqual(values[branch, 'Год'], (10099, 10089))
-                    self.assertEqual(values[branch, 'Итого'], (40396, 40356))
-
+                self.assertEqual(result, [])

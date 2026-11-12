@@ -1,4 +1,5 @@
 """Persist private input/result snapshots; never export or approve live rates."""
+from .subdivision_scope import with_exclusions
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -126,6 +127,7 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
     return rows,details
 
 
+@with_exclusions
 def start(iteration_id,owner,configuration,revision,*,recover=False):
     with transaction.atomic():
         obj=CoefficientIteration.objects.select_for_update().get(pk=iteration_id,owner=owner)
@@ -137,7 +139,8 @@ def start(iteration_id,owner,configuration,revision,*,recover=False):
         elif obj.runs.filter(state='running').exists():raise ValidationError('Эта итерация уже рассчитывается. Дождитесь завершения.')
         version=GlobalCoeffVersion.objects.filter(pk=configuration.get('formula_version'),status='approved').first()
         if 'actual_2025' in configuration['scenarios'] and not version:raise ValidationError('Не найдена утверждённая версия формул директоров 2025.')
-        inputs={'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
+        from .subdivision_scope import excluded_names,policy_signature
+        inputs={'excluded_subdivision_names':list(excluded_names()),'subdivision_policy':policy_signature(),'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
                 'subdivisions':dict(Subdivision.all_objects.values_list('pk','subdivision_key')),
                 'subdivision_names':dict(Subdivision.all_objects.values_list('pk','subdivision_name')),
                 'people':dict(DirectorEmployee.objects.values_list('pk','full_name')),
@@ -148,6 +151,7 @@ def start(iteration_id,owner,configuration,revision,*,recover=False):
         return CoefficientIterationRun.objects.create(iteration=obj,configuration=safe(configuration),inputs=safe(inputs))
 
 
+@with_exclusions
 def execute(run,progress,connector=None):
     from ..conns import connect_database
     from .coefficient_iteration_2025 import read_2025,read_details

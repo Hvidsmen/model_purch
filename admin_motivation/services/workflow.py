@@ -13,11 +13,11 @@ def export_snapshot():
     good_ids.update(SubdivisionDirectorCoeff.objects.filter(version__in=versions).values_list('goods_id',flat=True))
     good_ids.update(pk for version in versions for pk in version.coefficients.values_list('goods_id',flat=True))
     from .subdivision_aliases import rules
-    from .subdivision_scope import POLICY
+    from .subdivision_scope import policy_signature
     from .active_directors import bindings
     payload = {
         'active_directors': bindings(),
-        'subdivision_policy': POLICY,
+        'subdivision_policy': policy_signature(),
         'versions': [{'id':v.pk,'title':v.title,'from':v.effective_from.isoformat(),'revision':v.revision,'fallback_variation':v.fallback_variation} for v in versions],
         'aliases': sorted(rules()),
         'goods': list(Goods.objects.filter(pk__in=good_ids).order_by('pk').values('id','goods_key','planning_group_sales','group','brand')),

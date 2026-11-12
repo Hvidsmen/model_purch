@@ -1,6 +1,7 @@
 """Persistent exact plan inputs grouped at coefficient version boundaries."""
 import hashlib
 import json
+from .subdivision_scope import with_exclusions
 from .subdivision_scope import included
 from decimal import Decimal
 from django.core.exceptions import ValidationError
@@ -21,16 +22,18 @@ def summary_versions():
 
 def signature(versions):
     from .subdivision_aliases import rules
-    from .subdivision_scope import POLICY
+    from .subdivision_scope import policy_signature
     boundaries = [(v.pk, v.effective_from.isoformat()) for v in versions]
-    boundaries.append(POLICY)
+    boundaries.append(policy_signature())
+    boundaries.append('policy-channel-bases-v1')
     if rules():
         boundaries.append(rules())
     return hashlib.sha256(json.dumps(boundaries).encode()).hexdigest()
 
 
+@with_exclusions
 def ensure_summary_groups(scenario, versions=None, force=False):
-    from .sales_plans import number
+    from .sales_plans import number,policy_segments
     versions = summary_versions() if versions is None else versions
     wanted = signature(versions)
     current = SalesPlanScenario.objects.values_list('summary_signature', flat=True).get(pk=scenario.pk)
@@ -47,6 +50,7 @@ def ensure_summary_groups(scenario, versions=None, force=False):
 
 @transaction.atomic
 def _rebuild(scenario, versions, wanted, force, number):
+    from .sales_plans import policy_segments
     # SQLite ignores SELECT FOR UPDATE: acquire its writer lock before reading
     # a million rows, so concurrent cold requests cannot both build a snapshot.
     if connection.vendor == 'sqlite':
@@ -66,19 +70,21 @@ def _rebuild(scenario, versions, wanted, force, number):
             if day not in dates:
                 dates[day] = next((v.pk for v in reversed(versions) if v.effective_from <= day), None)
             key = (dates[day], sub, pg, group, brand)
-            values = grouped.setdefault(key, [ZERO, ZERO, [ZERO] * len(SEGMENTS)])
+            values = grouped.setdefault(key, [ZERO, ZERO, [ZERO] * len(SEGMENTS), [ZERO] * len(SEGMENTS)])
             values[0] += plan
             values[1] = values[1] + ddp if values[1] is not None and ddp is not None else None
+            for index,value in enumerate(policy_segments(segments,pg)):
+                values[3][index] += value
             for index, segment in enumerate(SEGMENTS):
                 values[2][index] += number(segments.get(segment))
         # Replace only after the entire source has been read successfully.
         locked.summary_groups.all().delete()
         pending = []
-        for (version, sub, pg, group, brand), (plan, ddp, segments) in grouped.items():
+        for (version, sub, pg, group, brand), (plan, ddp, segments, policies) in grouped.items():
             pending.append(SalesPlanSummaryGroup(scenario_id=locked.pk, version_key=version,
                 subdivision=sub, planning_group_sales=pg, group=group, brand=brand,
                 amounts={'plan': str(plan), 'ddp': str(ddp) if ddp is not None else None,
-                         'segments': [str(value) for value in segments]}))
+                         'segments': [str(value) for value in segments], 'policy_segments':[str(value) for value in policies]}))
             if len(pending) >= 1000:
                 SalesPlanSummaryGroup.objects.bulk_create(pending, batch_size=1000)
                 pending.clear()

@@ -10,7 +10,7 @@ from .services.execution_tracking import tracked_statement
 from . import test_recalculation_2025 as helpers
 
 
-class StageInstrumentationTests(SimpleTestCase):
+class StageInstrumentationTests(TestCase):
     def source(self):
         cursor=Mock();cursor.fetchone.side_effect=[(None,),(0,)]
         prepare(cursor)

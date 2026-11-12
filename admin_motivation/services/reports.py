@@ -71,7 +71,7 @@ def parameters(kind, query, trusted_identity=False):
         selected = values.get(key) or []
         selected = selected if isinstance(selected, list) else [selected]
         if any(not included(value) for value in selected):
-            raise ValidationError('Подразделение «Вентиляция» исключено из мотивации.')
+            raise ValidationError('Подразделение исключено из мотивации общим справочником SubdivisionName.')
     return values
 
 
