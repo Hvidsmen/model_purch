@@ -876,7 +876,7 @@ class ERPPlanSourceTests(TestCase):
         sql=source_sql('erp')
         self.cursor.execute.assert_called_once_with(sql,self.scenario.source_version)
         for fragment in ('DataWH.erp.[РегистрыНакопления.ПланыПродаж]', 'ps.Сценарий = @params_scenario',
-                         'ps.Подразделение', 'ps.Номенклатура', 'SUM(ps.Сумма) AmountUSD', 'SUM(ps.даичи_СуммаДДП) AmountDDP_USD'):
+                         'ps.Подразделение', 'ps.Номенклатура', 'SUM(COALESCE(ps.Сумма,0)) AmountUSD', 'SUM(ps.даичи_СуммаДДП) AmountDDP_USD'):
             self.assertIn(fragment,sql)
         self.assertNotIn('DataWH.planning.PlanSales',sql)
         self.assertEqual(self.scenario.lines.get(subdivision='').amount_usd,Decimal('1500'))
