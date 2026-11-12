@@ -52,10 +52,10 @@ class KeyCalculationTests(SimpleTestCase):
         calculated,_=at_full_plan(plans,rates,2026,D(80),D(20))
         self.assertEqual({r['branch'] for r in calculated},{MERGED})
         self.assertEqual(next(r['total'] for r in calculated if r['kind']=='Политики'),D(15))
-        self.assertEqual(list(rates.directors_for('TT-ID',2025)),[('directors_0_0',3)])
-        self.assertEqual({r['subdivision'] for r in rates.coefficients_2025(['MSK-ID','TT-ID'])},{'MSK-ID','TT-ID'})
+        self.assertEqual(list(rates.directors_for(TT,2025)),[('directors_0_0',3)])
+        self.assertEqual({r['subdivision'] for r in rates.coefficients_2025([MOSCOW,TT])},{MOSCOW,TT})
 
-    def test_equal_names_do_not_merge_calculations_for_distinct_keys(self):
+    def test_equal_names_merge_plan_and_director_base_for_distinct_keys(self):
         payload,mappings,_,people=inputs()
         for i,block in enumerate(payload['branches']['blocks']):
             block['labels']=['A','B'];mappings[f'branches_{i}_0']={'subdivision':1};mappings[f'branches_{i}_1']={'subdivision':2}
@@ -64,7 +64,10 @@ class KeyCalculationTests(SimpleTestCase):
         rates=RateBook(payload,mappings,{1:'KEY-A',2:'KEY-B'},people,{1:'Same name',2:'Same name'})
         calculated,_=at_full_plan([{**row(),'branch':'KEY-A'},{**row(amount='50'),'branch':'KEY-B'}],rates,2027,D(80),D(20))
         policies={r['branch']:r['total'] for r in calculated if r['kind']=='Политики'}
-        self.assertEqual(policies,{'KEY-A':D(10),'KEY-B':D(5)})
+        self.assertEqual(policies,{'Same name':D(15)})
+        directors=[r for r in calculated if r['kind']=='Директора']
+        self.assertEqual(len(directors),2)
+        self.assertEqual(sum(r['total'] for r in directors),D(105))
 
     def test_import_and_native_batch_join_and_partition_by_keys(self):
         from .services.coefficient_iteration_2025 import build_sql
@@ -74,9 +77,11 @@ class KeyCalculationTests(SimpleTestCase):
             self.assertIn('GROUP BY s.SubdivisionKey, s.SubdivisionName',sql)
         sql=build_sql()
         self.assertIn('ON t.Subdivision = s.SubdivisionKey',sql)
-        self.assertIn('WHERE SubdivisionKey IN (SELECT DISTINCT Subdivision FROM #iteration_plan)',sql)
-        self.assertNotIn('s.SubdivisionName',sql)
-        self.assertNotIn('sub.SubdivisionName',sql)
+        self.assertIn('n.SubdivisionKey=p.Subdivision',sql)
+        self.assertIn('d.SubdivisionName IN',sql)
+        self.assertIn('s.SubdivisionName AS PortalSubdivisionKey',sql)
+        self.assertIn('SET [ПодразделениеДокумент]=[Подразделение]',sql)
+        self.assertIn('named.SubdivisionName=c.Subdivision',sql)
 
 
 class KeyPresentationTests(TestCase):
@@ -105,3 +110,35 @@ class KeyPresentationTests(TestCase):
         self.assertEqual(book['Подразделения']['A2'].value,'KEY-A')
         self.assertEqual(book['Подразделения']['A3'].value,'KEY-B')
         book.close();exported.close()
+
+
+class BusinessScopeMoneyTests(SimpleTestCase):
+    def setup_book(self):
+        payload,mappings,_,people=inputs()
+        for i,block in enumerate(payload['directors']['blocks']):block['labels']=['Директор '+str(i)]
+        for value in mappings.values():
+            if 'employee' in value:value['subdivisions']=[1,2]
+        rates=RateBook(payload,mappings,{1:'Д-Астрахань',2:'Д-Волгоград'},people,
+                       {1:'Д-Астрахань',2:'Д-Астрахань'})
+        return rates
+
+    def test_signed_source_plans_net_before_premium_and_keep_receipts(self):
+        rates=self.setup_book()
+        rows,details=at_full_plan([row('Д-Астрахань',amount='100'),row('Д-Волгоград',amount='-20')],rates,2027,D(80),D(20))
+        policy=next(r for r in rows if r['kind']=='Политики')
+        self.assertEqual(policy['total'],D(8))
+        self.assertEqual({r['branch'] for r in rows},{'Д-Астрахань'})
+        self.assertEqual({r['key'] for r in details[0]['source_subdivisions']},{'Д-Астрахань','Д-Волгоград'})
+
+    def test_2025_director_gate_uses_combined_plan_not_individual_keys(self):
+        from unittest.mock import Mock
+        from .services.coefficient_iteration_runner import directors_2025
+        cursor=Mock();cursor.fetchall.return_value=[('Д-Астрахань',2,'1. RAC','Бытовые кондиционеры','DAIKIN','O1',D(90),D(0))]
+        snapshot={'directors':[],'corrections':[],'aliases':{},'default':'Подразделение(Глобально)'}
+        plans=[row('Д-Астрахань',2025,4,'100'),row('Д-Волгоград',2025,4,'100')]
+        rows,_=directors_2025(cursor,plans,self.setup_book(),{'quarter_share':'80','year_share':'20','payout_threshold':'.8'},snapshot)
+        self.assertEqual(len(rows),2)
+        for result in rows:
+            self.assertEqual(result['quarters'][1],0)
+            self.assertGreater(result['annual_accrued'],0)
+            self.assertEqual(result['annual_paid'],0)
