@@ -31,7 +31,7 @@ DECLARE @params_scenario nvarchar(255) = ?;
  SELECT s.SubdivisionKey, s.SubdivisionName Subdivision, g.PlanningGroupSalesERP, CAST(ps.Date_ AS date) Date_,
  CASE WHEN g.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN g.GroupERP ELSE '*' END GroupERP,
  CASE WHEN g.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN g.BrandName ELSE '*' END Brand,
- SUM(CASE WHEN YEAR(ps.Date_)=2025 THEN COALESCE(ps.AmountUSD,0) ELSE ps.AmountUSD END) AmountUSD, SUM(ps.AmountDDP_USD) AmountDDP_USD
+ SUM(COALESCE(ps.AmountUSD,0)) AmountUSD, SUM(ps.AmountDDP_USD) AmountDDP_USD
  FROM DataWH.planning.PlanSales ps
  INNER JOIN DataWH.dbo.Subdivisions s ON s.SubdivisionKey = ps.Subdivision
  INNER JOIN DataWH.planning.Goods g ON ps.GoodsKey = g.PlanningKey

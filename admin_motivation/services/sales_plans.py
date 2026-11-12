@@ -35,10 +35,7 @@ def import_number(value,column):
 def source_sql(source_type):
     if source_type=='planning':return SQL
     if source_type!='erp':raise ValidationError('Неизвестный источник плана.')
-    # Only the manually entered planning.PlanSales 2025 treats missing USD as zero.
-    # ERP and other years retain strict missing-value validation.
-    erp_sql=SQL.replace('SUM(CASE WHEN YEAR(ps.Date_)=2025 THEN COALESCE(ps.AmountUSD,0) ELSE ps.AmountUSD END)', 'SUM(ps.AmountUSD)')
-    return (erp_sql.replace('DataWH.planning.PlanSales ps','DataWH.erp.[РегистрыНакопления.ПланыПродаж] ps')
+    return (SQL.replace('DataWH.planning.PlanSales ps','DataWH.erp.[РегистрыНакопления.ПланыПродаж] ps')
         .replace('ps.Version_','ps.Сценарий').replace('ps.Date_','ps.Период')
         .replace('ps.Subdivision','ps.Подразделение').replace('ps.GoodsKey','ps.Номенклатура')
         .replace('ps.AmountUSD','ps.Сумма').replace('ps.AmountDDP_USD','ps.даичи_СуммаДДП'))
