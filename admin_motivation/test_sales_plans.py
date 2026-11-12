@@ -526,7 +526,7 @@ class SalesPlanTests(TestCase):
         self.assertIn('CAST(ps.Date_ AS date)', SQL)
         self.assertIn('s.SubdivisionName Subdivision', SQL)
         self.assertIn("ELSE '*' END", SQL)
-        self.assertIn('plan_.Subdivision=f.SubdivisionName', SQL)
+        self.assertIn('plan_.SubdivisionKey=f.SubdivisionKey', SQL)
         self.assertIn('COALESCE(f.O0,1)', SQL)
 
     def test_user_query_column_order_with_string_date_loads_correctly(self):

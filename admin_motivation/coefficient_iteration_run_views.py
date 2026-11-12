@@ -97,13 +97,14 @@ def calculations(request,pk):
         return FileResponse(workbook(run),as_attachment=True,filename=f'coefficient-iteration-{pk}-run-{run.pk}.xlsx')
     presentation=[]
     if run:
+        names={row['branch']:row.get('branch_name',row['branch']) for plan in run.inputs.get('plans',{}).values() for row in plan['rows']}
         for scenario,value in run.results.items():
             qs=[4] if value.get('year')==2026 else [1,2,3,4]
             item={**value,'key':scenario,'quarters':qs}
             if value.get('state')=='completed':
                 def present(row):
                     from decimal import Decimal
-                    return {**row,'payments':[row['quarters'][q-1] for q in qs],'quarter_total':sum((Decimal(str(v)) for v in row['quarters']),Decimal(0))}
+                    return {**row,'branch_name':names.get(row['branch'],row['branch']),'payments':[row['quarters'][q-1] for q in qs],'quarter_total':sum((Decimal(str(v)) for v in row['quarters']),Decimal(0))}
                 item['summary']=[present(row) for row in aggregate_rows(value['rows'])]
                 item['recipients']=[present(row) for row in value['rows']]
             presentation.append(item)

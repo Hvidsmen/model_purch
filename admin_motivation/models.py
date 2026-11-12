@@ -497,7 +497,7 @@ class SalesPlanScenario(models.Model):
 
 
 class SalesPlanLineQuerySet(models.QuerySet):
-    INPUT_FIELDS = {'scenario', 'scenario_id', 'plan_date', 'subdivision', 'planning_group_sales',
+    INPUT_FIELDS = {'source_subdivisions', 'scenario', 'scenario_id', 'plan_date', 'subdivision', 'planning_group_sales',
                     'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts'}
 
     def invalidate_summary(self, extra_ids=()):
@@ -566,6 +566,7 @@ class SalesPlanLine(models.Model):
     amount_usd = models.DecimalField(max_digits=24, decimal_places=6)
     amount_ddp_usd = models.DecimalField('DDP, USD', max_digits=24, decimal_places=6, null=True, blank=True)
     segment_amounts = models.JSONField(default=dict)
+    source_subdivisions = models.JSONField(default=dict, blank=True)
     coefficient_version = models.ForeignKey(GlobalCoeffVersion, on_delete=models.PROTECT, null=True, blank=True)
     calculation = models.JSONField(default=dict)
     policies_usd = models.DecimalField(max_digits=24, decimal_places=6, null=True)

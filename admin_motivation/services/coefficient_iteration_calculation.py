@@ -9,7 +9,7 @@ from .heat_exclusion import is_heat
 from .sales_plans import number
 from .subdivision_scope import included
 
-RULE='coefficient-iteration-v1'
+RULE='coefficient-iteration-v2-subdivision-keys'
 ZERO=Decimal(0)
 MOSCOW='Д-Москва'
 TT='ТЕРМОТРЕЙД'
@@ -26,14 +26,18 @@ def key(values):
 
 
 class RateBook:
-    def __init__(self,payload,mappings,subdivisions,people):
+    def __init__(self,payload,mappings,subdivisions,people,subdivision_names=None):
         self.cells={};self.labels={};self.groups={};self.minimums={}
         self.targets=defaultdict(set);self.people=people;self.sources={}
+        self.names={str(value):(subdivision_names or {}).get(pk,str(value)) for pk,value in subdivisions.items()}
+        self.references={};candidates=defaultdict(set)
         for row in mapping_rows(payload):
             value=mappings.get(row['id'],{});block=payload[row['source']]['blocks'][row['block']]
             if row['source']=='branches':
                 if value.get('subdivision') not in subdivisions:raise ValidationError('Подтвердите все подразделения в сопоставлении.')
-                targets=[(branch(subdivisions[value['subdivision']]),row['kind'])]
+                scope=str(subdivisions[value['subdivision']])
+                targets=[(scope,row['kind'])]
+                if self.role(scope)==MOSCOW:candidates[row['kind']].add(scope)
             else:
                 person=value.get('employee')
                 if person not in people or not value.get('subdivisions'):raise ValidationError('Подтвердите всех директоров и их подразделения.')
@@ -43,7 +47,7 @@ class RateBook:
                 token=row['id'];targets=[]
                 for sub in value['subdivisions']:
                     if sub not in subdivisions:raise ValidationError('Не найдено подразделение директора.')
-                    self.targets[token].add(branch(subdivisions[sub]))
+                    self.targets[token].add(str(subdivisions[sub]))
                 self.sources[token]={'employee':person,'employee_2025':value.get('employee_2025') or person,'label':row['label']}
                 # The user explicitly identified historical recipients/branches.
                 self.sources[token]['historical_branch']=(TT if norm(row['label']).startswith('волков ') else MOSCOW) if norm(row['label']) in HISTORICAL_DIRECTORS else None
@@ -58,8 +62,21 @@ class RateBook:
                     self.groups[group]=min(self.groups.get(group,minimum),minimum)
                     self.minimums[target]=min(self.minimums.get(target,minimum),minimum)
 
+        for kind,scopes in candidates.items():
+            ordered=sorted(scopes)
+            profiles=[{cell[2:]:rates for cell,rates in self.cells.items() if cell[:2]==(scope,kind)} for scope in ordered]
+            if any(profile!=profiles[0] for profile in profiles[1:]):raise ValidationError('Для объединённой Москвы выбраны разные наборы ставок. Проверьте привязки ключей.')
+            self.references[kind]=ordered[0]
+
+    def role(self,scope):
+        coded=branch(scope)
+        return coded if coded in (MOSCOW,TT) else branch(self.names.get(scope,scope))
+
+    def rate_scope(self,scope,kind):
+        return self.references.get(kind,MOSCOW) if self.role(scope) in (MOSCOW,TT) else scope
+
     def get(self,scope,kind,dimensions,year):
-        if kind!='Директора' and scope==TT:scope=MOSCOW  # Explicit 2025 TT=Moscow; later TT is merged.
+        if kind!='Директора':scope=self.rate_scope(scope,kind)  # Explicit 2025 TT=Moscow; later TT is merged.
         p,g,b=key(dimensions);target=(scope,kind)
         for goods,brand_,origin in ((g,b,'Точная ставка'),(g,'*','Строка *'),('*',b,'Строка *'),('*','*','Строка *')):
             cell=(*target,p,goods,brand_)
@@ -69,7 +86,7 @@ class RateBook:
         return (value,)*5,'Минимум группы' if (*target,p) in self.groups else 'Минимум таблицы'
 
     def classification(self,scope,kind,dimensions):
-        if kind!='Директора' and scope==TT:scope=MOSCOW
+        if kind!='Директора':scope=self.rate_scope(scope,kind)
         p,g,b=key(dimensions)
         for goods,brand_ in ((g,b),(g,'*'),('*',b),('*','*')):
             identity=(scope,kind,p,goods,brand_)
@@ -82,9 +99,9 @@ class RateBook:
             source=self.sources[token]
             if year==2025:
                 targets={source['historical_branch']} if source['historical_branch'] else targets
-                matches=sub in targets;person=source['employee_2025']
+                matches=self.role(sub) in targets if source['historical_branch'] else sub in targets;person=source['employee_2025']
             else:
-                matches=bool(targets & {MOSCOW,TT}) if sub==MERGED else sub in targets
+                matches=any(self.role(target) in (MOSCOW,TT) for target in targets) if sub==MERGED else sub in targets
                 person=source['employee']
             if not matches:continue
             signature={cell[2:]:value for cell,value in self.cells.items() if cell[:2]==(token,'Директора')}
@@ -97,9 +114,8 @@ class RateBook:
     def coefficients_2025(self,branches):
         records=[]
         for sub in branches:
-            rate_branch=MOSCOW if sub==TT else sub
             for (scope,kind,p,g,b),rates in self.cells.items():
-                if scope!=rate_branch or kind=='Директора':continue
+                if kind=='Директора' or scope!=self.rate_scope(sub,kind):continue
                 p,g,b=self.labels[scope,kind,p,g,b]
                 records.append({'subdivision':sub,'kind':kind,'planning':p,'goods':g,'brand':'' if b=='*' else b,
                                 **{f'k{i}':str(v) for i,v in enumerate(rates)}})
@@ -109,16 +125,25 @@ class RateBook:
 
 def plan_rows(plan,year):
     if plan.loaded_at is None or plan.is_deleted:raise ValidationError(f'Сначала загрузите план {year}.')
-    fields=('plan_date','subdivision','planning_group_sales','group','brand','amount_usd','segment_amounts')
+    fields=('plan_date','subdivision','planning_group_sales','group','brand','amount_usd','segment_amounts','source_subdivisions')
     result=[]
-    for day,sub,p,g,b,amount,segments in plan.lines.exclude(subdivision='').order_by().values_list(*fields).iterator(chunk_size=2000):
+    for day,sub,p,g,b,amount,segments,parts in plan.lines.exclude(subdivision='').order_by().values_list(*fields).iterator(chunk_size=2000):
         if day.year!=year:raise ValidationError(f'В плане {year} присутствует другой год: {day.year}.')
         if not included(sub):continue
         values=[number(segments.get(f'O{i}')) for i in range(5)];amount=number(amount)
         if abs(sum(values,ZERO)-amount)>max(Decimal('.0001'),abs(amount)*Decimal('.00000001')):
             raise ValidationError(f'В плане {year} сумма O0–O4 не совпадает с планом. Перезагрузите план.')
-        result.append({'date':day,'branch':branch(sub),'planning':p or '*','goods':g or '*','brand':b or '*',
-                       'amount':amount,'segments':values})
+        if not parts:raise ValidationError(f'В плане {year} не сохранены SubdivisionKey. Один раз перезагрузите этот план из MS SQL после обновления портала.')
+        part_amount=ZERO;part_segments=[ZERO]*5
+        for source_key,part in parts.items():
+            value=number(part['amount']);split=[number(part['segments'].get(f'O{i}')) for i in range(5)]
+            if abs(sum(split,ZERO)-value)>max(Decimal('.0001'),abs(value)*Decimal('.00000001')):
+                raise ValidationError(f'В плане {year} некорректные сегменты для SubdivisionKey {source_key}. Перезагрузите план.')
+            part_amount+=value;part_segments=[a+b for a,b in zip(part_segments,split)]
+            result.append({'date':day,'branch':str(source_key),'branch_name':sub,'planning':p or '*','goods':g or '*','brand':b or '*',
+                           'amount':value,'segments':split})
+        if abs(part_amount-amount)>Decimal('.0001') or any(abs(a-b)>Decimal('.0001') for a,b in zip(part_segments,values)):
+            raise ValidationError(f'В плане {year} суммы по ключам не совпадают с сохранённым итогом. Перезагрузите план.')
     if not result:raise ValidationError(f'Выбранный план {year} пуст.')
     return result
 
@@ -132,11 +157,11 @@ def empty_row(scenario,year,sub,kind,person='',employee_id=None):
 def at_full_plan(rows,rates,year,quarter_share,year_share,factor=lambda *args:Decimal(1)):
     scenario='moscow_q4_2026' if year==2026 else 'full_2027'
     grouped={};details=[]
-    selected=[r for r in rows if year!=2026 or r['date'].month>=10 and r['branch'] in (MOSCOW,TT)]
-    if year==2026 and {r['branch'] for r in selected}!={MOSCOW,TT}:
+    selected=[r for r in rows if year!=2026 or r['date'].month>=10 and rates.role(r['branch']) in (MOSCOW,TT)]
+    if year==2026 and {rates.role(r['branch']) for r in selected}!={MOSCOW,TT}:
         raise ValidationError('Для IV квартала 2026 нужны исходные планы и Москвы, и Термотрейда.')
     for item in selected:
-        sub=MERGED if item['branch'] in (MOSCOW,TT) else item['branch'];q=(item['date'].month-1)//3+1
+        sub=MERGED if rates.role(item['branch']) in (MOSCOW,TT) else item['branch'];q=(item['date'].month-1)//3+1
         dimensions=(item['planning'],item['goods'],item['brand'])
         actors=[('Политики','',None),('Продажи','',None),*[(token,rates.people[person],person) for token,person in rates.directors_for(sub,year)]]
         for actor,person,person_id in actors:

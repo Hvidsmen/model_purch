@@ -28,7 +28,7 @@ def formulas_snapshot(version):
         code=str(period).casefold().replace(' ','').replace('.','')
         q={'1кв':1,'2кв':2,'3кв':3,'4кв':4,'год':5,'year':5}.get(code)
         if q is None:raise ValidationError('Неизвестный период поправки подразделения: '+str(period))
-        corrections.append([branch(sub),q,str(number(value))])
+        corrections.append([str(sub),q,str(number(value))])
     formulas=list(SubdivisionDirectorCoeff.objects.filter(version=version).values_list(
         'subdivision__subdivision_key','employee_id','goods__planning_group_sales','goods__group','goods__brand','variation_calculate__variation_name'))
     return {'version_id':version.pk,'version_name':str(version),'default':version.fallback_variation,
@@ -40,7 +40,7 @@ class DirectorRates:
         self.rates=rates;self.token=token;self.snapshot=snapshot
         self.formulas={};self.corrections={}
         for sub,person,p,g,b,formula in snapshot['directors']:
-            identity=(branch(sub),person,*key((p,g,b)))
+            identity=(str(sub),person,*key((p,g,b)))
             if identity in self.formulas and self.formulas[identity]!=formula:raise ValidationError('Неоднозначные формулы директора.')
             self.formulas[identity]=formula
         for sub,period,value in snapshot['corrections']:
@@ -49,7 +49,7 @@ class DirectorRates:
             self.corrections[identity]=number(value)
 
     def rate_branch(self,sub):
-        aliases={branch(k):branch(v) for k,v in self.snapshot['aliases'].items()}
+        aliases={str(k):str(v) for k,v in self.snapshot['aliases'].items()}
         return aliases.get(sub,sub)
 
     def factor(self,sub,period):return self.corrections.get((self.rate_branch(sub),period),Decimal(1))
@@ -69,7 +69,7 @@ def validate_directors_2025(plans,rates,snapshot):
     # classification matrix before reusing it for directors (no lost dimensions).
     for sub in {r['branch'] for r in plans}:
         if not list(rates.directors_for(sub,2025)):raise ValidationError('Не назначен директор: '+sub)
-        sales_scope=MOSCOW if sub==TT else sub
+        sales_scope=rates.rate_scope(sub,'Продажи')
         sales_keys={cell[2:] for cell in rates.cells if cell[:2]==(sales_scope,'Продажи')}
         for token,_ in rates.directors_for(sub,2025):
             director_keys={cell[2:] for cell in rates.cells if cell[:2]==(token,'Директора')}
@@ -99,7 +99,7 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
     for sub,q,p,g,b,segment,pos,neg in cursor.fetchall():
         segment=str(segment or '').strip().upper().replace('О','O').replace('K','O')
         if segment not in ('O0','O1','O2','O3','O4'):raise ValidationError('В факте 2025 неизвестный сегмент скидки.')
-        facts.append({'branch':branch(sub),'quarter':int(q),'planning':p or '*','goods':g or '*','brand':b or '*',
+        facts.append({'branch':str(sub),'quarter':int(q),'planning':p or '*','goods':g or '*','brand':b or '*',
                       'segment':segment,'positive':number(pos or 0),'negative':number(neg or 0)})
     plan=[]
     for r in plans:
@@ -137,11 +137,12 @@ def start(iteration_id,owner,configuration,revision,*,recover=False):
         if 'actual_2025' in configuration['scenarios'] and not version:raise ValidationError('Не найдена утверждённая версия формул директоров 2025.')
         inputs={'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
                 'subdivisions':dict(Subdivision.all_objects.values_list('pk','subdivision_key')),
+                'subdivision_names':dict(Subdivision.all_objects.values_list('pk','subdivision_name')),
                 'people':dict(DirectorEmployee.objects.values_list('pk','full_name')),
                 'formulas':formulas_snapshot(version) if version else {'formula_defaults':[],'directors':[],'corrections':[],'aliases':{},'default':''}}
         # Validate historical choices even when an old confirmed upload predates
         # introduction of employee_2025. Never silently substitute current staff.
-        RateBook(obj.payload,obj.mappings,inputs['subdivisions'],inputs['people'])
+        RateBook(obj.payload,obj.mappings,inputs['subdivisions'],inputs['people'],inputs['subdivision_names'])
         return CoefficientIterationRun.objects.create(iteration=obj,configuration=safe(configuration),inputs=safe(inputs))
 
 
@@ -150,7 +151,7 @@ def execute(run,progress,connector=None):
     from .coefficient_iteration_2025 import read_2025,read_details
     inputs=run.inputs;settings=run.configuration
     rates=RateBook(inputs['payload'],inputs['mappings'],{int(k):v for k,v in inputs['subdivisions'].items()},
-                   {int(k):v for k,v in inputs['people'].items()})
+                   {int(k):v for k,v in inputs['people'].items()},{int(k):v for k,v in inputs.get('subdivision_names',{}).items()})
     results={};failed=False
     try:
         progress('Проверка загруженных планов и покрытия ставок',1)

@@ -45,17 +45,21 @@ def build_sql(cursor=None):
     # Use the exact saved portal plan, including ERP imports. No second read of
     # planning.PlanSales or source version with potentially different contents.
     pattern=r'FROM\s*\(\s*SELECT\s+Subdivision\s*,PlanningGroupSalesERP[\s\S]*?\)\s+t\s+INNER JOIN DataWH\.dbo\.Subdivisions s\s+ON t\.Subdivision = s\.SubdivisionKey'
-    source,count=re.subn(pattern,'FROM #iteration_plan t\nINNER JOIN DataWH.dbo.Subdivisions s ON t.Subdivision = s.SubdivisionName',source)
+    source,count=re.subn(pattern,'FROM #iteration_plan t\nINNER JOIN DataWH.dbo.Subdivisions s ON t.Subdivision = s.SubdivisionKey',source)
     if count!=2:raise ValidationError('Не распознаны два источника сохранённого плана 2025.')
     source=shares(source);source=first_quarter(parameterize(source));source=patch_calculation(source)
     from .calculation_performance import patch as performance
     source=performance(source)
     source=private_sales(source,cursor=cursor).replace('DataWH.motivation.PortalCalculationSubdivisions','DataWH.dbo.Subdivisions')
-    source=source.replace('SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions','SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions WHERE SubdivisionName IN (SELECT DISTINCT Subdivision FROM #iteration_plan)')
+    source=source.replace('SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions','SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions WHERE SubdivisionKey IN (SELECT DISTINCT Subdivision FROM #iteration_plan)')
     source=prepared(source,historical_author=True,cursor=cursor)
     # The saved importer maps blank planning groups to 9. OTHER. Apply the
     # identical classification to fact so those rows can match the saved plan.
     source=re.sub(r'\bp\.PlanningGroupSalesERP\b',"COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesERP)),N''),N'9. OTHER')",source,flags=re.I)
+    # Use physical keys for native calculation partitions and coefficient joins;
+    # names are restored only by the presentation layer. Exported formula scopes
+    # also store subdivision_key, so no name lookup is needed for historical rules.
+    source=re.sub(r'\b(sub|s)\.SubdivisionName\b',lambda match:f'CONVERT(nvarchar(255),{match[1]}.SubdivisionKey)',source,flags=re.I)
     source=source.replace('motivation.PortalFormulaDefaults','#iteration_defaults')
     for old,new in (('FactTest2025','#iteration_fact'),('PlanFactTest2025','#iteration_plan_fact'),
                     ('ReportMotivationByDealAuthorTest2025','#iteration_report'),('AnnualAccrualTest2025','#iteration_annual')):
@@ -110,11 +114,12 @@ def read_2025(cursor,plan,rates,settings,progress):
           row['goods'] if row['planning'].strip().upper() in ('1. RAC','2. VRF','3. PROF') else '',
           '' if row['brand']=='*' else row['brand'],str(row['amount'])) for row in plan])
     if defaults:cursor.executemany('INSERT INTO #iteration_defaults VALUES (?,?)',[(r['date'],r['formula'] or None) for r in defaults])
-    cursor.execute('''SELECT SubdivisionName FROM dbo.Subdivisions WHERE SubdivisionName IN
- (SELECT DISTINCT Subdivision FROM #iteration_plan) GROUP BY SubdivisionName HAVING COUNT(*)>1''')
-    if cursor.fetchall():raise ValidationError('В DWH неоднозначные названия подразделений плана 2025; расчёт остановлен.')
+    cursor.execute('''SELECT SubdivisionKey FROM dbo.Subdivisions WHERE SubdivisionKey IN
+ (SELECT DISTINCT Subdivision FROM #iteration_plan) GROUP BY SubdivisionKey HAVING COUNT(*)>1''')
+    duplicates=cursor.fetchall()
+    if duplicates:raise ValidationError('В DWH повторяются SubdivisionKey: '+', '.join(str(row[0]) for row in duplicates))
     cursor.execute('''SELECT DISTINCT p.Subdivision FROM #iteration_plan p LEFT JOIN dbo.Subdivisions s
- ON s.SubdivisionName=p.Subdivision WHERE s.SubdivisionKey IS NULL''')
+ ON s.SubdivisionKey=p.Subdivision WHERE s.SubdivisionKey IS NULL''')
     missing=cursor.fetchall()
     if missing:raise ValidationError('В DWH нет подразделений: '+', '.join(str(r[0]) for r in missing))
     progress('2025: факт, распределение плана по авторам и квартальные/годовые выплаты',6)
@@ -133,7 +138,7 @@ def read_2025(cursor,plan,rates,settings,progress):
     grouped={}
     for kind,sub,author,period,paid,bonus,possible in cursor.fetchall():
         if kind not in ('Политики','Продажи'):continue
-        sub=branch(sub);author=str(author or '') if kind=='Политики' else ''
+        sub=str(sub);author=str(author or '') if kind=='Политики' else ''
         row=grouped.setdefault((sub,kind,author),empty_row('actual_2025',2025,sub,kind,author))
         if str(period).strip().casefold()=='год':row['annual_paid']+=number(paid or 0)
         else:
@@ -144,7 +149,7 @@ def read_2025(cursor,plan,rates,settings,progress):
  SUM(CASE WHEN [СуммаМотивацииUSD]>0 THEN [СуммаМотивацииUSD] ELSE 0 END)
  FROM #iteration_fact WHERE [Год]=2025 AND '''+ELIGIBLE+''' GROUP BY [ТипКоэф],[Подразделение],[АвторСделки],[Квартал]''')
     for kind,sub,author,q,potential in cursor.fetchall():
-        author=str(author or '') if kind=='Политики' else '';identity=(branch(sub),kind,author)
+        author=str(author or '') if kind=='Политики' else '';identity=(str(sub),kind,author)
         if identity in grouped:grouped[identity]['annual_quarters'][int(q)-1]+=number(potential or 0)*number(settings['year_share'])/100
     for row in grouped.values():
         row['annual_accrued']=sum(row['annual_quarters'],ZERO)
