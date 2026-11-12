@@ -65,7 +65,7 @@ def sales_plans(request, scenario_id=None):
         if not ((action == 'create' and form.errors) or (action == 'edit' and edit_form.errors)):
             return redirect(reverse('motivation_sales_plan', args=[scenario.pk]) if scenario else reverse('motivation_sales_plans'))
     scope = 'subdivisions' if request.GET.get('scope') == 'subdivisions' else 'global'
-    report = period_report(scenario, scope, request.GET) if scenario else {}
+    report = period_report(scenario, scope, request.GET, include_details=request.GET.get('export')=='details') if scenario else {}
     lines = report.get('report_lines')
     if scenario and request.GET.get('export') in ['csv', 'details']:
         response = HttpResponse(content_type='text/csv; charset=utf-8')

@@ -7,20 +7,21 @@ DIMENSIONS = ['subdivision', 'planning_group_sales', 'group', 'brand']
 AMOUNTS = ['plan', 'ddp', 'policies', 'sales', 'directors', 'total']
 
 
-def period_report(scenario, scope, params):
+def period_report(scenario, scope, params, *, include_details=True):
     from .subdivision_scope import excluded_plan_names, included
     from .plan_scope import global_lines_without_excluded
     excluded = excluded_plan_names(scenario) if scope == 'global' else set()
     base = scenario.lines.exclude(subdivision='') if scope == 'subdivisions' else scenario.lines.filter(subdivision='')
-    virtual = global_lines_without_excluded(scenario) if scope == 'global' and excluded else None
+    virtual = global_lines_without_excluded(scenario, excluded=excluded, summary_only=not include_details) if scope == 'global' and excluded else None
     filters = {field: params.get(field, '').strip() for field in DIMENSIONS}
     if scope == 'global':
         filters['subdivision'] = ''
     # Aggregate once: derive filter choices and apply dimensional filters to period rows.
-    all_rows = list(base.values(*DIMENSIONS).annotate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), policies=Sum('policies_usd'),
-        sales=Sum('sales_usd'), directors=Sum('directors_usd'), directors_count=Count('directors_usd'), total=Sum('total_usd'), row_count=Count('pk'), ddp_count=Count('amount_ddp_usd'), calculated_count=Count('total_usd')).order_by(*DIMENSIONS))
     if virtual is not None:
         all_rows = snapshot_rows(virtual)
+    else:
+        all_rows = list(base.values(*DIMENSIONS).annotate(plan=Sum('amount_usd'), ddp=Sum('amount_ddp_usd'), policies=Sum('policies_usd'),
+            sales=Sum('sales_usd'), directors=Sum('directors_usd'), directors_count=Count('directors_usd'), total=Sum('total_usd'), row_count=Count('pk'), ddp_count=Count('amount_ddp_usd'), calculated_count=Count('total_usd')).order_by(*DIMENSIONS))
     from .subdivision_aliases import mapping, canonical, expand
     names = mapping()
     if scope == 'subdivisions':
