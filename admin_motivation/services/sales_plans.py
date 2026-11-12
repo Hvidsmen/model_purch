@@ -25,6 +25,13 @@ def number(value):
         raise ValidationError('В плане обнаружена некорректная сумма.')
 
 
+def import_number(value,column):
+    try:return number(value)
+    except ValidationError:
+        display='NULL' if value is None else repr(value)[:120]
+        raise ValidationError(f'Поле {column}: значение {display} не является допустимой суммой.') from None
+
+
 def source_sql(source_type):
     if source_type=='planning':return SQL
     if source_type!='erp':raise ValidationError('Неизвестный источник плана.')
@@ -107,11 +114,11 @@ def load_plan(scenario_id, connector=None, progress=None):
             if not included(sub):
                 continue
             try:
-                amounts = {segment: str(number(values[f'usd_{segment.lower()}'])) for segment in SEGMENTS}
-                amount = number(values['amountusd'])
-                ddp = number(values['amountddp_usd']) if values.get('amountddp_usd') is not None else None
+                amounts = {segment: str(import_number(values[f'usd_{segment.lower()}'],f'USD_{segment}')) for segment in SEGMENTS}
+                amount = import_number(values['amountusd'],'AmountUSD')
+                ddp = import_number(values['amountddp_usd'],'AmountDDP_USD') if values.get('amountddp_usd') is not None else None
             except ValidationError as error:
-                raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): ' + ' '.join(error.messages)) from error
+                raise ValidationError(f'Строка {row_number} ({sub}, ключ {values.get("subdivisionkey", "не сохранён")}, {pg}, {group}, {brand}, {on_date}): ' + ' '.join(error.messages)) from error
             if abs(sum(map(Decimal, amounts.values())) - amount) > max(Decimal('0.0001'), abs(amount)*Decimal('0.00000001')):
                 raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): сумма сегментов O0–O4 не совпадает с AmountUSD.')
             source_parts={}

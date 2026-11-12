@@ -510,6 +510,15 @@ class SalesPlanTests(TestCase):
         self.assertIn(';1500;', csv)
         self.assertEqual(self.client.get(reverse('motivation_sales_plan', args=[999999])).status_code, 404)
 
+    def test_import_error_names_the_null_field_and_preserves_previous_snapshot(self):
+        self.load()
+        for index,label in ((5,'AmountUSD'),(6,'USD_O0'),(10,'USD_O4')):
+            rows=list(self.rows());first=list(rows[0]);first[index]=None;rows[0]=tuple(first)
+            self.cursor.fetchall.return_value=rows
+            with self.assertRaisesMessage(ValidationError,label+': значение NULL'):
+                self.load()
+            self.assertEqual(self.scenario.lines.get(subdivision='').amount_usd,Decimal(1500))
+
     def test_source_versions_and_connection_cleanup(self):
         self.cursor.fetchall.return_value = [('2026',), ('2027',)]
         self.assertEqual(source_versions(self.connector), ['2026', '2027'])
