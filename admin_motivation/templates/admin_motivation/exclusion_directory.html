@@ -1,0 +1,25 @@
+{% extends 'admin_motivation/base.html' %}
+{% block content %}
+<section class="content">
+<h1>Справочник исключений</h1>
+<p>Подразделения сопоставляются по <strong>SubdivisionName</strong>. Отмеченные исключения действуют для плана и факта всех версий и всех видов мотивации.</p>
+<p>У политиков дополнительно исключены канал ДПП и группа планов продаж HEAT. Продажи и директора используют полную базу участвующих подразделений.</p>
+{% for message in messages %}<p class="alert alert-success" role="status">{{ message }}</p>{% endfor %}
+<form method="post">{% csrf_token %}
+{% if not can_edit %}<fieldset disabled>{% endif %}
+{{ formset.management_form }}
+{{ formset.non_form_errors }}
+<div style="overflow:auto"><table class="table table-bordered align-middle">
+<thead><tr><th>Подразделение (SubdivisionName)</th><th>Исключать</th><th>Комментарий</th></tr></thead>
+<tbody>{% for form in formset %}<tr>
+<td>{{ form.id }}{{ form.id.errors }}{{ form.non_field_errors }}{{ form.subdivision_name }}{{ form.subdivision_name.errors }}</td>
+<td>{{ form.enabled }}{{ form.enabled.errors }}</td>
+<td>{{ form.comment }}{{ form.comment.errors }}</td>
+</tr>{% endfor %}</tbody></table></div>
+{% if can_edit %}<p>Для нового исключения заполните последнюю строку. Чтобы вернуть подразделение в расчёт, снимите отметку «Исключать».</p>
+<button type="submit" class="btn btn-primary">Сохранить исключения</button>{% endif %}
+{% if not can_edit %}</fieldset>{% endif %}
+</form>
+<p class="text-muted mt-3">Изменения применяются при следующих загрузках и расчётах. Сохранённые результаты не пересчитываются автоматически. После изменения справочника пересохраните автоматические задания, чтобы обновить правила их следующих запусков.</p>
+</section>
+{% endblock %}

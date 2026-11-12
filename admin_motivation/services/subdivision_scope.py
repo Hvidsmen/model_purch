@@ -4,7 +4,7 @@ from contextvars import ContextVar
 from functools import wraps
 import hashlib,json
 
-DEFAULT_EXCLUDED = ('E-Com','Retail','Брендинг','Прочее','СНГ','Д-Маврикий','Буфер','Вентиляция')
+DEFAULT_EXCLUDED = ('E-Com','Retail','Брендинг','Прочее','СНГ','Д-Маврикий','Буфер','Вентиляция','ДПП')
 POLICY = 'motivation-subdivisions-v2-directory'
 _current = ContextVar('motivation_subdivision_exclusions', default=None)
 SCOPE_MARKER = '__MOTIVATION_SUBDIVISION_SCOPE__'
