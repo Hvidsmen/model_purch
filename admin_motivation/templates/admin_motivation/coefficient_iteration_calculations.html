@@ -1,0 +1,29 @@
+{% extends 'admin_motivation/base.html' %}{% load static tz i18n %}{% block content %}{% language 'ru' %}
+<style>.iteration-card{background:#fff;border:1px solid #dce2f1;border-radius:12px;padding:22px;margin:16px 0}.iteration-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px}.iteration-card h2{font-size:22px}.iteration-card h3{font-size:18px}.iteration-grid>div{min-width:0}.iteration-grid select,.iteration-grid input:not([type=checkbox]){width:100%;padding:8px}.iteration-table{width:100%;border-collapse:collapse;font-size:13px}.iteration-table th{background:#27364d;color:#fff;padding:12px}.iteration-table td{padding:9px;border-bottom:1px solid #e0e4ef;text-align:right;white-space:nowrap}.iteration-table td:first-child,.iteration-table td:nth-child(2){text-align:left}.iteration-table tr:nth-child(even){background:#f7f5fe}.iteration-note{color:#52617a}.iteration-error{background:#fff0f2;color:#a62439;padding:14px;border-radius:8px}</style>
+<section class="content">
+<p><a href="{% url 'motivation_coefficient_iteration_mapping' iteration.pk %}">← Сопоставление коэффициентов · № {{ iteration.pk }}</a></p>
+<h1>Расчёты новой итерации · № {{ iteration.pk }}</h1>
+<p class="iteration-note">Новые ставки берутся только из подтверждённых файлов этой итерации. Планы и результаты сохраняются отдельными снимками. Действующие коэффициенты и обычные расчёты портала не меняются.</p>
+{% if not iteration.confirmed %}<div class="iteration-error">Сначала подтвердите сопоставление подразделений и директоров.</div>{% endif %}
+<div class="iteration-card"><h2>Планы и параметры</h2>
+<p>В 2026–2027 Москва и Термотрейд объединены, используются московские ставки. В 2025 они считаются отдельно; для ТТ используются ставки Москвы. Получатели директорских ставок за 2025 берутся из исторической колонки сопоставления.</p>
+<p class="iteration-note">Для 2027 показан общий план политиков, без распределения между сотрудниками. Для 2025 план политиков распределяется по факту авторов, HEAT исключён только у политиков. Годовая часть 2026 берётся только из IV квартала; в 2027 — из всех четырёх кварталов.</p>
+{% if error %}<div class="iteration-error">{{ error }}</div>{% endif %}
+<div id="director-calculation-error" role="alert"></div>
+<form method="post" id="director-calculation-form">{% csrf_token %}{{ form.revision }}{{ form.revision.errors }}{{ form.non_field_errors }}<input type="hidden" name="progress_token" value="{{ progress_token }}">
+{{ form.scenarios.label_tag }}{{ form.scenarios }}{{ form.scenarios.errors }}
+<div class="iteration-grid">{% for field in form %}{% if field.name != 'revision' and field.name != 'scenarios' %}<div>{{ field.label_tag }}{{ field }}{{ field.errors }}</div>{% endif %}{% endfor %}</div>
+<p class="iteration-note">Версия модели задаёт формулы и поправки директоров 2025; ставки K0–K4 берутся из файлов. При 100% плановая премия 2026–2027 считается по K0–K4 и выбранным долям.</p>
+<button type="submit" class="btn btn-primary" {% if not iteration.confirmed %}disabled{% endif %}>Рассчитать выбранные сценарии</button></form>
+<div id="director-progress" hidden aria-live="polite"><h3 id="director-progress-state">Расчёт выполняется</h3><p id="director-progress-stage"></p><progress id="director-progress-bar" max="12" value="0" style="width:100%"></progress><p id="director-progress-time"></p><p id="director-progress-connection"></p></div>
+</div>
+{% if run %}<div class="iteration-card"><h2>Запуск № {{ run.pk }}</h2>{% if run.state == 'running' %}<p role="status">Выполняется. Пока показаны только завершённые сценарии.</p>{% endif %}<p>{% timezone 'Europe/Moscow' %}Начало: {{ run.started_at|date:'d.m.Y H:i:s' }} МСК · {% if run.completed_at %}Завершение: {{ run.completed_at|date:'d.m.Y H:i:s' }} МСК{% endif %}{% endtimezone %}</p>
+{% if run.error %}<p class="iteration-error">{{ run.error }}</p>{% endif %}{% if run.state != 'running' %}<a class="btn btn-outline-primary" href="?run={{ run.pk }}&amp;export=xlsx">Скачать результаты Excel</a>{% endif %}
+<p class="iteration-note">«Сумма квартальных» не включает годовую часть. Общая выплата = сумма квартальных + годовая выплата + доплата. «В годовую премию» показано до годового условия выплаты.</p>
+{% for scenario in presentation %}<h3>{{ scenario.title }}</h3>{% if scenario.state == 'failed' %}<p class="iteration-error">{{ scenario.error }}</p>{% else %}
+<div style="overflow:auto">{% include 'admin_motivation/_coefficient_iteration_results.html' with rows=scenario.summary %}</div>
+<details><summary>По авторам и директорам · {{ scenario.recipients|length }} строк</summary><div style="overflow:auto">{% include 'admin_motivation/_coefficient_iteration_results.html' with rows=scenario.recipients show_employee=True %}</div></details>
+{% endif %}{% endfor %}</div>{% endif %}
+<div class="iteration-card"><h2>История запусков</h2>{% for item in runs %}<p><a href="?run={{ item.pk }}">№ {{ item.pk }} · {% timezone 'Europe/Moscow' %}{{ item.started_at|date:'d.m.Y H:i' }} МСК{% endtimezone %}</a> · {% if item.state == 'completed' %}Завершён{% elif item.state == 'failed' %}Есть ошибки{% else %}Выполняется{% endif %}</p>{% empty %}<p>Расчётов пока нет.</p>{% endfor %}</div>
+</section><script src="{% static 'admin_motivation/director_scenario_progress.js' %}" defer></script>
+{% endlanguage %}{% endblock %}

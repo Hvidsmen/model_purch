@@ -1,5 +1,6 @@
 {% extends 'admin_motivation/base.html' %}{% block content %}
 <section class="content"><p><a href="{% url 'motivation_coefficient_iteration_upload' %}">← Загрузки коэффициентов</a></p>
+{% if iteration.confirmed %}<p><a class="btn btn-primary" href="{% url 'motivation_coefficient_iteration_calculations' iteration.pk %}">Выбрать планы и запустить расчёт →</a></p>{% endif %}
 <h1>Сопоставление подразделений и директоров · № {{ iteration.pk }}</h1>
 <p>Файлы: {{ iteration.payload.branches.name }} · {{ iteration.payload.directors.name }}</p>
 <p>Предложены только однозначные точные совпадения. Сокращения, опечатки и неоднозначные названия выберите вручную. Архивные директора не сопоставляются автоматически, но доступны для явного выбора в исторических сценариях. Для директора проверьте также подразделения, которым назначаются ставки этого блока.</p>
