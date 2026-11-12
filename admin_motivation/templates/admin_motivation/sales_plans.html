@@ -16,6 +16,7 @@
 </div>
 <details {% if form.errors %}open{% endif %} class="mt-3"><summary>Создать сценарий</summary><form method="post" class="plan-actions mt-2">{% if portal_motivation_readonly %}<fieldset disabled class="motivation-viewer-fields">{% endif %}{% csrf_token %}<input type="hidden" name="action" value="create">{{ form.as_p }}<datalist id="source-versions">{% for version in source_versions %}<option value="{{ version }}">{% endfor %}</datalist><button class="btn btn-primary">Создать</button>{% if portal_motivation_readonly %}</fieldset>{% endif %}</form></details>
 </div>
+{% if not scenario %}<div class="plan-card"><p>Выберите сценарий для просмотра сохранённого плана или создайте новый. Сводка строится только после выбора сценария.</p></div>{% endif %}
 {% if scenario %}
 <div class="plan-card"><h3>{{ scenario.title }}</h3><p>Источник: <strong>{{ scenario.get_source_type_display }}</strong>. Версия плана MS SQL: <strong>{{ scenario.source_version }}</strong>. Загружен: {{ scenario.loaded_at|date:'d.m.Y H:i'|default:'ещё нет' }}. Рассчитан: {{ scenario.calculated_at|date:'d.m.Y H:i'|default:'ещё нет' }}.</p>
 <details class="mb-3" {% if edit_form.errors %}open{% endif %}><summary>Изменить или удалить сценарий</summary>
