@@ -9,7 +9,7 @@ from .heat_exclusion import is_heat
 from .sales_plans import number
 from .subdivision_scope import included
 
-RULE='coefficient-iteration-v2-subdivision-keys'
+RULE='coefficient-iteration-v3-motivation-name'
 ZERO=Decimal(0)
 MOSCOW='Д-Москва'
 TT='ТЕРМОТРЕЙД'
@@ -35,7 +35,7 @@ class RateBook:
             value=mappings.get(row['id'],{});block=payload[row['source']]['blocks'][row['block']]
             if row['source']=='branches':
                 if value.get('subdivision') not in subdivisions:raise ValidationError('Подтвердите все подразделения в сопоставлении.')
-                scope=str(subdivisions[value['subdivision']])
+                scope=self.name_for_key(str(subdivisions[value['subdivision']]))
                 targets=[(scope,row['kind'])]
                 if self.role(scope)==MOSCOW:candidates[row['kind']].add(scope)
             else:
@@ -47,7 +47,7 @@ class RateBook:
                 token=row['id'];targets=[]
                 for sub in value['subdivisions']:
                     if sub not in subdivisions:raise ValidationError('Не найдено подразделение директора.')
-                    self.targets[token].add(str(subdivisions[sub]))
+                    self.targets[token].add(self.name_for_key(str(subdivisions[sub])))
                 self.sources[token]={'employee':person,'employee_2025':value.get('employee_2025') or person,'label':row['label']}
                 # The user explicitly identified historical recipients/branches.
                 self.sources[token]['historical_branch']=(TT if norm(row['label']).startswith('волков ') else MOSCOW) if norm(row['label']) in HISTORICAL_DIRECTORS else None
@@ -68,12 +68,13 @@ class RateBook:
             if any(profile!=profiles[0] for profile in profiles[1:]):raise ValidationError('Для объединённой Москвы выбраны разные наборы ставок. Проверьте привязки ключей.')
             self.references[kind]=ordered[0]
 
-    def role(self,scope):
-        coded=branch(scope)
-        return coded if coded in (MOSCOW,TT) else branch(self.names.get(scope,scope))
+    def name_for_key(self,source_key):
+        return branch(self.names.get(source_key,source_key))
+
+    def role(self,scope):return branch(scope)
 
     def rate_scope(self,scope,kind):
-        return self.references.get(kind,MOSCOW) if self.role(scope) in (MOSCOW,TT) else scope
+        return self.references.get(kind,MOSCOW) if branch(scope) in (MOSCOW,TT) else branch(scope)
 
     def get(self,scope,kind,dimensions,year):
         if kind!='Директора':scope=self.rate_scope(scope,kind)  # Explicit 2025 TT=Moscow; later TT is merged.
@@ -148,6 +149,23 @@ def plan_rows(plan,year):
     return result
 
 
+def motivation_plan_rows(rows,rates,*,merged=False):
+    """Aggregate plan amounts by business name, retaining physical-key receipts."""
+    grouped={}
+    for row in rows:
+        name=branch(row.get('branch_name') or rates.name_for_key(row['branch']))
+        if merged and name in (MOSCOW,TT):name=MERGED
+        identity=(row['date'],name,row['planning'],row['goods'],row['brand'])
+        target=grouped.setdefault(identity,{**row,'branch':name,'branch_name':name,'amount':ZERO,
+            'segments':[ZERO]*5,'source_subdivisions':[]})
+        target['amount']+=number(row['amount'])
+        target['segments']=[a+number(b) for a,b in zip(target['segments'],row['segments'])]
+        target['source_subdivisions'].extend(row.get('source_subdivisions') or [{
+            'key':row['branch'],'name':row.get('branch_name') or rates.name_for_key(row['branch']),
+            'amount':row['amount'],'segments':row['segments']}])
+    return list(grouped.values())
+
+
 def empty_row(scenario,year,sub,kind,person='',employee_id=None):
     return {'scenario':scenario,'year':year,'branch':sub,'kind':kind,'employee':person,'employee_id':employee_id,
             'quarters':[ZERO]*4,'possible':[ZERO]*4,'annual_quarters':[ZERO]*4,
@@ -157,9 +175,11 @@ def empty_row(scenario,year,sub,kind,person='',employee_id=None):
 def at_full_plan(rows,rates,year,quarter_share,year_share,factor=lambda *args:Decimal(1)):
     scenario='moscow_q4_2026' if year==2026 else 'full_2027'
     grouped={};details=[]
+    rows=motivation_plan_rows(rows,rates)
     selected=[r for r in rows if year!=2026 or r['date'].month>=10 and rates.role(r['branch']) in (MOSCOW,TT)]
     if year==2026 and {rates.role(r['branch']) for r in selected}!={MOSCOW,TT}:
         raise ValidationError('Для IV квартала 2026 нужны исходные планы и Москвы, и Термотрейда.')
+    selected=motivation_plan_rows(selected,rates,merged=True)
     for item in selected:
         sub=MERGED if rates.role(item['branch']) in (MOSCOW,TT) else item['branch'];q=(item['date'].month-1)//3+1
         dimensions=(item['planning'],item['goods'],item['brand'])
@@ -175,7 +195,7 @@ def at_full_plan(rows,rates,year,quarter_share,year_share,factor=lambda *args:De
             identity=(sub,kind,person_id)
             row=grouped.setdefault(identity,empty_row(scenario,year,sub,kind,person,person_id))
             row['quarters'][q-1]+=quarterly;row['possible'][q-1]+=quarterly;row['annual_quarters'][q-1]+=annual
-            details.append({'scenario':scenario,'year':year,'branch':sub,'original_branch':item['branch'],'kind':kind,
+            details.append({'scenario':scenario,'year':year,'branch':sub,'original_branch':item['branch'],'source_subdivisions':item['source_subdivisions'],'kind':kind,
                 'employee':person,'date':item['date'].isoformat(),'quarter':q,'planning':dimensions[0],'goods':dimensions[1],
                 'brand':dimensions[2],'plan':item['amount'],'fact':item['amount'],'execution':Decimal(1) if item['amount']>0 else None,
                 'segments':item['segments'],'rates':values,'origin':origin,'possible':quarterly,'paid':quarterly,'annual_contribution':annual})

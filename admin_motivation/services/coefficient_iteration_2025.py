@@ -4,7 +4,7 @@ from decimal import Decimal
 from xml.etree.ElementTree import Element,SubElement,tostring
 from django.core.exceptions import ValidationError
 from .sales_plans import number
-from .coefficient_iteration_calculation import branch,empty_row,ZERO
+from .coefficient_iteration_calculation import branch,empty_row,ZERO,motivation_plan_rows
 
 
 def scoped_setup():
@@ -15,6 +15,7 @@ def scoped_setup():
         'SELECT * INTO #test2025_coeff FROM #test2025_rates;',sql)
     sql=sql.replace('ON #test2025_coeff(PGSales,TypeCoeff)','ON #test2025_coeff(Subdivision,TypeCoeff) INCLUDE(PGSales,Group_,Brand,K0,K1,K2,K3,K4,DateFrom,DateTo)')
     sql=sql.replace('SELECT r.PGSales,r.TypeCoeff,MIN(v.Coeff_)','SELECT r.Subdivision,r.PGSales,r.TypeCoeff,MIN(v.Coeff_)')
+    sql=sql.replace('CREATE UNIQUE INDEX IX_test2025_group_min ON #test2025_group_min(PGSales,TypeCoeff);','')
     sql=sql.replace('GROUP BY r.PGSales,r.TypeCoeff','GROUP BY r.Subdivision,r.PGSales,r.TypeCoeff')
     sql=sql.replace('SELECT TypeCoeff,MIN(Minimum_)','SELECT Subdivision,TypeCoeff,MIN(Minimum_)').replace('GROUP BY TypeCoeff;','GROUP BY Subdivision,TypeCoeff;')
     if 'CROSS JOIN' in sql:raise ValidationError('Не удалось ограничить коэффициенты подразделениями.')
@@ -24,7 +25,7 @@ CREATE UNIQUE INDEX IX_iteration_table_rate ON #test2025_table_min(Subdivision,T
 
 
 def build_sql(cursor=None):
-    from .recalculation_2025_sql import template_source,patch_source,SETUP
+    from .recalculation_2025_sql import template_source,patch_source,SETUP,FORMULA_SNAPSHOT
     from .formula_defaults import patch_defaults
     from .recalculation_2025_share_cache import patch as shares
     from .payout_threshold import parameterize
@@ -34,6 +35,12 @@ def build_sql(cursor=None):
     from .prepared_sales import patch as prepared
     source=patch_source(patch_defaults(template_source())[0])
     source=source.replace(SETUP,scoped_setup(),1)
+    named_formulas=FORMULA_SNAPSHOT.replace('FROM DataWH.motivation.vSubdivisionMotiveCoeffTo old',
+        'FROM DataWH.motivation.vSubdivisionMotiveCoeffTo old\nINNER JOIN #iteration_names named ON CONVERT(nvarchar(255),old.Subdivision)=named.SubdivisionKey').replace(
+        'old.Subdivision=c.Subdivision','named.SubdivisionName=c.Subdivision')
+    if source.count(FORMULA_SNAPSHOT)!=1:raise ValidationError('Не распознан снимок исторических формул.')
+    source=source.replace(FORMULA_SNAPSHOT,named_formulas,1)
+
     # Restrict both fallback levels to the SAME uploaded subdivision.
     pattern=r"LEFT JOIN #test2025_group_min gm ON gm.PGSales=(p|t)\.PlanningGroupSalesERP AND gm.TypeCoeff=N'(Политики|Продажи)'\s+LEFT JOIN #test2025_table_min tm ON tm.TypeCoeff=N'\2'"
     def fallback(match):
@@ -51,20 +58,31 @@ def build_sql(cursor=None):
     from .calculation_performance import patch as performance
     source=performance(source)
     source=private_sales(source,cursor=cursor).replace('DataWH.motivation.PortalCalculationSubdivisions','DataWH.dbo.Subdivisions')
-    source=source.replace('SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions','SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions WHERE SubdivisionKey IN (SELECT DISTINCT Subdivision FROM #iteration_plan)')
+    source=source.replace('SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions',"SELECT d.SubdivisionKey FROM DataWH.dbo.Subdivisions d WHERE d.SubdivisionName IN (SELECT n.SubdivisionName FROM #iteration_plan p JOIN #iteration_names n ON n.SubdivisionKey=p.Subdivision)")
     source=prepared(source,historical_author=True,cursor=cursor)
     # The saved importer maps blank planning groups to 9. OTHER. Apply the
     # identical classification to fact so those rows can match the saved plan.
     source=re.sub(r'\bp\.PlanningGroupSalesERP\b',"COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesERP)),N''),N'9. OTHER')",source,flags=re.I)
-    # Use physical keys for native calculation partitions and coefficient joins;
-    # names are restored only by the presentation layer. Exported formula scopes
-    # also store subdivision_key, so no name lookup is needed for historical rules.
-    source=re.sub(r'\b(sub|s)\.SubdivisionName\b',lambda match:f'CONVERT(nvarchar(255),{match[1]}.SubdivisionKey)',source,flags=re.I)
+    # Physical source joins stay on SubdivisionKey. Every calculation scope,
+    # author allocation and payout window uses the business SubdivisionName.
+    source=source.replace('s.SubdivisionKey AS PortalSubdivisionKey','s.SubdivisionName AS PortalSubdivisionKey')
+    source=source.replace('DENSE_RANK() OVER(ORDER BY s.SubdivisionKey,','DENSE_RANK() OVER(ORDER BY s.SubdivisionName,')
+    documents=list(re.finditer(r't\.Subdivision\s+\[ПодразделениеДокумент\]',source))
+    if len(documents)!=2:raise ValidationError('Не распознаны области плана 2025 по имени подразделения.')
+    for index,match in reversed(list(enumerate(documents))):
+        field='t.PortalSubdivisionName' if index==0 else 's.SubdivisionName'
+        source=source[:match.start()]+field+' [ПодразделениеДокумент]'+source[match.end():]
     source=source.replace('motivation.PortalFormulaDefaults','#iteration_defaults')
     for old,new in (('FactTest2025','#iteration_fact'),('PlanFactTest2025','#iteration_plan_fact'),
                     ('ReportMotivationByDealAuthorTest2025','#iteration_report'),('AnnualAccrualTest2025','#iteration_annual')):
         full='DataWH.motivation.'+old
         source=source.replace("'"+full+"'","'tempdb.."+new+"'").replace(full,new)
+    marker="IF OBJECT_ID('tempdb..#iteration_fact')"
+    if source.count(marker)!=1:raise ValidationError('Не распознана граница исходного факта 2025.')
+    audit="""ALTER TABLE #fact ALTER COLUMN [ПодразделениеДокумент] nvarchar(255);
+UPDATE #fact SET [ПодразделениеДокумент]=[Подразделение];
+"""
+    source=source.replace(marker,audit+marker,1)
     source=re.sub(r"@Resource = N'motivation\.sp_CalcBySub'","@Resource = @IterationResource",source)
     # Parameter declarations replace the procedure header; no CREATE/ALTER PROC
     # and no persistent output object exists at any point in this calculation.
@@ -91,7 +109,7 @@ def xml(records):
 
 
 def read_2025(cursor,plan,rates,settings,progress):
-    branches=sorted({row['branch'] for row in plan})
+    branches=sorted({row['branch'] for row in motivation_plan_rows(plan,rates)})
     records=rates.coefficients_2025(branches)
     progress('2025: проверка подготовленного факта и временного расчёта',5)
     cursor.execute("DECLARE @l int; EXEC @l=sys.sp_getapplock @Resource=N'PortalMotivationCalculation',@LockMode=N'Shared',@LockOwner=N'Session',@LockTimeout=0; SELECT @l;")
@@ -108,7 +126,9 @@ def read_2025(cursor,plan,rates,settings,progress):
     cursor.execute('SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;')
     cursor.execute('''CREATE TABLE #iteration_plan(Subdivision nvarchar(255) COLLATE DATABASE_DEFAULT,PlanningGroupSalesERP nvarchar(255) COLLATE DATABASE_DEFAULT,
  Date_ date,GroupERP nvarchar(255) COLLATE DATABASE_DEFAULT,[Марка(Бренд)] nvarchar(255) COLLATE DATABASE_DEFAULT,AmountUSD decimal(24,6));
- CREATE TABLE #iteration_defaults(Date_ date NOT NULL PRIMARY KEY,DefaultFormula nvarchar(64) COLLATE DATABASE_DEFAULT);''')
+ CREATE TABLE #iteration_defaults(Date_ date NOT NULL PRIMARY KEY,DefaultFormula nvarchar(64) COLLATE DATABASE_DEFAULT);
+ SELECT CONVERT(nvarchar(255),SubdivisionKey) AS SubdivisionKey,SubdivisionName
+ INTO #iteration_names FROM dbo.Subdivisions;''')
     cursor.executemany('INSERT INTO #iteration_plan VALUES (?,?,?,?,?,?)',
         [(row['branch'],row['planning'],row['date'],
           row['goods'] if row['planning'].strip().upper() in ('1. RAC','2. VRF','3. PROF') else '',
@@ -138,7 +158,7 @@ def read_2025(cursor,plan,rates,settings,progress):
     grouped={}
     for kind,sub,author,period,paid,bonus,possible in cursor.fetchall():
         if kind not in ('Политики','Продажи'):continue
-        sub=str(sub);author=str(author or '') if kind=='Политики' else ''
+        sub=branch(sub);author=str(author or '') if kind=='Политики' else ''
         row=grouped.setdefault((sub,kind,author),empty_row('actual_2025',2025,sub,kind,author))
         if str(period).strip().casefold()=='год':row['annual_paid']+=number(paid or 0)
         else:
@@ -149,7 +169,7 @@ def read_2025(cursor,plan,rates,settings,progress):
  SUM(CASE WHEN [СуммаМотивацииUSD]>0 THEN [СуммаМотивацииUSD] ELSE 0 END)
  FROM #iteration_fact WHERE [Год]=2025 AND '''+ELIGIBLE+''' GROUP BY [ТипКоэф],[Подразделение],[АвторСделки],[Квартал]''')
     for kind,sub,author,q,potential in cursor.fetchall():
-        author=str(author or '') if kind=='Политики' else '';identity=(str(sub),kind,author)
+        author=str(author or '') if kind=='Политики' else '';identity=(branch(sub),kind,author)
         if identity in grouped:grouped[identity]['annual_quarters'][int(q)-1]+=number(potential or 0)*number(settings['year_share'])/100
     for row in grouped.values():
         row['annual_accrued']=sum(row['annual_quarters'],ZERO)

@@ -101,6 +101,12 @@ def workbook(run):
         if details:
             headers=['Подразделение','Сотрудник','Вид мотивации','Исходное подразделение','Период','Группа планов','Группа ERP','Бренд','Формула','План USD','Факт USD','Выполнение','Возможная квартальная USD','Квартальная выплата USD','В годовую USD','Основание']
             table(book,'Расшифровка '+name,headers,[[(names.get(r.get(k),r.get(k)) if k in ('branch','original_branch') else r.get(k)) for k in ('branch','employee','kind','original_branch','date' if year!=2025 else 'period','planning','goods','brand','formula','plan','fact','execution' if year!=2025 else 'ratio','possible','paid','annual_contribution','origin' if year!=2025 else 'note')] for r in details],text_columns=(1,2,3,4,5,6,7,8,9,16))
+    receipts=[]
+    for year,plan in run.inputs.get('plans',{}).items():
+        for row in plan['rows']:
+            receipts.append([year,row.get('date'),row['branch'],row.get('branch_name',row['branch']),
+                row.get('planning'),row.get('goods'),row.get('brand'),row.get('amount'),*row.get('segments',[None]*5)])
+    table(book,'Источники плана',['Год','Дата','SubdivisionKey','SubdivisionName','Группа планов','Группа ERP','Бренд','План USD','O0','O1','O2','O3','O4'],receipts,text_columns=range(1,8))
     table(book,'Подразделения',['SubdivisionKey','Название'],sorted(names.items()),text_columns=(1,2))
     parameters=table(book,'Параметры',['Параметр','Значение'],meta,text_columns=(1,2));parameters.column_dimensions['B'].width=110
     from .coefficient_iteration import mapping_rows

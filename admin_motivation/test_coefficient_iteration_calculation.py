@@ -44,7 +44,7 @@ class MoneyTests(SimpleTestCase):
         self.assertEqual(policy['quarters'],[D(12),0,0,0]);self.assertEqual(policy['annual_paid'],D(3));self.assertEqual(policy['total'],D(15))
         directors={r['employee']:r['total'] for r in rows if r['kind']=='Директора'}
         self.assertEqual(directors,{'Волков':D(45),'Галайда':D(60)})
-        self.assertEqual(len(details),8)
+        self.assertEqual(len(details),4)
 
     def test_2026_only_q4_and_annual_only_from_q4(self):
         rows,_=at_full_plan([row(year=2026,month=1,amount='1000'),row(year=2026,month=10),row(TT,2026,10,'50')],self.book(),2026,D(80),D(20))
@@ -122,8 +122,8 @@ class NativeSQLTests(SimpleTestCase):
         self.assertIn('GROUP BY Subdivision,PGSales,Group_,Brand,TypeCoeff',sql)
         self.assertIn('GROUP BY r.Subdivision,r.PGSales,r.TypeCoeff',sql)
         self.assertEqual(sql.count('tm.Subdivision='),4)
-        self.assertIn('gm.Subdivision=CONVERT(nvarchar(255),sub.SubdivisionKey)',sql)
-        self.assertIn('gm.Subdivision=CONVERT(nvarchar(255),s.SubdivisionKey)',sql)
+        self.assertIn('gm.Subdivision=sub.SubdivisionName',sql)
+        self.assertIn('gm.Subdivision=s.SubdivisionName',sql)
         self.assertIn('PortalOriginalDealAuthor',sql)
         self.assertIn('decimal(20,18)',sql)
         self.assertIn('FROM #iteration_defaults',sql)

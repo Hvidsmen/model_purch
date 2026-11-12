@@ -10,7 +10,7 @@ from django.db import transaction,IntegrityError
 from django.utils import timezone
 from ..models import (CoefficientIteration,CoefficientIterationRun,SalesPlanScenario,Subdivision,
  DirectorEmployee,GlobalCoeffVersion,SubdivisionDirectorCoeff,SubdivisionManagerCoeff)
-from .coefficient_iteration_calculation import RateBook,plan_rows,at_full_plan,branch,key,MOSCOW,TT,MERGED,ZERO,RULE,empty_row
+from .coefficient_iteration_calculation import RateBook,plan_rows,at_full_plan,branch,key,MOSCOW,TT,MERGED,ZERO,RULE,empty_row,motivation_plan_rows
 from .sales_plans import number
 
 SCENARIOS={'moscow_q4_2026':(2026,'Москва + ТТ · IV квартал 2026 · 100%'),
@@ -40,16 +40,16 @@ class DirectorRates:
         self.rates=rates;self.token=token;self.snapshot=snapshot
         self.formulas={};self.corrections={}
         for sub,person,p,g,b,formula in snapshot['directors']:
-            identity=(str(sub),person,*key((p,g,b)))
+            identity=(rates.name_for_key(str(sub)),person,*key((p,g,b)))
             if identity in self.formulas and self.formulas[identity]!=formula:raise ValidationError('Неоднозначные формулы директора.')
             self.formulas[identity]=formula
         for sub,period,value in snapshot['corrections']:
-            identity=(sub,period)
-            if identity in self.corrections:raise ValidationError('Неоднозначные поправки подразделения.')
+            identity=(rates.name_for_key(sub),period)
+            if identity in self.corrections and self.corrections[identity]!=number(value):raise ValidationError('Неоднозначные поправки расчётного подразделения: '+identity[0])
             self.corrections[identity]=number(value)
 
     def rate_branch(self,sub):
-        aliases={str(k):str(v) for k,v in self.snapshot['aliases'].items()}
+        aliases={self.rates.name_for_key(str(k)):self.rates.name_for_key(str(v)) for k,v in self.snapshot['aliases'].items()}
         return aliases.get(sub,sub)
 
     def factor(self,sub,period):return self.corrections.get((self.rate_branch(sub),period),Decimal(1))
@@ -65,6 +65,7 @@ class DirectorRates:
 
 
 def validate_directors_2025(plans,rates,snapshot):
+    plans=motivation_plan_rows(plans,rates)
     # The native fact uses the uploaded sales classification. Require the same
     # classification matrix before reusing it for directors (no lost dimensions).
     for sub in {r['branch'] for r in plans}:
@@ -90,6 +91,7 @@ def validate_directors_2025(plans,rates,snapshot):
 def directors_2025(cursor,plans,rates,settings,snapshot):
     from .director_scenarios import director_result
     validate_directors_2025(plans,rates,snapshot)
+    plans=motivation_plan_rows(plans,rates)
     cursor.execute('''SELECT Подразделение,Квартал,ГруппаПлановПродаж,ГруппаТоваров,Марка,СегментСкидки,
  SUM(CASE WHEN СуммаОтгрузокUSD>0 THEN СуммаОтгрузокUSD ELSE 0 END),
  SUM(CASE WHEN СуммаОтгрузокUSD<0 THEN СуммаОтгрузокUSD ELSE 0 END)
@@ -99,7 +101,7 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
     for sub,q,p,g,b,segment,pos,neg in cursor.fetchall():
         segment=str(segment or '').strip().upper().replace('О','O').replace('K','O')
         if segment not in ('O0','O1','O2','O3','O4'):raise ValidationError('В факте 2025 неизвестный сегмент скидки.')
-        facts.append({'branch':str(sub),'quarter':int(q),'planning':p or '*','goods':g or '*','brand':b or '*',
+        facts.append({'branch':branch(sub),'quarter':int(q),'planning':p or '*','goods':g or '*','brand':b or '*',
                       'segment':segment,'positive':number(pos or 0),'negative':number(neg or 0)})
     plan=[]
     for r in plans:
