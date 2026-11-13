@@ -27,6 +27,16 @@ def number(value):
         raise ValidationError('В плане обнаружена некорректная сумма.')
 
 
+def validate_plan_segments(amount,segments,label='План'):
+    """A source plan is distributed using bounded, nonnegative shares."""
+    tolerance=max(Decimal('0.0001'),abs(amount)*Decimal('0.00000001'))
+    if abs(sum(segments,Decimal(0))-amount)>tolerance:
+        raise ValidationError(f'{label}: сумма сегментов O0–O4 не совпадает с планом. Перезагрузите план из MS SQL.')
+    if any((value < -tolerance or value > amount+tolerance) if amount>=0
+           else (value > tolerance or value < amount-tolerance) for value in segments):
+        raise ValidationError(f'{label}: некорректное распределение плана O0–O4 (отрицательные или превышающие план доли). Перезагрузите план из MS SQL после обновления портала.')
+
+
 def policy_segments(segments, planning_group):
     from .motivation_exclusions import amounts_for
     return amounts_for('Политики',segments,planning_group)
@@ -128,8 +138,7 @@ def load_plan(scenario_id, connector=None, progress=None):
                 ddp = import_number(values['amountddp_usd'],'AmountDDP_USD') if values.get('amountddp_usd') is not None else None
             except ValidationError as error:
                 raise ValidationError(f'Строка {row_number} ({sub}, ключ {values.get("subdivisionkey", "не сохранён")}, {pg}, {group}, {brand}, {on_date}): ' + ' '.join(error.messages)) from error
-            if abs(sum(map(Decimal, amounts.values())) - amount) > max(Decimal('0.0001'), abs(amount)*Decimal('0.00000001')):
-                raise ValidationError(f'Строка {row_number} ({sub}, {pg}, {on_date}): сумма сегментов O0–O4 не совпадает с AmountUSD.')
+            validate_plan_segments(amount,list(map(Decimal,amounts.values())),f'Строка {row_number} ({sub}, {pg}, {on_date})')
             source_parts={}
             if 'subdivisionkey' in values:
                 source_key=classification(values['subdivisionkey'],'subdivisionkey',row_number)
@@ -276,6 +285,12 @@ def calculate_plan(scenario_id, progress=None):
     from .subdivision_aliases import mapping, canonical
     branch_names = mapping()
     for line in lines:
+        if line.subdivision:
+            if line.source_subdivisions:
+                for source_key,part in line.source_subdivisions.items():
+                    validate_plan_segments(number(part['amount']),[number(part['segments'][k]) for k in SEGMENTS],f'{line.subdivision}, ключ {source_key}, {line.plan_date}')
+            else:
+                validate_plan_segments(line.amount_usd,[number(line.segment_amounts[k]) for k in SEGMENTS],f'{line.subdivision}, {line.plan_date}')
         identity=(line.plan_date,line.planning_group_sales,line.group,line.brand)
         channels=channel_bases(line.segment_amounts,line.source_subdivisions)
         complete=channels_known(line.segment_amounts,line.source_subdivisions)
