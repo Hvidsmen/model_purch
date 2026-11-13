@@ -25,11 +25,12 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
         merge_channels(data['channels'],channel_bases(segments,sources))
         data['channels_complete'] &= channels_known(segments,sources)
         for i,value in enumerate(policy_segments(segments,pg)):data['policy'][i]+=value
+        director_amounts=amounts_for('Директора',segments,pg,sources) if branch is not None else None
         for index, segment in enumerate(SEGMENTS):
             value = number(segments.get(segment))
             data['usd'][index] += value
             if branch is not None:
-                branch[index] += amounts_for('Директора',segments,pg,sources)[index]
+                branch[index] += director_amounts[index]
     original_lines=scenario.lines.filter(subdivision='')
     if summary_only:
         original_lines=original_lines.only('scenario_id','plan_date','planning_group_sales','group','brand','calculation','total_usd').order_by()
@@ -39,7 +40,7 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
         if summary_only and not input_only:
             # Consume one bounded batch of audit JSON at a time; do not retain
             # every original snapshot merely to display aggregated amounts.
-            for original in original_lines.iterator(chunk_size=128):
+            for original in compact_originals(original_lines):
                 key=(original.plan_date,original.planning_group_sales,original.group,original.brand)
                 data=grouped.pop(key,None)
                 if data is not None:yield key,data,original
@@ -94,3 +95,29 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
                 line.calculation = {}
         result.append(line)
     return result
+
+
+def compact_originals(queryset):
+    """Read just saved rates/recipient scopes for an on-screen projection.
+
+    SQLite multipath JSON extraction parses each audit document once, while
+    avoiding Python decoding of unrelated coefficient provenance and audit data.
+    Other backends retain the bounded streaming implementation.
+    """
+    from django.db import connection
+    if connection.vendor != 'sqlite':
+        yield from queryset.iterator(chunk_size=128)
+        return
+    import json
+    from types import SimpleNamespace
+    from django.db.models import F,Func,Value,TextField
+    paths=[f'$."{kind}"."O{i}"."coefficient"' for kind in ('Политики','Продажи') for i in range(5)]
+    paths.append('$."Директора"."employees"')
+    columns=('scenario_id','plan_date','planning_group_sales','group','brand','total_usd')
+    projected=queryset.annotate(_rates=Func(F('calculation'),*[Value(path) for path in paths],function='json_extract',output_field=TextField()))
+    for values in projected.values_list(*columns,'_rates').iterator(chunk_size=128):
+        rates=json.loads(values[-1]) if values[-1] else [None]*11
+        records={kind:{f'O{i}':{'coefficient':rates[offset+i]} for i in range(5) if rates[offset+i] is not None}
+                 for kind,offset in (('Политики',0),('Продажи',5))}
+        if rates[10] is not None:records['Директора']={'employees':rates[10]}
+        yield SimpleNamespace(**dict(zip(columns,values[:-1])),calculation=records)
