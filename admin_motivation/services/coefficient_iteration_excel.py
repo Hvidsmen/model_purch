@@ -1,7 +1,8 @@
 """Styled per-scenario results with collapsed possible/annual-quarter columns."""
-from io import BytesIO
+from tempfile import TemporaryFile
 from decimal import Decimal,InvalidOperation
 from openpyxl import Workbook
+from openpyxl.cell import WriteOnlyCell
 from openpyxl.styles import Font,PatternFill,Alignment,Border,Side
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.utils import get_column_letter
@@ -12,35 +13,56 @@ def text(cell,value):
     cell.value=ILLEGAL_CHARACTERS_RE.sub('',str(value))[:32767];cell.data_type='s'
 
 
-def table(book,title,headers,rows,text_columns=()):
+BODY_FONT=Font(name='Calibri',size=11,color='27364D')
+HEADER_FONT=Font(name='Calibri',bold=True,color='FFFFFF')
+TOTAL_FONT=Font(name='Calibri',size=11,bold=True,color='FFFFFF')
+HEADER_FILL=PatternFill('solid',fgColor='6650BE')
+TOTAL_FILL=PatternFill('solid',fgColor='27364D')
+STRIPE_FILL=PatternFill('solid',fgColor='F5F3FC')
+WRAP=Alignment(wrap_text=True,vertical='center')
+PLAIN=Alignment(vertical='center')
+BODY_BORDER=Border(bottom=Side(style='hair',color='DFE4EF'))
+
+
+def table(book,title,headers,rows,text_columns=(),*,column_groups=(),percent_columns=(),widths=None):
     sheet=book.create_sheet(title);sheet.sheet_view.showGridLines=False
-    sheet.append(headers);sheet.row_dimensions[1].height=56
-    for cell in sheet[1]:
-        cell.font=Font(name='Calibri',bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='6650BE')
-        cell.alignment=Alignment(wrap_text=True,vertical='center')
-    for values in rows:
-        row=sheet.max_row+1
+    sheet.sheet_format.defaultRowHeight=30;sheet.row_dimensions[1].height=56
+    sheet.freeze_panes='D2'
+    for i in range(1,len(headers)+1):sheet.column_dimensions[get_column_letter(i)].width=34 if i<=3 else 23
+    for column,width in (widths or {}).items():sheet.column_dimensions[column].width=width
+    if column_groups:
+        sheet.sheet_properties.outlinePr.summaryRight=True;sheet.sheet_view.showOutlineSymbols=True
+        for first,last,anchor in column_groups:
+            sheet.column_dimensions.group(get_column_letter(first),get_column_letter(last),outline_level=1,hidden=True)
+            sheet.column_dimensions[get_column_letter(anchor)].collapsed=True
+    sheet.page_setup.orientation='landscape';sheet.page_setup.fitToWidth=1;sheet.page_setup.fitToHeight=0
+    sheet.sheet_properties.pageSetUpPr.fitToPage=True;sheet.print_title_rows='1:1'
+    heading=[]
+    for value in headers:
+        cell=WriteOnlyCell(sheet);text(cell,value)
+        cell.font=HEADER_FONT;cell.fill=HEADER_FILL;cell.alignment=WRAP;heading.append(cell)
+    sheet.append(heading)
+    last_row=1
+    for row,values in enumerate(rows,2):
+        last_row=row;cells=[]
+        total=bool(values and (str(values[0])=='ИТОГО' or 'ИТОГО' in str(values[1] if len(values)>1 else '')))
         for index,value in enumerate(values,1):
-            cell=sheet.cell(row,index)
+            cell=WriteOnlyCell(sheet)
             if value is None:pass
             elif index in text_columns:text(cell,value)
             else:
                 try:
                     numeric=Decimal(str(value))
                     if not numeric.is_finite():raise InvalidOperation
-                    cell.value=numeric;cell.number_format='#,##0.00'
+                    cell.value=numeric;cell.number_format='0.0000%' if index in percent_columns else '#,##0.00'
                 except (InvalidOperation,ValueError):text(cell,value)
-            cell.font=Font(name='Calibri',size=11,color='27364D')
-            cell.alignment=Alignment(vertical='center',wrap_text=index<=3)
-            cell.border=Border(bottom=Side(style='hair',color='DFE4EF'))
-            if row%2==0:cell.fill=PatternFill('solid',fgColor='F5F3FC')
-        sheet.row_dimensions[row].height=30
-        if values and (str(values[0])=='ИТОГО' or 'ИТОГО' in str(values[1] if len(values)>1 else '')):
-            for cell in sheet[row]:cell.font=Font(name='Calibri',bold=True,color='FFFFFF');cell.fill=PatternFill('solid',fgColor='27364D')
-    for i in range(1,len(headers)+1):sheet.column_dimensions[get_column_letter(i)].width=34 if i<=3 else 23
-    sheet.freeze_panes='D2';sheet.auto_filter.ref=sheet.dimensions
-    sheet.page_setup.orientation='landscape';sheet.page_setup.fitToWidth=1;sheet.page_setup.fitToHeight=0
-    sheet.sheet_properties.pageSetUpPr.fitToPage=True;sheet.print_title_rows='1:1'
+            cell.font=TOTAL_FONT if total else BODY_FONT
+            cell.alignment=WRAP if index<=3 else PLAIN;cell.border=BODY_BORDER
+            if total:cell.fill=TOTAL_FILL
+            elif row%2==0:cell.fill=STRIPE_FILL
+            cells.append(cell)
+        sheet.append(cells)
+    sheet.auto_filter.ref=f'A1:{get_column_letter(len(headers))}{last_row}'
     return sheet
 
 
@@ -56,23 +78,19 @@ def result_table(book,title,rows,year,names=None):
     headers.extend([f'Из {q} кв. в годовую премию, USD' for q in quarters])
     anchor=len(headers)+1;groups.append((first,anchor-1,anchor))
     headers.extend(['В годовую премию до условия выплаты, USD','Годовая часть выплачена, USD','Доплата за кварталы, USD','Общая выплата, USD'])
-    values=[]
-    for row in rows:
-        cells=[(names or {}).get(row['branch'],row['branch']),row['kind'],row.get('employee','')]
-        for q in quarters:cells.extend([row['possible'][q-1],row['quarters'][q-1]])
-        cells.append(sum((Decimal(str(value)) for value in row['quarters']),Decimal(0)))
-        cells.extend(row['annual_quarters'][q-1] for q in quarters)
-        cells.extend(row[field] for field in ('annual_accrued','annual_paid','bonus','total'));values.append(cells)
-    sheet=table(book,title,headers,values,text_columns=(1,2,3))
-    sheet.sheet_properties.outlinePr.summaryRight=True;sheet.sheet_view.showOutlineSymbols=True
-    for first,last,anchor in groups:
-        sheet.column_dimensions.group(get_column_letter(first),get_column_letter(last),outline_level=1,hidden=True)
-        sheet.column_dimensions[get_column_letter(anchor)].collapsed=True
-    return sheet
+    def values():
+        for row in rows:
+            cells=[(names or {}).get(row['branch'],row['branch']),row['kind'],row.get('employee','')]
+            for q in quarters:cells.extend([row['possible'][q-1],row['quarters'][q-1]])
+            cells.append(sum((Decimal(str(value)) for value in row['quarters']),Decimal(0)))
+            cells.extend(row['annual_quarters'][q-1] for q in quarters)
+            cells.extend(row[field] for field in ('annual_accrued','annual_paid','bonus','total'))
+            yield cells
+    return table(book,title,headers,values(),text_columns=(1,2,3),column_groups=groups)
 
 
 def workbook(run):
-    book=Workbook();book.remove(book.active)
+    book=Workbook(write_only=True)
     names={row['branch']:row.get('branch_name',row['branch']) for plan in run.inputs.get('plans',{}).values() for row in plan['rows']}
     from django.utils import timezone
     from zoneinfo import ZoneInfo
@@ -103,16 +121,16 @@ def workbook(run):
         details=result.get('details',[])
         if details:
             headers=['Подразделение','Сотрудник','Вид мотивации','Исходное подразделение','Период','Группа планов','Группа ERP','Бренд','Формула','План USD','Факт USD','Выполнение','Возможная квартальная USD','Квартальная выплата USD','В годовую USD','Основание']
-            table(book,'Расшифровка '+name,headers,[[(names.get(r.get(k),r.get(k)) if k in ('branch','original_branch') else r.get(k)) for k in ('branch','employee','kind','original_branch','date' if year!=2025 else 'period','planning','goods','brand','formula','plan','fact','execution' if year!=2025 else 'ratio','possible','paid','annual_contribution','origin' if year!=2025 else 'note')] for r in details],text_columns=(1,2,3,4,5,6,7,8,9,16))
-    receipts=[]
-    for year,plan in run.inputs.get('plans',{}).items():
-        for row in plan['rows']:
-            receipts.append([year,row.get('date'),row['branch'],row.get('branch_name',row['branch']),
-                row.get('channel',''),row.get('planning'),row.get('goods'),row.get('brand'),row.get('amount'),
-                sum((Decimal(str(v)) for v in row.get('policy_segments',row.get('segments',[]))),Decimal(0)),*row.get('segments',[None]*5)])
-    table(book,'Источники плана',['Год','Дата','SubdivisionKey','SubdivisionName','Канал','Группа планов','Группа ERP','Бренд','План USD','База политиков USD','O0','O1','O2','O3','O4'],receipts,text_columns=range(1,9))
+            table(book,'Расшифровка '+name,headers,([(names.get(r.get(k),r.get(k)) if k in ('branch','original_branch') else r.get(k)) for k in ('branch','employee','kind','original_branch','date' if year!=2025 else 'period','planning','goods','brand','formula','plan','fact','execution' if year!=2025 else 'ratio','possible','paid','annual_contribution','origin' if year!=2025 else 'note')] for r in details),text_columns=(1,2,3,4,5,6,7,8,9,16))
+    def receipts():
+        for year,plan in run.inputs.get('plans',{}).items():
+            for row in plan['rows']:
+                yield [year,row.get('date'),row['branch'],row.get('branch_name',row['branch']),
+                    row.get('channel',''),row.get('planning'),row.get('goods'),row.get('brand'),row.get('amount'),
+                    sum((Decimal(str(v)) for v in row.get('policy_segments',row.get('segments',[]))),Decimal(0)),*row.get('segments',[None]*5)]
+    table(book,'Источники плана',['Год','Дата','SubdivisionKey','SubdivisionName','Канал','Группа планов','Группа ERP','Бренд','План USD','База политиков USD','O0','O1','O2','O3','O4'],receipts(),text_columns=range(1,9))
     table(book,'Подразделения',['SubdivisionKey','Название'],sorted(names.items()),text_columns=(1,2))
-    parameters=table(book,'Параметры',['Параметр','Значение'],meta,text_columns=(1,2));parameters.column_dimensions['B'].width=110
+    table(book,'Параметры',['Параметр','Значение'],meta,text_columns=(1,2),widths={'B':110})
     from .coefficient_iteration import mapping_rows
     payload=run.inputs.get('payload');mappings=run.inputs.get('mappings',{})
     if payload:
@@ -124,7 +142,12 @@ def workbook(run):
                 values.append([row['kind'],row['label'],', '.join(str(subs.get(str(i),'')) for i in targets),
                     people.get(str(mapping.get('employee')),''),people.get(str(mapping.get('employee_2025')),''),
                     *entry['key'],*entry['rates']])
-        sheet=table(book,'Снимок ставок',['Вид','Название в файле','Привязанные подразделения','Директор 2026–2027','Директор 2025','Группа планов','Группа ERP','Бренд','K0','K1','K2','K3','K4'],values,text_columns=range(1,9))
-        for row in sheet.iter_rows(min_row=2,min_col=9,max_col=13):
-            for cell in row:cell.number_format='0.0000%'
-    output=BytesIO();book.save(output);book.close();output.seek(0);return output
+        sheet=table(book,'Снимок ставок',['Вид','Название в файле','Привязанные подразделения','Директор 2026–2027','Директор 2025','Группа планов','Группа ERP','Бренд','K0','K1','K2','K3','K4'],values,text_columns=range(1,9),percent_columns=range(9,14))
+    output=TemporaryFile()
+    try:
+        book.save(output)
+    except Exception:
+        output.close();raise
+    finally:
+        book.close()
+    output.seek(0);return output
