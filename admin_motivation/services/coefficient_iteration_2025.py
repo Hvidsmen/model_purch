@@ -62,7 +62,13 @@ def build_sql(cursor=None):
     source=prepared(source,historical_author=True,cursor=cursor)
     # The saved importer maps blank planning groups to 9. OTHER. Apply the
     # identical classification to fact so those rows can match the saved plan.
-    source=re.sub(r'\bp\.PlanningGroupSalesERP\b',"COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesERP)),N''),N'9. OTHER')",source,flags=re.I)
+    planning_expression="COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesERP)),N''),N'9. OTHER')"
+    source=re.sub(r'\bp\.PlanningGroupSalesERP\b',planning_expression,source,flags=re.I)
+    # A computed CTE column no longer inherits the original field name.
+    # Name both UNION projections explicitly; predicates keep the expression only.
+    projection=r'(?m)^([ \t]*,[ \t]*)'+re.escape(planning_expression)+r'[ \t]*$'
+    source,count=re.subn(projection,lambda match:match[1]+planning_expression+' AS PlanningGroupSalesERP',source)
+    if count!=2:raise ValidationError('Не распознаны два именованных столбца группы планов продаж в факте 2025.')
     # Physical source joins stay on SubdivisionKey. Every calculation scope,
     # author allocation and payout window uses the business SubdivisionName.
     source=source.replace('s.SubdivisionKey AS PortalSubdivisionKey','s.SubdivisionName AS PortalSubdivisionKey')
