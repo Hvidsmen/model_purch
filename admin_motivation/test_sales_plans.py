@@ -837,7 +837,7 @@ class SalesPlanTests(TestCase):
     def test_period_report_uses_one_aggregation_and_one_alias_query(self):
         from .services.plan_report import period_report
         self.load()
-        with self.assertNumQueries(3):  # directory snapshot + one aggregation + aliases
+        with self.assertNumQueries(5):  # three reference snapshots + one aggregation + aliases
             report = period_report(self.scenario, 'subdivisions', {})
         self.assertEqual(len(report['report_nodes']), 2)
         self.assertEqual(report['filter_choices']['subdivision'], ['A', 'B'])

@@ -1,4 +1,5 @@
 """Five isolated director comparisons; never edit the employee roster or rates."""
+from .subdivision_scope import with_exclusions
 from collections import defaultdict
 from decimal import Decimal
 import json
@@ -169,6 +170,7 @@ def detail(case,person,source,branch,formula,item,period,plan,fact,execution,dep
 
 
 @transaction.atomic
+@with_exclusions
 def calculate(plan_2025_id,plan_2026_id,version_id,source_moscow,source_tt,target_moscow,target_tt,connector=None,progress=None):
     if progress:progress('Проверка планов и версии модели',1)
     plans={2025:SalesPlanScenario.objects.select_for_update().get(pk=plan_2025_id,is_deleted=False),

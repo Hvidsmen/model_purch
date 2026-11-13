@@ -1,9 +1,7 @@
 """Validate only participating plans, with actionable private error context."""
-from .heat_exclusion import predicate as heat
-
 from .subdivision_scope import SCOPE_MARKER, EXCLUDED
-ELIGIBLE=(SCOPE_MARKER+"\n AND NOT (LTRIM(RTRIM(COALESCE([ТипКоэф],N'')))=N'Политики'\n"
-    " AND (COALESCE([Канал],N'')=N'ДПП' OR "+heat('[ГруппаПлановПродаж]')+"))")
+from .motivation_exclusions import DIMENSION_MARKER
+ELIGIBLE=SCOPE_MARKER+' AND '+DIMENSION_MARKER
 INVALID="""[СуммаПланUSD]<>0 AND (K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL)"""
 
 PLAN_GUARD=f"""

@@ -28,10 +28,8 @@ def number(value):
 
 
 def policy_segments(segments, planning_group):
-    """P0-P4 preserve the policy-only base alongside the full O0-O4 plan."""
-    from .heat_exclusion import is_heat
-    if is_heat(planning_group):return [Decimal(0)]*5
-    return [number(segments.get(f'P{i}',segments.get(f'O{i}',0))) for i in range(5)]
+    from .motivation_exclusions import amounts_for
+    return amounts_for('Политики',segments,planning_group)
 
 
 def import_number(value,column):
@@ -135,8 +133,11 @@ def load_plan(scenario_id, connector=None, progress=None):
             source_parts={}
             if 'subdivisionkey' in values:
                 source_key=classification(values['subdivisionkey'],'subdivisionkey',row_number)
-                source_parts[source_key]={'amount':str(amount),'segments':dict(amounts),'channel':str(values.get('chanel') or '')}
-            policy = [Decimal(0)]*5 if str(values.get('chanel') or '').strip().casefold()=='дпп' else policy_segments(amounts,pg)
+                source_parts[source_key]={'amount':str(amount),'segments':dict(amounts)}
+                if 'chanel' in values:source_parts[source_key]['channel']=str(values.get('chanel') or '')
+            amounts['channels']={str(values.get('chanel') or ''):[amounts[f'O{i}'] for i in range(5)]}
+            amounts['channels_complete']='chanel' in values
+            policy = policy_segments(amounts,pg)
             amounts.update({f'P{i}':str(value) for i,value in enumerate(policy)})
             lines.append(SalesPlanLine(scenario_id=scenario_id, plan_date=on_date, subdivision=sub,
                 planning_group_sales=pg, group=group, brand=brand, amount_usd=amount, amount_ddp_usd=ddp, segment_amounts=amounts,source_subdivisions=source_parts))
@@ -194,6 +195,10 @@ def aggregate_lines(lines, global_plan=False):
                 target['channel']=part.get('channel','')
                 target['amount']=str(Decimal(target['amount'])+number(part['amount']))
                 for segment in SEGMENTS:target['segments'][segment]=str(Decimal(target['segments'][segment])+number(part['segments'][segment]))
+        from .motivation_exclusions import channel_bases,merge_channels,serial_channels,channels_known
+        channels=channel_bases(total.segment_amounts) if total.segment_amounts.get('channels') is not None else {}
+        total.segment_amounts['channels_complete']=total.segment_amounts.get('channels_complete',True) and channels_known(line.segment_amounts,line.source_subdivisions)
+        total.segment_amounts['channels']=serial_channels(merge_channels(channels,channel_bases(line.segment_amounts,line.source_subdivisions)))
         for i,value in enumerate(policy_segments(line.segment_amounts,line.planning_group_sales)):
             total.segment_amounts[f'P{i}']=str(Decimal(total.segment_amounts.get(f'P{i}',0))+value)
         total.amount_usd += line.amount_usd
@@ -204,8 +209,8 @@ def aggregate_lines(lines, global_plan=False):
         number(total.amount_usd)
         if total.amount_ddp_usd is not None:
             number(total.amount_ddp_usd)
-        for amount in total.segment_amounts.values():
-            number(amount)
+        for segment in [*SEGMENTS,*[f'P{i}' for i in range(5)]]:
+            number(total.segment_amounts.get(segment,0))
     return list(aggregates.values())
 
 
@@ -262,6 +267,8 @@ def calculate_plan(scenario_id, progress=None):
     director_calculation = PlanDirectors(versions)
     version_cache, coefficient_cache = {}, {}
     pending, processed = [], 0
+    from .motivation_exclusions import channel_bases,merge_channels,serial_channels,amounts_for,channels_known
+    global_channels={};global_complete={}
     from itertools import chain
     # Local lines populate global director snapshots; global amounts count each director.
     lines = chain(scenario.lines.exclude(subdivision='').exclude(subdivision__in=excluded).order_by('pk').iterator(chunk_size=1000),
@@ -269,6 +276,17 @@ def calculate_plan(scenario_id, progress=None):
     from .subdivision_aliases import mapping, canonical
     branch_names = mapping()
     for line in lines:
+        identity=(line.plan_date,line.planning_group_sales,line.group,line.brand)
+        channels=channel_bases(line.segment_amounts,line.source_subdivisions)
+        complete=channels_known(line.segment_amounts,line.source_subdivisions)
+        if line.subdivision:
+            merge_channels(global_channels.setdefault(identity,{}),channels)
+            global_complete[identity]=global_complete.get(identity,True) and complete
+        else:
+            channels=global_channels.pop(identity,channels)
+            complete=global_complete.pop(identity,complete)
+        line.segment_amounts['channels_complete']=complete
+        line.segment_amounts['channels']=serial_channels(channels)
         line.subdivision = canonical(line.subdivision, branch_names)
         if line.plan_date not in version_cache:
             version_cache[line.plan_date] = next((v for v in reversed(versions) if v.effective_from <= line.plan_date), None)
@@ -278,8 +296,9 @@ def calculate_plan(scenario_id, progress=None):
         version_id = version.pk if version else None
         result, totals = {}, []
         for kind in KINDS:
-            if kind=='Политики' and not any(policy_segments(line.segment_amounts,line.planning_group_sales)):
-                result[kind]={s:{'coefficient':'0','usd':'0','motivation':'0','source':'policy_scope'} for s in SEGMENTS}
+            basis=amounts_for(kind,line.segment_amounts,line.planning_group_sales)
+            if not any(basis):
+                result[kind]={s:{'coefficient':'0','usd':'0','motivation':'0','source':'participation_scope'} for s in SEGMENTS}
                 totals.append(Decimal(0))
                 continue
             details, total = {}, Decimal(0)
@@ -312,7 +331,7 @@ def calculate_plan(scenario_id, progress=None):
                         coefficient_cache.clear()
                     cached = coefficient_cache[lookup] = (coefficient, metadata)
                 coefficient, metadata = cached
-                usd = policy_segments(line.segment_amounts,line.planning_group_sales)[SEGMENTS.index(segment)] if kind=='Политики' else number(line.segment_amounts.get(segment))
+                usd = basis[SEGMENTS.index(segment)]
                 contribution = coefficient * usd
                 details[segment] = {**metadata, 'usd': str(usd), 'motivation': str(contribution)}
                 total += contribution
@@ -348,7 +367,7 @@ def report(callback, stage, percent=None, processed=None, total=None):
 
 def save_calculations(lines):
     """Avoid constructing thousands of ORM CASE expression trees for large JSON rows."""
-    names = ['coefficient_version', 'calculation', 'policies_usd', 'sales_usd', 'directors_usd', 'total_usd']
+    names = ['segment_amounts', 'coefficient_version', 'calculation', 'policies_usd', 'sales_usd', 'directors_usd', 'total_usd']
     fields = [SalesPlanLine._meta.get_field(name) for name in names]
     quote = connection.ops.quote_name
     table = quote(SalesPlanLine._meta.db_table)

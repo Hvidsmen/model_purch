@@ -5,11 +5,11 @@ from decimal import Decimal
 from types import SimpleNamespace
 from django.core.exceptions import ValidationError
 from .coefficient_iteration import mapping_rows, norm, HISTORICAL_DIRECTORS
-from .heat_exclusion import is_heat
+from .motivation_exclusions import allowed,KINDS,sql_allowed,channels_changed
 from .sales_plans import number
 from .subdivision_scope import included
 
-RULE='coefficient-iteration-v4-name-directory-policy-bases'
+RULE='coefficient-iteration-v5-dimension-directories'
 ZERO=Decimal(0)
 MOSCOW='Д-Москва'
 TT='ТЕРМОТРЕЙД'
@@ -112,16 +112,18 @@ class RateBook:
             seen[person]=signature
             yield token,person
 
-    def coefficients_2025(self,branches,policy_branches=None):
+    def coefficients_2025(self,branches,policy_branches=None,kinds_by_branch=None,allow_missing_kinds=False):
         records=[]
         for sub in branches:
             kinds=('Политики','Продажи') if policy_branches is None or sub in policy_branches else ('Продажи',)
+            if kinds_by_branch is not None:kinds=tuple(k for k in kinds if k in kinds_by_branch.get(sub,()))
             for (scope,kind,p,g,b),rates in self.cells.items():
                 if kind not in kinds or scope!=self.rate_scope(sub,kind):continue
                 p,g,b=self.labels[scope,kind,p,g,b]
                 records.append({'subdivision':sub,'kind':kind,'planning':p,'goods':g,'brand':'' if b=='*' else b,
                                 **{f'k{i}':str(v) for i,v in enumerate(rates)}})
-            for kind in kinds:self.get(sub,kind,('*','*','*'),2025)
+            if not allow_missing_kinds:
+                for kind in kinds:self.get(sub,kind,('*','*','*'),2025)
         return records
 
 
@@ -138,13 +140,15 @@ def plan_rows(plan,year):
         if not parts:raise ValidationError(f'В плане {year} не сохранены SubdivisionKey. Один раз перезагрузите этот план из MS SQL после обновления портала.')
         part_amount=ZERO;part_segments=[ZERO]*5
         for source_key,part in parts.items():
+            if channels_changed() and 'channel' not in part:
+                raise ValidationError('В плане не сохранены исходные каналы. Один раз перезагрузите план из MS SQL для новых исключений каналов.')
             value=number(part['amount']);split=[number(part['segments'].get(f'O{i}')) for i in range(5)]
             if abs(sum(split,ZERO)-value)>max(Decimal('.0001'),abs(value)*Decimal('.00000001')):
                 raise ValidationError(f'В плане {year} некорректные сегменты для SubdivisionKey {source_key}. Перезагрузите план.')
             part_amount+=value;part_segments=[a+b for a,b in zip(part_segments,split)]
             result.append({'date':day,'branch':str(source_key),'branch_name':sub,'planning':p or '*','goods':g or '*','brand':b or '*',
                            'amount':value,'segments':split,'channel':part.get('channel',''),
-                           'policy_segments':[ZERO]*5 if str(part.get('channel','')).strip().casefold()=='дпп' or is_heat(p) else split})
+                           'policy_segments':split if allowed('Политики',p,part.get('channel','')) else [ZERO]*5})
         if abs(part_amount-amount)>Decimal('.0001') or any(abs(a-b)>Decimal('.0001') for a,b in zip(part_segments,values)):
             raise ValidationError(f'В плане {year} суммы по ключам не совпадают с сохранённым итогом. Перезагрузите план.')
     if not result:raise ValidationError(f'Выбранный план {year} пуст.')
@@ -159,14 +163,17 @@ def motivation_plan_rows(rows,rates,*,merged=False):
         if merged and name in (MOSCOW,TT):name=MERGED
         identity=(row['date'],name,row['planning'],row['goods'],row['brand'])
         target=grouped.setdefault(identity,{**row,'branch':name,'branch_name':name,'amount':ZERO,
-            'segments':[ZERO]*5,'policy_segments':[ZERO]*5,'policy_eligible':False,'source_subdivisions':[]})
+            'segments':[ZERO]*5,'policy_segments':[ZERO]*5,'policy_eligible':False,
+            'kind_segments':{kind:[ZERO]*5 for kind in KINDS},'eligible_kinds':dict.fromkeys(KINDS,False),'source_subdivisions':[]})
         target['amount']+=number(row['amount'])
         target['segments']=[a+number(b) for a,b in zip(target['segments'],row['segments'])]
-        eligible=not is_heat(row['planning']) and str(row.get('channel','')).strip().casefold()!='дпп'
-        target['policy_eligible'] |= row.get('policy_eligible',eligible)
-        policy=row.get('policy_segments',row['segments'])
-        if str(row.get('channel','')).strip().casefold()=='дпп' or is_heat(row['planning']):policy=[ZERO]*5
-        target['policy_segments']=[a+number(b) for a,b in zip(target['policy_segments'],policy)]
+        for kind in KINDS:
+            eligible=row.get('eligible_kinds',{}).get(kind,allowed(kind,row['planning'],row.get('channel','')))
+            target['eligible_kinds'][kind] |= eligible
+            values=row.get('kind_segments',{}).get(kind,row['segments'] if eligible else [ZERO]*5)
+            target['kind_segments'][kind]=[a+number(b) for a,b in zip(target['kind_segments'][kind],values)]
+        target['policy_eligible']=target['eligible_kinds']['Политики']
+        target['policy_segments']=target['kind_segments']['Политики']
         target['source_subdivisions'].extend(row.get('source_subdivisions') or [{
             'key':row['branch'],'name':row.get('branch_name') or rates.name_for_key(row['branch']),
             'amount':row['amount'],'segments':row['segments']}])
@@ -190,13 +197,15 @@ def at_full_plan(rows,rates,year,quarter_share,year_share,factor=lambda *args:De
     for item in selected:
         sub=MERGED if rates.role(item['branch']) in (MOSCOW,TT) else item['branch'];q=(item['date'].month-1)//3+1
         dimensions=(item['planning'],item['goods'],item['brand'])
-        actors=[('Политики','',None),('Продажи','',None),*[(token,rates.people[person],person) for token,person in rates.directors_for(sub,year)]]
+        director_actors=list(rates.directors_for(sub,year)) if item['eligible_kinds']['Директора'] else []
+        if item['eligible_kinds']['Директора'] and not director_actors:raise ValidationError('Не назначены директора: '+sub)
+        actors=[('Политики','',None),('Продажи','',None),*[(token,rates.people[person],person) for token,person in director_actors]]
         for actor,person,person_id in actors:
             kind='Директора' if person_id is not None else actor
-            if kind=='Политики' and not item['policy_eligible']:continue
+            if not item['eligible_kinds'][kind]:continue
             scope=actor if person_id is not None else MOSCOW if sub==MERGED else sub
             values,origin=rates.get(scope,kind,dimensions,year)
-            basis=item['policy_segments'] if kind=='Политики' else item['segments']
+            basis=item['kind_segments'][kind]
             full=sum((max(amount*k,ZERO) for amount,k in zip(basis,values)),ZERO)
             quarterly=full*quarter_share/100*factor(sub,q)
             annual=full*year_share/100*factor(sub,5)
@@ -205,8 +214,8 @@ def at_full_plan(rows,rates,year,quarter_share,year_share,factor=lambda *args:De
             row['quarters'][q-1]+=quarterly;row['possible'][q-1]+=quarterly;row['annual_quarters'][q-1]+=annual
             details.append({'scenario':scenario,'year':year,'branch':sub,'original_branch':item['branch'],'source_subdivisions':item['source_subdivisions'],'kind':kind,
                 'employee':person,'date':item['date'].isoformat(),'quarter':q,'planning':dimensions[0],'goods':dimensions[1],
-                'brand':dimensions[2],'plan':item['amount'],'fact':item['amount'],'execution':Decimal(1) if item['amount']>0 else None,
-                'segments':item['segments'],'rates':values,'origin':origin,'possible':quarterly,'paid':quarterly,'annual_contribution':annual})
+                'brand':dimensions[2],'plan':sum(basis,ZERO),'fact':sum(basis,ZERO),'execution':Decimal(1) if item['amount']>0 else None,
+                'segments':basis,'rates':values,'origin':origin,'possible':quarterly,'paid':quarterly,'annual_contribution':annual})
     if not grouped:raise ValidationError(f'Нет строк для сценария {year}.')
     for row in grouped.values():
         row['annual_accrued']=sum(row['annual_quarters'],ZERO);row['annual_paid']=row['annual_accrued']

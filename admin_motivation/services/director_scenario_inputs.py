@@ -53,6 +53,8 @@ def read_sources(plans, version, connector=None, progress=None):
             require_columns(cursor,('motivation.FactTest2025','dbo.Subdivisions'))
             # Fact contains one unreplicated Sales row per document/model/segment.
             # A merged display branch must never be reused as an original branch.
+            from .motivation_exclusions import sql_allowed
+            participation=sql_allowed('Директора',group_expression='f.[ГруппаПлановПродаж]',channel_expression='s.Chanel')
             cursor.execute(f"""SELECT COALESCE(s.SubdivisionName,f.[Подразделение]),f.[Квартал],
  f.[ГруппаПлановПродаж],f.[ГруппаТоваров],f.[Марка],f.[СегментСкидки],
  SUM(CASE WHEN f.[СуммаОтгрузокUSD]>0 THEN f.[СуммаОтгрузокUSD] ELSE 0 END),
@@ -60,6 +62,7 @@ def read_sources(plans, version, connector=None, progress=None):
  CASE WHEN s.SubdivisionName IS NULL THEN 1 ELSE 0 END
  FROM motivation.{table} f LEFT JOIN dbo.Subdivisions s ON s.SubdivisionKey=f.[ПодразделениеДокумент]
  WHERE f.[Год]=? AND f.[Квартал] BETWEEN 1 AND ? AND LTRIM(RTRIM(f.[ТипКоэф]))=N'Продажи' AND f.[СуммаОтгрузокUSD]<>0
+ AND {participation}
  AND (s.SubdivisionName IN (?,?) OR (s.SubdivisionName IS NULL AND f.[Подразделение] IN (?,?)))
  GROUP BY s.SubdivisionName,f.[Подразделение],f.[Квартал],f.[ГруппаПлановПродаж],f.[ГруппаТоваров],f.[Марка],f.[СегментСкидки]""",year,4 if year==2025 else 3,*BRANCHES,*BRANCHES)
             values=[]
@@ -96,7 +99,7 @@ def validated_parameters(params):
 
 def plan_inputs(scenario,year):
     result=[]
-    for day,sub,pg,goods,brand,amount,segments in scenario.lines.filter(plan_date__year=year).exclude(subdivision='').order_by().values_list('plan_date','subdivision','planning_group_sales','group','brand','amount_usd','segment_amounts').iterator(chunk_size=2000):
+    for day,sub,pg,goods,brand,amount,segments,sources in scenario.lines.filter(plan_date__year=year).exclude(subdivision='').order_by().values_list('plan_date','subdivision','planning_group_sales','group','brand','amount_usd','segment_amounts','source_subdivisions').iterator(chunk_size=2000):
         sub=branch_name(sub)
         if not sub or (year==2026 and day.month>9):continue
         if not isinstance(segments,dict) or set(SEGMENTS)-set(segments):
@@ -104,6 +107,8 @@ def plan_inputs(scenario,year):
         amounts=[number(segments[key]) for key in SEGMENTS];total=number(amount)
         if abs(sum(amounts,Decimal(0))-total)>max(Decimal('.0001'),abs(total)*Decimal('.00000001')):
             raise ValidationError(f'Сумма O0–O4 не совпадает с планом {year}.')
+        from .motivation_exclusions import amounts_for
+        amounts=amounts_for('Директора',segments,pg,sources)
         raw_goods=goods
         goods=goods if pg in ('1. RAC','2. VRF','3. PROF') else '*'
         brand=brand if raw_goods in ('Бытовые кондиционеры','Полупромышленные кондиционеры','Системы мульти-сплит','Системы VRF') else '*'

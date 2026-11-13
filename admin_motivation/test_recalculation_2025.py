@@ -204,8 +204,10 @@ class SalesParticipationTests(TestCase):
         from .test_director_participation import SOURCE
         sql=participation(directors(SOURCE)).replace('#pf_base','base').replace("N'", "'")
         with sqlite3.connect(':memory:') as db:
-            db.execute('CREATE TABLE base (Канал,ТипКоэф,Подразделение)')
-            db.executemany('INSERT INTO base VALUES (?,?,?)',[
+            db.create_function('PATINDEX',2,lambda pat,v:next((i+1 for i,c in enumerate(v) if c not in '0123456789. '),0))
+            db.create_function('UPPER',1,lambda v:v.upper() if v else v)
+            db.execute("CREATE TABLE base (Канал,ТипКоэф,Подразделение,ГруппаПлановПродаж DEFAULT 'RAC')")
+            db.executemany('INSERT INTO base (Канал,ТипКоэф,Подразделение) VALUES (?,?,?)',[
                 ('ДПП',kind,'Д-Москва') for kind in ('Политики','Продажи','Директора')])
             db.executescript(sql)
             self.assertCountEqual(db.execute('SELECT ТипКоэф FROM base').fetchall(), [('Продажи',),('Директора',)])

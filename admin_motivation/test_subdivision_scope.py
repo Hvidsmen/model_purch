@@ -34,7 +34,9 @@ class SubdivisionScopeTests(TestCase):
         local=self.plan.lines.get(subdivision='A');local.pk=None;local.subdivision='Вентиляция';local.save()
         global_line=self.plan.lines.get(subdivision='')
         global_line.amount_usd+=local.amount_usd
+        global_line.segment_amounts.pop('channels',None)
         for segment,value in local.segment_amounts.items():
+            if segment not in {f'{prefix}{i}' for prefix in ('O','P') for i in range(5)}:continue
             global_line.segment_amounts[segment]=str(Decimal(global_line.segment_amounts[segment])+Decimal(value))
         totals=[]
         for kind in ['Политики','Продажи']:

@@ -25,8 +25,10 @@ def exclusion_scope():
     from ..models import MotivationSubdivisionExclusion
     names = tuple(MotivationSubdivisionExclusion.objects.filter(enabled=True).values_list('subdivision_name', flat=True))
     token = _current.set(names)
+    from .motivation_exclusions import rule_scope
     try:
-        yield names
+        with rule_scope():
+            yield names
     finally:
         _current.reset(token)
 
@@ -40,7 +42,8 @@ def with_exclusions(function):
 
 
 def policy_signature():
-    return POLICY + ':' + hashlib.sha256(json.dumps(sorted(n.casefold().strip() for n in excluded_names()),ensure_ascii=False).encode()).hexdigest()
+    from .motivation_exclusions import rules
+    return POLICY + ':' + hashlib.sha256(json.dumps([sorted(n.casefold().strip() for n in excluded_names()),sorted(rules())],ensure_ascii=False).encode()).hexdigest()
 
 
 class ExcludedNames:
@@ -64,7 +67,8 @@ def sql_predicate(expression):
 
 
 def resolve_scope_sql(sql):
-    return sql.replace(SCOPE_MARKER, sql_predicate('[Подразделение]'))
+    from .motivation_exclusions import DIMENSION_MARKER,sql_allowed
+    return sql.replace(SCOPE_MARKER, sql_predicate('[Подразделение]')).replace(DIMENSION_MARKER,sql_allowed())
 
 
 def excluded_plan_names(scenario):

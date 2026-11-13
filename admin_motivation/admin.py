@@ -86,3 +86,11 @@ class MotivationSubdivisionExclusionAdmin(admin.ModelAdmin):
     list_filter = ('enabled',)
     search_fields = ('subdivision_name', 'comment')
     list_editable = ('enabled',)
+
+
+@admin.register(MotivationPlanningGroupExclusion, MotivationChannelExclusion)
+class MotivationDimensionExclusionAdmin(admin.ModelAdmin):
+    list_display = ('coefficient_type', 'value', 'enabled', 'comment')
+    list_filter = ('coefficient_type', 'enabled')
+    list_editable = ('enabled',)
+    search_fields = ('value', 'comment')

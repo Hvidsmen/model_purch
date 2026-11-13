@@ -10,19 +10,14 @@ RULE_VERSION = 'moscow-tt-q4-policy-heat-sales-dpp-v2'
 
 
 def patch(definition):
-    """Keep full physical inputs; exclude HEAT only from motivation windows."""
+    """Keep physical inputs; apply the shared rules before motivation windows."""
     mask = mask_sql(definition)
     deletes = list(re.finditer(r'\bDELETE\s+(?:FROM\s+)?#pf_base\b', mask, re.I))
     if not deletes:
-        raise ValidationError('Не найдена база расчёта для исключения HEAT.')
+        raise ValidationError('Не найдена база расчёта для правил участия.')
     at = deletes[0].start()
-    from .heat_exclusion import predicate as heat_predicate
-    definition = definition[:at] + """
--- Approved 2026 transition: HEAT excluded for policies; sales include HEAT and DPP.
-DELETE FROM #pf_base WHERE [Год]=2026
- AND {heat}
- AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики');
-""".format(heat=heat_predicate('[ГруппаПлановПродаж]')) + definition[at:]
+    from .motivation_exclusions import sql_allowed
+    definition = definition[:at] + '\n-- Shared motivation participation rules.\nDELETE FROM #pf_base WHERE NOT ('+sql_allowed()+');\n' + definition[at:]
     # Restrict the input set BEFORE window functions, for both the Q4 and
     # annual output SELECT. Never filter already-calculated annual windows.
     labels = list(re.finditer(r"N?'(?P<period>[1-4]\s+Квартал[^']*|Год)'\s+(?:AS\s+)?\[?КварталМотивации\]?", definition, re.I))

@@ -5,6 +5,7 @@ weight before an edit. Every candidate is revalued after storage rounding.
 """
 import hashlib
 import json
+from .subdivision_scope import with_exclusions
 from .subdivision_scope import included
 from collections import defaultdict
 from decimal import Decimal, ROUND_HALF_UP
@@ -25,6 +26,7 @@ def digest(value):
 
 
 class Budget:
+    @with_exclusions
     def __init__(self, version, plan, local=False, subdivision=None):
         self.version, self.plan, self.local = version, plan, local
         self.cells, self.terms, self.fallbacks = {}, [], 0
@@ -86,9 +88,9 @@ class Budget:
         lines = plan.lines.filter(plan_date__gte=version.effective_from).exclude(subdivision='').order_by('pk')
         if target is not None:
             lines = lines.filter(subdivision__in=expand(target, names))
-        fields = ('pk', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts')
+        fields = ('pk', 'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'segment_amounts','source_subdivisions')
         for raw_line in lines.values_list(*fields).iterator(chunk_size=2000):
-            pk, day, original_sub, pg, group, brand, amounts = raw_line
+            pk, day, original_sub, pg, group, brand, amounts, sources = raw_line
             if not included(original_sub, names):
                 continue
             sub = canonical(original_sub, names)
@@ -97,11 +99,10 @@ class Budget:
             input_count += 1
             # The selected version is constant over the affected date range.
             # Resolve each branch/classification once rather than once per month.
-            usd = plan_groups.setdefault((sub, pg, group, brand), [[ZERO] * 5,[ZERO] * 5])
-            from .sales_plans import policy_segments
-            for i,value in enumerate(policy_segments(amounts,pg)):usd[1][i]+=value
-            for index, segment in enumerate(SEGMENTS):
-                usd[0][index] += number(amounts.get(segment))
+            from .motivation_exclusions import KINDS as coefficient_kinds,amounts_for,kind_name
+            usd = plan_groups.setdefault((sub,pg,group,brand),{kind:[ZERO]*5 for kind in coefficient_kinds})
+            for kind in coefficient_kinds:
+                for i,value in enumerate(amounts_for(kind,amounts,pg,sources)):usd[kind][i]+=value
         for (sub, pg, group, brand), usd in plan_groups.items():
             lookup_sub = sub if local else ''
             kinds = [(kind, 0, 1) for kind in KINDS]
@@ -109,7 +110,7 @@ class Budget:
             for kind, staff, multiplier in kinds:
                 if not multiplier or (kind == 'Директор' and not staff_by_sub[lookup_sub]):
                     continue
-                for segment, amount in zip(SEGMENTS, usd[1] if kind=='Политики' else usd[0]):
+                for segment, amount in zip(SEGMENTS, usd[kind_name(kind)]):
                     if not amount:
                         continue
                     candidates = exact.get((lookup_sub, staff, pg, group, brand, kind, segment))

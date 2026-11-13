@@ -18,6 +18,7 @@ IF OBJECT_ID(N'motivation.PortalMotivationRun',N'U') IS NULL
 
 
 def parameters(job):
+    from .motivation_exclusions import rules
     from .pilot_calculation import PERIODS
     from .calculation_variants import variant_of, ALL_2026
     variant = variant_of(job)
@@ -37,6 +38,7 @@ def parameters(job):
                 'no_subdivision_authors': 'unallocated_plan_zero_premium',
                 'zero_sum_policy_plan_shares': 'positive_author_net_by_original_subdivision_coefficient_goods',
                 'coefficient_sha256': job.recalculation_2025.source_sha256,
+                'coefficient_exclusions':list(rules()),
                 'calculation_subdivisions': 'all_separate', 'currency': 'USD'}
     return {'fact_year': job.fact_year, 'plan_version': job.plan_version,
             'quarter_share': str(job.quarter_share), 'year_share': str(job.year_share),
@@ -46,6 +48,7 @@ def parameters(job):
             'variant': variant, 'transition_rule': RULE_VERSION if transition else None,
             'q4_eligibility_quarters': [4] if transition else [1,2,3,4],
             'annual_amount_quarters': [] if variant == 'separate_2026' else [4] if transition or variant == 'main' else [1,2,3,4],
+            'coefficient_exclusions':list(rules()),
             'calculation_subdivisions': ['Д-Москва', 'ТЕРМОТРЕЙД'],
             'annual_accrual_source': SNAPSHOT_VERSION}
 

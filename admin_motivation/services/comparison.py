@@ -177,19 +177,23 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
                 chosen = baseline if name == 'baseline' else next((v for v in reversed(versions) if v.effective_from <= on_date), None)
                 date_cache[date_key] = chosen.pk if chosen else None
             from .sales_plans import policy_segments
-            policy_usd=policy_segments(amounts,pg)
-            kinds=['Политики','Продажи'] if any(policy_usd) else ['Продажи']
+            from .motivation_exclusions import amounts_for
+            policy_usd=amounts_for('Политики',amounts,pg)
+            sales_usd=amounts_for('Продажи',amounts,pg)
+            director_usd=amounts_for('Директора',amounts,pg)
+            bases={'Политики':policy_usd,'Продажи':sales_usd}
+            kinds=[kind for kind,values in bases.items() if any(values)]
             try:
-                matrix, fallbacks = index.coefficients(date_cache[date_key], sub, pg, group, brand,kinds=kinds)
+                matrix, fallbacks = index.coefficients(date_cache[date_key], sub, pg, group, brand,kinds=kinds) if kinds else ([],0)
             except ValidationError as error:
                 results[name] = {'error': ' '.join(error.messages)}
                 continue
-            from .sales_plans import policy_segments
-            policies = sum((value * amount for value, amount in zip(matrix[0],policy_usd)),Decimal(0)) if any(policy_usd) else Decimal(0)
-            sales = sum((value * amount for value, amount in zip(matrix[-1], usd)), Decimal(0))
+            values={kind:sum((value*amount for value,amount in zip(row,bases[kind])),Decimal(0)) for kind,row in zip(kinds,matrix)}
+            policies=values.get('Политики',Decimal(0))
+            sales=values.get('Продажи',Decimal(0))
             results[name]['policies'] += policies
             results[name]['sales'] += sales
-            directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, usd)
+            directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, director_usd)
             results[name]['directors'] += directors
             results[name]['total'] += policies + sales + directors
             results[name]['fallbacks'] += fallbacks

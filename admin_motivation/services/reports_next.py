@@ -255,7 +255,7 @@ def planned_budget(execution, scenario, query):
     for field, model_field in [('planning', 'planning_group_sales'), ('goods', 'group'), ('brand', 'brand')]:
         if query.getlist(field):
             lines = lines.filter(**{model_field + '__in': query.getlist(field)})
-    for day, original, pg, group, brand, amount, ddp, segments in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
+    for day, original, pg, group, brand, amount, ddp, segments, sources in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts','source_subdivisions').iterator(chunk_size=2000):
         q_share=quarter_share if day.month>=10 and '4' in periods else Decimal(0)
         y_share=annual_share if day.month>=10 and '5' in periods else Decimal(0)
         share=q_share+y_share
@@ -275,24 +275,26 @@ def planned_budget(execution, scenario, query):
         bucket['plan'] += amount
         bucket['ddp'] = add(bucket['ddp'], ddp)
         for kind, target in kinds.items():
-            from .heat_exclusion import is_heat
-            if year == 2026 and is_heat(pg):
-                continue
+            from .motivation_exclusions import amounts_for
+            kind_amounts=amounts_for(kind,segments,pg,sources)
+            if not any(kind_amounts):continue
             if target not in included_kinds or target == 'directors':
                 continue
             for side in ('global', 'local'):
                 matrix, _ = indexes[side].coefficients(version.pk, sub if side == 'local' else '', pg, group, brand, kinds=[kind])
-                base_value = sum((rate * usd for rate, usd in zip(matrix[0], amounts)), Decimal(0))
+                base_value = sum((rate * usd for rate, usd in zip(matrix[0], kind_amounts)), Decimal(0))
                 value=base_value*share
                 bucket[side][target] += value
                 if side=='global':
                     parts['quarter'][target]+=base_value*q_share
                     parts['annual'][target]+=base_value*y_share
         if 'directors' in included_kinds:
-            staff = directors['local'].by_employee(version.pk, sub, pg, group, brand, amounts)
+            from .motivation_exclusions import amounts_for
+            director_amounts=amounts_for('Директора',segments,pg,sources)
+            staff = directors['local'].by_employee(version.pk, sub, pg, group, brand, director_amounts)
             if director_scope == 'active':
                 staff = {employee: value for employee, value in staff.items() if employee in active_staff.get(sub, set())}
-            global_base = directors['global'].motivation(version.pk, '', pg, group, brand, amounts)
+            global_base = directors['global'].motivation(version.pk, '', pg, group, brand, director_amounts)
             global_amount=global_base*share
             parts['quarter']['directors']+=global_base*q_share*len(staff)
             parts['annual']['directors']+=global_base*y_share*len(staff)

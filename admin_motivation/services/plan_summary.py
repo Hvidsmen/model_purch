@@ -79,7 +79,9 @@ def summary_report(scenario, params, allowed_subdivisions=None):
         ddp = Decimal(values['ddp']) if values['ddp'] is not None else None
         amounts = [Decimal(value) for value in values['segments']]
         policy_amounts=[Decimal(value) for value in values.get('policy_segments',values['segments'])]
-        staff_values = directors['local'].by_employee(version, sub, pg, group, brand, amounts) if 'directors' in kinds or selected_staff else {}
+        bases={kind:[Decimal(v) for v in values.get('kind_segments',{}).get(kind,values['segments'])] for kind in ('Политики','Продажи','Директора')}
+        bases['Политики']=policy_amounts
+        staff_values = directors['local'].by_employee(version, sub, pg, group, brand, bases['Директора']) if 'directors' in kinds or selected_staff else {}
         if selected_staff:
             staff_values = {staff: value for staff, value in staff_values.items() if staff in selected_staff}
             if not staff_values:
@@ -87,14 +89,14 @@ def summary_report(scenario, params, allowed_subdivisions=None):
         bucket = buckets.setdefault(sub, empty_bucket())
         bucket['plan'] += plan
         bucket['ddp'] = add(bucket['ddp'], ddp)
-        global_director = directors['global'].motivation(version, '', pg, group, brand, amounts) if 'directors' in kinds else ZERO
-        active_kinds=[item for item in policy_kinds if item[1]!='Политики' or any(policy_amounts)]
+        global_director = directors['global'].motivation(version, '', pg, group, brand, bases['Директора']) if 'directors' in kinds else ZERO
+        active_kinds=[item for item in policy_kinds if any(bases[item[1]])]
         if active_kinds:
             for side in ['global', 'local']:
                 try:
                     matrix, _ = indexes[side].coefficients(version, sub if side == 'local' else '', pg, group, brand,
                                                           kinds=[source for key, source in active_kinds])
-                    values = [sum((k * usd for k, usd in zip(row, policy_amounts if source=='Политики' else amounts)), ZERO) for (_,source),row in zip(active_kinds,matrix)]
+                    values = [sum((k * usd for k, usd in zip(row, bases[source])), ZERO) for (_,source),row in zip(active_kinds,matrix)]
                 except ValidationError:
                     values = [None] * len(active_kinds)
                     missing.add(side)

@@ -60,21 +60,23 @@ def _rebuild(scenario, versions, wanted, force, number):
         grouped, dates = {}, {}
         lines = locked.lines.exclude(subdivision='').order_by().values_list(
             'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand',
-            'amount_usd', 'amount_ddp_usd', 'segment_amounts')
+            'amount_usd', 'amount_ddp_usd', 'segment_amounts','source_subdivisions')
         from .subdivision_aliases import mapping, canonical
         names = mapping()
-        for day, sub, pg, group, brand, plan, ddp, segments in lines.iterator(chunk_size=2000):
+        from .motivation_exclusions import KINDS,amounts_for
+        for day, sub, pg, group, brand, plan, ddp, segments, sources in lines.iterator(chunk_size=2000):
             if not included(sub, names):
                 continue
             sub = canonical(sub, names)
             if day not in dates:
                 dates[day] = next((v.pk for v in reversed(versions) if v.effective_from <= day), None)
             key = (dates[day], sub, pg, group, brand)
-            values = grouped.setdefault(key, [ZERO, ZERO, [ZERO] * len(SEGMENTS), [ZERO] * len(SEGMENTS)])
+            values = grouped.setdefault(key, [ZERO, ZERO, [ZERO] * len(SEGMENTS), {kind:[ZERO]*5 for kind in KINDS}])
             values[0] += plan
             values[1] = values[1] + ddp if values[1] is not None and ddp is not None else None
-            for index,value in enumerate(policy_segments(segments,pg)):
-                values[3][index] += value
+            for kind in KINDS:
+                for index,value in enumerate(amounts_for(kind,segments,pg,sources)):
+                    values[3][kind][index] += value
             for index, segment in enumerate(SEGMENTS):
                 values[2][index] += number(segments.get(segment))
         # Replace only after the entire source has been read successfully.
@@ -84,7 +86,8 @@ def _rebuild(scenario, versions, wanted, force, number):
             pending.append(SalesPlanSummaryGroup(scenario_id=locked.pk, version_key=version,
                 subdivision=sub, planning_group_sales=pg, group=group, brand=brand,
                 amounts={'plan': str(plan), 'ddp': str(ddp) if ddp is not None else None,
-                         'segments': [str(value) for value in segments], 'policy_segments':[str(value) for value in policies]}))
+                         'segments': [str(value) for value in segments], 'policy_segments':[str(value) for value in policies['Политики']],
+                         'kind_segments':{kind:list(map(str,values)) for kind,values in policies.items()}}))
             if len(pending) >= 1000:
                 SalesPlanSummaryGroup.objects.bulk_create(pending, batch_size=1000)
                 pending.clear()

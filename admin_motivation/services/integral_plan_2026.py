@@ -1,5 +1,6 @@
 """Two weighted premium/plan coefficients over a selected full 2026 plan."""
 import json
+from .subdivision_scope import with_exclusions
 from collections import defaultdict
 from datetime import date
 from decimal import Decimal
@@ -15,7 +16,7 @@ from .director_comparison import DirectorIndex
 from .active_directors import bindings
 from .subdivision_aliases import mapping, canonical
 from .subdivision_scope import included
-from .heat_exclusion import is_heat
+from .motivation_exclusions import allowed,channel_bases
 from .sales_plans import number, SEGMENTS
 
 ZERO = Decimal(0)
@@ -48,6 +49,7 @@ def finish(row):
 
 
 @transaction.atomic
+@with_exclusions
 def calculate(scenario_id, version_id):
     scenario = SalesPlanScenario.objects.select_for_update().get(pk=scenario_id, is_deleted=False)
     version = GlobalCoeffVersion.objects.select_for_update().get(pk=version_id)
@@ -67,8 +69,8 @@ def calculate(scenario_id, version_id):
     grouped, months, input_count = {}, set(), 0
     skipped = {}
     lines = scenario.lines.filter(plan_date__gte=date(2026,1,1),plan_date__lt=date(2027,1,1)).exclude(subdivision='')
-    for day, sub, pg, goods, brand, amount, segments in lines.order_by().values_list(
-            'plan_date','subdivision','planning_group_sales','group','brand','amount_usd','segment_amounts').iterator(chunk_size=2000):
+    for day, sub, pg, goods, brand, amount, segments, sources in lines.order_by().values_list(
+            'plan_date','subdivision','planning_group_sales','group','brand','amount_usd','segment_amounts','source_subdivisions').iterator(chunk_size=2000):
         if not included(sub, aliases):
             continue
         target = canonical(sub, aliases)
@@ -78,26 +80,28 @@ def calculate(scenario_id, version_id):
             excluded['plan'] += number(amount); excluded['lines'] += 1
             continue
         months.add(day.strftime('%Y-%m')); input_count += 1
-        dpp = branch.chanel.chanel_name.strip().casefold() == 'дпп'
         if not isinstance(segments,dict) or set(SEGMENTS) - set(segments):
             raise ValidationError(f'{sub}, {pg}: в плане отсутствует распределение O0–O4. Перезагрузите план.')
         values = [number(segments[key]) for key in SEGMENTS]
         plan = number(amount)
         if abs(sum(values,ZERO)-plan) > max(Decimal('.0001'),abs(plan)*Decimal('.00000001')):
             raise ValidationError(f'{sub}, {pg}: сумма O0–O4 не совпадает с планом.')
-        entry = grouped.setdefault((target,dpp,pg,goods,brand),[ZERO,[ZERO]*5])
-        entry[0] += plan
-        entry[1] = [a+b for a,b in zip(entry[1],values)]
+        channels=channel_bases(segments,sources)
+        if not sources and 'channels' not in segments:channels={branch.chanel.chanel_name:values}
+        for channel,channel_values in channels.items():
+            entry = grouped.setdefault((target,channel,pg,goods,brand),[ZERO,[ZERO]*5])
+            entry[0] += sum(channel_values,ZERO)
+            entry[1] = [a+b for a,b in zip(entry[1],channel_values)]
     if not grouped and not skipped:
         raise ValidationError('В выбранном загруженном плане нет строк подразделений за 2026 год.')
     buckets, details = {}, []
-    for (sub,dpp,pg,goods,brand),(plan,amounts) in sorted(grouped.items()):
+    for (sub,channel,pg,goods,brand),(plan,amounts) in sorted(grouped.items()):
         row = buckets.setdefault(sub,empty(sub));row['plan'] += plan
         local = {'branch':sub,'planning':pg,'goods':goods,'brand':brand,'plan':plan,
                  'segments':amounts,'policies':ZERO,'sales':ZERO,'directors':ZERO,'notes':[]}
         for kind,field in [('Политики','policies'),('Продажи','sales')]:
-            if kind == 'Политики' and (is_heat(pg) or dpp):
-                local['notes'].append('Политики: исключён HEAT' if is_heat(pg) else 'Политики: исключён канал ДПП')
+            if not allowed(kind,pg,channel):
+                local['notes'].append(kind+': исключено справочником групп или каналов')
                 continue
             try:
                 matrix,fallback = policy_index.coefficients(version.pk,sub,pg,goods,brand,kinds=[kind])
@@ -114,7 +118,7 @@ def calculate(scenario_id, version_id):
         row['director_count'] = len(staff)
         if not staff:
             row['notes'].add('Нет действующих привязанных директоров')
-        for employee_id,name in sorted(staff.items()):
+        for employee_id,name in sorted(staff.items()) if allowed('Директора',pg,channel) else ():
             rates,source = director_index.coefficients(version.pk,sub,employee_id,pg,goods,brand)
             value = sum((k*usd for k,usd in zip(rates,amounts)),ZERO) if source != 'missing' else None
             if source != 'exact':

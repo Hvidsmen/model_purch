@@ -1,9 +1,12 @@
+from . import dimension_exclusion_views
 from . import exclusion_views
 from . import reports_director_scenarios, reports_integral_2026, reports_2025, editor_views, reports_next_views, reports_all_2026, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
 from . import report_navigation_views,coefficient_iteration_views,coefficient_iteration_run_views
 
 urlpatterns = [
+    path('directories/exclusions/groups/',dimension_exclusion_views.directory,{'dimension':'groups'},name='motivation_groups_exclusion_directory'),
+    path('directories/exclusions/channels/',dimension_exclusion_views.directory,{'dimension':'channels'},name='motivation_channels_exclusion_directory'),
     path('directories/exclusions/',exclusion_views.directory,name='motivation_exclusion_directory'),
     path('coefficient-iterations/<int:pk>/calculations/',coefficient_iteration_run_views.calculations,name='motivation_coefficient_iteration_calculations'),
     path('coefficient-iterations/',coefficient_iteration_views.upload,name='motivation_coefficient_iteration_upload'),

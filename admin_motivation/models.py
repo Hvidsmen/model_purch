@@ -19,6 +19,48 @@ class Chanel(models.Model):
         return self.chanel_name
 
 
+class MotivationDimensionExclusion(models.Model):
+    COEFFICIENT_TYPES = (('Политики', 'Политики'), ('Продажи', 'Продажи'), ('Директора', 'Директора'))
+    coefficient_type = models.CharField('Вид коэффициентов', max_length=30, choices=COEFFICIENT_TYPES)
+    value = models.CharField('Значение', max_length=255)
+    enabled = models.BooleanField('Исключать', default=True)
+    comment = models.CharField('Комментарий', max_length=500, blank=True)
+    dimension = None
+
+    class Meta:
+        abstract = True
+        ordering = ('coefficient_type', 'value')
+        unique_together = (('coefficient_type', 'value'),)
+
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        from .services.motivation_exclusions import normalize
+        self.value = normalize(self.value, self.dimension)
+        if not self.value:
+            raise ValidationError({'value': 'Укажите значение исключения.'})
+        values = type(self).objects.exclude(pk=self.pk).filter(coefficient_type=self.coefficient_type).values_list('value', flat=True)
+        if any(normalize(v, self.dimension)==self.value for v in values):
+            raise ValidationError({'value': 'Такое исключение для этого вида коэффициентов уже есть.'})
+
+    def __str__(self):return self.coefficient_type + ': ' + self.value
+
+
+class MotivationPlanningGroupExclusion(MotivationDimensionExclusion):
+    dimension = 'group'
+    class Meta(MotivationDimensionExclusion.Meta):
+        abstract = False
+        verbose_name = 'исключение группы планов продаж'
+        verbose_name_plural = 'исключения групп планов продаж'
+
+
+class MotivationChannelExclusion(MotivationDimensionExclusion):
+    dimension = 'channel'
+    class Meta(MotivationDimensionExclusion.Meta):
+        abstract = False
+        verbose_name = 'исключение канала'
+        verbose_name_plural = 'исключения каналов'
+
+
 class MotivationSubdivisionExclusion(models.Model):
     subdivision_name = models.CharField('SubdivisionName', max_length=255, unique=True)
     enabled = models.BooleanField('Исключать из мотивации', default=True)
