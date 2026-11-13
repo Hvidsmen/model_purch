@@ -68,11 +68,14 @@ def calculations(request,pk):
     if request.GET.get('run'):
         try:run_id=int(request.GET['run'])
         except (ValueError,TypeError):raise Http404
-        run=get_object_or_404(CoefficientIterationRun,pk=run_id,iteration=iteration)
+        query=CoefficientIterationRun.objects.all()
+        if request.method=='GET' and request.GET.get('export')=='xlsx':query=query.defer('inputs','results')
+        run=get_object_or_404(query,pk=run_id,iteration=iteration)
     if request.method=='GET' and run and request.GET.get('export')=='xlsx':
         if run.state=='running':return HttpResponse('Расчёт ещё выполняется. Excel будет доступен после завершения.',status=409)
         from .services.coefficient_iteration_excel import workbook
-        return FileResponse(workbook(run),as_attachment=True,filename=f'coefficient-iteration-{pk}-run-{run.pk}.xlsx')
+        from .services.coefficient_iteration_export_data import export_snapshot
+        return FileResponse(workbook(export_snapshot(run)),as_attachment=True,filename=f'coefficient-iteration-{pk}-run-{run.pk}.xlsx')
     latest=iteration.runs.defer('inputs','results').first()
     initial=(run or latest).configuration if run or latest else {}
     form=CalculationForm(iteration,request.POST if request.method=='POST' else None,initial=initial)
