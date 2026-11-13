@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from django.core.exceptions import ValidationError
 from .coefficient_iteration import mapping_rows, norm, HISTORICAL_DIRECTORS
 from .motivation_exclusions import allowed,KINDS,sql_allowed,channels_changed
-from .sales_plans import number
+from .sales_plans import number,validate_plan_segments
 from .subdivision_scope import included
 
 RULE='coefficient-iteration-v5-dimension-directories'
@@ -143,8 +143,7 @@ def plan_rows(plan,year):
             if channels_changed() and 'channel' not in part:
                 raise ValidationError('В плане не сохранены исходные каналы. Один раз перезагрузите план из MS SQL для новых исключений каналов.')
             value=number(part['amount']);split=[number(part['segments'].get(f'O{i}')) for i in range(5)]
-            if abs(sum(split,ZERO)-value)>max(Decimal('.0001'),abs(value)*Decimal('.00000001')):
-                raise ValidationError(f'В плане {year} некорректные сегменты для SubdivisionKey {source_key}. Перезагрузите план.')
+            validate_plan_segments(value,split,f'План {year}, {sub}, ключ {source_key}, {day}')
             part_amount+=value;part_segments=[a+b for a,b in zip(part_segments,split)]
             result.append({'date':day,'branch':str(source_key),'branch_name':sub,'planning':p or '*','goods':g or '*','brand':b or '*',
                            'amount':value,'segments':split,'channel':part.get('channel',''),

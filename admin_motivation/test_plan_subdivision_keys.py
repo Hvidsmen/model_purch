@@ -73,7 +73,7 @@ class KeyCalculationTests(SimpleTestCase):
         from .services.coefficient_iteration_2025 import build_sql
         for source in ('planning','erp'):
             sql=source_sql(source)
-            self.assertIn('plan_.SubdivisionKey=f.SubdivisionKey',sql)
+            self.assertIn('plan_.Subdivision=f.SubdivisionName',sql)
             self.assertIn('GROUP BY s.SubdivisionKey, s.SubdivisionName',sql)
         sql=build_sql()
         self.assertIn('ON t.Subdivision = s.SubdivisionKey',sql)
