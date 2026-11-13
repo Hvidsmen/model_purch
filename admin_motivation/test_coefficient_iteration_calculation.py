@@ -112,7 +112,8 @@ class NativeSQLTests(SimpleTestCase):
     def test_native_engine_is_scoped_and_writes_only_temporary_outputs(self):
         from .services.coefficient_iteration_2025 import build_sql
         sql=build_sql()
-        self.assertEqual(sql.count('?'),5)
+        self.assertEqual(sql.count('?'),0)
+        self.assertIn('FROM #iteration_parameters',sql)
         self.assertNotIn('CREATE PROCEDURE',sql)
         self.assertNotIn('DataWH.planning.PlanSales',sql)
         self.assertNotIn('DataWH.motivation.FactTest2025',sql)
@@ -262,6 +263,17 @@ class NativeResultTests(SimpleTestCase):
         self.assertEqual(rows[0]['annual_accrued'],D(2));self.assertEqual(rows[0]['annual_paid'],D(2))
         self.assertEqual(rows[0]['bonus'],D(1));self.assertEqual(rows[0]['total'],D(11))
         self.assertEqual(meta['prepared_run_id'],'used-run')
+        native=next(call for call in cursor.execute.call_args_list if call.args[0]=='native SQL')
+        self.assertEqual(native.args,('native SQL',))
+        bound=next(call for call in cursor.execute.call_args_list if call.args[0].startswith('INSERT INTO #iteration_parameters'))
+        self.assertEqual(bound.args[1:5],('Сохранённый план итерации','0.8','0.2','.8'))
+        self.assertTrue(bound.args[5].startswith('<coefficients>'))
+        setup=next(call for call in cursor.execute.call_args_list if 'CREATE TABLE #iteration_plan' in call.args[0])
+        self.assertEqual(len(setup.args),1)
+        self.assertIn('CREATE TABLE #iteration_parameters',setup.args[0])
+        calls=cursor.execute.call_args_list
+        self.assertLess(calls.index(setup),calls.index(bound))
+        self.assertLess(calls.index(bound),calls.index(native))
         inserted=next(call.args[1] for call in cursor.executemany.call_args_list if '#iteration_plan' in call.args[0])
         self.assertEqual(inserted[0][3],'Бытовые кондиционеры')
         self.assertEqual(inserted[1][3:5],('',''))

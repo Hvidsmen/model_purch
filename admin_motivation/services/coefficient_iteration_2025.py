@@ -94,10 +94,13 @@ UPDATE #fact SET [ПодразделениеДокумент]=[Подразде�
     # and no persistent output object exists at any point in this calculation.
     header=re.search(r'\bCREATE PROCEDURE motivation\.PortalCalcTest2025[\s\S]*?\bAS\s*(?=BEGIN\b)',source,re.I)
     if not header:raise ValidationError('Не распознан заголовок изолированного расчёта.')
-    declarations='''DECLARE @FactYear int=2025,@PlanVersion nvarchar(500)=?,
- @QuarterShare decimal(9,8)=?,@YearShare decimal(9,8)=?,
- @PayoutThreshold decimal(9,8)=?,@Test2025Coefficients nvarchar(max)=?,
+    declarations='''DECLARE @FactYear int=2025,@PlanVersion nvarchar(500),
+ @QuarterShare decimal(9,8),@YearShare decimal(9,8),
+ @PayoutThreshold decimal(9,8),@Test2025Coefficients nvarchar(max),
  @IterationResource nvarchar(255)=CONCAT(N'PortalCoefficientIteration2025:',@@SPID);
+SELECT @PlanVersion=PlanVersion,@QuarterShare=QuarterShare,@YearShare=YearShare,
+ @PayoutThreshold=PayoutThreshold,@Test2025Coefficients=Coefficients
+FROM #iteration_parameters;
 '''
     source=source[:header.start()]+declarations+source[header.end():]
     code=mask_sql(source)
@@ -137,6 +140,8 @@ def read_2025(cursor,plan,rates,settings,progress):
     cursor.execute('''CREATE TABLE #iteration_plan(Subdivision nvarchar(255) COLLATE DATABASE_DEFAULT,PlanningGroupSalesERP nvarchar(255) COLLATE DATABASE_DEFAULT,
  Date_ date,GroupERP nvarchar(255) COLLATE DATABASE_DEFAULT,[Марка(Бренд)] nvarchar(255) COLLATE DATABASE_DEFAULT,AmountUSD decimal(24,6));
  CREATE TABLE #iteration_defaults(Date_ date NOT NULL PRIMARY KEY,DefaultFormula nvarchar(64) COLLATE DATABASE_DEFAULT);
+ CREATE TABLE #iteration_parameters(PlanVersion nvarchar(500),QuarterShare decimal(9,8),YearShare decimal(9,8),
+ PayoutThreshold decimal(9,8),Coefficients nvarchar(max));
  SELECT CONVERT(nvarchar(255),SubdivisionKey) AS SubdivisionKey,SubdivisionName
  INTO #iteration_names FROM dbo.Subdivisions;''')
     cursor.executemany('INSERT INTO #iteration_plan VALUES (?,?,?,?,?,?)',
@@ -153,8 +158,13 @@ def read_2025(cursor,plan,rates,settings,progress):
     missing=cursor.fetchall()
     if missing:raise ValidationError('В DWH нет подразделений: '+', '.join(str(r[0]) for r in missing))
     progress('2025: факт, распределение плана по авторам и квартальные/годовые выплаты',6)
-    cursor.execute(source,'Сохранённый план итерации',str(number(settings['quarter_share'])/100),
+    # ODBC parameterized execution uses a nested RPC scope. SELECT INTO temp
+    # outputs created there disappear when it returns. Bind only INSERT values
+    # into a caller-created table; run the native batch without RPC parameters.
+    cursor.execute('INSERT INTO #iteration_parameters VALUES (?,?,?,?,?)',
+                   'Сохранённый план итерации',str(number(settings['quarter_share'])/100),
                    str(number(settings['year_share'])/100),str(settings['payout_threshold']),xml(records))
+    cursor.execute(source)
     # Drain informational result sets emitted by the native SQL batch.
     used_run=None
     while True:
