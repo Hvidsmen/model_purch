@@ -69,6 +69,10 @@ def calculations(request,pk):
         try:run_id=int(request.GET['run'])
         except (ValueError,TypeError):raise Http404
         run=get_object_or_404(CoefficientIterationRun,pk=run_id,iteration=iteration)
+    if request.method=='GET' and run and request.GET.get('export')=='xlsx':
+        if run.state=='running':return HttpResponse('Расчёт ещё выполняется. Excel будет доступен после завершения.',status=409)
+        from .services.coefficient_iteration_excel import workbook
+        return FileResponse(workbook(run),as_attachment=True,filename=f'coefficient-iteration-{pk}-run-{run.pk}.xlsx')
     latest=iteration.runs.defer('inputs','results').first()
     initial=(run or latest).configuration if run or latest else {}
     form=CalculationForm(iteration,request.POST if request.method=='POST' else None,initial=initial)
@@ -91,10 +95,6 @@ def calculations(request,pk):
                 if 'progress' in locals():progress.update(error,state='failed')
         else:error=' '.join((form.fields[name].label+': ' if name in form.fields else '')+' '.join(str(message) for message in messages) for name,messages in form.errors.items())
         if asynchronous:return JsonResponse({'error':error,'fields':form.errors,'progress_token':token_for(request.user)},status=400)
-    if run and request.GET.get('export')=='xlsx':
-        if run.state=='running':return HttpResponse('Расчёт ещё выполняется. Excel будет доступен после завершения.',status=409)
-        from .services.coefficient_iteration_excel import workbook
-        return FileResponse(workbook(run),as_attachment=True,filename=f'coefficient-iteration-{pk}-run-{run.pk}.xlsx')
     presentation=[]
     if run:
         names={row['branch']:row.get('branch_name',row['branch']) for plan in run.inputs.get('plans',{}).values() for row in plan['rows']}
