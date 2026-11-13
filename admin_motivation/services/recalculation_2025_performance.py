@@ -3,7 +3,6 @@ from collections import defaultdict
 from decimal import Decimal
 from .recalculation_2025 import decimal
 from .subdivision_scope import EXCLUDED,sql_predicate
-from .heat_exclusion import predicate
 
 # Projected plan/fact are already window totals: never SUM them across goods rows.
 # Q1's two inputs are normalized to physical shipments; no threshold is applied.
@@ -31,7 +30,8 @@ def gates_sql():
     Legacy personal formulae substitute 1 for a zero plan per grouped input row;
     global department mode uses the genuine plan sum. Keep both denominators.
     """
-    scope = sql_predicate('[Подразделение]')
+    from .motivation_exclusions import sql_allowed
+    scope = sql_predicate('[Подразделение]')+' AND '+sql_allowed()
     return """
 WITH base AS (
  SELECT LTRIM(RTRIM([ТипКоэф])) AS Kind_,[Подразделение],[АвторСделки],[Квартал],
@@ -39,8 +39,7 @@ WITH base AS (
  FROM motivation.PlanFactTest2025
  WHERE [Год]=2025 AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики',N'Продажи')
  AND """ + scope + """
- AND (LTRIM(RTRIM([ТипКоэф]))<>N'Политики' OR
- (([Канал] IS NULL OR [Канал]<>N'ДПП') AND NOT (""" + predicate('[ГруппаПлановПродаж]') + """)))
+
  GROUP BY [ТипКоэф],[Подразделение],[ПодразделениеДокумент],[Канал],[Год],[Квартал],
  [ГруппаПлановПродаж],[ГруппаТоваров],[Марка],[АвторСделки],K0,K1,K2,K3,K4,[VariationCalculate])
 SELECT Kind_,[Подразделение],[АвторСделки],p.Period_,SUM(Plan_),

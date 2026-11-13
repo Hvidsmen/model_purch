@@ -28,7 +28,8 @@ class ExclusionDirectoryTests(TestCase):
             sql=build_sql()
             self.assertIn("DELETE FROM #pf_base WHERE NOT (",sql)
             self.assertNotIn('__MOTIVATION_',sql)
-            self.assertIn("Канал=N'ДПП' AND LTRIM(RTRIM([ТипКоэф]))=N'Политики'",sql)
+            from .services.motivation_exclusions import sql_allowed
+            self.assertIn(sql_allowed(),sql)
 
     def test_edits_apply_next_operation_and_keep_running_scope_stable(self):
         with exclusion_scope():

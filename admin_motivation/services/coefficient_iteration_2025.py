@@ -111,8 +111,10 @@ def xml(records):
 def read_2025(cursor,plan,rates,settings,progress):
     named_plan=motivation_plan_rows(plan,rates)
     branches=sorted({row['branch'] for row in named_plan})
-    policies={row['branch'] for row in named_plan if row['policy_eligible']}
-    records=rates.coefficients_2025(branches,policy_branches=policies)
+    # Actuals may contain eligible groups/channels absent from the plan.
+    # Supply all available raw classifications; SQL eligibility guards decide
+    # whether a missing rate belongs to a genuinely participating row.
+    records=rates.coefficients_2025(branches,allow_missing_kinds=True)
     progress('2025: проверка подготовленного факта и временного расчёта',5)
     cursor.execute("DECLARE @l int; EXEC @l=sys.sp_getapplock @Resource=N'PortalMotivationCalculation',@LockMode=N'Shared',@LockOwner=N'Session',@LockTimeout=0; SELECT @l;")
     acquired=cursor.fetchone()

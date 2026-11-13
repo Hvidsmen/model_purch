@@ -109,7 +109,7 @@ class ProjectionTests(SimpleTestCase):
  ('H','4. HEAT','Other','Brand','Heater','Товар'),('S','1. RAC','Other','Brand','Service','Услуга');
  INSERT INTO customers VALUES('C','Customer');
  INSERT INTO thresholds VALUES('MASS',10,20,30,40,1);''')
-        query=PROJECTION.replace('DataWH.motivation.PortalPreparedSales','sales').replace('DataWH.dbo.Subdivisions','subs').replace('DataWH.dbo.Product','products').replace('DataWH.dbo.Customer','customers').replace('DATEPART(QUARTER,',"DATEPART('QUARTER',")
+        query=PROJECTION.replace('__DIRECTOR_PARTICIPATION__','1=1').replace('DataWH.motivation.PortalPreparedSales','sales').replace('DataWH.dbo.Subdivisions','subs').replace('DataWH.dbo.Product','products').replace('DataWH.dbo.Customer','customers').replace('DATEPART(QUARTER,',"DATEPART('QUARTER',")
         self.query=re.sub(r" OUTER APPLY \(SELECT COUNT\(\*\).*?\) m", " LEFT JOIN thresholds m ON f.discount_type LIKE '%' || m.type_discount || '%'",query,flags=re.S)
 
     def sale(self,price,*,doc='Doc',product='P',branch='M',day='20260110',discount=20,itw=0,balls=0,kind='MASS'):

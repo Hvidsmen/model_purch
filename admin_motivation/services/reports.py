@@ -408,8 +408,8 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         from .subdivision_scope import sql_predicate
         source_sql = 'SELECT * FROM (' + source_sql.strip().rstrip(';') + ') AS included_source WHERE ' + sql_predicate('[Подразделение]')
         if kind == 'deals':
-            from .heat_exclusion import predicate as heat_predicate
-            source_sql += " AND NOT ([Год]=2026 AND " + heat_predicate('[ГруппаПлановПродаж]') + " AND LTRIM(RTRIM([ТипКоэф])) IN (N'Политики',N'Продажи'))"
+            from .motivation_exclusions import sql_allowed
+            source_sql += ' AND '+sql_allowed()
         annual_source_sql = source_sql
         if kind == 'manager-detail' and period_condition:
             source_sql += ' AND ' + period_condition

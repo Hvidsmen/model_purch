@@ -13,6 +13,7 @@ from ..models import (CoefficientIteration,CoefficientIterationRun,SalesPlanScen
  DirectorEmployee,GlobalCoeffVersion,SubdivisionDirectorCoeff,SubdivisionManagerCoeff)
 from .coefficient_iteration_calculation import RateBook,plan_rows,at_full_plan,branch,key,MOSCOW,TT,MERGED,ZERO,RULE,empty_row,motivation_plan_rows
 from .sales_plans import number
+from .motivation_exclusions import rules as dimension_rules
 
 SCENARIOS={'moscow_q4_2026':(2026,'Москва + ТТ · IV квартал 2026 · 100%'),
            'full_2027':(2027,'Все подразделения · 2027 · 100%'),
@@ -93,10 +94,11 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
     from .director_scenarios import director_result
     validate_directors_2025(plans,rates,snapshot)
     plans=motivation_plan_rows(plans,rates)
+    from .motivation_exclusions import sql_allowed
     cursor.execute('''SELECT Подразделение,Квартал,ГруппаПлановПродаж,ГруппаТоваров,Марка,СегментСкидки,
  SUM(CASE WHEN СуммаОтгрузокUSD>0 THEN СуммаОтгрузокUSD ELSE 0 END),
  SUM(CASE WHEN СуммаОтгрузокUSD<0 THEN СуммаОтгрузокUSD ELSE 0 END)
- FROM #iteration_fact WHERE Год=2025 AND LTRIM(RTRIM(ТипКоэф))=N'Продажи'
+ FROM #iteration_fact WHERE Год=2025 AND LTRIM(RTRIM(ТипКоэф))=N'Продажи' AND '''+sql_allowed('Директора')+'''
  GROUP BY Подразделение,Квартал,ГруппаПлановПродаж,ГруппаТоваров,Марка,СегментСкидки''')
     facts=[]
     for sub,q,p,g,b,segment,pos,neg in cursor.fetchall():
@@ -107,11 +109,12 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
     plan=[]
     for r in plans:
         p,g,b=rates.classification(r['branch'],'Продажи',(r['planning'],r['goods'],r['brand']))
-        for i,value in enumerate(r['segments']):
+        for i,value in enumerate(r['kind_segments']['Директора']):
             plan.append({'branch':r['branch'],'quarter':(r['date'].month-1)//3+1,'planning':p,
                 'goods':g,'brand':b,'segment':f'O{i}','positive':max(value,ZERO),'negative':min(value,ZERO)})
     rows=[];details=[]
-    for sub in sorted({r['branch'] for r in plans}):
+    active={r['branch'] for r in plans if r['eligible_kinds']['Директора']} | {r['branch'] for r in facts}
+    for sub in sorted(active):
         actors=list(rates.directors_for(sub,2025))
         if not actors:raise ValidationError('Для подразделения не назначен директор в итерации: '+sub)
         for token,recipient in actors:
@@ -140,7 +143,7 @@ def start(iteration_id,owner,configuration,revision,*,recover=False):
         version=GlobalCoeffVersion.objects.filter(pk=configuration.get('formula_version'),status='approved').first()
         if 'actual_2025' in configuration['scenarios'] and not version:raise ValidationError('Не найдена утверждённая версия формул директоров 2025.')
         from .subdivision_scope import excluded_names,policy_signature
-        inputs={'excluded_subdivision_names':list(excluded_names()),'subdivision_policy':policy_signature(),'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
+        inputs={'coefficient_exclusions':list(dimension_rules()),'excluded_subdivision_names':list(excluded_names()),'subdivision_policy':policy_signature(),'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
                 'subdivisions':dict(Subdivision.all_objects.values_list('pk','subdivision_key')),
                 'subdivision_names':dict(Subdivision.all_objects.values_list('pk','subdivision_name')),
                 'people':dict(DirectorEmployee.objects.values_list('pk','full_name')),
@@ -180,9 +183,6 @@ def execute(run,progress,connector=None):
                 if year!=2025:
                     progress('Расчёт '+title,2 if year==2026 else 3)
                     rows,details=at_full_plan(plans[year],rates,year,number(settings['quarter_share']),number(settings['year_share']))
-                    # A zero director section must never masquerade as coverage.
-                    for sub in {row['branch'] for row in rows}:
-                        if not list(rates.directors_for(sub,year)):raise ValidationError('Не назначены директора: '+sub)
                     source={'source':'Сохранённый план; факт равен плану, выполнение 100%'}
                 else:
                     validate_directors_2025(plans[year],rates,inputs['formulas'])

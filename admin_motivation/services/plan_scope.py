@@ -14,19 +14,22 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
     names = mapping()
     grouped = {}
     source = scenario.lines.exclude(subdivision='').exclude(subdivision__in=excluded)
-    for day, sub, pg, group, brand, amount, ddp, segments in source.order_by().values_list(
-            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts').iterator(chunk_size=2000):
+    for day, sub, pg, group, brand, amount, ddp, segments, sources in source.order_by().values_list(
+            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts','source_subdivisions').iterator(chunk_size=2000):
         key = (day, pg, group, brand)
-        data = grouped.setdefault(key, {'plan': Decimal(0), 'ddp': Decimal(0), 'usd': [Decimal(0)] * 5, 'policy': [Decimal(0)] * 5, 'branches': {}})
+        data = grouped.setdefault(key, {'plan': Decimal(0), 'ddp': Decimal(0), 'usd': [Decimal(0)] * 5, 'policy': [Decimal(0)] * 5, 'branches': {},'channels':{},'channels_complete':True})
         data['plan'] += amount
         data['ddp'] = data['ddp'] + ddp if data['ddp'] is not None and ddp is not None else None
         branch = data['branches'].setdefault(canonical(sub, names), [Decimal(0)] * 5) if not input_only else None
+        from .motivation_exclusions import channel_bases,merge_channels,serial_channels,amounts_for,channels_known
+        merge_channels(data['channels'],channel_bases(segments,sources))
+        data['channels_complete'] &= channels_known(segments,sources)
         for i,value in enumerate(policy_segments(segments,pg)):data['policy'][i]+=value
         for index, segment in enumerate(SEGMENTS):
             value = number(segments.get(segment))
             data['usd'][index] += value
             if branch is not None:
-                branch[index] += value
+                branch[index] += amounts_for('Директора',segments,pg,sources)[index]
     original_lines=scenario.lines.filter(subdivision='')
     if summary_only:
         original_lines=original_lines.only('scenario_id','plan_date','planning_group_sales','group','brand','calculation','total_usd').order_by()
@@ -52,6 +55,8 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
         line.subdivision=''
         line.amount_usd, line.amount_ddp_usd = data['plan'], data['ddp']
         line.segment_amounts = dict(zip(SEGMENTS, map(str, data['usd'])))
+        line.segment_amounts['channels']=serial_channels(data['channels'])
+        line.segment_amounts['channels_complete']=data['channels_complete']
         line.segment_amounts.update({f'P{i}':str(value) for i,value in enumerate(data['policy'])})
         line.calculation = deepcopy(original.calculation) if original and not summary_only else {}
         records=original.calculation if original and summary_only else line.calculation
@@ -61,7 +66,7 @@ def global_lines_without_excluded(scenario, *, input_only=False, excluded=None, 
             try:
                 for kind in KINDS:
                     total = Decimal(0)
-                    for segment, amount in zip(SEGMENTS, data['policy'] if kind=='Политики' else data['usd']):
+                    for segment, amount in zip(SEGMENTS, amounts_for(kind,line.segment_amounts,pg)):
                         record = records[kind][segment]
                         value = number(record['coefficient']) * amount
                         if not summary_only:record.update(usd=str(amount), motivation=str(value))

@@ -30,8 +30,8 @@ class ExclusionDirectoryPageTests(TestCase):
         self.assertContains(response,'Справочник директоров')
         self.assertContains(response,'E-Com')
         self.assertContains(response,'Сохранить исключения')
-        self.assertContains(response,'канал ДПП')
-        self.assertContains(response,'HEAT')
+        self.assertContains(response,'исключения каналов')
+        self.assertContains(response,'исключения групп планов продаж')
         self.assertContains(response,'href="'+self.url+'"')
         self.assertEqual(len(response.context['formset'].initial_forms),9)
 

@@ -1,0 +1,15 @@
+{% extends 'admin_motivation/base.html' %}
+{% block content %}<section class="content">
+<h1>{{ title }}</h1>
+<p>Исключение действует для выбранного вида коэффициентов в плане и факте всех версий. Политики, продажи и директора настраиваются независимо.</p>
+{% if dimension == 'groups' %}<p>Группы сопоставляются по PlanningGroupSalesERP без учёта регистра, пробелов и начального номера: HEAT и 5. HEAT — одна группа.</p>{% else %}<p>Каналы сопоставляются по Chanel без учёта регистра и пробелов.</p>{% endif %}
+{% for message in messages %}<p class="alert alert-success" role="status">{{ message }}</p>{% endfor %}
+<form method="post">{% csrf_token %}{% if not can_edit %}<fieldset disabled>{% endif %}
+{{ formset.management_form }}{{ formset.non_form_errors }}
+<div style="overflow:auto"><table class="table table-bordered align-middle"><thead><tr><th>Вид коэффициентов</th><th>{{ value_label }}</th><th>Исключать</th><th>Комментарий</th></tr></thead><tbody>
+{% for form in formset %}<tr><td>{{ form.id }}{{ form.id.errors }}{{ form.non_field_errors }}{{ form.coefficient_type }}{{ form.coefficient_type.errors }}</td><td>{{ form.value }}{{ form.value.errors }}</td><td>{{ form.enabled }}{{ form.enabled.errors }}</td><td>{{ form.comment }}{{ form.comment.errors }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% if can_edit %}<p>Новое правило добавляется в последней строке. Чтобы отменить исключение, снимите отметку «Исключать».</p><button class="btn btn-primary" type="submit">Сохранить исключения</button>{% endif %}
+{% if not can_edit %}</fieldset>{% endif %}</form>
+<p class="text-muted mt-3">После изменения пересчитайте планы и мотивацию. Пересохраните автоматические задания, чтобы обновить их правила. Сохранённые результаты не меняются автоматически.</p>
+</section>{% endblock %}

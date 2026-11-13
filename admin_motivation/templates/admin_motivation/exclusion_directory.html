@@ -3,7 +3,7 @@
 <section class="content">
 <h1>Справочник исключений</h1>
 <p>Подразделения сопоставляются по <strong>SubdivisionName</strong>. Отмеченные исключения действуют для плана и факта всех версий и всех видов мотивации.</p>
-<p>У политиков дополнительно исключены канал ДПП и группа планов продаж HEAT. Продажи и директора используют полную базу участвующих подразделений.</p>
+<p>По видам коэффициентов отдельно настраиваются <a href="{% url 'motivation_groups_exclusion_directory' %}">исключения групп планов продаж</a> и <a href="{% url 'motivation_channels_exclusion_directory' %}">исключения каналов</a>.</p>
 {% for message in messages %}<p class="alert alert-success" role="status">{{ message }}</p>{% endfor %}
 <form method="post">{% csrf_token %}
 {% if not can_edit %}<fieldset disabled>{% endif %}

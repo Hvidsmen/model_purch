@@ -18,7 +18,9 @@ class PlanDirectors:
         if not line.subdivision:
             employees = list(self.global_rows.pop(key, {}).values())
             return self.snapshot(employees)
-        amounts = [number(line.segment_amounts[segment]) for segment in SEGMENTS]
+        from .motivation_exclusions import amounts_for
+        amounts = amounts_for('Директора',line.segment_amounts,line.planning_group_sales,line.source_subdivisions)
+        if not any(amounts):return self.snapshot([])
         employees = []
         for staff in sorted(self.local.employees.get((version, line.subdivision), ())):
             values, source = self.local.coefficients(version, line.subdivision, staff, *key[1:])

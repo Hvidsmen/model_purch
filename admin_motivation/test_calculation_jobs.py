@@ -78,7 +78,8 @@ class CalculationJobsTests(TestCase):
         self.assertIn('DataWH.motivation.PortalCalculationSubdivisions', sql)
         self.assertNotIn('ALTER PROCEDURE [motivation].[sp_CalcBySub]', sql)
         self.assertNotIn("<>N'Директора'",sql)
-        self.assertIn("Канал=N'ДПП' AND LTRIM(RTRIM([ТипКоэф]))=N'Политики'", sql)
+        from .services.motivation_exclusions import sql_allowed
+        self.assertIn(sql_allowed(),sql)
         view_sql = next(call.args[0] for call in self.cursor.execute.call_args_list if call.args[0].startswith('ALTER VIEW motivation.PortalCalculationSubdivisions'))
         self.assertIn("N'Вентиляция'",view_sql)
         self.assertIn('COALESCE(m.TargetName,s.SubdivisionName)',view_sql)

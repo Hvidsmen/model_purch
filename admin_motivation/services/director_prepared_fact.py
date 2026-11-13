@@ -21,7 +21,7 @@ WITH physical AS (
  INNER JOIN DataWH.dbo.Subdivisions sub ON sub.SubdivisionKey=s.Subdivision
  INNER JOIN DataWH.dbo.Product p ON p.ProductCode=s.ProductCode AND p.[Тип номенклатуры]='Товар'
  INNER JOIN DataWH.dbo.Customer c ON c.CustomerKey=s.CustomerKey
- WHERE s.ClosedDealDate>=? AND s.ClosedDealDate<? AND sub.SubdivisionName IN (?,?)
+ WHERE s.ClosedDealDate>=? AND s.ClosedDealDate<? AND sub.SubdivisionName IN (?,?) AND __DIRECTOR_PARTICIPATION__
  GROUP BY sub.SubdivisionName,sub.Chanel,s.Subdivision,s.ClosedDealDate,p.ModelCode,
  s.DocumentNumber,s.DateInvoice,p.PlanningGroupSalesErp,
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE '' END,
@@ -88,7 +88,9 @@ def read_fact(cursor,version,branches,settings):
  o1 decimal(9,4) NULL,o2 decimal(9,4) NULL,o3 decimal(9,4) NULL,o4 decimal(9,4) NULL)""")
     cursor.executemany("INSERT INTO #portal_director_segments(type_discount,o1,o2,o3,o4) VALUES (?,?,?,?,?)",
         [(item['type_discount'],*[item[key] for key in ('o1','o2','o3','o4')]) for item in segments])
-    cursor.execute(PROJECTION,'20260101','20261001',*branches)
+    from .motivation_exclusions import sql_allowed
+    source=PROJECTION.replace('__DIRECTOR_PARTICIPATION__',sql_allowed('Директора',group_expression='p.PlanningGroupSalesErp',channel_expression='sub.Chanel'))
+    cursor.execute(source,'20260101','20261001',*branches)
     values=[]
     for branch,quarter,planning,goods,brand,segment,positive,negative,matches in cursor.fetchall():
         if matches>1:

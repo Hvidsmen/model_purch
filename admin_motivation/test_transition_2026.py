@@ -129,7 +129,8 @@ class TransitionPreparationTests(TestCase):
                 calculation_jobs.prepare(cursor, variant)
                 sql = cursor.execute.call_args.args[0]
                 self.assertEqual(sql.count('FROM #pf_base WHERE (Квартал=4 OR @FactYear<>2026)'), 0 if variant == 'separate_2026' else 2)
-                self.assertIn("[ТипКоэф])) IN (N'Политики')", sql)
+                from .services.motivation_exclusions import sql_allowed
+                self.assertIn(sql_allowed(),sql)
                 self.assertIn('motivation.ReportMotivationByDealAuthor'+suffix, sql)
                 self.assertIn('motivation.AnnualAccrual'+suffix, sql)
                 view = next(call.args[0] for call in cursor.execute.call_args_list if call.args[0].startswith('ALTER VIEW'))
