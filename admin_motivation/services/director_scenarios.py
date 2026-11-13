@@ -135,7 +135,7 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
             if not reasons:reasons.append('Условия выполнены')
             if possible==0:reasons.append('Начисление равно нулю')
             details.append(detail(case,recipient,source,MERGED if merged else branch,formula,example,
-                f'{q} квартал',p,f,execution,department,None if q==1 else threshold,possible,payment,ZERO,'; '.join(reasons),origins[key],rates.factor(branch,q)))
+                f'{q} квартал',p,f,execution,department,None if q==1 else threshold,possible,payment,ZERO,'; '.join(reasons),origins[key],rates.factor(branch,q),bp,bf))
             contribution=potential[key,q]*year_share*rates.factor(branch,5)
             annual_quarters[q-1]+=contribution
             details[-1]['annual_contribution']=contribution
@@ -150,7 +150,7 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
             carry=max(scope_quarter_potential-scope_paid,ZERO) if eligible else ZERO
             annual_paid+=payment;bonus+=carry
             details.append(detail(case,recipient,source,branch,formula,example,'Год',p,f,execution,department,threshold,
-                accrued,payment,carry,'Годовой порог выполнен' if eligible else 'Годовой порог не выполнен',origins[key],rates.factor(branch,5)))
+                accrued,payment,carry,'Годовой порог выполнен' if eligible else 'Годовой порог не выполнен',origins[key],rates.factor(branch,5),bp,bf))
     return {'scenario':case,'year':year,'branch':MERGED if merged else branch,'employee':recipient.full_name,
         'employee_id':recipient.pk,'role':'Директор','rate_source':source.full_name,'quarters':paid,
         'annual_paid':annual_paid,'annual_accrued':annual_accrued,'bonus':bonus,
@@ -159,11 +159,12 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
         'total':sum(paid,ZERO)+annual_paid+bonus,'notes':sorted(notes)},details
 
 
-def detail(case,person,source,branch,formula,item,period,plan,fact,execution,department,threshold,possible,paid,bonus,note,origin,correction):
+def detail(case,person,source,branch,formula,item,period,plan,fact,execution,department,threshold,possible,paid,bonus,note,origin,correction,department_plan=None,department_fact=None):
     return {'scenario':case,'employee':person.full_name,'rate_source':source.full_name,'branch':branch,
         'formula':formula,'planning':item['planning'] if len(scope(formula,item))>=1 else 'Все группы',
         'goods':item['goods'] if len(scope(formula,item))>=2 else 'Все товары',
         'brand':item['brand'] if len(scope(formula,item))>=3 else 'Все бренды',
+        'department_plan':department_plan,'department_fact':department_fact,
         'period':period,'plan':plan,'fact':fact,'ratio':execution,'department_ratio':department,'threshold':threshold,
         'possible':possible,'paid':paid,'bonus':bonus,'note':note,'rate_origin':origin,'correction':correction}
 

@@ -107,8 +107,7 @@ class KeyPresentationTests(TestCase):
         exported=self.client.get(url,{'run':run.pk,'export':'xlsx'})
         book=load_workbook(BytesIO(b''.join(exported.streaming_content)))
         self.assertEqual(book['Сводка 2027']['A2'].value,'Одинаковое название')
-        self.assertEqual(book['Подразделения']['A2'].value,'KEY-A')
-        self.assertEqual(book['Подразделения']['A3'].value,'KEY-B')
+        self.assertNotIn('Подразделения',book.sheetnames)
         book.close();exported.close()
 
 

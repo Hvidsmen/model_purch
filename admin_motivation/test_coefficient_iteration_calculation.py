@@ -224,7 +224,7 @@ class CalculationTests(TestCase):
         self.assertContains(response,'Скачать результаты Excel');self.assertContains(response,'Волков')
         exported=self.client.get(self.url,{'run':run.pk,'export':'xlsx'})
         book=load_workbook(BytesIO(b''.join(exported.streaming_content)))
-        self.assertIn('Сводка 2027',book.sheetnames);self.assertIn('Снимок ставок',book.sheetnames)
+        self.assertIn('Сводка 2027',book.sheetnames);self.assertIn('План-факт 2027',book.sheetnames)
         sheet=book['Сводка 2027'];self.assertTrue(sheet.column_dimensions['D'].hidden)
         self.assertTrue(sheet.column_dimensions['E'].collapsed);self.assertFalse(sheet.sheet_view.showGridLines)
         self.assertEqual(sheet['K2'].value,16)

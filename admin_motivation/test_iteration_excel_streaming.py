@@ -48,22 +48,22 @@ class StreamingWorkbookTests(SimpleTestCase):
     def test_partial_run_exports_sources_errors_and_percentage_formats(self):
         row=empty_row('full_2027',2027,'KEY','Политики');row.update(total=D(10),annual_paid=D(10))
         run=SimpleNamespace(iteration_id=1,pk=2,state='failed',started_at=timezone.now(),completed_at=None,error='2025 failed',
-            configuration={},inputs={'plans':{'2027':{'rows':[{'branch':'KEY','branch_name':'Shown name','amount':'100',
+            configuration={},inputs={'export_names':{'KEY':'Shown name'},'plans':{'2027':{'rows':[{'branch':'KEY','branch_name':'Shown name','amount':'100',
                 'segments':['100','0','0','0','0'],'planning':'RAC','channel':'Dealer'}]}},
                 'payload':{'branches':{'blocks':[{'kind':'Политики','column':1,'labels':['Branch'],
                   'entries':[{'key':['RAC','*','*'],'rates':['.001']*5}]}]},'directors':{'blocks':[]}}},
-            results={'full_2027':{'state':'completed','year':2027,'rows':[row], 'details':[]},
+            results={'full_2027':{'state':'completed','year':2027,'rows':[row], 'details':[], 'plan_fact_summary':[{'branch':'KEY','kind':'Политики','period':'1 квартал','plan':'100','fact':'100','execution':'1'}]},
                      'actual_2025':{'state':'failed','year':2025,'title':'2025','error':'2025 failed'}})
         with patch('admin_motivation.services.coefficient_iteration_excel.Workbook',wraps=Workbook) as factory:
             stream=workbook(run)
         factory.assert_called_once_with(write_only=True)
         try:
             loaded=load_workbook(stream)
-            self.assertEqual(loaded['Источники плана']['C2'].value,'KEY')
-            self.assertEqual(loaded['Источники плана']['D2'].value,'Shown name')
-            self.assertEqual(loaded['Источники плана']['I2'].value,100)
-            self.assertEqual(loaded['Снимок ставок']['I2'].number_format,'0.0000%')
-            self.assertAlmostEqual(loaded['Снимок ставок']['I2'].value,.001)
+            self.assertEqual(loaded['План-факт 2027']['A2'].value,'Shown name')
+            self.assertEqual(loaded['План-факт 2027']['D2'].value,100)
+            self.assertEqual(loaded['План-факт 2027']['F2'].number_format,'0.0000%')
+            self.assertNotIn('Источники плана',loaded.sheetnames)
+            self.assertNotIn('Снимок ставок',loaded.sheetnames)
             self.assertEqual(loaded['Параметры'].column_dimensions['B'].width,110)
             self.assertTrue(any('2025 failed' in str(cell.value) for row in loaded['Параметры'] for cell in row))
             loaded.close()

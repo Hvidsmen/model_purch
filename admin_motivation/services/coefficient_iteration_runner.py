@@ -198,7 +198,8 @@ def execute(run,progress,connector=None):
                         rows.extend(directors);details=[*policy_details,*details]
                     finally:
                         if connection is not None:connection.close()
-                results[scenario]=safe({'state':'completed','title':title,'year':year,'rows':rows,'details':details,'source':source})
+                from .coefficient_iteration_export_summary import summarize_plan_facts
+                results[scenario]=safe({'plan_fact_summary':summarize_plan_facts(details,year),'state':'completed','title':title,'year':year,'rows':rows,'details':details,'source':source})
             except Exception as exc:
                 failed=True
                 if isinstance(exc,ValidationError):message=' '.join(exc.messages)

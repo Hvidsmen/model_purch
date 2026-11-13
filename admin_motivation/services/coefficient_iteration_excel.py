@@ -91,7 +91,7 @@ def result_table(book,title,rows,year,names=None):
 
 def workbook(run):
     book=Workbook(write_only=True)
-    names={row['branch']:row.get('branch_name',row['branch']) for plan in run.inputs.get('plans',{}).values() for row in plan['rows']}
+    names=run.inputs.get('export_names',{})
     from django.utils import timezone
     from zoneinfo import ZoneInfo
     local=lambda value:timezone.localtime(value,ZoneInfo('Europe/Moscow')).isoformat() if value else ''
@@ -99,7 +99,7 @@ def workbook(run):
           ['Начало, МСК',local(run.started_at)],['Завершение, МСК',local(run.completed_at)],['Ошибка',run.error],
           ['Квартальная доля, %',run.configuration.get('quarter_share')],['Годовая доля, %',run.configuration.get('year_share')],
           ['Порог выплаты',run.configuration.get('payout_threshold')],
-          ['Исключённые SubdivisionName',', '.join(run.inputs.get('excluded_subdivision_names',[]))],
+          ['Исключённые SubdivisionName',', '.join((run.inputs.get('excluded_subdivision_names') or []))],
           ['Правило участия подразделений',run.inputs.get('subdivision_policy','')],
           ['Исключения групп и каналов',str(run.inputs.get('coefficient_exclusions',[]))],
           ['Примечание','Годовая часть не включена в сумму квартальных. Общая выплата = квартальные + годовая выплата + доплата.'],
@@ -117,32 +117,20 @@ def workbook(run):
         year=result['year'];name='IV кв 2026' if year==2026 else str(year)
         result_table(book,'Сводка '+name,aggregate_rows(result['rows']),year,names)
         result_table(book,'Получатели '+name,result['rows'],year,names)
-        if result.get('source'):meta.append([f'Источник {year}',str(result['source'])])
-        details=result.get('details',[])
-        if details:
-            headers=['Подразделение','Сотрудник','Вид мотивации','Исходное подразделение','Период','Группа планов','Группа ERP','Бренд','Формула','План USD','Факт USD','Выполнение','Возможная квартальная USD','Квартальная выплата USD','В годовую USD','Основание']
-            table(book,'Расшифровка '+name,headers,([(names.get(r.get(k),r.get(k)) if k in ('branch','original_branch') else r.get(k)) for k in ('branch','employee','kind','original_branch','date' if year!=2025 else 'period','planning','goods','brand','formula','plan','fact','execution' if year!=2025 else 'ratio','possible','paid','annual_contribution','origin' if year!=2025 else 'note')] for r in details),text_columns=(1,2,3,4,5,6,7,8,9,16))
-    def receipts():
-        for year,plan in run.inputs.get('plans',{}).items():
-            for row in plan['rows']:
-                yield [year,row.get('date'),row['branch'],row.get('branch_name',row['branch']),
-                    row.get('channel',''),row.get('planning'),row.get('goods'),row.get('brand'),row.get('amount'),
-                    sum((Decimal(str(v)) for v in row.get('policy_segments',row.get('segments',[]))),Decimal(0)),*row.get('segments',[None]*5)]
-    table(book,'Источники плана',['Год','Дата','SubdivisionKey','SubdivisionName','Канал','Группа планов','Группа ERP','Бренд','План USD','База политиков USD','O0','O1','O2','O3','O4'],receipts(),text_columns=range(1,9))
-    table(book,'Подразделения',['SubdivisionKey','Название'],sorted(names.items()),text_columns=(1,2))
+        source=result.get('source') or {}
+        if isinstance(source,dict):
+            for field in ('source','prepared_run_id','completed_at'):
+                if source.get(field) is not None:meta.append([f'Источник {year}: {field}',str(source[field])])
+        def bases():
+            for row in result.get('plan_fact_summary') or []:
+                yield [names.get(row['branch'],row['branch']),row['kind'],row['period'],
+                       row.get('plan'),row.get('fact'),row.get('execution'),
+                       *(row.get('segments') or [None]*5),row.get('note','')]
+        table(book,'План-факт '+name,
+              ['Подразделение','Вид мотивации','Период','План, USD','Факт, USD','Выполнение',
+               'O0, USD','O1, USD','O2, USD','O3, USD','O4, USD','Примечание'],
+              bases(),text_columns=(1,2,3,12),percent_columns=(6,),widths={'L':80})
     table(book,'Параметры',['Параметр','Значение'],meta,text_columns=(1,2),widths={'B':110})
-    from .coefficient_iteration import mapping_rows
-    payload=run.inputs.get('payload');mappings=run.inputs.get('mappings',{})
-    if payload:
-        values=[];people=run.inputs.get('people',{});subs=run.inputs.get('subdivision_names',run.inputs.get('subdivisions',{}))
-        for row in mapping_rows(payload):
-            mapping=mappings.get(row['id'],{});block=payload[row['source']]['blocks'][row['block']]
-            targets=[mapping.get('subdivision')] if row['source']=='branches' else mapping.get('subdivisions',[])
-            for entry in block['entries']:
-                values.append([row['kind'],row['label'],', '.join(str(subs.get(str(i),'')) for i in targets),
-                    people.get(str(mapping.get('employee')),''),people.get(str(mapping.get('employee_2025')),''),
-                    *entry['key'],*entry['rates']])
-        sheet=table(book,'Снимок ставок',['Вид','Название в файле','Привязанные подразделения','Директор 2026–2027','Директор 2025','Группа планов','Группа ERP','Бренд','K0','K1','K2','K3','K4'],values,text_columns=range(1,9),percent_columns=range(9,14))
     output=TemporaryFile()
     try:
         book.save(output)
