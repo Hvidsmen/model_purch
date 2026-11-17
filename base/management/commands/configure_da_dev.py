@@ -1,4 +1,4 @@
-"""Apply the agreed HAProxy/TT profile on the portal server."""
+"""Configure HTTPS while preserving the existing directory authentication."""
 from importlib.util import find_spec
 from pathlib import Path
 import shutil
@@ -11,14 +11,19 @@ from scripts.split_monitoring_update import write
 
 
 class Command(BaseCommand):
-    help='Настроить da-dev.daichi.ru за HAProxy и LDAPS домена TT; проверить TLS без пароля.'
+    help='Настроить HTTPS da-dev.daichi.ru, сохранив текущий доменный вход. LDAPS TT — только по явному параметру.'
 
     def add_arguments(self,parser):
-        parser.add_argument('--https-only',action='store_true',help='Применить HTTPS без изменения AD и без подключения к LDAPS.')
+        mode=parser.add_mutually_exclusive_group()
+        mode.add_argument('--https-only',action='store_true',help='Совместимость: HTTPS без изменения AD; теперь это поведение по умолчанию.')
+        mode.add_argument('--configure-tt-ldaps',action='store_true',help='Явно заменить настройки AD на LDAPS только домена TT.')
         parser.add_argument('--ca-cert',help='PEM-файл публичной цепочки CA, если её нет в доверенных сертификатах Windows.')
 
     def handle(self,*args,**options):
-        https_only=options['https_only']
+        configure_tt=options['configure_tt_ldaps']
+        if configure_tt and options['https_only']:raise CommandError('Выберите HTTPS или явную настройку LDAPS TT.')
+        if options.get('ca_cert') and not configure_tt:raise CommandError('--ca-cert применяется только вместе с --configure-tt-ldaps.')
+        https_only=not configure_tt
         if https_only:
             profile=da_dev_https_profile()
         else:
