@@ -34,3 +34,8 @@ def da_dev_profile(ca_file=''):
         'PORTAL_AD_SHORT_NAMES':'true','PORTAL_AD_ALLOW_HTTP':'false',
         'PORTAL_AD_TRUSTED_DOMAINS':'false','PORTAL_AD_FOREST_DISCOVERY':'false',
     }
+
+
+def da_dev_https_profile():
+    """HTTPS can be deployed while the independent directory service is down."""
+    return {key:value for key,value in da_dev_profile().items() if not key.startswith('PORTAL_AD_')}

@@ -1,5 +1,6 @@
 ﻿param(
     [string]$CaCertFile,
+    [switch]$HttpsOnly,
     [switch]$Restart,
     [string]$TaskName = 'PortalComp'
 )
@@ -9,9 +10,12 @@ Set-Location -LiteralPath $portalRoot
 $pythonExecutable = Join-Path $portalRoot '.venv310\Scripts\python.exe'
 if (-not (Test-Path -LiteralPath $pythonExecutable)) { $pythonExecutable = Join-Path $portalRoot '.venv\Scripts\python.exe' }
 if (-not (Test-Path -LiteralPath $pythonExecutable)) { throw 'Не найден Python окружения портала.' }
-& $pythonExecutable -m pip install 'ldap3>=2.9.1,<3'
-if ($LASTEXITCODE -ne 0) { throw 'Не установлен ldap3. Настройки сайта не изменены.' }
+if (-not $HttpsOnly) {
+    & $pythonExecutable -m pip install 'ldap3>=2.9.1,<3'
+    if ($LASTEXITCODE -ne 0) { throw 'Не установлен ldap3. Настройки сайта не изменены.' }
+}
 $configureArguments = @('manage.py', 'configure_da_dev', '--settings=portal.settings_local')
+if ($HttpsOnly) { $configureArguments += '--https-only' }
 if ($CaCertFile) { $configureArguments += @('--ca-cert', $CaCertFile) }
 & $pythonExecutable @configureArguments
 if ($LASTEXITCODE -ne 0) { throw 'Настройка не завершена. Проверьте сообщение выше.' }

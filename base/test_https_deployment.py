@@ -142,3 +142,25 @@ class DeploymentProfileTests(SimpleTestCase):
         context.return_value.wrap_socket.assert_called_once()
         self.assertEqual(context.return_value.wrap_socket.call_args.kwargs['server_hostname'],'dc-2tt.thermotrade.local')
         tcp.assert_called_once_with(('dc-2tt.thermotrade.local',636),timeout=5)
+
+    def test_https_only_applies_without_ldap_dependency_or_network_and_preserves_ad(self):
+        with TemporaryDirectory() as directory:
+            root=Path(directory);(root/'.local').mkdir()
+            original={'PORTAL_AD_AUTH':'true','PORTAL_AD_AUTH_METHOD':'windows','PORTAL_AD_NETBIOS_DOMAIN':'EXISTING','DJANGO_ALLOWED_HOSTS':'localhost'}
+            (root/'.local/site-settings.json').write_text(json.dumps(original))
+            with override_settings(BASE_DIR=root,SPLIT_MONITORING_CONFIG=root/'not-installed/runtime.json'),patch('base.management.commands.configure_da_dev.find_spec') as dependency,patch('base.management.commands.configure_da_dev.check_tls',side_effect=ConnectionResetError()) as tls:
+                call_command('configure_da_dev',https_only=True,stdout=StringIO())
+            dependency.assert_not_called();tls.assert_not_called()
+            profile=site_settings(root)
+            for key in original:
+                if key.startswith('PORTAL_AD_'):self.assertEqual(profile[key],original[key])
+            self.assertIn('da-dev.daichi.ru',profile['DJANGO_ALLOWED_HOSTS'])
+            self.assertEqual(profile['PORTAL_HTTPS_PROXY'],'true');self.assertEqual(profile['DJANGO_SECURE_COOKIES'],'true')
+            self.assertEqual(json.loads((root/'.local/site-settings.json.bak').read_text()),original)
+
+    def test_https_only_does_not_enable_ad_when_there_was_no_profile(self):
+        with TemporaryDirectory() as directory:
+            root=Path(directory)
+            with override_settings(BASE_DIR=root,SPLIT_MONITORING_CONFIG=root/'not-installed/runtime.json'),patch('base.management.commands.configure_da_dev.check_tls') as tls:
+                call_command('configure_da_dev',https_only=True,stdout=StringIO())
+            self.assertFalse(any(key.startswith('PORTAL_AD_') for key in site_settings(root)));tls.assert_not_called()
