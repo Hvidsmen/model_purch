@@ -23,6 +23,7 @@ class ReportGroupForm(forms.Form):
     motivation_role = project_forms.project_field('motivation')
     purchases_role = project_forms.project_field('purchases')
     dashboards_role = project_forms.project_field('dashboards')
+    split_monitoring_role = project_forms.project_field('split_monitoring')
     portal_role = forms.ChoiceField(label='Роль в портале', required=False, choices=[('', 'Выберите роль')] + [(role, role) for role in ROLES])
     employee_type = forms.ModelChoiceField(label='Вид работника', queryset=TypeCoeff.objects.exclude(type_coeff_name='').order_by('type_coeff_name'), empty_label='Выберите вид работника', required=False, widget=forms.HiddenInput)
     subdivisions = forms.ModelMultipleChoiceField(label='Подразделения', queryset=Subdivision.objects.order_by('subdivision_key'), required=False, widget=forms.CheckboxSelectMultiple)

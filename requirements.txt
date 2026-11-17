@@ -10,3 +10,6 @@ SQLAlchemy>=2.0.41,<2.1
 pyodbc>=5.2.0,<6
 tqdm>=4.67.1,<5
 requests>=2.32.3,<3
+
+# Isolated loopback server for the private Split-monitoring application.
+waitress==3.0.2

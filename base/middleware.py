@@ -16,7 +16,9 @@ class PortalAccessMiddleware:
         module = view_func.__module__
         match = request.resolver_match
         project = None
-        if module.startswith('model_purch.'):
+        if module=='base.split_monitoring_views':
+            project='split_monitoring'
+        elif module.startswith('model_purch.'):
             project = 'purchases'
         elif module.startswith('dashboards.'):
             project = 'dashboards'
@@ -39,7 +41,7 @@ class PortalAccessMiddleware:
                 if '/api/' in request.path or 'application/json' in request.headers.get('Accept', ''):
                     return JsonResponse({'error': 'Доступны только отчёты в рамках назначенных подразделений и прав.'}, status=403)
                 return render(request, 'base/forbidden.html', status=403)
-        json_request = '/api/' in request.path or 'application/json' in request.headers.get('Accept', '') or request.content_type == 'application/json' or (match and match.url_name == 'motivation_coefficient_comparison')
+        json_request = (project=='split_monitoring' and request.path.startswith('/card-api/')) or '/api/' in request.path or 'application/json' in request.headers.get('Accept', '') or request.content_type == 'application/json' or (match and match.url_name == 'motivation_coefficient_comparison')
         if not request.user.is_authenticated or not request.user.is_active:
             if json_request:
                 return JsonResponse({'error': 'Требуется вход в портал.', 'login_url': reverse('portal_login')}, status=401)
