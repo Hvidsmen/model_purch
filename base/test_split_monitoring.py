@@ -43,6 +43,25 @@ class SplitMonitoringAccessTests(TestCase):
         for form in (UserForm,ReportGroupForm,PortalUserChangeForm,PortalUserCreationForm):
             self.assertIn('split_monitoring_role',form.base_fields)
 
+    def test_group_editor_renders_and_saves_monitoring_grant_and_deny(self):
+        actor=User.objects.create_superuser('split-groups-admin');self.client.force_login(actor)
+        url=reverse('portal_user_groups')
+        response=self.client.get(url)
+        self.assertContains(response,'name="split_monitoring_role"')
+        data={'name':'Split report readers','motivation_role':'','purchases_role':'','dashboards_role':'',
+              'split_monitoring_role':ANALYST,'members':[self.user.pk]}
+        response=self.client.post(url,data)
+        self.assertEqual(response.status_code,302)
+        group=Group.objects.get(name='Split report readers')
+        self.assertEqual(GroupProjectAccess.objects.get(group=group,project='split_monitoring').role,ANALYST)
+        self.assertTrue(can_access(User.objects.get(pk=self.user.pk),'split_monitoring'))
+        response=self.client.get(url,{'edit':group.pk})
+        self.assertContains(response,'name="split_monitoring_role"')
+        self.assertEqual(response.context['form']['split_monitoring_role'].value(),ANALYST)
+        response=self.client.post(url,{**data,'group':group.pk,'split_monitoring_role':''})
+        self.assertEqual(response.status_code,302)
+        self.assertFalse(can_access(User.objects.get(pk=self.user.pk),'split_monitoring'))
+
     def test_json_card_uses_exact_origin_and_does_not_require_django_token(self):
         self.grant();client=Client(enforce_csrf_checks=True);client.force_login(self.user)
         with patch('base.split_monitoring_views.forward',return_value=JsonResponseForTest()) as backend:
