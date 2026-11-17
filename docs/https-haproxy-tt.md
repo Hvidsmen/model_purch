@@ -2,6 +2,17 @@
 
 Публичный адрес DA портала — **https://da-dev.daichi.ru**. HAProxy `192.168.221.9` завершает TLS и передаёт HTTP на `192.168.221.178:8000`. Профиль относится только к этому порталу; `etl-dev-portal.daichi.ru` не изменяется.
 
+## Включить HTTPS независимо от LDAPS
+
+Если LDAPS сбрасывает соединение, новый адрес портала можно настроить отдельно:
+
+```powershell
+cd "C:\Users\ETLadmin\Desktop\Python\PortalComp\pythonProject1\model_purch"
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\configure_da_dev.ps1 -HttpsOnly -Restart
+```
+
+Режим `-HttpsOnly` применяет ALLOWED_HOSTS, распознавание HTTPS от доверенного HAProxy, CSRF/cookies и origin мониторинга. Он не устанавливает LDAP-зависимости, не подключается к контроллеру и не меняет существующие параметры AD. Прежний способ входа сохраняется; это не исправление недоступного LDAPS. После исправления контроллера выполните полную настройку ниже без `-HttpsOnly`.
+
 ## Применение на сервере
 
 После обновления портала до актуального `main` выполните под служебной учётной записью портала:
