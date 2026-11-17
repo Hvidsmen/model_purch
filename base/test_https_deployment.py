@@ -114,7 +114,7 @@ class DeploymentProfileTests(SimpleTestCase):
             profile=root/'.local/site-settings.json';profile.write_text('{"original":"yes"}')
             monitor=root/'runtime.json';monitor.write_text('{"origins":["http://old"]}')
             with override_settings(BASE_DIR=root,SPLIT_MONITORING_CONFIG=monitor),patch('base.management.commands.configure_da_dev.find_spec',return_value=True),patch('base.management.commands.configure_da_dev.check_tls',side_effect=ssl.SSLCertVerificationError()):
-                with self.assertRaises(CommandError):call_command('configure_da_dev',stdout=StringIO())
+                with self.assertRaises(CommandError):call_command('configure_da_dev',configure_tt_ldaps=True,stdout=StringIO())
             self.assertEqual(profile.read_text(),'{"original":"yes"}');self.assertEqual(monitor.read_text(),'{"origins":["http://old"]}')
 
     def test_configuration_preserves_db_and_monitor_data_and_adds_origin(self):
@@ -125,7 +125,7 @@ class DeploymentProfileTests(SimpleTestCase):
             config={'port':8767,'app_dir':'original-code','data_dir':'original-data','package_sha256':'hash','control_token':'secret','origins':['http://192.168.221.178:8000']}
             monitor.write_text(json.dumps(config));output=StringIO()
             with override_settings(BASE_DIR=root,SPLIT_MONITORING_CONFIG=monitor,AD_CA_CERT_FILE=''),patch('base.management.commands.configure_da_dev.find_spec',return_value=True),patch('base.management.commands.configure_da_dev.check_tls',return_value='TLSv1.3') as tls,patch('base.management.commands.configure_da_dev.stop') as stop:
-                call_command('configure_da_dev',stdout=output)
+                call_command('configure_da_dev',configure_tt_ldaps=True,stdout=output)
             tls.assert_called_once_with('ldaps://dc-2tt.thermotrade.local:636','',5);stop.assert_called_once_with(monitor)
             configured=json.loads(monitor.read_text());self.assertEqual(configured['origins'],[config['origins'][0],'https://da-dev.daichi.ru'])
             self.assertEqual(configured['data_dir'],config['data_dir']);self.assertEqual(configured['control_token'],config['control_token'])
@@ -164,3 +164,21 @@ class DeploymentProfileTests(SimpleTestCase):
             with override_settings(BASE_DIR=root,SPLIT_MONITORING_CONFIG=root/'not-installed/runtime.json'),patch('base.management.commands.configure_da_dev.check_tls') as tls:
                 call_command('configure_da_dev',https_only=True,stdout=StringIO())
             self.assertFalse(any(key.startswith('PORTAL_AD_') for key in site_settings(root)));tls.assert_not_called()
+
+
+    def test_default_preserves_all_existing_directory_settings_without_contacting_tt(self):
+        with TemporaryDirectory() as directory:
+            root=Path(directory);(root/'.local').mkdir()
+            original={'PORTAL_AD_AUTH':'true','PORTAL_AD_AUTH_METHOD':'windows','PORTAL_AD_NETBIOS_DOMAIN':'DAICHI','PORTAL_AD_TRUSTED_DOMAINS':'true','PORTAL_AD_FOREST_DISCOVERY':'true'}
+            (root/'.local/site-settings.json').write_text(json.dumps(original))
+            with override_settings(BASE_DIR=root,SPLIT_MONITORING_CONFIG=root/'not-installed/runtime.json'),patch('base.management.commands.configure_da_dev.find_spec') as dependency,patch('base.management.commands.configure_da_dev.check_tls',side_effect=ConnectionResetError()) as tls:
+                call_command('configure_da_dev',stdout=StringIO())
+            dependency.assert_not_called();tls.assert_not_called()
+            profile=site_settings(root)
+            for key,value in original.items():self.assertEqual(profile[key],value)
+            self.assertEqual(profile['PORTAL_HTTPS_PROXY'],'true')
+
+    def test_ca_option_alone_cannot_silently_change_directory_mode(self):
+        with patch('base.management.commands.configure_da_dev.check_tls') as tls:
+            with self.assertRaises(CommandError):call_command('configure_da_dev',ca_cert='any.pem',stdout=StringIO())
+        tls.assert_not_called()
