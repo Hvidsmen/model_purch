@@ -76,9 +76,13 @@ class ActiveDirectoryBackend(ModelBackend):
     def authenticate(self, request, username=None, password=None, **kwargs):
         if not settings.AD_AUTH_ENABLED or not isinstance(username, str):
             return None
-        # Unqualified names remain ordinary local portal accounts.
+        # Existing local password accounts retain their own authentication and
+        # are never linked to a similarly named AD identity.
         if '\\' not in username and '@' not in username:
-            return None
+            if not settings.AD_SHORT_NAMES or settings.AD_AUTH_METHOD!='ldaps':return None
+            local=get_user_model().objects.filter(username=username).first()
+            if local and local.has_usable_password():return None
+            username=settings.AD_NETBIOS_DOMAIN+'\\'+username
         if not password or (settings.AD_REQUIRE_HTTPS and (request is None or not request.is_secure())):
             raise PermissionDenied
         try:
@@ -94,7 +98,10 @@ class ActiveDirectoryBackend(ModelBackend):
             logger.warning('Active Directory authentication unavailable (%s)', type(error).__name__)
             raise PermissionDenied from None
         with transaction.atomic():
-            user, created = get_user_model().objects.get_or_create(username=identity['username'])
+            matches=list(get_user_model().objects.filter(username__iexact=identity['username'])[:2])
+            if len(matches)>1:raise PermissionDenied
+            if matches:user,created=matches[0],False
+            else:user,created=get_user_model().objects.get_or_create(username=identity['username'])
             if not self.user_can_authenticate(user):
                 raise PermissionDenied
             if created:

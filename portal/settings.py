@@ -13,9 +13,12 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 
 import os
 from pathlib import Path
+from .deployment import site_settings, value
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+_SITE_PROFILE = site_settings(BASE_DIR)
+def site_value(name,default=''):return value(_SITE_PROFILE,name,default)
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
@@ -26,8 +29,8 @@ SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-local-developm
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.environ.get('DJANGO_DEBUG', 'true').lower() in {'1', 'true', 'yes'}
 
-ALLOWED_HOSTS = [host.strip() for host in os.environ.get(
-    'DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.221.178'
+ALLOWED_HOSTS = [host.strip() for host in site_value(
+    'DJANGO_ALLOWED_HOSTS', 'localhost,127.0.0.1,192.168.221.178,da-dev.daichi.ru'
 ).split(',') if host.strip()]
 
 if not DEBUG and SECRET_KEY == 'django-insecure-local-development-only':
@@ -58,6 +61,7 @@ CRISPY_ALLOWED_TEMPLATE_PACKS = "bootstrap5"
 CRISPY_TEMPLATE_PACK = "bootstrap5"
 
 MIDDLEWARE = [
+    'base.proxy.TrustedProxyMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -192,21 +196,30 @@ if WINDOWS_AUTH_ENABLED:
 
 
 MIDDLEWARE.insert(MIDDLEWARE.index('django.contrib.auth.middleware.AuthenticationMiddleware') + 1, 'base.preview.UserPreviewMiddleware')
-SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SECURE_COOKIES', '').lower() in {'1', 'true', 'yes'}
+SESSION_COOKIE_SECURE = site_value('DJANGO_SECURE_COOKIES', '').lower() in {'1', 'true', 'yes'}
 CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+SESSION_COOKIE_NAME = site_value('DJANGO_SESSION_COOKIE_NAME','sessionid')
+CSRF_COOKIE_NAME = site_value('DJANGO_CSRF_COOKIE_NAME','csrftoken')
+CSRF_TRUSTED_ORIGINS = [origin.strip() for origin in site_value('DJANGO_CSRF_TRUSTED_ORIGINS','https://da-dev.daichi.ru').split(',') if origin.strip()]
+PORTAL_TRUSTED_PROXIES = tuple(item.strip() for item in site_value('PORTAL_TRUSTED_PROXIES','192.168.221.9').split(',') if item.strip())
+HTTPS_PROXY_ENABLED = site_value('PORTAL_HTTPS_PROXY','false').lower() in {'1','true','yes'}
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO','https') if HTTPS_PROXY_ENABLED else None
+USE_X_FORWARDED_HOST = HTTPS_PROXY_ENABLED
+USE_X_FORWARDED_PORT = HTTPS_PROXY_ENABLED
 
-# AD form login is independent of IIS; bare usernames still use local passwords.
-AD_AUTH_ENABLED = os.environ.get('PORTAL_AD_AUTH', '').lower() in {'1', 'true', 'yes'}
-AD_AUTH_METHOD = os.environ.get('PORTAL_AD_AUTH_METHOD', 'ldaps').lower()
-AD_LDAPS_URL = os.environ.get('PORTAL_AD_LDAPS_URL', '')
-AD_NETBIOS_DOMAIN = os.environ.get('PORTAL_AD_NETBIOS_DOMAIN', '')
-AD_UPN_SUFFIX = os.environ.get('PORTAL_AD_UPN_SUFFIX', '')
-AD_SEARCH_BASE = os.environ.get('PORTAL_AD_SEARCH_BASE', '')
-AD_CA_CERT_FILE = os.environ.get('PORTAL_AD_CA_CERT_FILE', '')
+# AD form login is independent of IIS. Short TT names are opt-in; local accounts stay separate.
+AD_AUTH_ENABLED = site_value('PORTAL_AD_AUTH', '').lower() in {'1', 'true', 'yes'}
+AD_AUTH_METHOD = site_value('PORTAL_AD_AUTH_METHOD', 'ldaps').lower()
+AD_LDAPS_URL = site_value('PORTAL_AD_LDAPS_URL', '')
+AD_NETBIOS_DOMAIN = site_value('PORTAL_AD_NETBIOS_DOMAIN', '')
+AD_UPN_SUFFIX = site_value('PORTAL_AD_UPN_SUFFIX', '')
+AD_SEARCH_BASE = site_value('PORTAL_AD_SEARCH_BASE', '')
+AD_CA_CERT_FILE = site_value('PORTAL_AD_CA_CERT_FILE', '')
 AD_CONNECT_TIMEOUT = 5
-AD_TRUSTED_DOMAIN_DISCOVERY = os.environ.get('PORTAL_AD_TRUSTED_DOMAINS', 'true').lower() in {'1', 'true', 'yes'}
-AD_FOREST_DISCOVERY = os.environ.get('PORTAL_AD_FOREST_DISCOVERY', 'true').lower() in {'1', 'true', 'yes'}
-AD_REQUIRE_HTTPS = os.environ.get('PORTAL_AD_ALLOW_HTTP', '').strip().lower() not in ('1', 'true', 'yes', 'on')
+AD_SHORT_NAMES = site_value('PORTAL_AD_SHORT_NAMES','false').lower() in {'1','true','yes'}
+AD_TRUSTED_DOMAIN_DISCOVERY = site_value('PORTAL_AD_TRUSTED_DOMAINS', 'true').lower() in {'1', 'true', 'yes'}
+AD_FOREST_DISCOVERY = site_value('PORTAL_AD_FOREST_DISCOVERY', 'true').lower() in {'1', 'true', 'yes'}
+AD_REQUIRE_HTTPS = site_value('PORTAL_AD_ALLOW_HTTP', '').strip().lower() not in ('1', 'true', 'yes', 'on')
 if AD_AUTH_ENABLED:
     from django.core.exceptions import ImproperlyConfigured
     if AD_AUTH_METHOD not in ('ldaps', 'windows'):
