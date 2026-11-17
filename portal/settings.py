@@ -218,3 +218,6 @@ if AD_AUTH_ENABLED:
     if AD_AUTH_METHOD == 'windows' and os.name != 'nt':
         raise ImproperlyConfigured('Режим AD windows использует LogonUser и требует Windows-сервер.')
     AUTHENTICATION_BACKENDS.insert(0, 'base.ad_auth.ActiveDirectoryBackend')
+
+# Private package and snapshots live outside tracked source/static directories.
+SPLIT_MONITORING_CONFIG = Path(os.environ.get('SPLIT_MONITORING_CONFIG', str(BASE_DIR / '.local' / 'split-monitoring' / 'runtime.json')))

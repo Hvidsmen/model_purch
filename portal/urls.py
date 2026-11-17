@@ -15,7 +15,7 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from base import identity_views, group_views, user_views, update_views, admin_views, sales_planning_preview, sales_planning, sales_planning_groups
-from base import split_views
+from base import split_views, split_monitoring_views
 from django.contrib import admin
 from django.contrib.auth.views import LoginView, LogoutView
 
@@ -24,6 +24,9 @@ from django.conf import settings
 from django.conf.urls.static import static
 
 urlpatterns = ([
+                   path('split-monitoring/', split_monitoring_views.application, name='split_monitoring_index'),
+                   path('split-monitoring/<path:path>', split_monitoring_views.application, name='split_monitoring_asset'),
+                   path('card-api/<path:path>', split_monitoring_views.api, name='split_monitoring_api'),
                    path('sales-planning/', sales_planning.index, name='sales_planning_index'),
                    path('sales-planning/split/', sales_planning.split, name='sales_planning_split'),
                    path('sales-planning/scenarios/', split_views.scenarios, name='split_scenarios'),
