@@ -1,5 +1,6 @@
 """Owner-scoped iteration configuration, calculations and immutable exports."""
 from datetime import date
+from decimal import Decimal
 from django import forms
 from django.core.exceptions import ValidationError
 from django.db.models import Exists,OuterRef
@@ -26,6 +27,9 @@ class CalculationForm(forms.Form):
     year_share=forms.DecimalField(label='Годовая доля, %',initial=20,min_value=0,max_value=100,decimal_places=6)
     payout_threshold=forms.DecimalField(label='Порог выплаты (0,8 = 80%)',initial='.8',min_value=0,max_value=1,decimal_places=8)
 
+    usd_rub_2026=forms.DecimalField(label='Курс USD/RUB · план 2026',initial=80,min_value=Decimal('0.000001'),max_value=1000000,decimal_places=6,required=False)
+    usd_rub_2027=forms.DecimalField(label='Курс USD/RUB · план 2027',initial=80,min_value=Decimal('0.000001'),max_value=1000000,decimal_places=6,required=False)
+
     def __init__(self,iteration,*args,**kwargs):
         super().__init__(*args,**kwargs);self.initial['revision']=iteration.revision
         for year in (2025,2026,2027):
@@ -47,6 +51,9 @@ class CalculationForm(forms.Form):
         for scenario in data.get('scenarios',[]):
             year=SCENARIOS[scenario][0]
             if not data.get(f'plan_{year}'):self.add_error(f'plan_{year}',f'Выберите загруженный план {year}.')
+        for year in (2026,2027):
+            if any(SCENARIOS[key][0]==year for key in data.get('scenarios',[])) and data.get(f'usd_rub_{year}') is None:
+                self.add_error(f'usd_rub_{year}','Укажите курс для выбранного плана.')
         return data
 
     def configuration(self):
@@ -69,7 +76,7 @@ def calculations(request,pk):
         try:run_id=int(request.GET['run'])
         except (ValueError,TypeError):raise Http404
         query=CoefficientIterationRun.objects.all()
-        if request.method=='GET' and request.GET.get('export')=='xlsx':query=query.defer('inputs','results')
+        if request.method=='GET':query=query.defer('inputs','results')
         run=get_object_or_404(query,pk=run_id,iteration=iteration)
     if request.method=='GET' and run and request.GET.get('export')=='xlsx':
         if run.state=='running':return HttpResponse('Расчёт ещё выполняется. Excel будет доступен после завершения.',status=409)
@@ -98,19 +105,26 @@ def calculations(request,pk):
                 if 'progress' in locals():progress.update(error,state='failed')
         else:error=' '.join((form.fields[name].label+': ' if name in form.fields else '')+' '.join(str(message) for message in messages) for name,messages in form.errors.items())
         if asynchronous:return JsonResponse({'error':error,'fields':form.errors,'progress_token':token_for(request.user)},status=400)
+    currency='RUB' if request.GET.get('currency')=='RUB' else 'USD'
     presentation=[]
     if run:
-        names={row['branch']:row.get('branch_name',row['branch']) for plan in run.inputs.get('plans',{}).values() for row in plan['rows']}
-        for scenario,value in run.results.items():
+        from .services.coefficient_iteration_export_data import export_snapshot
+        snapshot=export_snapshot(run,include_bases=False)
+        names=snapshot.inputs['export_names']
+        for scenario,value in snapshot.results.items():
             qs=[4] if value.get('year')==2026 else [1,2,3,4]
             item={**value,'key':scenario,'quarters':qs}
             if value.get('state')=='completed':
+                from .services.coefficient_iteration_currency import display_rows
+                selected_rows=display_rows(value['rows'],currency)
+                if selected_rows is None:
+                    item['currency_unavailable']=True;presentation.append(item);continue
                 def present(row):
                     from decimal import Decimal
                     return {**row,'branch_name':names.get(row['branch'],row['branch']),'payments':[row['quarters'][q-1] for q in qs],'quarter_total':sum((Decimal(str(v)) for v in row['quarters']),Decimal(0))}
-                item['summary']=[present(row) for row in aggregate_rows(value['rows'])]
-                item['recipients']=[present(row) for row in value['rows']]
+                item['summary']=[present(row) for row in aggregate_rows(selected_rows)]
+                item['recipients']=[present(row) for row in selected_rows]
             presentation.append(item)
     return render(request,'admin_motivation/coefficient_iteration_calculations.html',{
         'iteration':iteration,'form':form,'run':run,'runs':iteration.runs.defer('inputs','results')[:15],
-        'presentation':presentation,'error':error,'progress_token':token_for(request.user),'skip_motivation_workflow':True})
+        'presentation':presentation,'currency':currency,'error':error,'progress_token':token_for(request.user),'skip_motivation_workflow':True})

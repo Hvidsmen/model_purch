@@ -95,17 +95,21 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
     validate_directors_2025(plans,rates,snapshot)
     plans=motivation_plan_rows(plans,rates)
     from .motivation_exclusions import sql_allowed
+    dual=settings.get('currency_rule')=='iteration-currency-v1-deal-rub'
+    rub_columns=', SUM(CASE WHEN СуммаОтгрузокRUB>0 THEN СуммаОтгрузокRUB ELSE 0 END), SUM(CASE WHEN СуммаОтгрузокRUB<0 THEN СуммаОтгрузокRUB ELSE 0 END)' if dual else ''
     cursor.execute('''SELECT Подразделение,Квартал,ГруппаПлановПродаж,ГруппаТоваров,Марка,СегментСкидки,
  SUM(CASE WHEN СуммаОтгрузокUSD>0 THEN СуммаОтгрузокUSD ELSE 0 END),
- SUM(CASE WHEN СуммаОтгрузокUSD<0 THEN СуммаОтгрузокUSD ELSE 0 END)
+ SUM(CASE WHEN СуммаОтгрузокUSD<0 THEN СуммаОтгрузокUSD ELSE 0 END)'''+rub_columns+'''
  FROM #iteration_fact WHERE Год=2025 AND LTRIM(RTRIM(ТипКоэф))=N'Продажи' AND '''+sql_allowed('Директора')+'''
  GROUP BY Подразделение,Квартал,ГруппаПлановПродаж,ГруппаТоваров,Марка,СегментСкидки''')
     facts=[]
-    for sub,q,p,g,b,segment,pos,neg in cursor.fetchall():
+    for values in cursor.fetchall():
+        sub,q,p,g,b,segment,pos,neg=values[:8]
         segment=str(segment or '').strip().upper().replace('О','O').replace('K','O')
         if segment not in ('O0','O1','O2','O3','O4'):raise ValidationError('В факте 2025 неизвестный сегмент скидки.')
         facts.append({'branch':branch(sub),'quarter':int(q),'planning':p or '*','goods':g or '*','brand':b or '*',
-                      'segment':segment,'positive':number(pos or 0),'negative':number(neg or 0)})
+                      'segment':segment,'positive':number(pos or 0),'negative':number(neg or 0),
+                      **({'positive_rub':number(values[8]),'negative_rub':number(values[9])} if dual else {})})
     plan=[]
     for r in plans:
         p,g,b=rates.classification(r['branch'],'Продажи',(r['planning'],r['goods'],r['brand']))
@@ -126,12 +130,22 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
             for field in ('quarters','annual_paid','annual_accrued','bonus','total'):result[field]=row[field]
             result['possible']=[row[f'q{q}_possible'] for q in range(1,5)]
             result['annual_quarters']=[row[f'annual_q{q}'] for q in range(1,5)]
+            if dual:
+                rub,_=director_result('actual_2025',2025,False,False,
+                    SimpleNamespace(pk=recipient,full_name=rates.people[recipient]),
+                    SimpleNamespace(pk=source_id,full_name=rates.people[source_id]),sub,facts,plan,settings,
+                    DirectorRates(rates,token,snapshot),currency='RUB')
+                result['rub']={field:rub[field] for field in ('quarters','annual_paid','annual_accrued','bonus','total')}
+                result['rub']['possible']=[rub[f'q{q}_possible'] for q in range(1,5)]
+                result['rub']['annual_quarters']=[rub[f'annual_q{q}'] for q in range(1,5)]
             rows.append(result);details.extend([{**item,'kind':'Директора','year':2025} for item in items])
     return rows,details
 
 
 @with_exclusions
 def start(iteration_id,owner,configuration,revision,*,recover=False):
+    from .coefficient_iteration_currency import configuration as currency_configuration
+    configuration=currency_configuration(configuration)
     with transaction.atomic():
         obj=CoefficientIteration.objects.select_for_update().get(pk=iteration_id,owner=owner)
         if not obj.confirmed or obj.revision!=revision:raise ValidationError('Сопоставление изменилось. Проверьте и подтвердите его перед расчётом.')
@@ -143,7 +157,7 @@ def start(iteration_id,owner,configuration,revision,*,recover=False):
         version=GlobalCoeffVersion.objects.filter(pk=configuration.get('formula_version'),status='approved').first()
         if 'actual_2025' in configuration['scenarios'] and not version:raise ValidationError('Не найдена утверждённая версия формул директоров 2025.')
         from .subdivision_scope import excluded_names,policy_signature
-        inputs={'coefficient_exclusions':list(dimension_rules()),'excluded_subdivision_names':list(excluded_names()),'subdivision_policy':policy_signature(),'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
+        inputs={'currency_rule':configuration['currency_rule'],'coefficient_exclusions':list(dimension_rules()),'excluded_subdivision_names':list(excluded_names()),'subdivision_policy':policy_signature(),'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
                 'subdivisions':dict(Subdivision.all_objects.values_list('pk','subdivision_key')),
                 'subdivision_names':dict(Subdivision.all_objects.values_list('pk','subdivision_name')),
                 'people':dict(DirectorEmployee.objects.values_list('pk','full_name')),
@@ -199,7 +213,17 @@ def execute(run,progress,connector=None):
                     finally:
                         if connection is not None:connection.close()
                 from .coefficient_iteration_export_summary import summarize_plan_facts
-                results[scenario]=safe({'plan_fact_summary':summarize_plan_facts(details,year),'state':'completed','title':title,'year':year,'rows':rows,'details':details,'source':source})
+                from .coefficient_iteration_currency import RULE as CURRENCY_RULE,convert_money,convert_bases
+                bases=summarize_plan_facts(details,year)
+                rub_bases=None
+                if settings.get('currency_rule')==CURRENCY_RULE:
+                    if year!=2025:
+                        rate=settings[f'usd_rub_{year}']
+                        for row in rows:row['rub']=convert_money(row,rate)
+                        rub_bases=convert_bases(bases,rate)
+                        source['usd_rub']=rate
+                    source['currency_rule']=CURRENCY_RULE
+                results[scenario]=safe({'plan_fact_summary':bases,'plan_fact_summary_rub':rub_bases,'state':'completed','title':title,'year':year,'rows':rows,'details':details,'source':source})
             except Exception as exc:
                 failed=True
                 if isinstance(exc,ValidationError):message=' '.join(exc.messages)

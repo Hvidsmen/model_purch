@@ -51,10 +51,10 @@ def array_records(run_id,field,parts,fields):
                 if value is not None:yield dict(zip(fields,json.loads(value)))
 
 
-def export_snapshot(run):
+def export_snapshot(run,*,include_bases=True):
     stamp=run.completed_at or run.started_at
-    key=f'iteration-compact-export-v1:{run.pk}:{run.state}:{stamp.isoformat() if stamp else ""}'
-    data=cache.get(key)
+    key=f'iteration-compact-export-v2:{include_bases}:{run.pk}:{run.state}:{stamp.isoformat() if stamp else ""}'
+    data=cache.get(key) if run.state!='running' else None
     if data is None:
         paths=[['rule'],['revision'],['excluded_subdivision_names'],['subdivision_policy'],['coefficient_exclusions'],
                ['subdivisions'],['subdivision_names'],['formulas','version_name']]
@@ -72,15 +72,15 @@ def export_snapshot(run):
             if plan['id'] is not None or plan['title'] is not None:inputs['plans'][str(year)]=plan
         paths=[]
         for scenario in SCENARIOS:
-            paths.extend([[scenario,field] for field in ('state','title','year','rows','error','plan_fact_summary')])
-            paths.extend([[scenario,'source',field] for field in ('source','prepared_run_id','completed_at')])
+            paths.extend([[scenario,field] if include_bases or field not in ('plan_fact_summary','plan_fact_summary_rub') else ['__unused_base__'] for field in ('state','title','year','rows','error','plan_fact_summary','plan_fact_summary_rub')])
+            paths.extend([[scenario,'source',field] for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub')])
         values=iter(project(run.pk,'results',paths));results={}
         for scenario,(year,title) in SCENARIOS.items():
-            item={field:next(values) for field in ('state','title','year','rows','error','plan_fact_summary')}
-            item['source']={field:next(values) for field in ('source','prepared_run_id','completed_at')}
+            item={field:next(values) for field in ('state','title','year','rows','error','plan_fact_summary','plan_fact_summary_rub')}
+            item['source']={field:next(values) for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub')}
             if item['state'] is None:continue
             item['year']=item['year'] or year;item['title']=item['title'] or title
-            if item['state']=='completed' and item['plan_fact_summary'] is None:
+            if include_bases and item['state']=='completed' and item['plan_fact_summary'] is None:
                 item['plan_fact_summary']=summarize_plan_facts(array_records(run.pk,'results',[scenario,'details'],FIELDS),int(item['year']))
             results[scenario]=item
         # Legacy snapshots may contain only physical-key/name pairs in plan rows.
@@ -89,6 +89,6 @@ def export_snapshot(run):
                 for row in array_records(run.pk,'inputs',['plans',str(year),'rows'],('branch','branch_name')):
                     if row.get('branch'):inputs['export_names'][row['branch']]=row.get('branch_name') or row['branch']
         data={'inputs':inputs,'results':results}
-        cache.set(key,data,3600)
+        if run.state!='running':cache.set(key,data,3600)
     return SimpleNamespace(pk=run.pk,iteration_id=run.iteration_id,state=run.state,configuration=run.configuration,
                            started_at=run.started_at,completed_at=run.completed_at,error=run.error,**data)
