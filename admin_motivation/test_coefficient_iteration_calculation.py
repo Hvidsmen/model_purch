@@ -165,7 +165,7 @@ class CalculationTests(TestCase):
         from django.db.models import QuerySet
         QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
         self.config={'scenarios':['moscow_q4_2026','full_2027'],'plan_2025':None,'plan_2026':self.plans[2026].pk,'plan_2027':self.plans[2027].pk,
-                     'formula_version':self.version.pk,'quarter_share':'80','year_share':'20','payout_threshold':'.8'}
+                     'formula_version':self.version.pk,'usd_rub_2026':'80','usd_rub_2027':'80','quarter_share':'80','year_share':'20','payout_threshold':'.8'}
         self.url=reverse('motivation_coefficient_iteration_calculations',args=[self.iteration.pk])
 
     def make(self):return start(self.iteration.pk,self.user,self.config,self.iteration.revision)

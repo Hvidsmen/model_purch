@@ -25,6 +25,8 @@ class IterationCalculationBrowserTests(StaticLiveServerTestCase):
         expect(self.page.get_by_role('heading',name='Расчёты новой итерации',exact=False)).to_be_visible()
         self.page.locator('input[name=scenarios][value=actual_2025]').uncheck()
         for year in (2026,2027):self.page.locator(f'#id_plan_{year}').select_option(str(plans[year]),force=True)
+        self.page.locator('#id_usd_rub_2026').fill('75.5')
+        self.page.locator('#id_usd_rub_2027').fill('81.25')
         from .services.coefficient_iteration_calculation import at_full_plan
         def slow(*args,**kwargs):time.sleep(.5);return at_full_plan(*args,**kwargs)
         with patch('admin_motivation.services.coefficient_iteration_runner.at_full_plan',side_effect=slow):
@@ -36,6 +38,9 @@ class IterationCalculationBrowserTests(StaticLiveServerTestCase):
         expect(self.page.get_by_role('heading',name='Москва + ТТ · IV квартал 2026 · 100%')).to_be_visible()
         expect(self.page.get_by_role('heading',name='Все подразделения · 2027 · 100%')).to_be_visible()
         expect(self.page.locator('.iteration-table').first).to_contain_text('Все выбранные подразделения')
+        self.page.get_by_role('link',name='RUB',exact=True).click()
+        expect(self.page.locator('.iteration-table').first).to_contain_text('Общая выплата, RUB')
+        expect(self.page.get_by_text('Курсы этого запуска:',exact=False)).to_contain_text('75.5')
         with self.page.expect_download() as event:
             self.page.get_by_role('link',name='Скачать результаты Excel').click()
         self.assertTrue(event.value.suggested_filename.endswith('.xlsx'))

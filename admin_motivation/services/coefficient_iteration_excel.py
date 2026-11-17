@@ -66,7 +66,7 @@ def table(book,title,headers,rows,text_columns=(),*,column_groups=(),percent_col
     return sheet
 
 
-def result_table(book,title,rows,year,names=None):
+def result_table(book,title,rows,year,names=None,currency="USD"):
     quarters=[4] if year==2026 else [1,2,3,4]
     headers=['Подразделение','Вид мотивации','Сотрудник']
     groups=[]
@@ -86,6 +86,7 @@ def result_table(book,title,rows,year,names=None):
             cells.extend(row['annual_quarters'][q-1] for q in quarters)
             cells.extend(row[field] for field in ('annual_accrued','annual_paid','bonus','total'))
             yield cells
+    headers=[header.replace('USD',currency) for header in headers]
     return table(book,title,headers,values(),text_columns=(1,2,3),column_groups=groups)
 
 
@@ -99,6 +100,11 @@ def workbook(run):
           ['Начало, МСК',local(run.started_at)],['Завершение, МСК',local(run.completed_at)],['Ошибка',run.error],
           ['Квартальная доля, %',run.configuration.get('quarter_share')],['Годовая доля, %',run.configuration.get('year_share')],
           ['Порог выплаты',run.configuration.get('payout_threshold')],
+          ['Курс USD/RUB · 2026',run.configuration.get('usd_rub_2026')],
+          ['Курс USD/RUB · 2027',run.configuration.get('usd_rub_2027')],
+          ['Правило валют',run.configuration.get('currency_rule','USD: старый запуск без RUB')],
+          ['Факт 2025 · RUB','По исходной рублёвой базе сделок (PriceRUR / Price); ставки и условия выплаты исходного расчёта.'],
+          ['Базы выполнения 2025','План-факт для проверки условий сохранён в USD; не переводится по среднему курсу.'],
           ['Исключённые SubdivisionName',', '.join((run.inputs.get('excluded_subdivision_names') or []))],
           ['Правило участия подразделений',run.inputs.get('subdivision_policy','')],
           ['Исключения групп и каналов',str(run.inputs.get('coefficient_exclusions',[]))],
@@ -117,19 +123,27 @@ def workbook(run):
         year=result['year'];name='IV кв 2026' if year==2026 else str(year)
         result_table(book,'Сводка '+name,aggregate_rows(result['rows']),year,names)
         result_table(book,'Получатели '+name,result['rows'],year,names)
+        from .coefficient_iteration_currency import display_rows
+        rub_rows=display_rows(result['rows'],'RUB')
+        if rub_rows is not None:
+            result_table(book,'Сводка '+name+' RUB',aggregate_rows(rub_rows),year,names,'RUB')
+            result_table(book,'Получатели '+name+' RUB',rub_rows,year,names,'RUB')
+        else:meta.append([f'RUB {year}','В этом запуске RUB не сохранён; нужен новый расчёт.'])
         source=result.get('source') or {}
         if isinstance(source,dict):
-            for field in ('source','prepared_run_id','completed_at'):
+            for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub'):
                 if source.get(field) is not None:meta.append([f'Источник {year}: {field}',str(source[field])])
-        def bases():
-            for row in result.get('plan_fact_summary') or []:
-                yield [names.get(row['branch'],row['branch']),row['kind'],row['period'],
-                       row.get('plan'),row.get('fact'),row.get('execution'),
-                       *(row.get('segments') or [None]*5),row.get('note','')]
-        table(book,'План-факт '+name,
-              ['Подразделение','Вид мотивации','Период','План, USD','Факт, USD','Выполнение',
-               'O0, USD','O1, USD','O2, USD','O3, USD','O4, USD','Примечание'],
-              bases(),text_columns=(1,2,3,12),percent_columns=(6,),widths={'L':80})
+        for currency,key in (('USD','plan_fact_summary'),('RUB','plan_fact_summary_rub')):
+            if currency=='RUB' and result.get(key) is None:continue
+            def bases():
+                for row in result.get(key) or []:
+                    yield [names.get(row['branch'],row['branch']),row['kind'],row['period'],
+                           row.get('plan'),row.get('fact'),row.get('execution'),
+                           *(row.get('segments') or [None]*5),row.get('note','')]
+            table(book,'План-факт '+name+(' RUB' if currency=='RUB' else ''),
+                  ['Подразделение','Вид мотивации','Период',f'План, {currency}',f'Факт, {currency}','Выполнение',
+                   *[f'O{i}, {currency}' for i in range(5)],'Примечание'],
+                  bases(),text_columns=(1,2,3,12),percent_columns=(6,),widths={'L':80})
     table(book,'Параметры',['Параметр','Значение'],meta,text_columns=(1,2),widths={'B':110})
     output=TemporaryFile()
     try:

@@ -91,7 +91,7 @@ def turnover(rows,quarters,formula=None,example=None):
 def ratio(fact,plan):return fact/plan if plan>0 else None
 
 
-def director_result(case,year,merged,synthetic,recipient,source,branch,facts,plans,settings,rates):
+def director_result(case,year,merged,synthetic,recipient,source,branch,facts,plans,settings,rates,*,currency="USD"):
     input_facts=[r for r in (plans if synthetic else facts) if merged or r['branch']==branch]
     input_plan=[r for r in plans if merged or r['branch']==branch]
     quarter_share=number(settings['quarter_share'])/100
@@ -110,7 +110,8 @@ def director_result(case,year,merged,synthetic,recipient,source,branch,facts,pla
     for row in input_facts:
         values,formula,origin=rates.get(source,branch,row)
         key=(formula,*scope(formula,row));segment=int(row['segment'][1]);k=values[segment]
-        amount=number(row['positive']) if k>=0 else number(row['negative'])
+        suffix='_rub' if currency=='RUB' else ''
+        amount=number(row['positive'+suffix]) if k>=0 else number(row['negative'+suffix])
         potential[key,row['quarter']]+=amount*k
     for key,example in sorted(examples.items()):
         formula=key[0];scope_paid=ZERO;scope_quarter_potential=ZERO

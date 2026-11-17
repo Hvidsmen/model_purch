@@ -24,7 +24,7 @@ CREATE UNIQUE INDEX IX_iteration_table_rate ON #test2025_table_min(Subdivision,T
 '''
 
 
-def build_sql(cursor=None):
+def build_sql(cursor=None,*,rub=False):
     from .recalculation_2025_sql import template_source,patch_source,SETUP,FORMULA_SNAPSHOT
     from .formula_defaults import patch_defaults
     from .recalculation_2025_share_cache import patch as shares
@@ -103,6 +103,10 @@ SELECT @PlanVersion=PlanVersion,@QuarterShare=QuarterShare,@YearShare=YearShare,
 FROM #iteration_parameters;
 '''
     source=source[:header.start()]+declarations+source[header.end():]
+    if rub:
+        from .coefficient_iteration_currency_sql import add_rub_shipments
+        from .pilot_calculation import normalize_q4_rur
+        source=add_rub_shipments(normalize_q4_rur(source))
     code=mask_sql(source)
     if 'DataWH.planning.PlanSales' in source or re.search(r'\b(?:CREATE|ALTER)\s+PROC|\b(?:INTO|UPDATE|DELETE\s+FROM|DROP\s+TABLE)\s+(?:DataWH|motivation)\.',code,re.I):
         raise ValidationError('В изолированном расчёте обнаружена запись вне временных таблиц.')
@@ -135,7 +139,8 @@ def read_2025(cursor,plan,rates,settings,progress):
     if objects[3]:
         cursor.execute("SELECT Date_,DefaultFormula FROM motivation.PortalFormulaDefaults WHERE Date_<'20260101' ORDER BY Date_")
         defaults=[{'date':str(r[0]),'formula':r[1]} for r in cursor.fetchall()]
-    source=build_sql(cursor)
+    dual=settings.get('currency_rule')=='iteration-currency-v1-deal-rub'
+    source=build_sql(cursor,rub=dual)
     cursor.execute('SET QUOTED_IDENTIFIER ON; SET ANSI_NULLS ON;')
     cursor.execute('''CREATE TABLE #iteration_plan(Subdivision nvarchar(255) COLLATE DATABASE_DEFAULT,PlanningGroupSalesERP nvarchar(255) COLLATE DATABASE_DEFAULT,
  Date_ date,GroupERP nvarchar(255) COLLATE DATABASE_DEFAULT,[Марка(Бренд)] nvarchar(255) COLLATE DATABASE_DEFAULT,AmountUSD decimal(24,6));
@@ -171,30 +176,44 @@ def read_2025(cursor,plan,rates,settings,progress):
         if cursor.description and str(cursor.description[0][0]).casefold()=='prepared_run_id':used_run=cursor.fetchone()[0]
         if not cursor.nextset():break
     if not used_run:raise ValidationError('Расчёт не подтвердил использованный набор подготовленного факта.')
+    rub_columns=',SUM(COALESCE([СуммаМотивацииRURУчетПроцента],0)),SUM(COALESCE([ОстатокRUR],0)),SUM(COALESCE([СуммаМотивацииRUR],0))' if dual else ''
     cursor.execute('''SELECT LTRIM(RTRIM([ТипКоэф])),[Подразделение],[АвторСделки],[КварталМотивации],
  SUM(COALESCE([СуммаМотивацииUSDУчетПроцента],0)),SUM(COALESCE([Остаток],0)),
- SUM(COALESCE([СуммаМотивацииUSD],0)) FROM #iteration_report WHERE [Год]=2025
+ SUM(COALESCE([СуммаМотивацииUSD],0))'''+rub_columns+''' FROM #iteration_report WHERE [Год]=2025
  GROUP BY [ТипКоэф],[Подразделение],[АвторСделки],[КварталМотивации]''')
     grouped={}
-    for kind,sub,author,period,paid,bonus,possible in cursor.fetchall():
+    for values in cursor.fetchall():
+        kind,sub,author,period,paid,bonus,possible=values[:7]
         if kind not in ('Политики','Продажи'):continue
         sub=branch(sub);author=str(author or '') if kind=='Политики' else ''
         row=grouped.setdefault((sub,kind,author),empty_row('actual_2025',2025,sub,kind,author))
-        if str(period).strip().casefold()=='год':row['annual_paid']+=number(paid or 0)
-        else:
-            q=int(str(period).strip()[0]);row['quarters'][q-1]+=number(paid or 0);row['possible'][q-1]+=number(possible or 0)
-        row['bonus']+=number(bonus or 0)
+        if dual and 'rub' not in row:row['rub']=empty_row('actual_2025',2025,sub,kind,author)
+        def add(target,paid,bonus,possible):
+            if str(period).strip().casefold()=='год':target['annual_paid']+=number(paid or 0)
+            else:
+                q=int(str(period).strip()[0]);target['quarters'][q-1]+=number(paid or 0);target['possible'][q-1]+=number(possible or 0)
+            target['bonus']+=number(bonus or 0)
+        add(row,paid,bonus,possible)
+        if dual:add(row['rub'],*values[7:10])
     from .recalculation_2025_plan import ELIGIBLE
     from .subdivision_scope import resolve_scope_sql
+    rub_columns=',SUM(CASE WHEN [AmountRURMotive]>0 THEN [AmountRURMotive] ELSE 0 END)' if dual else ''
     cursor.execute('''SELECT LTRIM(RTRIM([ТипКоэф])),[Подразделение],[АвторСделки],[Квартал],
- SUM(CASE WHEN [СуммаМотивацииUSD]>0 THEN [СуммаМотивацииUSD] ELSE 0 END)
+ SUM(CASE WHEN [СуммаМотивацииUSD]>0 THEN [СуммаМотивацииUSD] ELSE 0 END)'''+rub_columns+'''
  FROM #iteration_fact WHERE [Год]=2025 AND '''+resolve_scope_sql(ELIGIBLE)+''' GROUP BY [ТипКоэф],[Подразделение],[АвторСделки],[Квартал]''')
-    for kind,sub,author,q,potential in cursor.fetchall():
+    for values in cursor.fetchall():
+        kind,sub,author,q,potential=values[:5]
         author=str(author or '') if kind=='Политики' else '';identity=(branch(sub),kind,author)
-        if identity in grouped:grouped[identity]['annual_quarters'][int(q)-1]+=number(potential or 0)*number(settings['year_share'])/100
+        if identity in grouped:
+            grouped[identity]['annual_quarters'][int(q)-1]+=number(potential or 0)*number(settings['year_share'])/100
+            if dual:grouped[identity]['rub']['annual_quarters'][int(q)-1]+=number(values[5] or 0)*number(settings['year_share'])/100
     for row in grouped.values():
-        row['annual_accrued']=sum(row['annual_quarters'],ZERO)
-        row['total']=sum(row['quarters'],ZERO)+row['annual_paid']+row['bonus']
+        for target in ([row,row['rub']] if dual else [row]):
+            target['annual_accrued']=sum(target['annual_quarters'],ZERO)
+            target['total']=sum(target['quarters'],ZERO)+target['annual_paid']+target['bonus']
+        if dual:
+            from .coefficient_iteration_currency import money
+            row['rub']=money(row['rub'])
     if not grouped:raise ValidationError('Расчёт 2025 не вернул результаты. Нулевой результат не подставлен.')
     cursor.execute('''SELECT r.RunId,r.CompletedAt FROM motivation.PortalPreparedSalesRun r WHERE r.RunId=? AND r.State_=N'completed' ''',used_run)
     ready=cursor.fetchone()
