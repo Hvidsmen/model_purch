@@ -3,7 +3,7 @@
 {% block content %}
 <link rel="stylesheet" href="{% static 'base/user_groups.css' %}?v=projects-20261024">
 <section class="access-groups">
-<header class="access-groups-heading"><div><p class="access-eyebrow">Администрирование · Доступ к отчётам</p><h1>Группы пользователей</h1><p>Независимые права в Мотивации, Модели закупок и Дашбордах.</p></div><a class="access-button access-secondary" href="{% url 'portal_users' %}{{ project_query }}">Пользователи и роли</a></header>
+<header class="access-groups-heading"><div><p class="access-eyebrow">Администрирование · Доступ к отчётам</p><h1>Группы пользователей</h1><p>Независимые права по проектам портала.</p></div><a class="access-button access-secondary" href="{% url 'portal_users' %}{{ project_query }}">Пользователи и роли</a></header>
 {% include 'base/_project_catalog_tabs.html' %}
 {% for message in messages %}<p class="access-notice {{ message.tags }}" role="status">{{ message }}</p>{% endfor %}
 <div class="access-group-layout">
@@ -13,10 +13,10 @@
 <section class="access-panel access-editor"><header class="access-panel-header"><div><p class="access-eyebrow">{% if editing %}Настройка доступа{% else %}Новая группа{% endif %}</p><h2>{% if editing %}{{ editing.name }}{% else %}Соберите группу{% endif %}</h2></div></header>
 <form method="post" id="access-group-form">{% csrf_token %}{% if editing %}<input type="hidden" name="group" value="{{ editing.pk }}">{% endif %}{{ form.non_field_errors }}
 <label class="access-field">{{ form.name.label }}{{ form.name }}{{ form.name.errors }}</label>
-<fieldset class="project-access-fields"><legend>Права по проектам</legend><label class="access-field">{{ form.motivation_role.label }}{{ form.motivation_role }}{{ form.motivation_role.errors }}</label><label class="access-field">{{ form.purchases_role.label }}{{ form.purchases_role }}{{ form.purchases_role.errors }}</label><label class="access-field">{{ form.dashboards_role.label }}{{ form.dashboards_role }}{{ form.dashboards_role.errors }}</label></fieldset><details class="access-legacy-role"><summary>Прежняя общая роль (совместимость)</summary><label class="access-field">{{ form.portal_role.label }}{{ form.portal_role }}{{ form.portal_role.errors }}</label></details>
+<fieldset class="project-access-fields"><legend>Права по проектам</legend>{% for field in form.project_role_fields %}<label class="access-field">{{ field.label }}{{ field }}{{ field.errors }}</label>{% endfor %}</fieldset><details class="access-legacy-role"><summary>Прежняя общая роль (совместимость)</summary><label class="access-field">{{ form.portal_role.label }}{{ form.portal_role }}{{ form.portal_role.errors }}</label></details>
 {% include 'base/_group_multi.html' with field=form.subdivisions hint='Для политиков, продаж, заместителей и директоров выберите подразделения.' %}
 {% include 'base/_group_multi.html' with field=form.members hint='Участников можно добавить сейчас или позже.' %}
-<p class="access-explanation">Участники наследуют роль отдельно в каждом проекте. Персональное назначение пользователя имеет приоритет. Политик и Продажи видят свои сделки. Зам. директора видит всех политиков выбранных подразделений. Директор видит все данные выбранных филиалов. Администратор, Генеральный директор и Логист имеют тот же доступ, что и при назначении роли пользователю. Подразделения не ограничивают доступ этих трёх ролей.</p>
+<p class="access-explanation">Участники наследуют роль отдельно в каждом проекте. Персональное назначение пользователя имеет приоритет. Политик и Продажи видят свои сделки. Зам. директора видит всех политиков выбранных подразделений. Директор видит все данные выбранных филиалов. Администратор, Генеральный директор и Логист имеют тот же доступ, что и при назначении роли пользователю. Подразделения не ограничивают доступ этих трёх ролей. В «Мониторинге сплитов» роль действует на всё приложение; подразделения не ограничивают этот доступ.</p>
 <div class="access-form-footer admin-access-sticky"><button type="submit" class="access-button">{% if editing %}Сохранить изменения{% else %}Создать группу{% endif %}</button>{% if editing %}<a href="{% url 'portal_user_groups' %}{{ project_query }}">Отмена</a>{% endif %}</div>
 </form></section>
 </div></section><script src="{% static 'base/user_groups.js' %}?v=20261021-auto-author" defer></script>

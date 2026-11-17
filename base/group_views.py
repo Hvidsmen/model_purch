@@ -50,6 +50,10 @@ class ReportGroupForm(forms.Form):
                 canonical = {branch.merged_into_id or branch.pk for branch in scope.subdivisions.select_related('merged_into')}
                 self.initial['subdivisions'] = canonical
 
+    @property
+    def project_role_fields(self):
+        return [field for field in self if field.field.widget.attrs.get('data-project-role')]
+
     def clean_name(self):
         name = self.cleaned_data['name'].strip()
         duplicate = Group.objects.filter(name__iexact=name)
