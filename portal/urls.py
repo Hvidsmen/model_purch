@@ -21,10 +21,12 @@ from django.contrib.auth.views import LoginView, LogoutView
 
 from django.urls import include, path
 from django.conf import settings
+from base import split_monitoring_update_views
 from django.conf.urls.static import static
 
 urlpatterns = ([
                    path('split-monitoring/', split_monitoring_views.application, name='split_monitoring_index'),
+                   path('split-monitoring/updates/', split_monitoring_update_views.updates, name='split_monitoring_updates'),
                    path('split-monitoring/<path:path>', split_monitoring_views.application, name='split_monitoring_asset'),
                    path('card-api/<path:path>', split_monitoring_views.api, name='split_monitoring_api'),
                    path('sales-planning/', sales_planning.index, name='sales_planning_index'),

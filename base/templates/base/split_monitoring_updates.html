@@ -1,0 +1,29 @@
+{% extends 'base/base.html' %}
+{% load static %}
+{% block title %}Обновление мониторинга · DA портал{% endblock %}
+{% block project_name %}Мониторинг сплитов{% endblock %}
+{% block content %}
+<section class="portal-welcome">
+<h1>Обновление мониторинга сплитов</h1>
+<p>Источник: <a href="https://github.com/bse-sb/Split-monitoring" target="_blank" rel="noopener">bse-sb/Split-monitoring</a>, ветка <strong>main</strong>.</p>
+<p>Обновляется только приложение мониторинга. Рабочие снимки сохраняются. Перед переключением новая версия проверяется на копии данных.</p>
+<p>Установленный коммит: <code>{{ installed_commit|default:'версия из приватного ZIP' }}</code></p>
+{% if update_error %}<p role="alert">{{ update_error }}</p>{% endif %}
+<form method="post">{% csrf_token %}<button type="submit" class="btn btn-primary" id="monitor-update-start">Обновить из GitHub</button></form>
+{% if update_job %}
+<div id="monitor-update" data-run="{{ update_job.id }}" data-state="{{ update_job.state }}" style="margin-top:1rem">
+<h2 id="monitor-update-stage">{{ update_job.stage }}</h2>
+<p id="monitor-update-state">{{ update_job.state }}</p>
+<progress id="monitor-update-progress" max="5" value="{{ update_job.steps|length }}" style="width:100%"></progress>
+<p id="monitor-update-time"></p>
+<ol id="monitor-update-steps">{% for step in update_job.steps %}<li>{{ step.label }}</li>{% endfor %}</ol>
+<p id="monitor-update-message" role="status">{{ update_job.message }}</p>
+<p>Коммит: <code id="monitor-update-commit">{{ update_job.target_commit|default:'определяется' }}</code></p>
+</div>
+{{ update_job|json_script:'monitor-update-initial' }}
+<script src="{% static 'base/split_monitoring_updates.js' %}" defer></script>
+{% endif %}
+<p><a href="{% url 'split_monitoring_index' %}" target="_blank" rel="noopener">Открыть мониторинг →</a></p>
+<p>Для приватного репозитория Git на сервере должен иметь доступ от учётной записи, под которой работает портал. Если изменился интерфейс, в репозитории нужна совместимая сборка <code>app/dist</code>. При ошибке проверки работающая версия сохраняется.</p>
+</section>
+{% endblock %}

@@ -5,6 +5,8 @@ from pathlib import Path
 import socket
 from tempfile import TemporaryDirectory
 from unittest import skipUnless
+from unittest.mock import patch
+from scripts.split_monitoring_update import write
 from django.contrib.auth.models import User
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
 from django.test import override_settings
@@ -36,6 +38,7 @@ class SplitMonitoringBrowserTests(StaticLiveServerTestCase):
                     app.wait_for_url('**/split-monitoring/')
                     expect(app.locator('.lc-page')).to_be_visible(timeout=45000)
                     expect(app.get_by_role('button',name='Обновить из базы')).to_be_visible()
+                    expect(app.get_by_role('button',name='Обновить из GitHub')).to_be_visible()
                     expect(app.locator('.lc-matrix').first).to_be_visible(timeout=45000)
                     self.assertEqual(app.request.get(self.live_server_url+'/card-api/meta').status,200)
                     anon=browser.new_context()
@@ -49,6 +52,17 @@ class SplitMonitoringBrowserTests(StaticLiveServerTestCase):
                     expect(app.locator('.lc-workspace')).to_have_attribute('aria-busy','false')
                     Path('/workspace/output').mkdir(exist_ok=True)
                     app.screenshot(path='/workspace/output/split-monitoring-integrated.png',full_page=True)
+                    self.assertEqual(errors,[])
+                    job={'id':'e'*32,'actor':user.pk,'state':'completed','stage':'Готово','message':'Мониторинг обновлён.',
+                         'started_at':'2026-11-17T10:00:00+00:00','finished_at':'2026-11-17T10:00:04+00:00','steps':[],'target_commit':'f'*40}
+                    write(config.parent/'updates'/job['id']/'status.json',job)
+                    with patch('base.split_monitoring_update_views.start',return_value=job) as update:
+                        app.get_by_role('button',name='Обновить из GitHub').click()
+                        expect(app.get_by_role('heading',name='Обновление мониторинга сплитов')).to_be_visible()
+                        expect(app.locator('#monitor-update-message')).to_have_text('Мониторинг обновлён.')
+                        expect(app.locator('#monitor-update-state')).to_have_text('Завершено')
+                        update.assert_called_once_with(config,user.pk)
+                    app.screenshot(path='/workspace/output/split-monitoring-updates.png',full_page=True)
                     self.assertEqual(errors,[])
                 finally:
                     context.close();browser.close();stop(config)
