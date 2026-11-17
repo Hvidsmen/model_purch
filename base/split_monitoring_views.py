@@ -3,6 +3,11 @@ import http.client
 import json
 import logging
 import re
+from html.parser import HTMLParser
+from pathlib import Path
+from django.middleware.csrf import get_token
+from django.urls import reverse
+from django.utils.html import format_html
 from urllib.parse import quote
 from django.conf import settings
 from django.http import HttpResponse,JsonResponse,Http404
@@ -10,13 +15,48 @@ from django.shortcuts import render
 from django.utils.cache import patch_vary_headers
 from django.views.decorators.csrf import csrf_exempt
 from .access import role_for,ADMIN
-from scripts.split_monitoring_runtime import ensure_running,Unavailable
+from scripts.split_monitoring_runtime import ensure_running,Unavailable,lock
 
 logger=logging.getLogger(__name__)
 MAX_RESPONSE=32*1024*1024
 
 
 def forward(request,path):
+    if path=='/card-api/refresh':
+        try:
+            with lock(Path(settings.SPLIT_MONITORING_CONFIG).resolve().parent/'refresh.lock'):
+                return _forward(request,path)
+        except OSError:
+            return JsonResponse({'error':'Мониторинг обновляется. Повторите запрос позже.'},status=409)
+    return _forward(request,path)
+
+
+class _BodyFound(Exception):pass
+
+
+class _BodyParser(HTMLParser):
+    def handle_starttag(self,tag,attrs):
+        if tag=='body':
+            self.position=self.getpos();self.tag=self.get_starttag_text()
+            raise _BodyFound()
+
+
+def admin_toolbar(request,body):
+    if role_for(request.user,'split_monitoring')!=ADMIN or getattr(request,'portal_preview_user',None):return body
+    text=body.decode('utf-8');parser=_BodyParser()
+    try:parser.feed(text)
+    except _BodyFound:pass
+    else:return body
+    line,column=parser.position
+    offset=sum(len(part) for part in text.splitlines(keepends=True)[:line-1])+column+len(parser.tag)
+    toolbar=format_html('<nav aria-label="Администрирование мониторинга" style="display:flex;gap:16px;align-items:center;padding:10px 20px;border-bottom:1px solid #ddd;background:#fff;font:14px Arial;color:#222">'
+        '<a href="{}">DA портал</a><form action="{}" method="post" style="margin:0"><input type="hidden" name="csrfmiddlewaretoken" value="{}">'
+        '<button type="submit">Обновить из GitHub</button></form><a href="{}">Статус обновления</a></nav>',
+        reverse('index_base'),reverse('split_monitoring_updates'),get_token(request),reverse('split_monitoring_updates'))
+    return (text[:offset]+str(toolbar)+text[offset:]).encode('utf-8')
+
+
+def _forward(request,path):
     try:
         config=ensure_running(settings.SPLIT_MONITORING_CONFIG)
         conn=http.client.HTTPConnection('127.0.0.1',config['port'],timeout=120 if path=='/card-api/refresh' else 30)
@@ -29,6 +69,10 @@ def forward(request,path):
             response=HttpResponse(body,status=upstream.status,content_type=upstream.getheader('Content-Type','application/octet-stream'))
             for header in ('Content-Length','Content-Disposition','ETag','Last-Modified'):
                 if upstream.getheader(header) is not None:response[header]=upstream.getheader(header)
+            if path in ('/','/index.html') and request.method=='GET' and upstream.status==200 and 'text/html' in response.get('Content-Type',''):
+                response.content=admin_toolbar(request,body)
+                response['Content-Length']=str(len(response.content))
+                if response.content!=body and response.has_header('ETag'):del response['ETag']
             response['Cache-Control']='private, no-store';response['X-Content-Type-Options']='nosniff'
             patch_vary_headers(response,('Cookie',))
             return response

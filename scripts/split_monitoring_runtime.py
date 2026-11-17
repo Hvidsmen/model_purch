@@ -72,6 +72,16 @@ def health(config):
 def ensure_running(config_path=DEFAULT_CONFIG):
     config=read_config(config_path)
     if health(config):return config
+    try:
+        with lock(Path(config_path).resolve().parent/'activation.lock'):
+            return _ensure_running(config_path)
+    except OSError as exc:
+        raise Unavailable('Мониторинг обновляется. Повторите открытие через несколько секунд.') from exc
+
+
+def _ensure_running(config_path=DEFAULT_CONFIG):
+    config=read_config(config_path)
+    if health(config):return config
     home=Path(config_path).resolve().parent
     deadline=time.monotonic()+10
     while True:
@@ -80,13 +90,19 @@ def ensure_running(config_path=DEFAULT_CONFIG):
                 config=read_config(config_path)
                 if health(config):return config
                 log=(home/'backend.log').open('ab')
-                args=[sys.executable,str(Path(__file__).resolve()),'serve','--config',str(Path(config_path).resolve())]
+                args=[config.get('python_executable',sys.executable),str(Path(__file__).resolve()),'serve','--config',str(Path(config_path).resolve())]
                 options={'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {'start_new_session':True}
-                try:subprocess.Popen(args,cwd=config['app_dir'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,**options)
+                try:child=subprocess.Popen(args,cwd=config['app_dir'],stdin=subprocess.DEVNULL,stdout=log,stderr=log,**options)
                 finally:log.close()
                 while time.monotonic()<deadline:
                     if health(config):return config
                     time.sleep(.15)
+                # Only terminate the child just launched here. Otherwise a slow
+                # failed candidate could bind the port after rollback started.
+                if child.poll() is None:
+                    child.terminate()
+                    try:child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:child.kill();child.wait(timeout=5)
                 raise Unavailable('Мониторинг не запустился. Подробности в локальном журнале backend.log.')
         except OSError as exc:
             if time.monotonic()>=deadline:raise Unavailable('Мониторинг запускается другим процессом. Повторите открытие.') from exc
@@ -95,7 +111,7 @@ def ensure_running(config_path=DEFAULT_CONFIG):
 
 def install(package,origins,*,config_path=DEFAULT_CONFIG,port=8767):
     home=Path(config_path).resolve().parent
-    with lock(home/'launch.lock'):
+    with lock(home/'activation.lock'),lock(home/'launch.lock'):
         return _install(package,origins,config_path=config_path,port=port)
 
 

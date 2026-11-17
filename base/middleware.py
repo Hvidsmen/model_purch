@@ -16,7 +16,7 @@ class PortalAccessMiddleware:
         module = view_func.__module__
         match = request.resolver_match
         project = None
-        if module=='base.split_monitoring_views':
+        if module in ('base.split_monitoring_views','base.split_monitoring_update_views'):
             project='split_monitoring'
         elif module.startswith('model_purch.'):
             project = 'purchases'
