@@ -63,4 +63,4 @@ def overview(scenario,evaluated=None):
     channels=[{'id':cid,'name':channel['name'],'planned':complete_sum(
         next((item['planned'] for item in row['channels'] if item['id']==cid),None) for row in rows)}
         for cid,channel in scenario.state['channels'].items()]
-    return {'groups':rows,'totals':totals,'channels':channels,'expanded_colspan':18+len(channels)}
+    return {'groups':rows,'totals':totals,'channels':channels,'expanded_colspan':17+len(channels)}
