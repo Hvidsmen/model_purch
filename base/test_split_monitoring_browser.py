@@ -8,8 +8,11 @@ from unittest import skipUnless
 from unittest.mock import patch
 from scripts.split_monitoring_update import write
 from django.contrib.auth.models import User
+from base.models import UserProjectAccess
+from base.access import ADMIN
+from base.preview import SESSION_KEY
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
-from django.test import override_settings
+from django.test import override_settings,Client
 from django.urls import reverse
 from scripts.split_monitoring_runtime import install,stop
 
@@ -24,19 +27,33 @@ class SplitMonitoringBrowserTests(StaticLiveServerTestCase):
             installed=install(os.environ['SPLIT_MONITORING_TEST_PACKAGE'],[self.live_server_url],config_path=config,port=port)
             user=User.objects.create_superuser('split-browser-admin')
             self.client.force_login(user)
+            global_session=self.client.cookies['sessionid'].value
+            project_admin=User.objects.create_user('monitor-project-admin')
+            UserProjectAccess.objects.create(user=project_admin,project='split_monitoring',role=ADMIN)
+            project_client=Client();project_client.force_login(project_admin)
+            project_session=project_client.cookies['sessionid'].value
+            preview_client=Client();preview_client.force_login(user)
+            preview_session=preview_client.session
+            preview_session[SESSION_KEY]={'actor':str(user.pk),'target':str(project_admin.pk)}
+            preview_session.save()
+            preview_cookie=preview_client.cookies['sessionid'].value
             with override_settings(SPLIT_MONITORING_CONFIG=config),sync_playwright() as driver:
                 browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
                 context=browser.new_context(viewport={'width':1440,'height':1000})
-                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                context.add_cookies([{'name':'sessionid','value':global_session,'url':self.live_server_url}])
                 page=context.new_page();errors=[];page.on('pageerror',lambda exc:errors.append(str(exc)))
                 try:
                     page.goto(self.live_server_url+reverse('index_base'))
                     links=page.locator('.portal-projects a');expect(links).to_have_count(5)
+                    context.add_cookies([{'name':'sessionid','value':project_session,'url':self.live_server_url}])
                     with page.expect_popup() as popup:
                         page.locator('.portal-projects').get_by_role('link',name='Мониторинг сплитов').click()
                     app=popup.value;app.on('pageerror',lambda exc:errors.append(str(exc)))
                     app.wait_for_url('**/split-monitoring/')
+                    app.goto(self.live_server_url+'/split-monitoring/?view=1&tab=dashboard')
                     expect(app.locator('.lc-page')).to_be_visible(timeout=45000)
+                    Path('/workspace/output').mkdir(exist_ok=True)
+                    app.screenshot(path='/workspace/output/monitor-project-admin-toolbar.png')
                     expect(app.get_by_role('button',name='Обновить из базы')).to_be_visible()
                     expect(app.get_by_role('button',name='Обновить из GitHub')).to_be_visible()
                     expect(app.locator('.lc-matrix').first).to_be_visible(timeout=45000)
@@ -61,7 +78,7 @@ class SplitMonitoringBrowserTests(StaticLiveServerTestCase):
                         expect(app.get_by_role('heading',name='Обновление мониторинга сплитов')).to_be_visible()
                         expect(app.locator('#monitor-update-message')).to_have_text('Мониторинг обновлён.')
                         expect(app.locator('#monitor-update-state')).to_have_text('Завершено')
-                        update.assert_called_once_with(config,user.pk)
+                        update.assert_called_once_with(config,project_admin.pk)
                     # A portal administrator can deliver the private package
                     # through the browser without a shell or Git credentials.
                     app.locator('#id_package').set_input_files(os.environ['SPLIT_MONITORING_TEST_PACKAGE'])
@@ -76,5 +93,11 @@ class SplitMonitoringBrowserTests(StaticLiveServerTestCase):
                         self.assertGreater(captured[0],0)
                     app.screenshot(path='/workspace/output/split-monitoring-updates.png',full_page=True)
                     self.assertEqual(errors,[])
+                    context.add_cookies([{'name':'sessionid','value':preview_cookie,'url':self.live_server_url}])
+                    app.goto(self.live_server_url+'/split-monitoring/?view=1&tab=dashboard')
+                    expect(app.get_by_role('navigation',name='Режим просмотра сотрудника')).to_be_visible()
+                    expect(app.get_by_role('navigation',name='Режим просмотра сотрудника')).to_contain_text('Обновление мониторинга в этом режиме запрещено')
+                    expect(app.get_by_role('button',name='Обновить из GitHub')).to_have_count(0)
+                    self.assertEqual(app.request.post(self.live_server_url+reverse('split_monitoring_updates'),data={'source':'git'}).status,403)
                 finally:
                     context.close();browser.close();stop(config)

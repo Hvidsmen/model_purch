@@ -42,17 +42,26 @@ class _BodyParser(HTMLParser):
 
 
 def admin_toolbar(request,body):
-    if role_for(request.user,'split_monitoring')!=ADMIN or getattr(request,'portal_preview_user',None):return body
+    preview=getattr(request,'portal_preview_user',None)
+    if role_for(request.user,'split_monitoring')!=ADMIN and not preview:return body
     text=body.decode('utf-8');parser=_BodyParser()
     try:parser.feed(text)
     except _BodyFound:pass
     else:return body
     line,column=parser.position
-    offset=sum(len(part) for part in text.splitlines(keepends=True)[:line-1])+column+len(parser.tag)
-    toolbar=format_html('<nav aria-label="Администрирование мониторинга" style="display:flex;gap:16px;align-items:center;padding:10px 20px;border-bottom:1px solid #ddd;background:#fff;font:14px Arial;color:#222">'
-        '<a href="{}">DA портал</a><form action="{}" method="post" style="margin:0"><input type="hidden" name="csrfmiddlewaretoken" value="{}">'
-        '<button type="submit">Обновить из GitHub</button></form><a href="{}">Установить ZIP / статус обновления</a></nav>',
-        reverse('index_base'),reverse('split_monitoring_updates'),get_token(request),reverse('split_monitoring_updates'))
+    # HTMLParser counts LF lines, while str.splitlines also splits U+2028
+    # inside compiled JavaScript. Keep insertion outside the verified scripts.
+    offset=sum(len(part)+1 for part in text.split('\n')[:line-1])+column+len(parser.tag)
+    if preview:
+        toolbar=format_html('<nav aria-label="Режим просмотра сотрудника" style="padding:12px 20px;border-bottom:1px solid #ddd;background:#fff7da;font:14px Arial;color:#222">'
+            '<strong>Просмотр как {}</strong>. Обновление мониторинга в этом режиме запрещено. '
+            'Для обновления сотрудник должен войти под своей учётной записью. '
+            '<a href="{}">Вернуться в портал</a></nav>',request.user.get_username(),reverse('index_base'))
+    else:
+        toolbar=format_html('<nav aria-label="Администрирование мониторинга" style="display:flex;gap:16px;align-items:center;padding:10px 20px;border-bottom:1px solid #ddd;background:#fff;font:14px Arial;color:#222">'
+            '<a href="{}">DA портал</a><form action="{}" method="post" style="margin:0"><input type="hidden" name="csrfmiddlewaretoken" value="{}">'
+            '<button type="submit">Обновить из GitHub</button></form><a href="{}">Установить ZIP / статус обновления</a></nav>',
+            reverse('index_base'),reverse('split_monitoring_updates'),get_token(request),reverse('split_monitoring_updates'))
     return (text[:offset]+str(toolbar)+text[offset:]).encode('utf-8')
 
 
