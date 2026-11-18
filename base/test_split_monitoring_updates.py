@@ -75,3 +75,27 @@ class MonitoringUpdateAccessTests(TestCase):
             response=_forward(request,'/')
         self.assertEqual(int(response['Content-Length']),len(response.content));self.assertNotIn('ETag',response)
         self.assertIn('Обновить из GitHub'.encode(),response.content)
+
+    def test_admin_upload_dispatches_file_and_checksum_with_csrf(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        self.grant(ADMIN);client=Client(enforce_csrf_checks=True);client.force_login(self.user)
+        page=client.get(self.url);self.assertContains(page,'Проверить и установить ZIP')
+        checksum='a'*64
+        captured=[]
+        def dispatch(*args,**kwargs):
+            captured.append(kwargs['uploaded_file'].read());return {'id':'f'*32}
+        with patch('base.split_monitoring_update_views.start',side_effect=dispatch) as worker:
+            response=client.post(self.url,{'source':'package','package':SimpleUploadedFile('private.zip',b'package'),'sha256':checksum,'csrfmiddlewaretoken':client.cookies['csrftoken'].value})
+        self.assertEqual(response.status_code,302)
+        self.assertEqual(worker.call_args.kwargs['expected_sha256'],checksum)
+        self.assertEqual(captured,[b'package'])
+
+    def test_upload_denies_analyst_and_rejects_invalid_files(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        with patch('base.split_monitoring_update_views.start') as worker:
+            self.grant(ANALYST)
+            self.assertEqual(self.client.post(self.url,{'source':'package','package':SimpleUploadedFile('private.zip',b'package')}).status_code,403)
+            self.grant(ADMIN)
+            self.assertEqual(self.client.post(self.url,{'source':'package'}).status_code,400)
+            self.assertEqual(self.client.post(self.url,{'source':'package','package':SimpleUploadedFile('wrong.txt',b'package')}).status_code,400)
+            worker.assert_not_called()

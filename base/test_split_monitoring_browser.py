@@ -62,6 +62,18 @@ class SplitMonitoringBrowserTests(StaticLiveServerTestCase):
                         expect(app.locator('#monitor-update-message')).to_have_text('Мониторинг обновлён.')
                         expect(app.locator('#monitor-update-state')).to_have_text('Завершено')
                         update.assert_called_once_with(config,user.pk)
+                    # A portal administrator can deliver the private package
+                    # through the browser without a shell or Git credentials.
+                    app.locator('#id_package').set_input_files(os.environ['SPLIT_MONITORING_TEST_PACKAGE'])
+                    captured=[]
+                    def accept_package(*args,**kwargs):
+                        captured.append(kwargs['uploaded_file'].size)
+                        return job
+                    with patch('base.split_monitoring_update_views.start',side_effect=accept_package) as package_update:
+                        app.get_by_role('button',name='Проверить и установить ZIP').click()
+                        expect(app.locator('#monitor-update-state')).to_have_text('Завершено')
+                        self.assertEqual(package_update.call_count,1)
+                        self.assertGreater(captured[0],0)
                     app.screenshot(path='/workspace/output/split-monitoring-updates.png',full_page=True)
                     self.assertEqual(errors,[])
                 finally:

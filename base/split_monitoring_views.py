@@ -51,7 +51,7 @@ def admin_toolbar(request,body):
     offset=sum(len(part) for part in text.splitlines(keepends=True)[:line-1])+column+len(parser.tag)
     toolbar=format_html('<nav aria-label="Администрирование мониторинга" style="display:flex;gap:16px;align-items:center;padding:10px 20px;border-bottom:1px solid #ddd;background:#fff;font:14px Arial;color:#222">'
         '<a href="{}">DA портал</a><form action="{}" method="post" style="margin:0"><input type="hidden" name="csrfmiddlewaretoken" value="{}">'
-        '<button type="submit">Обновить из GitHub</button></form><a href="{}">Статус обновления</a></nav>',
+        '<button type="submit">Обновить из GitHub</button></form><a href="{}">Установить ZIP / статус обновления</a></nav>',
         reverse('index_base'),reverse('split_monitoring_updates'),get_token(request),reverse('split_monitoring_updates'))
     return (text[:offset]+str(toolbar)+text[offset:]).encode('utf-8')
 
