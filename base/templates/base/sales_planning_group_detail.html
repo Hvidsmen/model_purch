@@ -1,7 +1,7 @@
 {% extends 'base/portal_shell.html' %}
 {% block title %}{{ group.name }} · Группа планирования{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
-{% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='directories' %}{% endblock %}
+{% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='groups' %}{% endblock %}
 {% block content %}<section class="portal-welcome"><p><a href="{% url 'sales_planning_groups' %}">← Группы планирования</a></p><h1>{{ group.name }}</h1>
 {% if not group.is_active %}<p role="status">Группа неактивна. Моделей в текущей номенклатуре нет; ручные настройки сохранены.</p>{% endif %}
 {% for message in messages %}<p role="status">{{ message }}</p>{% endfor %}{% if error %}<p role="alert" class="alert alert-danger">{{ error }}</p>{% endif %}

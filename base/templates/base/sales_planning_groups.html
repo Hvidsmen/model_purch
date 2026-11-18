@@ -1,7 +1,7 @@
 {% extends 'base/portal_shell.html' %}{% load tz static %}
 {% block title %}Группы планирования · Split{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
-{% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='directories' %}{% endblock %}
+{% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='groups' %}{% endblock %}
 {% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_group_filters.css' %}?v=20261108">{% endblock %}
 {% block module_js %}{{ block.super }}<script src="{% static 'base/split_group_filters.js' %}?v=20261108" defer></script>{% endblock %}
 {% block content %}<section class="portal-welcome">
