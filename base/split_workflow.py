@@ -131,6 +131,12 @@ def changed_state(scenario, post, *, allow_empty=False):
     state = deepcopy(scenario.state)
     action = post.get('action')
     member_action, _, target = (action or '').partition(':')
+    if member_action == 'group_plan':
+        from .split_group_plan import distribute
+        inputs = post.copy()
+        inputs['action'] = 'lines'
+        state = changed_state(scenario, inputs)
+        return distribute(scenario, state, target, post.get('group_plan_' + target))
     if member_action in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups'):
         if scenario.status != 'draft':
             raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')

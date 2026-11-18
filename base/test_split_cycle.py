@@ -346,3 +346,120 @@ class SplitCycleTests(TestCase):
             sold = sum(row['quantity'] for row in result['shipments'] if row['power'] == stock['power'] and row['kind'] == 'indoor')
             self.assertEqual(stock['quantity'], sold)
 
+
+
+class GroupPlanDistributionTests(TestCase):
+    setUp = SplitCycleTests.setUp
+    complete = SplitCycleTests.complete
+
+    def plan_post(self, total):
+        self.complete()
+        gid, group = next(iter(self.scenario.state['groups'].items()))
+        post = {'action': 'group_plan:' + gid, 'group_plan_' + gid: total,
+                'revision': self.scenario.revision, 'ddp_' + gid: group['ddp']}
+        for cid, line in group['channels'].items():
+            for field, prefix in [('input','q'), ('fact','fact'), ('markup','markup')]:
+                post[prefix + '_' + gid + '_' + cid] = line[field]
+        return gid, group, post
+
+    def test_group_total_scales_saved_channel_weights_preserving_distribution(self):
+        gid, old, post = self.plan_post('90')
+        first = next(iter(old['channels']))
+        post['q_' + gid + '_' + first] = '999'  # Basis is the saved plan.
+        state = changed_state(self.scenario, post)
+        self.assertEqual([number(x['input']) for x in state['groups'][gid]['channels'].values()], [30,60])
+        self.assertEqual(state['groups'][gid]['powers'], old['powers'])
+        for cid, line in old['channels'].items():
+            self.assertEqual(state['groups'][gid]['channels'][cid]['months'], line['months'])
+
+    def test_locked_channel_and_exact_rounding(self):
+        gid, old, post = self.plan_post('10.000001')
+        first = next(iter(old['channels']))
+        post['lockq_' + gid + '_' + first] = 'on'
+        state = changed_state(self.scenario, post)
+        self.assertEqual([number(x['input']) for x in state['groups'][gid]['channels'].values()], [10,Decimal('.000001')])
+        post['group_plan_' + gid] = '9'
+        with self.assertRaises(ValidationError):
+            changed_state(self.scenario, post)
+        self.assertEqual(self.scenario.state['groups'][gid], old)
+
+    def test_missing_weights_rejected_but_explicit_zero_allowed(self):
+        gid, old, post = self.plan_post('1')
+        for cid, line in old['channels'].items():
+            line['input'] = '0'
+            post['q_' + gid + '_' + cid] = '0'
+        with self.assertRaisesMessage(ValidationError, 'Нет сохранённых пропорций'):
+            changed_state(self.scenario, post)
+        post['group_plan_' + gid] = '0'
+        self.assertTrue(all(number(x['input']) == 0 for x in changed_state(self.scenario, post)['groups'][gid]['channels'].values()))
+
+    def test_annual_target_adds_actual_to_allocated_period_plan(self):
+        gid, old, post = self.plan_post('60')
+        self.scenario.state['volume_mode'] = 'annual'
+        for cid, line in old['channels'].items():
+            line['fact'] = '5'
+            line['input'] = str(number(line['input']) + 5)
+            post['fact_' + gid + '_' + cid] = '5'
+            post['q_' + gid + '_' + cid] = line['input']
+        state = changed_state(self.scenario, post)
+        self.assertEqual([number(x['input']) for x in state['groups'][gid]['channels'].values()], [25,45])
+
+    def test_absolute_months_rescale_and_conserve_total(self):
+        gid, old, post = self.plan_post('90')
+        months = planning_months(self.scenario)
+        for line in old['channels'].values():
+            line['allocation'] = 'quantity'
+            line['month_quantities'] = dict(zip(months, map(str, allocate(number(line['input']), [number(1)] * len(months)))))
+        state = changed_state(self.scenario, post)
+        for line in state['groups'][gid]['channels'].values():
+            self.assertEqual(sum(map(number, line['month_quantities'].values())), number(line['input']))
+        self.scenario.state = state
+        self.assertEqual(evaluate(self.scenario)['errors'], [])
+
+    def test_zero_channel_receives_nothing_and_other_group_inputs_are_saved(self):
+        gid, old, post = self.plan_post('17.000001')
+        zero_cid = next(iter(old['channels']))
+        old['channels'][zero_cid]['input'] = '0'
+        post['q_' + gid + '_' + zero_cid] = '0'
+        self.scenario.state['groups']['other'] = deepcopy(old)
+        post['ddp_other'] = '150'
+        for cid, line in old['channels'].items():
+            for field, prefix in [('input', 'q'), ('fact', 'fact'), ('markup', 'markup')]:
+                post[prefix + '_other_' + cid] = line[field]
+        result = changed_state(self.scenario, post)
+        self.assertEqual(number(result['groups'][gid]['channels'][zero_cid]['input']), 0)
+        self.assertEqual(sum(number(x['input']) for x in result['groups'][gid]['channels'].values()), Decimal('17.000001'))
+        self.assertEqual(result['groups']['other']['channels'], old['channels'])
+        self.assertEqual(result['groups']['other']['ddp'], '150')
+
+    def test_all_locked_requires_exact_total_and_blank_total_is_not_zero(self):
+        gid, old, post = self.plan_post('30')
+        for cid in old['channels']:
+            post['lockq_' + gid + '_' + cid] = 'on'
+        result = changed_state(self.scenario, post)
+        self.assertEqual([number(x['input']) for x in result['groups'][gid]['channels'].values()], [10, 20])
+        for invalid in ['31', '', '-1']:
+            post['group_plan_' + gid] = invalid
+            with self.assertRaises(ValidationError):
+                changed_state(self.scenario, post)
+
+    def test_http_save_revision_guard_and_approved_immutability(self):
+        gid, old, post = self.plan_post('90')
+        url = reverse('split_scenario', args=[self.scenario.pk])
+        page = self.client.get(url)
+        self.assertContains(page, 'name="group_plan_' + gid + '"')
+        self.assertContains(page, 'Распределить')
+        self.assertEqual(self.client.post(url, post).status_code, 302)
+        self.scenario.refresh_from_db()
+        self.assertEqual(sum(number(x['input']) for x in self.scenario.state['groups'][gid]['channels'].values()), 90)
+        post['group_plan_' + gid] = '120'
+        self.client.post(url, post)
+        self.scenario.refresh_from_db()
+        self.assertEqual(sum(number(x['input']) for x in self.scenario.state['groups'][gid]['channels'].values()), 90)
+        self.scenario.status = 'approved'
+        self.scenario.save(update_fields=['status'])
+        post['revision'] = self.scenario.revision
+        self.client.post(url, post)
+        self.scenario.refresh_from_db()
+        self.assertEqual(sum(number(x['input']) for x in self.scenario.state['groups'][gid]['channels'].values()), 90)
+
