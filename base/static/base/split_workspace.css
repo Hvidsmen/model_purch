@@ -184,3 +184,12 @@
 .split-plan-matrix .split-history-metrics span{flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px}
 
 .split-plan-matrix [data-plan-opening-component][hidden]{display:none!important}
+.split-hierarchy-tools{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.split-hierarchy-tools small{color:#64748b;font-size:11px}
+.split-plan-matrix [data-plan-parent][hidden]{display:none!important}
+.split-plan-subtotal>th,.split-plan-subtotal>td{background:#eef0fb;font-weight:500;border-top:1px solid #d4d7eb}
+.split-plan-subtotal[data-plan-level="1"]>th,.split-plan-subtotal[data-plan-level="1"]>td{background:#f0f2fa}
+.split-plan-subtotal[data-plan-level="2"]>th,.split-plan-subtotal[data-plan-level="2"]>td{background:#f5f5fc}
+.split-plan-subtotal[data-plan-level="3"]>th,.split-plan-subtotal[data-plan-level="3"]>td{background:#f9f9fd}
+.split-plan-subtotal [data-plan-subtotal-toggle]{display:block;cursor:pointer;white-space:normal}
+.split-plan-subtotal small{font-size:10px;color:#64748b;font-weight:400}

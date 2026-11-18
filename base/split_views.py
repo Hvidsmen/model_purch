@@ -212,6 +212,8 @@ def scenario(request, pk):
     inventory = stock_overview(item, data) if tab in ('plan', 'stock') else None
     from .split_plan_inventory import presentation as inventory_presentation
     plan_inventory = inventory_presentation(inventory) if tab == 'plan' else None
+    from .split_plan_hierarchy import presentation as hierarchy_presentation
+    plan_hierarchy = hierarchy_presentation(item, plan_detail, data, historical, plan_inventory) if tab == 'plan' else []
     plan_lines = {}
     for line in data['lines']:
         plan_lines.setdefault(line['gid'], {})[line['cid']] = line
@@ -265,6 +267,7 @@ def scenario(request, pk):
         'history_total_colspan': 5 + (1 if historical['latest_year'] else 0),
         'matrix_colspan': 11 + len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'plan_inventory': plan_inventory,
+        'plan_hierarchy': plan_hierarchy,
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'stock_overview': inventory if tab == 'stock' else None,
