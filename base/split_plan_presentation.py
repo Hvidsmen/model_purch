@@ -15,15 +15,11 @@ def reference_fields(name, goods):
             'factory': values('manufacturer')}
 
 
-@precise
-def presentation(scenario, evaluated):
+def references(scenario):
     groups = scenario.state['groups']
     keys = {model['key'] for group in groups.values() for power in group['powers'].values()
             for model in power['models']}
     goods = {good.source_key: good for good in SalesPlanningGoods.objects.filter(source_key__in=keys)}
-    shipments = {}
-    for row in evaluated['shipments']:
-        shipments.setdefault((row['group_key'], row['power'], row['channel_id']), []).append(row)
     result = {}
     for gid, group in groups.items():
         models = {model['key'] for power in group['powers'].values() for model in power['models']}
@@ -32,6 +28,20 @@ def presentation(scenario, evaluated):
             reference = {**reference, 'factory': reference_fields(group['ref']['name'], [goods[key] for key in models if key in goods])['factory']}
         if not reference.get('brand'):
             reference = {**reference, 'brand': ', '.join(group['ref'].get('brand', []))}
+        result[gid] = reference
+    return result
+
+
+@precise
+def presentation(scenario, evaluated):
+    groups = scenario.state['groups']
+    reference_by_group = references(scenario)
+    shipments = {}
+    for row in evaluated['shipments']:
+        shipments.setdefault((row['group_key'], row['power'], row['channel_id']), []).append(row)
+    result = {}
+    for gid, group in groups.items():
+        reference = reference_by_group[gid]
         powers = []
         for key, power in group['powers'].items():
             channels = {}
