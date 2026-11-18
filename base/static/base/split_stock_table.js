@@ -5,6 +5,11 @@
   const states = Array.from(document.querySelectorAll('[data-forecast-state]'));
   const controls = attribute => Array.from(table.querySelectorAll(`[${attribute}]`));
   const find = (attribute, id) => controls(attribute).find(node => node.getAttribute(attribute) === id);
+  function syncSpans() {
+    const count = Array.from(table.tHead.rows[0].cells)
+      .filter(cell => !cell.hidden).reduce((sum, cell) => sum + cell.colSpan, 0);
+    table.querySelectorAll('[data-stock-fullspan]').forEach(cell => { cell.colSpan = count; });
+  }
   function choose(id, mode) {
     const state = states.find(node => node.dataset.forecastState === id);
     if (!state) return;
@@ -47,15 +52,26 @@
     if (event.target.value === 'powers') sumIntoGroup(id, 'data-forecast-power');
   });
   table.addEventListener('click', event => {
+    const blockToggle = event.target.closest('[data-stock-band-toggle]');
+    if (blockToggle && table.contains(blockToggle)) {
+      const band = blockToggle.dataset.stockBandToggle;
+      const expanded = blockToggle.getAttribute('aria-expanded') !== 'true';
+      blockToggle.setAttribute('aria-expanded', String(expanded));
+      blockToggle.querySelector('[data-block-arrow]').textContent = expanded ? '▾' : '▸';
+      controls('data-stock-block-band').forEach(cell => {
+        if (cell.dataset.stockBlockBand === band) cell.hidden = !expanded;
+      });
+      find('data-stock-band-heading', band).colSpan = expanded ? 3 : 1;
+      syncSpans();
+      return;
+    }
     const channelToggle = event.target.closest('[data-stock-channel-toggle]');
     if (channelToggle && table.contains(channelToggle)) {
       const expanded = channelToggle.getAttribute('aria-expanded') !== 'true';
       channelToggle.setAttribute('aria-expanded', String(expanded));
       channelToggle.querySelector('[data-channel-arrow]').textContent = expanded ? '▾' : '▸';
       table.querySelectorAll('[data-stock-channel-column]').forEach(cell => { cell.hidden = !expanded; });
-      table.querySelectorAll('[data-stock-fullspan]').forEach(cell => {
-        cell.colSpan = expanded ? Number(cell.dataset.stockFullspan) : 13;
-      });
+      syncSpans();
       return;
     }
     const button = event.target.closest('[data-stock-toggle]');

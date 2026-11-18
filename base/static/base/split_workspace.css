@@ -161,3 +161,5 @@
 
 .split-plan-matrix [data-plan-power-group][hidden]{display:none!important}
 .split-plan-matrix [data-plan-power-group]{background:#fbfaff}
+
+.split-stock-table [data-stock-block-band][hidden]{display:none!important}
