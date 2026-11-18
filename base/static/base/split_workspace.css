@@ -170,3 +170,7 @@
  .split-month-table .split-month-channel-cell{grid-column:1/-1}
  .split-month-channel-cell::before{content:'Канал: ';color:#777}
 }
+
+.split-fact-column .split-history-metrics{grid-template-columns:minmax(110px,1fr);gap:5px}
+.split-fact-column .split-history-metrics span{flex-direction:row;align-items:baseline;justify-content:space-between;gap:12px}
+.split-plan-matrix .split-fact-column{min-width:140px}
