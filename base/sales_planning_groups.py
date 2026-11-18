@@ -20,7 +20,7 @@ class GroupSettingsForm(forms.ModelForm):
         model = SalesPlanningGroup
         fields = ['notes', 'related_groups', 'replacement_groups']
         labels = {'related_groups': 'Связанные группы', 'replacement_groups': 'Замещающие группы'}
-        widgets = {'notes': forms.Textarea(attrs={'rows': 3})}
+        widgets = {'notes': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Краткое примечание к группе'})}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -30,7 +30,7 @@ class GroupSettingsForm(forms.ModelForm):
             allowed = split_groups().filter(Q(is_active=True) | Q(pk__in=selected)).exclude(pk=self.instance.pk)
             self.fields[field].queryset = allowed
             self.preserved_links[field] = list(getattr(self.instance, field).exclude(pk__in=allowed).values_list('pk', flat=True))
-            self.fields[field].help_text = 'Выбор нескольких групп: Ctrl / Cmd. Неактивные сохранённые связи не удаляются при обновлении.'
+            self.fields[field].help_text = 'Добавляйте группы через поиск и фильтры. Сохранённые неактивные связи сохраняются.'
 
     def save(self, commit=True):
         instance = super().save(commit=commit)
@@ -136,7 +136,9 @@ def detail(request, pk):
             return HttpResponseBadRequest('Неизвестное действие.')
     goods = list(group_goods(group))
     powers = power_rows(group, goods)
+    from .sales_planning_link_picker import picker_context
     return render(request, 'base/sales_planning_group_detail.html', {
+        **picker_context(form),
         'group': group, 'summary': group_summaries([group])[0], 'form': form, 'error': error,
         'powers': powers,
         'goods_page': Paginator(goods, 50).get_page(request.GET.get('page')),
