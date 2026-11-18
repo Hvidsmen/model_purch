@@ -262,7 +262,7 @@ def scenario(request, pk):
         'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
-        'stock_overview':stock_overview(item) if tab=='stock' else None,
+        'stock_overview':stock_overview(item,data) if tab=='stock' else None,
         'inventory_focus':request.POST.get('group') or request.GET.get('expand',''),
         'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
         'distribution_overview':distribution_overview,'distribution_edit':distribution_edit,'distribution_filters':distribution_filters,

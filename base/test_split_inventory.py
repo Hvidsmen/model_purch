@@ -183,7 +183,7 @@ class SplitInventoryImportTests(TestCase):
         self.assertEqual([row['group']['ref']['name'] for row in result['groups']],['G','H'])
         self.assertEqual([row['channels'][0]['name'] for row in result['groups']],['Дилерский','Дилерский'])
         response=self.client.get(self.url)
-        self.assertContains(response,'data-inventory-group="other"')
+        self.assertContains(response,'data-stock-group="other"')
         self.assertNotContains(response,'class="split-picker"')
         self.assertEqual(len(response.context['stock_overview']['groups']),2)
 
