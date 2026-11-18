@@ -27,8 +27,8 @@ class SplitScopeTests(TestCase):
             product_group=product, block_type=block, power_class=power, brand=product)
 
     def test_previously_imported_foreign_data_hidden_in_every_directory_without_deletion(self):
-        directories = self.client.get(reverse('sales_planning_directories'))
-        self.assertEqual(directories.context['goods_count'], 2)
+        directories = self.client.get(reverse('sales_planning_goods'))
+        self.assertEqual(directories.context['total_count'], 2)
         self.assertNotContains(directories, 'Commercial only')
         self.assertNotContains(directories, 'Ventilation only')
         groups = self.client.get(reverse('sales_planning_groups'), {'inactive': '1'})
