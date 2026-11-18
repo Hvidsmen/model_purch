@@ -62,7 +62,12 @@ class MonitoringUpdateAccessTests(TestCase):
         actual=admin_toolbar(request,body)
         self.assertIn(b'<body class="native"><nav',actual)
         self.assertIn('Обновить из GitHub'.encode(),actual);self.assertIn(b'csrfmiddlewaretoken',actual)
-        request.portal_preview_user=self.user;self.assertEqual(admin_toolbar(request,body),body)
+        request.portal_preview_user=self.user
+        preview=admin_toolbar(request,body)
+        self.assertIn('Просмотр как'.encode(),preview)
+        self.assertIn('Обновление мониторинга в этом режиме запрещено'.encode(),preview)
+        self.assertNotIn('Обновить из GitHub'.encode(),preview)
+        self.assertNotIn(b'<form',preview)
         from .split_monitoring_update_views import updates
         self.assertEqual(updates(request).status_code,403)
 
@@ -99,3 +104,12 @@ class MonitoringUpdateAccessTests(TestCase):
             self.assertEqual(self.client.post(self.url,{'source':'package'}).status_code,400)
             self.assertEqual(self.client.post(self.url,{'source':'package','package':SimpleUploadedFile('wrong.txt',b'package')}).status_code,400)
             worker.assert_not_called()
+
+
+    def test_toolbar_insertion_handles_unicode_line_separators_in_compiled_scripts(self):
+        self.grant(ADMIN);request=RequestFactory().get('/split-monitoring/?view=1');request.user=self.user
+        prefix='<html><head><script>const text="a\u2028b\u0085c";</script>\n</head>\n<body class="native">'
+        body=(prefix+'Original</body></html>').encode()
+        result=admin_toolbar(request,body).decode()
+        self.assertTrue(result.startswith(prefix+'<nav'),result[:200])
+        self.assertIn('</nav>Original</body>',result)
