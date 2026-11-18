@@ -13,6 +13,50 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
     setUp = fixtures.SplitCycleTests.setUp
     complete = fixtures.SplitCycleTests.complete
 
+    def test_plan_group_expands_powers_and_reference_fields_without_submitting(self):
+        from playwright.sync_api import sync_playwright, expect
+        self.complete()
+        gid, group = next(iter(self.scenario.state['groups'].items()))
+        for good in self.models:
+            good.sales_plan_group = 'RAC'
+            good.outdoor_block_type = 'INV'
+            good.manufacturer = 'Factory <A>'
+            good.save()
+        group['ref'].pop('details', None)
+        self.scenario.save(update_fields=['state'])
+        revision = self.scenario.revision
+        self.scenario.status = 'approved'
+        self.scenario.save(update_fields=['status'])
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            context = browser.new_context(viewport={'width': 1800, 'height': 1100})
+            try:
+                context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url}])
+                page = context.new_page()
+                url = self.live_server_url + reverse('split_scenario', args=[self.scenario.pk])
+                page.goto(url)
+                expect(page.locator('[data-plan-group] > td').first).to_have_text('RAC')
+                expect(page.locator('[data-plan-group] > td').nth(1)).to_have_text('Brand')
+                expect(page.locator('[data-plan-group] > td').nth(2)).to_have_text('INV')
+                expect(page.locator('[data-plan-group] > td').nth(3)).to_have_text('Factory <A>')
+                detail = page.locator('[data-plan-power-group]')
+                expect(detail).not_to_be_visible()
+                page.get_by_role('button', name='Раскрыть мощности G', exact=True).click()
+                expect(detail).to_be_visible()
+                expect(detail.locator('th')).to_have_text('↳ 07')
+                expect(detail.locator('td').nth(5)).to_have_text('10')
+                expect(detail.locator('td').nth(7)).to_have_text('1 500'.replace(' ', '\u00a0'))
+                page.get_by_role('button', name='Раскрыть мощности G', exact=True).press('Space')
+                expect(detail).not_to_be_visible()
+                page.goto(url)
+                page.get_by_role('button', name='Раскрыть мощности G', exact=True).click()
+                expect(detail).to_be_visible()
+            finally:
+                context.close()
+                browser.close()
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.revision, revision)
+
     def test_stock_plan_expands_channels_with_group_power_and_total_values(self):
         from playwright.sync_api import sync_playwright, expect
         self.complete()

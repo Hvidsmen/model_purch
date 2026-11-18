@@ -15,7 +15,7 @@ WHERE Даичи_КаналПродаж IS NOT NULL'''
 
 GOODS_SQL = '''SELECT
     Ссылка, Наименование, Родитель, Даичи_ГруппаПланирования, Марка,
-    Даичи_ГруппаПлановПродаж, БИТ_КлассМощности, БИТ_ТипБлока, БИТ_ТипНаружногоБлока
+    Даичи_ГруппаПлановПродаж, БИТ_КлассМощности, БИТ_ТипБлока, БИТ_ТипНаружногоБлока, Производитель
 FROM DataWH.erp.[Справочники.Номенклатура]
 WHERE LTRIM(RTRIM(Родитель)) = N'Бытовые кондиционеры' '''
 
@@ -38,7 +38,7 @@ def load_goods():
         finally:
             connection.close()
     goods = {}
-    fields = ('planning_group', 'brand', 'sales_plan_group', 'power_class', 'block_type', 'outdoor_block_type')
+    fields = ('planning_group', 'brand', 'sales_plan_group', 'power_class', 'block_type', 'outdoor_block_type', 'manufacturer')
     for row in rows:
         key = reference_key(row[0])
         product_group = str(row[2]).strip() if row[2] is not None else ''

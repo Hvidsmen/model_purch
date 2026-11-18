@@ -14,8 +14,10 @@ from .split_engine import number, stored, allocate, quantity, planning_months, f
 
 
 def group_snapshot(group):
+    from .split_plan_presentation import reference_fields
+    goods = list(group_goods(group))
     powers = {}
-    for good in group_goods(group):
+    for good in goods:
         power, kind = good.power_class.strip(), block_kind(good.block_type)
         if not power or not kind:
             continue
@@ -30,7 +32,7 @@ def group_snapshot(group):
                          **{field + '_' + kind: None for field in ('stock', 'prior', 'incoming') for kind in ('indoor', 'outdoor')}}
     return {'ref': {'id': group.pk, 'source_key': group.source_key, 'name': group.name,
                     'related': list(split_groups(group.related_groups.all()).values('pk', 'name')), 'replacements': list(split_groups(group.replacement_groups.all()).values('pk', 'name')),
-                    'brand': sorted(set(group_goods(group).values_list('brand', flat=True))), 'active': True},
+                    'brand': sorted({good.brand for good in goods}), 'details': reference_fields(group.name, goods), 'active': True},
             'ddp': None, 'buy': '0', 'forecast': {}, 'channels': {}, 'powers': result}
 
 

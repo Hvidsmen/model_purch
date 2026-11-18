@@ -14,6 +14,13 @@ def product(key=b'product', name='Split', parent='Бытовые кондици�
 
 
 class GoodsImportTests(TestCase):
+    def test_manufacturer_is_loaded_from_nomenclature_and_cleared_when_missing(self):
+        self.assertIn('Производитель', GOODS_SQL)
+        self.import_rows([(*product(), 'Factory <A>')])
+        self.assertEqual(SalesPlanningGoods.objects.get().manufacturer, 'Factory <A>')
+        self.import_rows([(*product(), None)])
+        self.assertEqual(SalesPlanningGoods.objects.get().manufacturer, '')
+
     def import_rows(self, rows):
         connection, cursor = Mock(), Mock()
         cursor.fetchall.return_value = rows
