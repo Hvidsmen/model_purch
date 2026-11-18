@@ -1,0 +1,10 @@
+{% load split_format %}{% if part == 'opening' %}
+<td class="split-matrix-total" data-plan-inventory="opening">{{ balance.opening|split_number }}</td>
+<td class="split-matrix-total" data-plan-opening-component hidden>{{ balance.stock|split_number }}</td>
+<td class="split-matrix-total" data-plan-opening-component hidden>{{ balance.prior|split_number }}</td>
+<td class="split-matrix-total" data-plan-opening-component hidden>{{ balance.forecast|split_number }}</td>
+{% else %}
+<td class="split-matrix-total" data-plan-inventory="existing">{{ balance.existing|split_number }}</td>
+<td class="split-matrix-total" data-plan-inventory="new">{{ balance.new|split_number }}</td>
+<td class="split-matrix-total" data-plan-inventory="closing">{{ balance.closing|split_number }}</td>
+{% endif %}
