@@ -16,6 +16,7 @@ from .access import can_access
 from .models import SplitScenario, SalesPlanningChannel
 from .sales_planning_scope import split_groups
 from .split_forms import ScenarioForm
+from .split_opening import opening_balance
 from .split_engine import evaluate, planning_months, forecast_months
 from .split_workflow import create_scenario, changed_state, persist, approve, correction, forecast_preview
 from . import split_exports
@@ -253,6 +254,7 @@ def scenario(request, pk):
         'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
+        'opening_stock':opening_balance(item,group) if tab=='stock' else None,
         'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
         'distribution_overview':distribution_overview,'distribution_edit':distribution_edit,'distribution_filters':distribution_filters,
         'basis_token':basis_token, 'distribution_warning':distribution_warning,

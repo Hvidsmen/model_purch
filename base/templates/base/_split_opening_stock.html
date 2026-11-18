@@ -1,0 +1,15 @@
+{% load split_format %}
+<section class="admin-panel" id="split-opening-section">
+<h2>4. Сток на начало планового периода · {{ scenario.start|date:'d.m.Y' }}</h2>
+<p><strong>Сток на начало = сток на дату среза + поступления до начала − прогноз продаж до начала.</strong></p>
+<p>Итог по сохранённым значениям выбранной группы. Сохраните ручные правки для пересчёта. «—» означает, что данных недостаточно.</p>
+{% for issue in opening_stock.issues %}<p role="status">{{ issue }}</p>{% endfor %}
+{% if opening_stock.deficit %}<p role="alert">До начала плана ожидается дефицит. Проверьте поступления и прогноз продаж.</p>{% endif %}
+<div style="overflow-x:auto"><table class="admin-table">
+<thead><tr><th rowspan="2">Мощность</th><th colspan="2">Сток на срез · шт.</th><th colspan="2">Поступит до начала · шт.</th><th rowspan="2">Прогноз · комплекты</th><th colspan="2">Сток на начало · шт.</th><th rowspan="2">Комплекты на начало</th></tr>
+<tr><th>Внутренние</th><th>Наружные</th><th>Внутренние</th><th>Наружные</th><th>Внутренние</th><th>Наружные</th></tr></thead>
+<tbody>{% for row in opening_stock.rows %}<tr><td>{{ row.power }}</td><td>{{ row.stock_indoor|split_number }}</td><td>{{ row.stock_outdoor|split_number }}</td><td>{{ row.prior_indoor|split_number }}</td><td>{{ row.prior_outdoor|split_number }}</td><td>{{ row.forecast|split_number }}</td><td>{{ row.opening_indoor|split_number }}</td><td>{{ row.opening_outdoor|split_number }}</td><td>{{ row.sets|split_number }}</td></tr>{% endfor %}</tbody>
+<tfoot><tr><th>Итого</th><th>{{ opening_stock.totals.stock_indoor|split_number }}</th><th>{{ opening_stock.totals.stock_outdoor|split_number }}</th><th>{{ opening_stock.totals.prior_indoor|split_number }}</th><th>{{ opening_stock.totals.prior_outdoor|split_number }}</th><th>{{ opening_stock.totals.forecast|split_number }}</th><th>{{ opening_stock.totals.opening_indoor|split_number }}</th><th>{{ opening_stock.totals.opening_outdoor|split_number }}</th><th>{{ opening_stock.totals.sets|split_number }}</th></tr></tfoot>
+</table></div>
+<p>Комплекты = минимум внутренних и наружных блоков каждой мощности. Итог комплектов — сумма по мощностям.</p>
+</section>
