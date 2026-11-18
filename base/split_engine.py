@@ -97,12 +97,14 @@ def evaluate(scenario):
         shares = [number(powers[key].get('share'), optional=True) for key in pkeys]
         valid_shares = bool(shares) and all(value is not None for value in shares) and sum(shares, ZERO) == HUNDRED
         group_quantity = ZERO
+        quantities_known = True
         for cid, line in group['channels'].items():
             prefix = name + ' · ' + state['channels'][cid]['name']
             try:
                 qty = quantity(scenario, line)
             except ValidationError as exc:
                 errors.append(prefix + ': ' + ' '.join(exc.messages))
+                quantities_known = False
                 qty = ZERO
             group_quantity += qty
             ddp, markup = number(group.get('ddp'), optional=True), number(line.get('markup'), optional=True)
@@ -169,19 +171,15 @@ def evaluate(scenario):
         if not group_quantity and all(power.get('stock_indoor') is None and power.get('stock_outdoor') is None for power in powers.values()):
             totals['closing'] = None
             continue
-        if not valid_shares:
+        direct_inventory=quantities_known and group_quantity==ZERO and number(group.get('buy','0'),optional=True)==ZERO
+        if not valid_shares and not direct_inventory:
             totals['closing'] = None
             continue
-        forecast = [number(group['forecast'].get(month), optional=True) for month in forecast_months(scenario)]
-        for month, imported in group.get('forecast_imports', {}).items():
-            first = date.fromisoformat(month + '-01')
-            last = first.replace(day=monthrange(first.year, first.month)[1])
-            needed_start, needed_end = max(first, scenario.stock_date + timedelta(days=1)), min(last, scenario.start - timedelta(days=1))
-            if date.fromisoformat(imported['start']) > needed_start or date.fromisoformat(imported['end']) < needed_end:
-                errors.append(name + ' · ' + month + ': перенесён только фрагмент прогноза. Дополните и сохраните месячный прогноз вручную.')
-        if any(value is None for value in forecast):
-            errors.append(name + ': заполните прогноз до начала планирования.')
-            totals['closing'] = None
+        from .split_preplan_forecast import resolve as resolve_forecast
+        resolved_forecast=resolve_forecast(scenario,group)
+        if resolved_forecast['issues']:
+            errors.extend(name+': '+message for message in resolved_forecast['issues'])
+            totals['closing']=None
             continue
         sales_by_power = {key: ZERO for key in pkeys}
         for row in shipments[shipment_start:]:
@@ -191,11 +189,11 @@ def evaluate(scenario):
             totals['closing'] = None
             continue
         sales = [sales_by_power[key] for key in pkeys]
-        forecasts = allocate(sum(forecast, ZERO), shares)
-        buys = allocate(number(group.get('buy', '0')), shares)
+        forecasts = [resolved_forecast['powers'][key] for key in pkeys]
+        buys = allocate(number(group.get('buy', '0')), shares) if valid_shares else [ZERO]*len(pkeys)
         for key, sold, predicted, bought in zip(pkeys, sales, forecasts, buys):
             power = powers[key]
-            if not number(power.get('share'), optional=True):
+            if not number(power.get('share'), optional=True) and group.get('forecast_mode')!='powers' and not direct_inventory:
                 continue
             balances = []
             for kind in ('indoor', 'outdoor'):

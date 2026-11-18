@@ -52,3 +52,24 @@ class OpeningBalanceTests(SimpleTestCase):
         self.assertIsNone(opening_balance(self.scenario(),group)['totals']['sets'])
         group=self.group();group['powers']['07']['share']='20'
         result=opening_balance(self.scenario(),group);self.assertIsNone(result['totals']['sets']);self.assertTrue(result['issues'])
+
+    def test_direct_power_forecast_requires_no_shares_and_group_total_is_derived(self):
+        group=self.group();group['forecast_mode']='powers'
+        group['powers']['07'].update(share=None,forecast_before='3')
+        group['powers']['09']={'share':None,'stock_indoor':'20','stock_outdoor':'30','prior_indoor':'1','prior_outdoor':'1','forecast_before':'4'}
+        result=opening_balance(self.scenario(),group)
+        self.assertEqual(result['issues'],[]);self.assertEqual(result['forecast_total'],7)
+        self.assertEqual([row['sets'] for row in result['rows']],[9,17]);self.assertEqual(result['totals']['sets'],26)
+
+    def test_partially_entered_powers_keep_known_results_and_unknown_total(self):
+        group=self.group();group['forecast_mode']='powers';group['powers']['07']['forecast_before']='3'
+        group['powers']['09']={**group['powers']['07'],'forecast_before':None}
+        result=opening_balance(self.scenario(),group)
+        self.assertEqual(result['rows'][0]['sets'],9);self.assertIsNone(result['rows'][1]['sets'])
+        self.assertIsNone(result['forecast_total']);self.assertTrue(result['issues'])
+
+    def test_group_total_is_visible_even_if_distribution_is_missing(self):
+        group=self.group();group['forecast_mode']='group';group['forecast_before_total']='15';group['powers']['07']['share']=None
+        result=opening_balance(self.scenario(),group)
+        self.assertEqual(result['forecast_total'],15);self.assertIsNone(result['rows'][0]['forecast'])
+        self.assertTrue(result['issues'])

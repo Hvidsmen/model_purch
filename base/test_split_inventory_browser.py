@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import re
 from pathlib import Path
 from copy import deepcopy
 from unittest import skipUnless
@@ -46,13 +47,27 @@ class SplitInventoryBrowserTests(StaticLiveServerTestCase):
                 expect(opening.locator('[data-opening="indoor"]')).to_have_text('16')
                 expect(opening.locator('[data-opening="outdoor"]')).to_have_text('7')
                 expect(opening.locator('[data-opening="sets"]')).to_have_text('7')
+                # The forecast column is editable at both group and power grain.
+                page.get_by_label('Прогноз группы G',exact=True).fill('8')
+                page.locator('[data-stock-group="'+self.gid+'"]').get_by_role('button',name='Сохранить',exact=True).click()
+                expect(page.get_by_label('Прогноз мощности G 07',exact=True)).to_have_value(re.compile(r'^8(?:\.0+)?$'))
+                expect(page.locator('.split-stock-power-row[data-stock-child="'+self.gid+'"] [data-opening="sets"]')).to_have_text('4')
+                page.get_by_label('Прогноз мощности G 07',exact=True).fill('3')
+                expect(page.get_by_label('Прогноз группы G',exact=True)).to_have_value('3')
+                page.locator('.split-stock-tools-row[data-stock-child="'+self.gid+'"]').get_by_role('button',name='Сохранить группу').click()
+                expect(page.get_by_label('Прогноз мощности G 07',exact=True)).to_have_value('3')
+                expect(page.locator('.split-stock-power-row[data-stock-child="'+self.gid+'"] [data-opening="sets"]')).to_have_text('9')
+                # A collapsed group's summary cell can be edited and saved too.
+                page.get_by_label('Прогноз группы H',exact=True).fill('0')
+                page.locator('[data-stock-group="other"]').get_by_role('button',name='Сохранить',exact=True).click()
+                expect(page.get_by_label('Прогноз группы H',exact=True)).to_have_value('0')
                 # Saving G must not send the identically named inputs of H.
-                page.get_by_role('button',name='Раскрыть группу H',exact=True).click()
                 other=page.locator('.split-stock-power-row[data-stock-child="other"]')
                 expect(other.locator('[name="stock_indoor_0"]')).to_have_value('0')
                 expect(other.locator('[name="stock_outdoor_0"]')).to_have_value('0')
                 page.get_by_role('button',name='Раскрыть группу H',exact=True).click()
                 expect(other.locator('[name="stock_indoor_0"]')).not_to_be_visible()
+                page.get_by_role('button',name='Раскрыть группу G',exact=True).click()
                 Path('/workspace/output').mkdir(exist_ok=True)
                 page.screenshot(path='/workspace/output/split-physical-inventory.png',full_page=True)
             finally:context.close();browser.close()

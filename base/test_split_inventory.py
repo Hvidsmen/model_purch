@@ -207,3 +207,47 @@ class SplitInventoryImportTests(TestCase):
             self.client.post(self.url,{'action':'load_inventory_all','revision':99});source.assert_not_called()
             self.scenario.status='approved';self.scenario.save(update_fields=['status'])
             self.client.post(self.url,{'action':'load_inventory_all','revision':1});source.assert_not_called()
+
+    def test_direct_power_forecast_saves_without_plan_shares_and_drives_both_balances(self):
+        from .split_workflow import changed_state
+        from .split_opening import opening_balance
+        from .split_engine import evaluate
+        group=self.scenario.state['groups'][self.gid];group['powers']['07']['share']=None
+        with patch('base.split_inventory.source_rows',return_value=(self.stock,[])):
+            state=inventory_state(self.scenario,self.gid)
+        self.scenario.state=state
+        post={'action':'stock','group':self.gid,'channel':self.cid,'buy':'0','forecast_mode':'powers','forecast_power_0':'3',
+              'stock_indoor_0':'15','stock_outdoor_0':'12','prior_indoor_0':'0','prior_outdoor_0':'0','incoming_indoor_0':'2','incoming_outdoor_0':'1'}
+        self.scenario.state=changed_state(self.scenario,post)
+        current=self.scenario.state['groups'][self.gid]
+        self.assertEqual(current['forecast_mode'],'powers');self.assertEqual(current['powers']['07']['forecast_before'],'3')
+        self.assertEqual(opening_balance(self.scenario,current)['totals']['sets'],9)
+        result=evaluate(self.scenario)
+        self.assertEqual(result['stock'][0]['forecast'],3);self.assertEqual(result['stock'][0]['closing'],10)
+
+    def test_monthly_forecast_is_not_erased_by_editing_stock_and_import_can_reset_mode(self):
+        from .split_workflow import changed_state
+        group=self.scenario.state['groups'][self.gid];group['forecast']={'2026-11':'10','2026-12':'5'}
+        group['forecast_imports']={'2026-11':{'start':'2026-11-10','end':'2026-11-30'}}
+        state=changed_state(self.scenario,{'action':'stock','group':self.gid,'channel':self.cid,'buy':'0'})
+        self.assertEqual(state['groups'][self.gid]['forecast'],group['forecast'])
+        self.assertEqual(state['groups'][self.gid]['forecast_imports'],group['forecast_imports'])
+
+
+    def test_zero_group_forecast_and_zero_plan_need_no_distribution_for_inventory(self):
+        from .split_engine import evaluate
+        group=self.scenario.state['groups'][self.gid]
+        group.update(forecast_mode='group',forecast_before_total='0',buy='0')
+        group['powers']['07'].update(share=None,stock_indoor='15',stock_outdoor='12',prior_indoor='0',prior_outdoor='0',incoming_indoor='2',incoming_outdoor='1')
+        result=evaluate(self.scenario)
+        self.assertEqual(result['stock'][0]['closing'],13)
+
+
+    def test_missing_plan_quantity_cannot_be_treated_as_zero_for_direct_inventory(self):
+        from .split_engine import evaluate
+        group=self.scenario.state['groups'][self.gid]
+        group.update(forecast_mode='powers',buy='0')
+        group['channels'][self.cid]['input']=None
+        group['powers']['07'].update(share=None,forecast_before='0',stock_indoor='15',stock_outdoor='12',prior_indoor='0',prior_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
+        result=evaluate(self.scenario)
+        self.assertIsNone(result['totals']['closing']);self.assertEqual(result['stock'],[])
