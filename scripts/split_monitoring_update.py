@@ -1,4 +1,4 @@
-"""Repository-only monitoring updates. Never runs git/pip/migrations on the portal."""
+"""Isolated Git or private-package monitoring updates. Never runs git/pip/migrations on the portal."""
 import argparse
 from datetime import datetime,timezone
 from hashlib import sha256
@@ -49,7 +49,7 @@ def status(config_path,run_id):
     return record
 
 
-def start(config_path,actor):
+def start(config_path,actor,*,uploaded_file=None,expected_sha256=''):
     read_config(config_path)
     home=directory(config_path);home.mkdir(parents=True,exist_ok=True)
     with lock(home/'dispatch.lock'):
@@ -60,6 +60,22 @@ def start(config_path,actor):
         run_id=uuid.uuid4().hex;folder=home/run_id;folder.mkdir()
         record={'id':run_id,'actor':int(actor),'state':'queued','stage':'Ожидание запуска','started_at':datetime.now(timezone.utc).isoformat(),
                 'heartbeat':time.time(),'steps':[],'repository':'bse-sb/Split-monitoring','branch':BRANCH,'message':''}
+        if uploaded_file is not None:
+            from scripts.split_monitoring_package import MAX_UPLOAD_BYTES,PackageError
+            digest=sha256();size=0
+            try:
+                if expected_sha256 and not re.fullmatch('[0-9a-fA-F]{64}',expected_sha256):raise PackageError('SHA-256 должен содержать 64 шестнадцатеричных знака.')
+                with (folder/'package.zip').open('wb') as target:
+                    for chunk in uploaded_file.chunks():
+                        size+=len(chunk)
+                        if size>MAX_UPLOAD_BYTES:raise PackageError('Размер ZIP превышает 64 МБ.')
+                        digest.update(chunk);target.write(chunk)
+                if not size:raise PackageError('Загружен пустой ZIP.')
+                if expected_sha256 and digest.hexdigest()!=expected_sha256.lower():raise PackageError('SHA-256 загруженного ZIP не совпал с указанным.')
+                record.update(source='package',package_sha256=digest.hexdigest())
+            except Exception:
+                shutil.rmtree(folder);raise
+        else:record['source']='git'
         write(folder/'status.json',record);write(home/'current.json',{'id':run_id})
         logfile=(folder/'worker.log').open('ab')
         options={'creationflags':subprocess.CREATE_NO_WINDOW} if os.name=='nt' else {'start_new_session':True}
@@ -151,7 +167,7 @@ class Updater:
         data=temporary/'data';shutil.copytree(self.config['data_dir'],data)
         with socket.socket() as sock:sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         config={**self.config,'app_dir':str(app),'data_dir':str(data),'port':port,'python_executable':python,
-                'package_sha256':self.record['target_commit']}
+                'package_sha256':self.record.get('target_release',self.record.get('target_commit'))}
         path=temporary/'runtime.json';write(path,config)
         try:
             ensure_running(path)
@@ -170,10 +186,14 @@ class Updater:
     def activate(self,app,python,requirements):
         from scripts.split_monitoring_runtime import _ensure_running
         with lock(self.home/'activation.lock'),lock(self.home/'refresh.lock'):
-            # Installer/start paths cannot revive the previous process midway.
+            # Keep proxy-origin changes made during validation, and refuse to
+            # overwrite a different release installed concurrently.
+            latest=read_config(self.config_path)
+            if latest['app_dir']!=self.config['app_dir']:raise UpdateError('Рабочая версия изменилась во время проверки. Повторите обновление.')
+            self.config=latest
             stop(self.config_path)
             target={**self.config,'app_dir':str(app),'python_executable':python,'requirements_sha256':requirements,
-                    'package_sha256':self.record['target_commit'],'git_commit':self.record['target_commit'],'repository':REPOSITORY,'branch':BRANCH}
+                    'package_sha256':self.record.get('target_release',self.record.get('target_commit')),'git_commit':self.record.get('target_commit',''),'repository':REPOSITORY,'branch':BRANCH,'release_source':self.record.get('source','git')}
             write(self.home/'previous-runtime.json',self.config)
             try:
                 write(self.config_path,target);_ensure_running(self.config_path)
@@ -182,30 +202,51 @@ class Updater:
                 finally:write(self.config_path,self.config);_ensure_running(self.config_path)
                 raise UpdateError('Новая версия не запустилась. Предыдущая версия восстановлена.')
 
+    def prepare_package(self):
+        from scripts.split_monitoring_package import extract_verified,PackageError
+        self.stage('Проверка SHA-256 загруженного ZIP')
+        package=self.folder/'package.zip'
+        digest=sha256(package.read_bytes()).hexdigest()
+        if digest!=self.record['package_sha256']:raise UpdateError('Загруженный ZIP изменился после загрузки.')
+        self.record.update(target_release=digest,previous_commit=self.config.get('git_commit',''))
+        self.stage('Проверка полного пакета и сборки интерфейса')
+        try:root,manifest=extract_verified(package,self.folder/'extracted')
+        except PackageError as exc:raise UpdateError(str(exc)) from exc
+        app=self.home/'releases'/('zip-'+digest[:16]+'-'+self.record['id'][:8])
+        # Packaged data is checked for integrity, but never copied into the
+        # active release or the operational data directory.
+        shutil.copytree(root,app,ignore=lambda directory,names:[name for name in names if name in ('.git','node_modules','__pycache__','.venv') or (Path(directory)==root and name=='data')])
+        verify_build(app,Path(self.config['app_dir']),Path(self.config['data_dir']))
+        self.record['package_created_at']=str(manifest.get('createdAt',''))[:100]
+        return app
+
     def run(self):
         try:
             with lock(self.home/'update.lock'):
-                self.stage('Получение Split-monitoring из GitHub')
-                checkout=self.folder/'checkout'
-                self.command(['git','-c','core.hooksPath='+str(self.folder/'no-hooks'),'clone','--depth','1','--branch',BRANCH,self.repository,str(checkout)],cwd=self.folder)
-                commit=self.command(['git','rev-parse','HEAD'],cwd=checkout)
-                if not re.fullmatch('[0-9a-f]{40}',commit):raise UpdateError('Git не вернул SHA коммита.')
-                self.record['target_commit']=commit;self.record['previous_commit']=self.config.get('git_commit','')
-                if self.config.get('git_commit')==commit:
-                    self.record.update(state='completed',message='Установлена последняя версия мониторинга.');return
-                self.stage('Проверка отдельного релиза и сборки интерфейса')
-                if any(path.is_symlink() for path in checkout.rglob('*')):raise UpdateError('Символические ссылки в релизе не поддерживаются.')
-                app=self.home/'releases'/('git-'+commit[:16]+'-'+self.record['id'][:8])
-                shutil.copytree(checkout,app,ignore=lambda directory,names: [name for name in names if name in ('.git','node_modules','.venv') or (Path(directory)==checkout and name=='data')])
-                if not (app/'portal_wsgi.py').is_file():raise UpdateError('В репозитории нет portal_wsgi.py.')
-                verify_build(app,Path(self.config['app_dir']),Path(self.config['data_dir']))
+                if self.record.get('source')=='package':
+                    app=self.prepare_package()
+                else:
+                    self.stage('Получение Split-monitoring из GitHub')
+                    checkout=self.folder/'checkout'
+                    self.command(['git','-c','core.hooksPath='+str(self.folder/'no-hooks'),'clone','--depth','1','--branch',BRANCH,self.repository,str(checkout)],cwd=self.folder)
+                    commit=self.command(['git','rev-parse','HEAD'],cwd=checkout)
+                    if not re.fullmatch('[0-9a-f]{40}',commit):raise UpdateError('Git не вернул SHA коммита.')
+                    self.record['target_commit']=commit;self.record['previous_commit']=self.config.get('git_commit','')
+                    if self.config.get('git_commit')==commit:
+                        self.record.update(state='completed',message='Установлена последняя версия мониторинга.');return
+                    self.stage('Проверка отдельного релиза и сборки интерфейса')
+                    if any(path.is_symlink() for path in checkout.rglob('*')):raise UpdateError('Символические ссылки в релизе не поддерживаются.')
+                    app=self.home/'releases'/('git-'+commit[:16]+'-'+self.record['id'][:8])
+                    shutil.copytree(checkout,app,ignore=lambda directory,names: [name for name in names if name in ('.git','node_modules','.venv') or (Path(directory)==checkout and name=='data')])
+                    if not (app/'portal_wsgi.py').is_file():raise UpdateError('В репозитории нет portal_wsgi.py.')
+                    verify_build(app,Path(self.config['app_dir']),Path(self.config['data_dir']))
                 self.stage('Подготовка отдельного Python-окружения мониторинга')
                 python,requirements=self.interpreter(app)
                 self.stage('Проверка запуска на копии рабочих данных')
                 self.smoke(app,python)
                 self.stage('Переключение только приложения мониторинга')
                 self.activate(app,python,requirements)
-                self.record.update(state='completed',message='Мониторинг обновлён из GitHub. Рабочие данные сохранены.')
+                self.record.update(state='completed',message='Мониторинг обновлён. Рабочие данные сохранены.')
         except Exception as exc:
             self.record.update(state='failed',message=str(exc) if isinstance(exc,UpdateError) else 'Обновление мониторинга не выполнено. Подробности в локальном worker.log.')
             import logging;logging.exception('Split-monitoring update failed')
