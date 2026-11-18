@@ -191,6 +191,14 @@ def evaluate(scenario):
         sales = [sales_by_power[key] for key in pkeys]
         forecasts = [resolved_forecast['powers'][key] for key in pkeys]
         buys = allocate(number(group.get('buy', '0')), shares) if valid_shares else [ZERO]*len(pkeys)
+        from .split_supplies import corrections, sql_receipts, validate_corrections
+        try:
+            validate_corrections(group)
+            supply_adjustments = corrections(group)
+        except ValidationError as exc:
+            errors.extend(name + ': ' + message for message in exc.messages)
+            totals['closing'] = None
+            continue
         for key, sold, predicted, bought in zip(pkeys, sales, forecasts, buys):
             power = powers[key]
             if not number(power.get('share'), optional=True) and group.get('forecast_mode')!='powers' and not direct_inventory:
@@ -198,20 +206,22 @@ def evaluate(scenario):
             balances = []
             for kind in ('indoor', 'outdoor'):
                 initial = number(power.get('stock_' + kind), optional=True)
-                incoming = number(power.get('incoming_' + kind), optional=True)
+                incoming = sql_receipts(power, kind)
                 prior = number(power.get('prior_' + kind), optional=True) if forecast_months(scenario) else ZERO
                 if any(value is None for value in (initial, incoming, prior)):
                     errors.append(name + ' · ' + key + ': заполните остатки и поступления обоих блоков (ноль указывается явно).')
                     totals['closing'] = None
                     balances = []
                     break
-                balances.append(initial + prior - predicted + incoming + bought - sold)
+                balances.append(initial + prior - predicted + incoming + supply_adjustments[key] + bought - sold)
             if not balances:
                 continue
             closing = min(balances)
             if totals['closing'] is not None:
                 totals['closing'] += closing
             stock.append({'group': name, 'power': key, 'quantity': sold, 'forecast': predicted, 'buy': bought,
+                          'supply_adjustment': supply_adjustments[key], 'incoming_sql_indoor': sql_receipts(power, 'indoor'),
+                          'incoming_sql_outdoor': sql_receipts(power, 'outdoor'),
                           'indoor': balances[0], 'outdoor': balances[1], 'closing': closing})
             if closing < 0:
                 warnings.append(name + ' · ' + key + ': дефицит на конец периода ' + str(closing) + ' комплектов.')

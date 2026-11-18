@@ -223,7 +223,8 @@ class SplitInventoryImportTests(TestCase):
         self.assertEqual(current['forecast_mode'],'powers');self.assertEqual(current['powers']['07']['forecast_before'],'3')
         self.assertEqual(opening_balance(self.scenario,current)['totals']['sets'],9)
         result=evaluate(self.scenario)
-        self.assertEqual(result['stock'][0]['forecast'],3);self.assertEqual(result['stock'][0]['closing'],10)
+        self.assertEqual(result['stock'][0]['forecast'],3);self.assertEqual(result['stock'][0]['closing'],9)
+        self.assertEqual(current['powers']['07']['incoming_sql_outdoor'],'0')
 
     def test_monthly_forecast_is_not_erased_by_editing_stock_and_import_can_reset_mode(self):
         from .split_workflow import changed_state
