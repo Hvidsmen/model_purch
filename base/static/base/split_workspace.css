@@ -154,3 +154,5 @@
 .split-stock-tools-row>td{white-space:normal;background:#fbfaff;padding:14px 18px}
 .split-stock-channel-plan span{display:inline-block;margin-right:18px}
 .split-stock-table tfoot th{background:#eeeaf9}
+.split-stock-table .split-forecast-save{display:block;font-size:11px;padding:4px 6px;min-height:0;margin-top:5px}
+.split-stock-table select[data-forecast-choice]{min-width:160px}

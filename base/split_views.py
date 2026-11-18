@@ -138,6 +138,7 @@ def scenario(request, pk):
                 if action == 'forecast_apply':
                     state = deepcopy(item.state)
                     for row in forecast:
+                        state['groups'][row['gid']]['forecast_mode']='monthly'
                         state['groups'][row['gid']]['forecast'][row['month']] = str(row['value'])
                         state['groups'][row['gid']].setdefault('forecast_imports', {})[row['month']] = {
                             'start': str(start), 'end': str(end), 'source': source.pk, 'version': source.version}

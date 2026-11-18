@@ -220,9 +220,19 @@ def changed_state(scenario, post, *, allow_empty=False):
         gid, cid, group = selected(state, post)
         if group.get('inventory_source'):group['inventory_source']['manual_adjusted']=True
         group['buy'] = decimal_input(post, 'buy', optional=False)
+        mode=post.get('forecast_mode',group.get('forecast_mode','monthly'))
+        if mode not in ('monthly','group','powers'):raise ValidationError('Выберите способ ввода прогноза.')
+        group['forecast_mode']=mode
+        if mode=='group':group['forecast_before_total']=decimal_input(post,'forecast_group')
+        if mode=='powers':
+            for index,power in enumerate(group['powers'].values()):power['forecast_before']=decimal_input(post,'forecast_power_'+str(index))
+        changed_months=False
         for month in forecast_months(scenario):
-            group['forecast'][month] = decimal_input(post, 'forecast_' + month)
-        group['forecast_imports'] = {}
+            if 'forecast_'+month in post:
+                value=decimal_input(post,'forecast_'+month)
+                changed_months=changed_months or value!=group['forecast'].get(month)
+                group['forecast'][month]=value
+        if mode!='monthly' or changed_months or post.get('forecast_monthly_confirm')=='1':group['forecast_imports']={}
         for index, power in enumerate(group['powers'].values()):
             for field in ('stock', 'prior', 'incoming'):
                 for kind in ('indoor', 'outdoor'):
