@@ -1,6 +1,7 @@
 import importlib.util
 import os
 from pathlib import Path
+from copy import deepcopy
 from unittest import skipUnless
 from unittest.mock import patch
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
@@ -11,6 +12,10 @@ from . import test_split_inventory as inventory_fixtures
 class SplitInventoryBrowserTests(StaticLiveServerTestCase):
     def setUp(self):
         super().setUp();inventory_fixtures.SplitInventoryImportTests.setUp(self)
+        group=deepcopy(self.scenario.state['groups'][self.gid])
+        group['ref'].update(id='other',name='H',source_key='H')
+        self.scenario.state['groups']['other']=group
+        self.scenario.save(update_fields=['state'])
 
     def test_operator_loads_physical_block_counts_into_stock_form(self):
         from playwright.sync_api import sync_playwright,expect
@@ -21,25 +26,34 @@ class SplitInventoryBrowserTests(StaticLiveServerTestCase):
             page=context.new_page()
             try:
                 page.goto(self.live_server_url+self.url)
-                expect(page.get_by_role('button',name='Загрузить остатки и приходы из DataWH')).to_be_visible()
-                with patch('base.split_inventory.source_rows',return_value=(self.stock,self.incomes)):
-                    page.get_by_role('button',name='Загрузить остатки и приходы из DataWH').click()
-                    expect(page.locator('[name="stock_indoor_0"]')).to_have_value('15')
-                    expect(page.locator('[name="stock_outdoor_0"]')).to_have_value('12')
-                    expect(page.locator('[name="prior_indoor_0"]')).to_have_value('6')
-                    expect(page.locator('[name="incoming_outdoor_0"]')).to_have_value('15')
-                    expect(page.get_by_text('Источник: DataWH.erp.StreamGoods',exact=False)).to_be_visible()
+                expect(page.get_by_role('button',name='Загрузить остатки и приходы всех групп')).to_be_visible()
+                expect(page.locator('#split-stock-section details')).to_have_count(2)
+                expect(page.locator('#split-stock-section [name="stock_indoor_0"]').first).not_to_be_visible()
+                page.locator('#split-stock-section [data-inventory-group="'+self.gid+'"] summary').click()
+                expect(page.locator('#split-stock-section [name="stock_indoor_0"]').first).to_be_visible()
+                with patch('base.split_inventory.source_rows_many',return_value={self.gid:(self.stock,self.incomes),'other':([],[])}):
+                    page.get_by_role('button',name='Загрузить остатки и приходы всех групп').click()
+                    expect(page.locator('[name="stock_indoor_0"][form="split-stock-form-'+self.gid+'"]')).to_have_value('15')
+                    expect(page.locator('[name="stock_outdoor_0"][form="split-stock-form-'+self.gid+'"]')).to_have_value('12')
+                    expect(page.locator('[name="prior_indoor_0"][form="split-stock-form-'+self.gid+'"]')).to_have_value('6')
+                    expect(page.locator('[name="incoming_outdoor_0"][form="split-stock-form-'+self.gid+'"]')).to_have_value('15')
+                    expect(page.get_by_text('Источник: DataWH.erp.StreamGoods',exact=False).first).to_be_visible()
                 expect(page.get_by_role('heading',name='1. Сток на 06.11.2026')).to_be_visible()
                 expect(page.get_by_role('heading',name='2. Поступления',exact=True)).to_be_visible()
                 expect(page.get_by_role('heading',name='3. Прогноз продаж до начала плана')).to_be_visible()
                 expect(page.get_by_role('heading',name='4. Сток на начало планового периода · 01.01.2027')).to_be_visible()
-                page.locator('[name="forecast_2026-11"]').fill('2')
-                page.locator('[name="forecast_2026-12"]').fill('3')
-                page.get_by_role('button',name='Сохранить сток и закупки').click()
-                opening=page.locator('#split-opening-section tbody tr').first
+                page.locator('[name="forecast_2026-11"][form="split-stock-form-'+self.gid+'"]').fill('2')
+                page.locator('[name="forecast_2026-12"][form="split-stock-form-'+self.gid+'"]').fill('3')
+                page.locator('#split-forecast-section [data-inventory-group="'+self.gid+'"]').get_by_role('button',name='Сохранить группу').click()
+                opening=page.locator('#split-opening-section [data-inventory-group="'+self.gid+'"] tbody tr').first
                 expect(opening.locator('td').nth(6)).to_have_text('16')
                 expect(opening.locator('td').nth(7)).to_have_text('7')
                 expect(opening.locator('td').nth(8)).to_have_text('7')
+                # Saving G must not send the identically named inputs of H.
+                other=page.locator('#split-stock-section [data-inventory-group="other"]')
+                other.locator('summary').click()
+                expect(other.locator('[name="stock_indoor_0"]')).to_have_value('0')
+                expect(other.locator('[name="stock_outdoor_0"]')).to_have_value('0')
                 Path('/workspace/output').mkdir(exist_ok=True)
                 page.screenshot(path='/workspace/output/split-physical-inventory.png',full_page=True)
             finally:context.close();browser.close()
