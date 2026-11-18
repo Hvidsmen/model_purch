@@ -5,6 +5,23 @@ from .split_engine import ZERO, allocate, number, planning_months, precise, quan
 
 
 @precise
+def set_period_quantity(scenario, state, line, previous, value):
+    value = number(value)
+    if line.get('allocation') == 'quantity' and value != quantity(scenario, previous):
+        months = planning_months(scenario)
+        monthly = [number(previous.get('month_quantities', {}).get(month), optional=True) for month in months]
+        if value and (any(item is None for item in monthly) or not sum(monthly, ZERO)):
+            raise ValidationError('Нет сохранённых месячных пропорций канала. Заполните распределение по месяцам.')
+        line['month_quantities'] = dict(zip(months, map(stored,
+            allocate(value, monthly) if value else [ZERO] * len(months))))
+    actual = number(line.get('fact'), optional=True)
+    if state.get('volume_mode', scenario.entry_mode) == 'annual' and actual is None and value:
+        raise ValidationError('Для годовой цели заполните состоявшийся факт до начала плана.')
+    line['input'] = stored(value + ((actual or ZERO) if state.get('volume_mode', scenario.entry_mode) == 'annual' else ZERO))
+    number(line['input'])
+
+
+@precise
 def distribute(scenario, state, gid, target):
     if gid not in state['groups']:
         raise ValidationError('Группа отсутствует в плане. Обновите страницу.')
@@ -21,16 +38,5 @@ def distribute(scenario, state, gid, target):
         raise ValidationError('Нет сохранённых пропорций каналов. Сначала задайте и сохраните объёмы по каналам.')
     values = allocate(target - fixed, weights) if sum(weights, ZERO) else [ZERO] * len(free)
     for (cid, line), value in zip(free, values):
-        if line.get('allocation') == 'quantity' and value != quantity(scenario, previous[cid]):
-            months = planning_months(scenario)
-            monthly = [number(previous[cid].get('month_quantities', {}).get(month), optional=True) for month in months]
-            if value and (any(item is None for item in monthly) or not sum(monthly, ZERO)):
-                raise ValidationError('Нет сохранённых месячных пропорций канала. Заполните распределение по месяцам.')
-            line['month_quantities'] = dict(zip(months, map(stored,
-                allocate(value, monthly) if value else [ZERO] * len(months))))
-        actual = number(line.get('fact'), optional=True)
-        if state.get('volume_mode', scenario.entry_mode) == 'annual' and actual is None and value:
-            raise ValidationError('Для годовой цели заполните состоявшийся факт до начала плана.')
-        line['input'] = stored(value + ((actual or ZERO) if state.get('volume_mode', scenario.entry_mode) == 'annual' else ZERO))
-        number(line['input'])
+        set_period_quantity(scenario, state, line, previous[cid], value)
     return state

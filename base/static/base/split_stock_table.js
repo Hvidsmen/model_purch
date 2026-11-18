@@ -30,6 +30,12 @@
   }
   table.addEventListener('input', event => {
     const target = event.target;
+    if (target.hasAttribute('data-stock-plan-group') || target.hasAttribute('data-stock-plan-channel')) {
+      const group = target.hasAttribute('data-stock-plan-group');
+      const id = group ? target.dataset.stockPlanGroup : target.dataset.stockPlanChannel;
+      const state = document.querySelector('[data-stock-plan-mode="' + id + '"]');
+      if (state) state.value = group ? 'group' : 'channels';
+    }
     if (target.hasAttribute('data-forecast-group')) choose(target.dataset.forecastGroup, 'group');
     if (target.hasAttribute('data-forecast-power')) { choose(target.dataset.forecastPower, 'powers'); sumIntoGroup(target.dataset.forecastPower, 'data-forecast-power'); }
     if (target.hasAttribute('data-forecast-month')) { choose(target.dataset.forecastMonth, 'monthly'); sumIntoGroup(target.dataset.forecastMonth, 'data-forecast-month'); }

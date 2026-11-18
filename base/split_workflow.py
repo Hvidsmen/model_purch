@@ -245,6 +245,17 @@ def changed_state(scenario, post, *, allow_empty=False):
             for field in ('stock', 'prior', 'incoming'):
                 for kind in ('indoor', 'outdoor'):
                     power[field + '_' + kind] = decimal_input(post, field + '_' + kind + '_' + str(index))
+        plan_mode = post.get('plan_mode', 'unchanged')
+        if plan_mode not in ('unchanged', 'group', 'channels'):
+            raise ValidationError('Выберите способ изменения плана продаж.')
+        if plan_mode == 'group':
+            from .split_group_plan import distribute
+            state = distribute(scenario, state, gid, post.get('plan_group'))
+        elif plan_mode == 'channels':
+            from .split_group_plan import set_period_quantity
+            for channel_id, line in group['channels'].items():
+                set_period_quantity(scenario, state, line, scenario.state['groups'][gid]['channels'][channel_id],
+                                    post.get('plan_channel_' + channel_id))
     elif action == 'composition':
         if post.get('confirm') != 'on':
             raise ValidationError('Подтвердите изменение состава сценария.')

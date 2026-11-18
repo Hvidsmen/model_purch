@@ -1,5 +1,6 @@
 import importlib.util
 import os
+import re
 from unittest import skipUnless
 
 from django.contrib.staticfiles.testing import StaticLiveServerTestCase
@@ -12,6 +13,37 @@ from . import test_split_cycle as fixtures
 class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
     setUp = fixtures.SplitCycleTests.setUp
     complete = fixtures.SplitCycleTests.complete
+
+    def test_stock_page_edits_total_and_channel_plan_and_updates_closing(self):
+        from playwright.sync_api import sync_playwright, expect
+        self.complete()
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            context = browser.new_context(viewport={'width': 1800, 'height': 1100})
+            try:
+                context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url}])
+                page = context.new_page()
+                page.goto(self.live_server_url + reverse('split_scenario', args=[self.scenario.pk]) + '?tab=stock')
+                total = page.get_by_label('План продаж группы G', exact=True)
+                expect(total).to_have_value('30')
+                total.fill('90')
+                page.get_by_role('button', name='Распределить план', exact=True).click()
+                expect(total).to_have_value(re.compile(r'^90(?:\.0+)?$'))
+                expect(page.locator('.split-stock-group-row > td').last).to_have_text('10')
+                page.get_by_role('button', name='Раскрыть план продаж по каналам', exact=True).click()
+                expect(page.get_by_label('План продаж G Дилеры', exact=True)).to_have_value('30.000000')
+                expect(page.get_by_label('План продаж G Розница', exact=True)).to_have_value('60.000000')
+                page.get_by_label('План продаж G Дилеры', exact=True).fill('45')
+                page.get_by_label('План продаж G Розница', exact=True).fill('55')
+                page.get_by_role('button', name='Сохранить каналы', exact=True).click()
+                expect(total).to_have_value(re.compile(r'^100(?:\.0+)?$'))
+                expect(page.locator('.split-stock-group-row > td').last).to_have_text('0')
+                # The shared plan is immediately visible on its other tab.
+                page.get_by_role('link', name='План продаж', exact=True).click()
+                expect(page.get_by_label('Общий план G', exact=True)).to_have_value('100')
+            finally:
+                context.close()
+                browser.close()
 
     def test_plan_group_expands_powers_and_reference_fields_without_submitting(self):
         from playwright.sync_api import sync_playwright, expect
@@ -71,7 +103,8 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('[data-stock-channel-column]').first).not_to_be_visible()
                 toggle.click()
                 expect(toggle).to_have_attribute('aria-expanded', 'true')
-                expect(page.locator('.split-stock-group-row [data-stock-channel-column]')).to_have_text(['10', '20'])
+                expect(page.locator('.split-stock-group-row [data-stock-plan-channel]').nth(0)).to_have_value('10')
+                expect(page.locator('.split-stock-group-row [data-stock-plan-channel]').nth(1)).to_have_value('20')
                 expect(page.locator('tfoot [data-stock-channel-column]')).to_have_text(['10', '20'])
                 page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]')).to_have_text(['10', '20'])
