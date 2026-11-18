@@ -99,6 +99,12 @@ def scenario(request, pk):
                 apply_proposal(target,cid,distribution_section,values)
                 target.setdefault('distribution_sources',{})[distribution_section if distribution_section == 'powers' else 'months:'+cid] = metadata(basis)
                 persist(item,request.user,request.POST.get('revision'),state,'Распределение из факта за пять лет · '+distribution_section)
+            elif action == 'load_inventory':
+                from .split_inventory import inventory_state
+                if item.status != 'draft' or str(request.POST.get('revision')) != str(item.revision):
+                    raise ValidationError('Обновите черновик перед загрузкой остатков и приходов.')
+                state=inventory_state(item,gid)
+                persist(item,request.user,request.POST.get('revision'),state,'Остатки и приходы из StreamGoods · '+state['groups'][gid]['ref']['name']+' · физические блоки')
             elif action == 'load_history':
                 from .split_history import load_history
                 if item.status != 'draft' or str(request.POST.get('revision')) != str(item.revision):
