@@ -158,3 +158,6 @@
 .split-stock-table select[data-forecast-choice]{min-width:160px}
 
 .split-stock-table [data-stock-channel-column][hidden]{display:none!important}
+
+.split-plan-matrix [data-plan-power-group][hidden]{display:none!important}
+.split-plan-matrix [data-plan-power-group]{background:#fbfaff}

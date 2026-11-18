@@ -209,6 +209,8 @@ def scenario(request, pk):
     historical['latest_year'] = historical['years'][-1] if historical['snapshot'] and historical['years'] else None
     history_total = enrich_history(historical)
     matrix_totals = plan_totals(data, item.state)
+    from .split_plan_presentation import presentation as plan_presentation
+    plan_detail = plan_presentation(item, data) if tab == 'plan' else {}
     plan_lines = {}
     for line in data['lines']:
         plan_lines.setdefault(line['gid'], {})[line['cid']] = line
@@ -255,12 +257,12 @@ def scenario(request, pk):
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'history': historical,
-        'history_total': history_total, 'matrix_totals': matrix_totals, 'plan_lines': plan_lines,
+        'history_total': history_total, 'matrix_totals': matrix_totals, 'plan_lines': plan_lines, 'plan_detail': plan_detail,
         'history_by_group': {row['gid']: row for row in historical['groups']},
         'plan_channel_colspan': 4 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 3,
         'history_channel_colspan': (4 if item.state.get('volume_mode', item.entry_mode) == 'annual' else 3) + (1 if historical['latest_year'] else 0),
         'history_total_colspan': 1 + (1 if historical['latest_year'] else 0),
-        'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
+        'matrix_colspan': 7 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'stock_overview':stock_overview(item,data) if tab=='stock' else None,

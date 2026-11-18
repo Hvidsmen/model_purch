@@ -24,6 +24,7 @@ class SalesPlanningGoods(models.Model):
     power_class = models.TextField('Мощность', blank=True)
     block_type = models.TextField('Тип блока', blank=True)
     outdoor_block_type = models.TextField('INV / On-Off', blank=True)
+    manufacturer = models.TextField('Завод / производитель', blank=True)
     is_active = models.BooleanField('Присутствует в источнике', default=True)
 
     class Meta:
