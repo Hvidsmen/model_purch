@@ -175,7 +175,7 @@ def scenario(request, pk):
                 if action == 'bulk' and request.POST.get('confirm') != 'on':
                     raise ValidationError('Подтвердите применение массовой корректировки.')
                 persist(item, request.user, request.POST.get('revision'), state,
-                    {'group_plan': 'Общий план группы распределён по сохранённым пропорциям каналов', 'lines': 'Объёмы, наценки и DDP', 'distribution': 'Месяцы, мощности и модели', 'distribution_months':'Распределение по месяцам', 'distribution_powers':'Распределение по мощностям', 'stock': 'Остатки, поступления и прогноз',
+                    {'group_plan': 'Общий план группы распределён по сохранённым пропорциям каналов', 'lines': 'Объёмы, наценки и DDP', 'distribution': 'Месяцы, мощности и модели', 'distribution_months':'Распределение по месяцам', 'distribution_powers':'Распределение по мощностям', 'stock': 'Остатки, поступления, прогноз и план продаж',
                      'equal_months': 'Равномерные доли месяцев вручную', 'equal_powers': 'Равномерные доли мощностей вручную',
                      'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам',
                      'add_group': 'Добавлена группа в план', 'remove_group': 'Группа исключена из плана',
