@@ -244,7 +244,13 @@ def changed_state(scenario, post, *, allow_empty=False):
         for index, power in enumerate(group['powers'].values()):
             for field in ('stock', 'prior', 'incoming'):
                 for kind in ('indoor', 'outdoor'):
+                    if field == 'incoming' and 'incoming_sql_' + kind in power:
+                        continue
                     power[field + '_' + kind] = decimal_input(post, field + '_' + kind + '_' + str(index))
+        if 'supply_adjustment' in post:
+            from .split_supplies import signed_quantity, validate_corrections
+            group['supply_adjustment'] = stored(signed_quantity(post.get('supply_adjustment')))
+            validate_corrections(group)
         plan_mode = post.get('plan_mode', 'unchanged')
         if plan_mode not in ('unchanged', 'group', 'channels'):
             raise ValidationError('Выберите способ изменения плана продаж.')

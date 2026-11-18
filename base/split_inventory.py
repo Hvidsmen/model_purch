@@ -147,6 +147,10 @@ def apply_inventory(scenario,group,rows):
                 else:outside+=quantity;continue
             cell=destination+'_'+block
             group['powers'][pkey][cell]=stored(number(number(group['powers'][pkey][cell])+quantity))
+    for power in group['powers'].values():
+        if power.get('active',True):
+            for kind in ('indoor','outdoor'):
+                power['incoming_sql_'+kind]=power['incoming_'+kind]
     loaded_at=timezone.now()
     group['inventory_source']={'loaded_at':loaded_at.isoformat(),'loaded_at_display':loaded_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M:%S МСК'),'stock_date':str(scenario.stock_date),
         'source':'DataWH.erp.StreamGoods','quantity_basis':'physical_blocks','stock_models':len(stock),'income_rows':len(incomes),

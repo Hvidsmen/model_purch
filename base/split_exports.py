@@ -51,9 +51,9 @@ def workbook(scenario):
             sheet.append(header)
         sheet.append([text_cell(value) for value in [row['month'], row['group'], row['power'], row['channel'], row['model'], row['model_key'], 'Внутренний' if row['kind'] == 'indoor' else 'Наружный', row['quantity'], row['cost'], row['revenue']]])
     stock = book.create_sheet('Остатки')
-    stock.append(['Группа', 'Мощность', 'Продажи комплектов', 'Прогноз до начала', 'Дополнительные закупки', 'Внутренние на конец', 'Наружные на конец', 'Комплекты на конец'])
+    stock.append(['Группа', 'Мощность', 'Продажи комплектов', 'Прогноз до начала', 'Новые поставки · компл.', 'Внутренние на конец', 'Наружные на конец', 'Комплекты на конец', 'Поставки SQL · внутренние', 'Поставки SQL · наружные', 'Корректировка поставок · компл.'])
     for row in data['stock']:
-        stock.append([text_cell(row[key]) for key in ('group', 'power', 'quantity', 'forecast', 'buy', 'indoor', 'outdoor', 'closing')])
+        stock.append([text_cell(row[key]) for key in ('group', 'power', 'quantity', 'forecast', 'buy', 'indoor', 'outdoor', 'closing', 'incoming_sql_indoor', 'incoming_sql_outdoor', 'supply_adjustment')])
     output = BytesIO()
     try:
         book.save(output)
