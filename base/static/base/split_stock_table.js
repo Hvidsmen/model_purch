@@ -41,6 +41,17 @@
     if (event.target.value === 'powers') sumIntoGroup(id, 'data-forecast-power');
   });
   table.addEventListener('click', event => {
+    const channelToggle = event.target.closest('[data-stock-channel-toggle]');
+    if (channelToggle && table.contains(channelToggle)) {
+      const expanded = channelToggle.getAttribute('aria-expanded') !== 'true';
+      channelToggle.setAttribute('aria-expanded', String(expanded));
+      channelToggle.querySelector('[data-channel-arrow]').textContent = expanded ? '▾' : '▸';
+      table.querySelectorAll('[data-stock-channel-column]').forEach(cell => { cell.hidden = !expanded; });
+      table.querySelectorAll('[data-stock-fullspan]').forEach(cell => {
+        cell.colSpan = expanded ? Number(cell.dataset.stockFullspan) : 13;
+      });
+      return;
+    }
     const button = event.target.closest('[data-stock-toggle]');
     if (!button || !table.contains(button)) return;
     const expanded = button.getAttribute('aria-expanded') !== 'true';

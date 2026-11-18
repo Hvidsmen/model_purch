@@ -13,6 +13,33 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
     setUp = fixtures.SplitCycleTests.setUp
     complete = fixtures.SplitCycleTests.complete
 
+    def test_stock_plan_expands_channels_with_group_power_and_total_values(self):
+        from playwright.sync_api import sync_playwright, expect
+        self.complete()
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            context = browser.new_context(viewport={'width': 1600, 'height': 1000})
+            try:
+                context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url}])
+                page = context.new_page()
+                page.goto(self.live_server_url + reverse('split_scenario', args=[self.scenario.pk]) + '?tab=stock')
+                toggle = page.get_by_role('button', name='Раскрыть план продаж по каналам', exact=True)
+                expect(page.locator('[data-stock-channel-column]').first).not_to_be_visible()
+                toggle.click()
+                expect(toggle).to_have_attribute('aria-expanded', 'true')
+                expect(page.locator('.split-stock-group-row [data-stock-channel-column]')).to_have_text(['10', '20'])
+                expect(page.locator('tfoot [data-stock-channel-column]')).to_have_text(['10', '20'])
+                page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
+                expect(page.locator('.split-stock-power-row [data-stock-channel-column]')).to_have_text(['10', '20'])
+                expect(page.locator('.split-stock-power-row [data-stock-channel-column]').first).to_be_visible()
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '15')
+                toggle.click()
+                expect(page.locator('.split-stock-power-row [data-stock-channel-column]').first).not_to_be_visible()
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '13')
+            finally:
+                context.close()
+                browser.close()
+
     def test_edit_total_distributes_channels_and_localized_decimal_stays_editable(self):
         from playwright.sync_api import sync_playwright, expect
         self.complete()

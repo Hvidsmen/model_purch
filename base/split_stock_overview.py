@@ -10,7 +10,11 @@ def complete_sum(values):
 
 
 def overview(scenario,evaluated=None):
-    rows=[];ending={}
+    rows=[];ending={};channel_powers={}
+    for value in (evaluated or {}).get('shipments',[]):
+        if value['kind']=='indoor':
+            key=(value['group_key'],value['power'],value['channel_id'])
+            channel_powers[key]=channel_powers.get(key,ZERO)+value['quantity']
     for value in (evaluated or {}).get('stock',[]):ending.setdefault(value['group'],{})[value['power']]=value
     for gid,group in scenario.state['groups'].items():
         opening=opening_balance(scenario,group)
@@ -22,6 +26,9 @@ def overview(scenario,evaluated=None):
             except ValidationError:planned=None
             channels.append({'id':cid,'name':scenario.state['channels'].get(cid,{}).get('name',cid),'planned':planned})
         plan_total=complete_sum(channel['planned'] for channel in channels)
+        for power in powers:
+            power['channels']=[{**channel,'planned':ZERO if channel['planned']==ZERO else
+                channel_powers.get((group['ref']['source_key'],power['key'],channel['id']))} for channel in channels]
         inventory_only=plan_total==ZERO and number(group.get('buy','0'),optional=True)==ZERO
         expected=list(group['powers']) if group.get('forecast_mode')=='powers' or inventory_only else [key for key,power in group['powers'].items() if power.get('share') and number(power['share'])>0]
         closed=ending.get(group['ref']['name'],{})
@@ -34,4 +41,7 @@ def overview(scenario,evaluated=None):
     totals={key:complete_sum(row['opening']['totals'][key] for row in rows) for key in ('stock_indoor','stock_outdoor','prior_indoor','prior_outdoor','forecast','opening_indoor','opening_outdoor','sets')}
     totals['forecast']=complete_sum(row['opening']['forecast_total'] for row in rows)
     totals.update(planned=complete_sum(row['planned'] for row in rows),incoming_indoor=complete_sum(row['incoming_indoor'] for row in rows),incoming_outdoor=complete_sum(row['incoming_outdoor'] for row in rows),closing=complete_sum(row['closing'] for row in rows))
-    return {'groups':rows,'totals':totals}
+    channels=[{'id':cid,'name':channel['name'],'planned':complete_sum(
+        next((item['planned'] for item in row['channels'] if item['id']==cid),None) for row in rows)}
+        for cid,channel in scenario.state['channels'].items()]
+    return {'groups':rows,'totals':totals,'channels':channels,'expanded_colspan':13+len(channels)}
