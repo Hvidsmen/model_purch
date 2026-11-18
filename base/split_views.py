@@ -209,6 +209,9 @@ def scenario(request, pk):
     matrix_totals = plan_totals(data, item.state)
     from .split_plan_presentation import presentation as plan_presentation
     plan_detail = plan_presentation(item, data) if tab == 'plan' else {}
+    inventory = stock_overview(item, data) if tab in ('plan', 'stock') else None
+    from .split_plan_inventory import presentation as inventory_presentation
+    plan_inventory = inventory_presentation(inventory) if tab == 'plan' else None
     plan_lines = {}
     for line in data['lines']:
         plan_lines.setdefault(line['gid'], {})[line['cid']] = line
@@ -259,11 +262,12 @@ def scenario(request, pk):
         'history_by_group': {row['gid']: row for row in historical['groups']},
         'plan_channel_colspan': 1,
         'history_channel_colspan': 1 + (1 if historical['latest_year'] else 0),
-        'history_total_colspan': 1 + (1 if historical['latest_year'] else 0),
-        'matrix_colspan': 7 + len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
+        'history_total_colspan': 5 + (1 if historical['latest_year'] else 0),
+        'matrix_colspan': 11 + len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
+        'plan_inventory': plan_inventory,
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
-        'stock_overview':stock_overview(item,data) if tab=='stock' else None,
+        'stock_overview': inventory if tab == 'stock' else None,
         'inventory_focus':request.GET.get('expand','') if request.method == 'GET' else '',
         'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
         'distribution_overview':distribution_overview,'distribution_edit':distribution_edit,'distribution_filters':distribution_filters,
