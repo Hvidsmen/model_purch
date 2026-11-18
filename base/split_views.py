@@ -248,6 +248,10 @@ def scenario(request, pk):
     if tab == 'distribution':
         from .split_distribution_overview import overview
         distribution_overview = overview(item,distribution_section,distribution_filters)
+        from .split_plan_presentation import references
+        distribution_references = references(item)
+        for row in distribution_overview['rows']:
+            row['reference'] = distribution_references[row['gid']]
     versions = SplitScenario.objects.filter(family=item.family).order_by('-version')
     compare_id = request.GET.get('compare') or (str(item.parent_id) if item.parent_id else '')
     if compare_id:

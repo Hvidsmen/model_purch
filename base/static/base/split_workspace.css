@@ -193,3 +193,17 @@
 .split-plan-subtotal[data-plan-level="3"]>th,.split-plan-subtotal[data-plan-level="3"]>td{background:#f9f9fd}
 .split-plan-subtotal [data-plan-subtotal-toggle]{display:block;cursor:pointer;white-space:normal}
 .split-plan-subtotal small{font-size:10px;color:#64748b;font-weight:400}
+
+.split-month-table-wrap:has(.split-reference-table){overflow-x:auto}
+.split-reference-table{min-width:1500px}
+.split-reference-table:not(.split-power-table){min-width:1700px}
+.split-reference-table .split-distribution-reference-col{width:100px}
+.split-reference-table .split-month-identity-col{width:260px}
+.split-reference-table .split-month-channel-col{width:110px}
+.split-reference-table .split-month-sum-col{width:75px}
+.split-distribution-reference{vertical-align:top;font-size:11px}
+@media(max-width:700px){
+ .split-reference-table,.split-reference-table:not(.split-power-table){min-width:0}
+ .split-reference-table .split-distribution-reference{grid-column:1/-1;display:flex;gap:8px}
+ .split-distribution-reference::before{content:attr(data-label) ': ';color:#64748b;min-width:115px}
+}
