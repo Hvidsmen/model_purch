@@ -14,11 +14,12 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
     setUp = fixtures.SplitCycleTests.setUp
     complete = fixtures.SplitCycleTests.complete
 
-    def test_sql_new_supplies_and_signed_correction_have_separate_columns(self):
+    def test_planned_and_new_supplies_have_no_correction_column(self):
         from playwright.sync_api import sync_playwright, expect
         self.complete()
         group = next(iter(self.scenario.state['groups'].values()))
         power = next(iter(group['powers'].values()))
+        group['supply_adjustment'] = '-2'  # Existing values must not be silently erased.
         power.update(incoming_sql_indoor='12', incoming_sql_outdoor='15', incoming_indoor='12', incoming_outdoor='15')
         self.scenario.save(update_fields=['state'])
         with sync_playwright() as driver:
@@ -29,21 +30,18 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
                 page = context.new_page()
                 page.goto(self.live_server_url + reverse('split_scenario', args=[self.scenario.pk]) + '?tab=stock')
                 page.get_by_label('Новые поставки G', exact=True).fill('10')
-                page.get_by_label('Корректировка поставок G', exact=True).fill('-2')
+                expect(page.locator('#split-stock-table')).not_to_contain_text('SQL')
+                expect(page.locator('#split-stock-table')).not_to_contain_text('Корректировка')
+                expect(page.locator('[name="supply_adjustment"]')).to_have_count(0)
                 page.get_by_role('button', name='Сохранить поставки', exact=True).click()
                 expect(page.get_by_role('button', name='Раскрыть группу G', exact=True)).to_have_attribute('aria-expanded', 'false')
                 expect(page.get_by_label('Новые поставки G', exact=True)).to_have_value('10')
-                expect(page.get_by_label('Корректировка поставок G', exact=True)).to_have_value('-2')
                 expect(page.locator('.split-stock-group-row [data-stock-sets="incoming"]')).to_have_text('12')
                 expect(page.locator('.split-stock-group-row > td').last).to_have_text('90')
                 page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
                 page.locator('[data-stock-band-toggle="incoming"]').click()
                 expect(page.get_by_label('В периоде внутренние G 07', exact=True)).to_have_value('12')
                 expect(page.get_by_label('В периоде внутренние G 07', exact=True)).to_have_attribute('readonly', '')
-                page.get_by_label('Корректировка поставок G', exact=True).fill('-13')
-                page.get_by_role('button', name='Сохранить поставки', exact=True).click()
-                expect(page.get_by_role('alert').first).to_contain_text('не может быть отрицательным')
-                expect(page.locator('.split-stock-group-row [data-stock-sets="incoming"]')).to_have_text('12')
             finally:
                 context.close()
                 browser.close()
@@ -62,19 +60,19 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
                 expect(table.locator('[data-stock-block-band]:visible')).to_have_count(0)
                 expect(table.locator('.split-stock-group-row [data-stock-sets="stock"]')).to_have_text('100')
                 expect(table.locator('.split-stock-group-row [data-stock-sets="prior"]')).to_have_text('0')
-                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '10')
+                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '9')
                 page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
                 expect(page.get_by_label('Сток внутренние G 07', exact=True)).not_to_be_visible()
                 table.locator('[data-stock-band-toggle="stock"]').click()
                 expect(page.get_by_label('Сток внутренние G 07', exact=True)).to_be_visible()
-                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '12')
+                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '11')
                 page.get_by_label('Сток внутренние G 07', exact=True).fill('120')
                 table.locator('[data-stock-band-toggle="stock"]').click()
                 expect(page.get_by_label('Сток внутренние G 07', exact=True)).not_to_be_visible()
                 table.locator('[data-stock-band-toggle="incoming"]').click()
                 expect(page.get_by_label('В периоде внутренние G 07', exact=True)).to_be_visible()
                 table.locator('[data-stock-channel-toggle]').click()
-                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '14')
+                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '13')
                 page.get_by_role('button', name='Сохранить группу', exact=True).click()
                 # Hidden component inputs still submit their edited values.
                 table.locator('[data-stock-band-toggle="stock"]').click()
@@ -181,10 +179,10 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]')).to_have_text(['10', '20'])
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]').first).to_be_visible()
-                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '12')
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '11')
                 toggle.click()
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]').first).not_to_be_visible()
-                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '10')
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '9')
             finally:
                 context.close()
                 browser.close()
