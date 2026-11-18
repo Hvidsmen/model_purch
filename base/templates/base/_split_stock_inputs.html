@@ -1,0 +1,39 @@
+<section class="admin-panel">
+<h2>Сток и поступления · {{ group.ref.name }}</h2>
+<p>Все каналы вместе. Остатки и приходы учитываются отдельно по внутренним и наружным блокам, в физических штуках.</p>
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="load_inventory"><input type="hidden" name="revision" value="{{ scenario.revision }}"><input type="hidden" name="group" value="{{ gid }}"><input type="hidden" name="channel" value="{{ cid }}"><fieldset {% if scenario.status == 'approved' %}disabled{% endif %}>
+<p>Загрузка заменит сток и поступления выбранной группы. Сохранённые прогноз продаж и дополнительные закупки сохранятся. Сначала сохраните их ручные правки.</p>
+<button class="admin-button secondary">Загрузить остатки и приходы из DataWH</button></fieldset></form>
+{% if group.inventory_source %}<p>Источник: {{ group.inventory_source.source }} · срез {{ group.inventory_source.stock_date }} · загружено {{ group.inventory_source.loaded_at_display }}{% if group.inventory_source.manual_adjusted %} · есть ручные изменения{% endif %}. После конца плана: {{ group.inventory_source.after_period }} шт. (не включены).</p>{% endif %}
+</section>
+<form method="post">{% csrf_token %}<input type="hidden" name="action" value="stock"><input type="hidden" name="revision" value="{{ scenario.revision }}"><input type="hidden" name="group" value="{{ gid }}"><input type="hidden" name="channel" value="{{ cid }}"><fieldset {% if scenario.status == 'approved' %}disabled{% endif %}>
+<section class="admin-panel" id="split-stock-section">
+<h2>1. Сток на {{ scenario.stock_date|date:'d.m.Y' }}</h2>
+<p>Начальный срез. Неизвестное значение оставьте пустым; отсутствие блоков укажите нулём.</p>
+{% for power in powers %}<div class="split-power"><h3>Мощность {{ power.key }}</h3><div class="split-create">
+<label>Внутренние · шт.<input type="number" min="0" step="0.000001" name="stock_indoor_{{ power.index }}" value="{{ power.stock_indoor|default_if_none:'' }}"></label>
+<label>Наружные · шт.<input type="number" min="0" step="0.000001" name="stock_outdoor_{{ power.index }}" value="{{ power.stock_outdoor|default_if_none:'' }}"></label>
+</div></div>{% endfor %}
+</section>
+<section class="admin-panel" id="split-incomes-section">
+<h2>2. Поступления</h2>
+<p>Поступления до {{ scenario.start|date:'d.m.Y' }} увеличивают сток на начало плана. Поступления внутри планового периода участвуют в расчёте его конца.</p>
+{% for power in powers %}<div class="split-power"><h3>Мощность {{ power.key }}</h3><div class="split-create">
+{% if forecasts %}
+<label>До начала · внутренние · шт.<input type="number" min="0" step="0.000001" name="prior_indoor_{{ power.index }}" value="{{ power.prior_indoor|default_if_none:'' }}"></label>
+<label>До начала · наружные · шт.<input type="number" min="0" step="0.000001" name="prior_outdoor_{{ power.index }}" value="{{ power.prior_outdoor|default_if_none:'' }}"></label>
+{% endif %}
+<label>В периоде · внутренние · шт.<input type="number" min="0" step="0.000001" name="incoming_indoor_{{ power.index }}" value="{{ power.incoming_indoor|default_if_none:'' }}"></label>
+<label>В периоде · наружные · шт.<input type="number" min="0" step="0.000001" name="incoming_outdoor_{{ power.index }}" value="{{ power.incoming_outdoor|default_if_none:'' }}"></label>
+</div></div>{% endfor %}
+<label>Дополнительные закупки в плановом периоде · комплекты<input type="number" min="0" step="0.000001" name="buy" value="{{ group.buy }}" required></label>
+<p>Дополнительные закупки планового периода не включаются в сток на его начало.</p>
+</section>
+<section class="admin-panel" id="split-forecast-section">
+<h2>3. Прогноз продаж до начала плана</h2>
+<p>Все каналы вместе, в комплектах. Из стока каждого типа блока вычитается одинаковое количество комплектов; прогноз распределяется по долям мощностей.</p>
+{% if forecasts %}<div class="split-months">{% for month in forecasts %}<label>{{ month.key }}<input type="number" min="0" step="0.000001" name="forecast_{{ month.key }}" value="{{ month.value|default_if_none:'' }}"></label>{% endfor %}</div>
+{% else %}<p>Между датой стока и началом плана нет промежутка: прогноз до начала равен нулю.</p>{% endif %}
+<button class="admin-button">Сохранить сток и закупки</button>
+</section>
+</fieldset></form>
