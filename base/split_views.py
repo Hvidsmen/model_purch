@@ -41,8 +41,6 @@ def return_to(pk, tab, gid='', cid='', section='months'):
     query = {'tab': tab, 'group': gid, 'channel': cid, 'section':section}
     if tab == 'distribution':
         query['edit'] = '1'
-    if tab == 'stock' and gid:
-        query['expand'] = gid
     return reverse('split_scenario', args=[pk]) + '?' + urlencode(query)
 
 
@@ -266,7 +264,7 @@ def scenario(request, pk):
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'stock_overview':stock_overview(item,data) if tab=='stock' else None,
-        'inventory_focus':request.POST.get('group') or request.GET.get('expand',''),
+        'inventory_focus':request.GET.get('expand','') if request.method == 'GET' else '',
         'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
         'distribution_overview':distribution_overview,'distribution_edit':distribution_edit,'distribution_filters':distribution_filters,
         'basis_token':basis_token, 'distribution_warning':distribution_warning,
