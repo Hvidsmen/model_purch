@@ -1,6 +1,6 @@
 {% extends 'base/portal_shell.html' %}{% load static report_format split_format tz %}
 {% block title %}{{ scenario.title }} · v{{ scenario.version }} · Split{% endblock %}
-{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=inventory-overview1">{% endblock %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=inventory-table1">{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
 {% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='scenarios' %}{% endblock %}
 {% block content %}{% timezone "Europe/Moscow" %}<section class="portal-welcome split-workspace">
@@ -41,8 +41,6 @@
 {% include 'base/_split_distribution_overview.html' %}
 {% elif tab == 'stock' %}
 {% include 'base/_split_stock_overview.html' %}
-<details class="admin-panel"><summary>Расчёт конечного остатка · все группы</summary><table class="admin-table"><thead><tr><th>Группа / мощность</th><th>Продажи</th><th>Прогноз до начала</th><th>Доп. закупки</th><th>Внутренние на конец</th><th>Наружные на конец</th><th>Комплекты</th></tr></thead><tbody>{% for row in data.stock %}<tr><td>{{ row.group }} · {{ row.power }}</td><td>{{ row.quantity|split_number }}</td><td>{{ row.forecast|split_number }}</td><td>{{ row.buy|split_number }}</td><td>{{ row.indoor|split_number }}</td><td>{{ row.outdoor|split_number }}</td><td>{{ row.closing|split_number }}</td></tr>{% endfor %}</tbody></table></details>
-
 {% elif tab == 'sources' %}
 <section class="admin-panel"><h2>Данные и связи</h2><table class="admin-table"><thead><tr><th>Источник</th><th>Состояние</th><th>Что работает сейчас</th></tr></thead><tbody><tr><td>Номенклатура и группы</td><td>Снимок {{ state.reference_at }}</td><td>Загруженные справочники портала</td></tr><tr><td>Факт и сезонность</td><td>Не подключён</td><td>Ручной факт, доли месяцев и мощностей</td></tr><tr><td>Исторический сток</td><td>Загрузка физических внутренних и наружных блоков из StreamGoods</td><td>Срез на {{ scenario.stock_date|date:'d.m.Y' }}</td></tr><tr><td>Ожидаемые поступления</td><td>Загрузка из StreamGoods</td><td>Правила ModelPurch: типы документов и перенос дат; отдельно до начала и в периоде</td></tr><tr><td>Отправка в DWH</td><td>Не подключена</td><td>Файл детализации утверждённой версии; передачи на сервер нет</td></tr></tbody></table>
 <form method="post">{% csrf_token %}<input type="hidden" name="action" value="sources"><input type="hidden" name="revision" value="{{ scenario.revision }}"><fieldset {% if scenario.status == 'approved' %}disabled{% endif %}><label>Происхождение ручных данных / период истории<textarea name="source_notes" rows="4" maxlength="5000">{{ state.source_notes }}</textarea></label><button class="admin-button">Сохранить примечания</button></fieldset></form>
@@ -62,4 +60,4 @@
 
 
 
-{% block module_js %}{{ block.super }}<script src="{% static 'base/split_history.js' %}?v=3" defer></script><script src="{% static 'base/split_month_grid.js' %}?v=2" defer></script>{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'base/split_stock_table.js' %}?v=1" defer></script><script src="{% static 'base/split_history.js' %}?v=3" defer></script><script src="{% static 'base/split_month_grid.js' %}?v=2" defer></script>{% endblock %}

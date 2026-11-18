@@ -134,3 +134,23 @@
 .split-inventory-group[open]>summary{border-bottom:1px solid #e6e1f6;margin-bottom:12px}
 .split-inventory-group input[type=number]{max-width:140px;width:100%;min-width:85px}
 .split-inventory-group button{margin:10px 0}
+
+/* One inventory reconciliation table, group totals followed by power rows. */
+.split-stock-table-scroll{overflow:auto;max-height:75vh;border:1px solid #ddd8f0;border-radius:8px}
+.split-stock-table{min-width:1320px;margin:0!important;font-variant-numeric:tabular-nums}
+.split-stock-table thead{position:sticky;top:0;z-index:6;background:#f5f3fc}
+.split-stock-table th,.split-stock-table td{padding:9px 7px;white-space:nowrap}
+.split-stock-table .split-stock-label{position:sticky;left:0;z-index:2;min-width:235px;max-width:310px;white-space:normal;background:#fff}
+.split-stock-table thead .split-stock-label{z-index:8;background:#f5f3fc}
+.split-stock-group-row td,.split-stock-group-row th{font-weight:600;background:#f7f5ff!important;border-top:2px solid #ded8f4}
+.split-stock-table .split-stock-opening{background:#eff8f5}
+.split-stock-toggle{background:none;border:0;text-align:left;color:inherit;font:inherit;cursor:pointer;padding:3px 0;width:100%}
+.split-stock-power-row .split-stock-label{padding-left:24px;font-weight:400}
+.split-stock-table input[type=number]{width:82px;min-width:72px;max-width:105px;padding:6px!important}
+.split-stock-table [data-stock-child][hidden]{display:none!important}
+.split-stock-editors{display:flex;gap:24px;align-items:flex-end;flex-wrap:wrap}
+.split-stock-months{display:flex;gap:14px;flex-wrap:wrap;margin-top:8px}
+.split-stock-editors label{display:flex;gap:5px;flex-direction:column}
+.split-stock-tools-row>td{white-space:normal;background:#fbfaff;padding:14px 18px}
+.split-stock-channel-plan span{display:inline-block;margin-right:18px}
+.split-stock-table tfoot th{background:#eeeaf9}
