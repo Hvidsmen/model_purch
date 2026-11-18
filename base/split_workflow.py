@@ -218,6 +218,7 @@ def changed_state(scenario, post, *, allow_empty=False):
                         power[kind] = value
     elif action == 'stock':
         gid, cid, group = selected(state, post)
+        if group.get('inventory_source'):group['inventory_source']['manual_adjusted']=True
         group['buy'] = decimal_input(post, 'buy', optional=False)
         for month in forecast_months(scenario):
             group['forecast'][month] = decimal_input(post, 'forecast_' + month)
