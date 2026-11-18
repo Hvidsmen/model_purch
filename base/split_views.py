@@ -16,7 +16,7 @@ from .access import can_access
 from .models import SplitScenario, SalesPlanningChannel
 from .sales_planning_scope import split_groups
 from .split_forms import ScenarioForm
-from .split_opening import opening_balance
+from .split_stock_overview import overview as stock_overview
 from .split_engine import evaluate, planning_months, forecast_months
 from .split_workflow import create_scenario, changed_state, persist, approve, correction, forecast_preview
 from . import split_exports
@@ -41,6 +41,8 @@ def return_to(pk, tab, gid='', cid='', section='months'):
     query = {'tab': tab, 'group': gid, 'channel': cid, 'section':section}
     if tab == 'distribution':
         query['edit'] = '1'
+    if tab == 'stock' and gid:
+        query['expand'] = gid
     return reverse('split_scenario', args=[pk]) + '?' + urlencode(query)
 
 
@@ -100,6 +102,12 @@ def scenario(request, pk):
                 apply_proposal(target,cid,distribution_section,values)
                 target.setdefault('distribution_sources',{})[distribution_section if distribution_section == 'powers' else 'months:'+cid] = metadata(basis)
                 persist(item,request.user,request.POST.get('revision'),state,'Распределение из факта за пять лет · '+distribution_section)
+            elif action == 'load_inventory_all':
+                from .split_inventory import all_inventory_state
+                if item.status != 'draft' or str(request.POST.get('revision')) != str(item.revision):
+                    raise ValidationError('Обновите черновик перед общей загрузкой остатков и приходов.')
+                state=all_inventory_state(item)
+                persist(item,request.user,request.POST.get('revision'),state,'Остатки и приходы из StreamGoods · все группы · физические блоки')
             elif action == 'load_inventory':
                 from .split_inventory import inventory_state
                 if item.status != 'draft' or str(request.POST.get('revision')) != str(item.revision):
@@ -254,7 +262,8 @@ def scenario(request, pk):
         'matrix_colspan': 3 + (4 if item.state.get('volume_mode',item.entry_mode) == 'annual' else 3) * len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
-        'opening_stock':opening_balance(item,group) if tab=='stock' else None,
+        'stock_overview':stock_overview(item) if tab=='stock' else None,
+        'inventory_focus':request.POST.get('group') or request.GET.get('expand',''),
         'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
         'distribution_overview':distribution_overview,'distribution_edit':distribution_edit,'distribution_filters':distribution_filters,
         'basis_token':basis_token, 'distribution_warning':distribution_warning,

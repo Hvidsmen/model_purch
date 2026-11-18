@@ -125,3 +125,12 @@
  .split-month-table .split-month-sum small{display:inline;margin-left:6px}
  .split-month-table td[colspan]{grid-column:1/-1}
 }
+
+/* Shared physical inventory: group summaries expand into powers. */
+.split-inventory-group{border:1px solid #ded9f3;border-radius:8px;margin:10px 0;padding:0 12px}
+.split-inventory-group>summary{cursor:pointer;padding:14px 2px;line-height:1.5}
+.split-inventory-group>summary strong{margin-right:20px}
+.split-inventory-group>summary span{color:#677894;font-size:.9em}
+.split-inventory-group[open]>summary{border-bottom:1px solid #e6e1f6;margin-bottom:12px}
+.split-inventory-group input[type=number]{max-width:140px;width:100%;min-width:85px}
+.split-inventory-group button{margin:10px 0}

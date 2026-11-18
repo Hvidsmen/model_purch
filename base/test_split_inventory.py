@@ -13,7 +13,7 @@ from django.utils import timezone
 from .models import SalesPlanningChannel,SalesPlanningGoods,SalesPlanningGroup,SalesPlanningDirectoryLoad
 from .sales_planning_group_service import rebuild_groups
 from .split_workflow import create_scenario
-from .split_inventory import STOCK_SQL,INCOME_SQL,source_rows,inventory_state
+from .split_inventory import STOCK_SQL,INCOME_SQL,source_rows,inventory_state,source_rows_many,all_inventory_state
 
 
 class InventorySourceSQLTests(SimpleTestCase):
@@ -40,10 +40,13 @@ CREATE TABLE stream (ReportDate,НоменклатураСсылка,Склад�
     def row(self,model,warehouse,stock=0,transit=0,incoming=0,kind='ПеремещениеТоваров',expected='2026-12-15',report='2026-11-06'):
         self.db.execute('INSERT INTO stream VALUES (?,?,?,?,?,?,?,?)',(report,model,warehouse,stock,transit,incoming,kind,expected))
 
-    def query(self,sql):
+    def translated(self,sql):
         for source,target in [('DataWH.erp.[Справочники.Номенклатура]','goods_fixture'),('DataWH.dbo.ModelCodeERP','models'),('DataWH.erp.[Справочник.Склады]','warehouses'),('DataWH.erp.StreamGoods','stream')]:sql=sql.replace(source,target)
-        sql=sql.replace("N'","'").replace('DATEADD(MONTH,',"DATEADD('MONTH',").replace('DATEADD(DAY,',"DATEADD('DAY',")
-        return self.db.execute(sql,('Бытовые кондиционеры','G','2026-11-06')).fetchall()
+        sql=sql.replace('COUNT_BIG(*)','COUNT(*)').replace("N'","'").replace('DATEADD(MONTH,',"DATEADD('MONTH',").replace('DATEADD(DAY,',"DATEADD('DAY',")
+        return sql
+
+    def query(self,sql):
+        return self.db.execute(self.translated(sql),('Бытовые кондиционеры','G','2026-11-06')).fetchall()
 
     def test_physical_inner_and_outer_both_count_without_flag_or_duplicate_join(self):
         self.row('in','sale',stock=12,transit=3)
@@ -72,6 +75,25 @@ CREATE TABLE stream (ReportDate,НоменклатураСсылка,Склад�
     def test_null_quantity_is_not_silently_discarded(self):
         self.row('in','sale',stock=None,transit=3)
         row=self.query(STOCK_SQL)[0];self.assertIsNone(row[4]);self.assertEqual(row[5],1)
+
+    def test_all_group_reads_share_one_connection_and_partition_results(self):
+        from types import SimpleNamespace
+        self.db.execute('INSERT INTO goods_fixture VALUES (?,?,?,?,?,?)',('h','H-IN','09','Внутренний','Бытовые кондиционеры','H'))
+        self.db.execute('INSERT INTO models VALUES (?,?)',('H-IN',0))
+        self.row('in','sale',stock=12);self.row('h','sale',stock=30)
+        connection,cursor=Mock(),Mock();queries=[];current=[]
+        def execute(sql,*args):
+            queries.append(args);current[:]=[self.db.execute(self.translated(sql),args)]
+        cursor.execute.side_effect=execute
+        cursor.fetchone.side_effect=lambda:current[0].fetchone()
+        cursor.fetchall.side_effect=lambda:current[0].fetchall()
+        groups={'g':{'ref':{'name':'G'}},'h':{'ref':{'name':'H'}}}
+        with patch('base.split_inventory.connect_database',return_value=(connection,cursor)) as connect:
+            result=source_rows_many(SimpleNamespace(stock_date=date(2026,11,6)),groups)
+        connect.assert_called_once();self.assertEqual(len(queries),3)
+        self.assertEqual(result['g'][0][0][4],12);self.assertEqual(result['h'][0][0][4],30)
+        self.assertEqual(result['g'][1],[]);self.assertEqual(result['h'][1],[])
+        self.assertEqual(queries[1],('Бытовые кондиционеры','G','H','2026-11-06'))
 
 
 class SplitInventoryImportTests(TestCase):
@@ -134,3 +156,54 @@ class SplitInventoryImportTests(TestCase):
             state=inventory_state(self.scenario,self.gid)
         values=state['groups'][self.gid]['powers']['07']
         self.assertTrue(all(values[field+'_'+kind]=='0' for field in ('stock','prior','incoming') for kind in ('indoor','outdoor')))
+
+
+    def test_all_groups_apply_once_and_any_bad_group_aborts_everything(self):
+        other=deepcopy(self.scenario.state['groups'][self.gid]);other['ref'].update(id='other',name='H')
+        self.scenario.state['groups']['other']=other;self.scenario.save(update_fields=['state'])
+        before=deepcopy(self.scenario.state)
+        with patch('base.split_inventory.source_rows_many',return_value={self.gid:(self.stock,self.incomes),'other':([],[])}):
+            response=self.client.post(self.url,{'action':'load_inventory_all','revision':1})
+        self.assertEqual(response.status_code,302);self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.state['groups'][self.gid]['powers']['07']['stock_indoor'],'15')
+        self.assertEqual(self.scenario.state['groups']['other']['powers']['07']['stock_indoor'],'0')
+        self.assertEqual(self.scenario.revision,2)
+        successful=deepcopy(self.scenario.state)
+        bad=[('unknown','BAD','07','Внутренний',1,0)]
+        with patch('base.split_inventory.source_rows_many',return_value={self.gid:([],[]),'other':(bad,[])}):
+            response=self.client.post(self.url,{'action':'load_inventory_all','revision':2})
+        self.assertEqual(response.status_code,200);self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.state,successful);self.assertEqual(self.scenario.revision,2)
+
+    def test_overview_has_all_groups_channels_and_no_selection_filter(self):
+        from .split_stock_overview import overview
+        other=deepcopy(self.scenario.state['groups'][self.gid]);other['ref'].update(id='other',name='H')
+        self.scenario.state['groups']['other']=other;self.scenario.save(update_fields=['state'])
+        result=overview(self.scenario)
+        self.assertEqual([row['group']['ref']['name'] for row in result['groups']],['G','H'])
+        self.assertEqual([row['channels'][0]['name'] for row in result['groups']],['Дилерский','Дилерский'])
+        response=self.client.get(self.url)
+        self.assertContains(response,'data-inventory-group="other"')
+        self.assertNotContains(response,'class="split-picker"')
+        self.assertEqual(len(response.context['stock_overview']['groups']),2)
+
+
+    def test_shared_physical_stock_is_not_multiplied_by_channel_count(self):
+        from .split_stock_overview import overview
+        with patch('base.split_inventory.source_rows',return_value=(self.stock,[])):
+            state=inventory_state(self.scenario,self.gid)
+        group=state['groups'][self.gid]
+        group['forecast']={'2026-11':'0','2026-12':'0'}
+        group['channels'][self.cid]['input']='4'
+        state['channels']['second']={'id':'second','name':'Розница'}
+        group['channels']['second']=deepcopy(group['channels'][self.cid]);group['channels']['second']['input']='6'
+        self.scenario.state=state;result=overview(self.scenario)
+        self.assertEqual(result['totals']['stock_indoor'],15);self.assertEqual(result['totals']['stock_outdoor'],12)
+        self.assertEqual(result['totals']['sets'],12)
+        self.assertEqual([channel['planned'] for channel in result['groups'][0]['channels']],[4,6])
+
+    def test_all_group_load_rejects_stale_and_approved_before_source(self):
+        with patch('base.split_inventory.source_rows_many') as source:
+            self.client.post(self.url,{'action':'load_inventory_all','revision':99});source.assert_not_called()
+            self.scenario.status='approved';self.scenario.save(update_fields=['status'])
+            self.client.post(self.url,{'action':'load_inventory_all','revision':1});source.assert_not_called()
