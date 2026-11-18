@@ -14,6 +14,42 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
     setUp = fixtures.SplitCycleTests.setUp
     complete = fixtures.SplitCycleTests.complete
 
+    def test_stock_defaults_to_sets_and_each_block_band_expands_independently(self):
+        from playwright.sync_api import sync_playwright, expect
+        self.complete()
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            context = browser.new_context(viewport={'width': 1800, 'height': 1100})
+            try:
+                context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url}])
+                page = context.new_page()
+                page.goto(self.live_server_url + reverse('split_scenario', args=[self.scenario.pk]) + '?tab=stock')
+                table = page.locator('#split-stock-table')
+                expect(table.locator('[data-stock-block-band]:visible')).to_have_count(0)
+                expect(table.locator('.split-stock-group-row [data-stock-sets="stock"]')).to_have_text('100')
+                expect(table.locator('.split-stock-group-row [data-stock-sets="prior"]')).to_have_text('0')
+                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '8')
+                page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
+                expect(page.get_by_label('Сток внутренние G 07', exact=True)).not_to_be_visible()
+                table.locator('[data-stock-band-toggle="stock"]').click()
+                expect(page.get_by_label('Сток внутренние G 07', exact=True)).to_be_visible()
+                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '10')
+                page.get_by_label('Сток внутренние G 07', exact=True).fill('120')
+                table.locator('[data-stock-band-toggle="stock"]').click()
+                expect(page.get_by_label('Сток внутренние G 07', exact=True)).not_to_be_visible()
+                table.locator('[data-stock-band-toggle="incoming"]').click()
+                expect(page.get_by_label('В периоде внутренние G 07', exact=True)).to_be_visible()
+                table.locator('[data-stock-channel-toggle]').click()
+                expect(table.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '12')
+                page.get_by_role('button', name='Сохранить группу', exact=True).click()
+                # Hidden component inputs still submit their edited values.
+                table.locator('[data-stock-band-toggle="stock"]').click()
+                expect(page.get_by_label('Сток внутренние G 07', exact=True)).to_have_value('120')
+                expect(table.locator('.split-stock-group-row [data-stock-sets="stock"]')).to_have_text('100')
+            finally:
+                context.close()
+                browser.close()
+
     def test_stock_page_edits_total_and_channel_plan_and_updates_closing(self):
         from playwright.sync_api import sync_playwright, expect
         self.complete()
@@ -109,10 +145,10 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]')).to_have_text(['10', '20'])
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]').first).to_be_visible()
-                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '15')
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '10')
                 toggle.click()
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]').first).not_to_be_visible()
-                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '13')
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '8')
             finally:
                 context.close()
                 browser.close()

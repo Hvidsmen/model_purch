@@ -27,6 +27,7 @@ class SplitInventoryBrowserTests(StaticLiveServerTestCase):
             page=context.new_page()
             try:
                 page.goto(self.live_server_url+self.url)
+                for toggle in page.locator('[data-stock-band-toggle]').all(): toggle.click()
                 expect(page.get_by_role('button',name='Загрузить остатки и приходы всех групп')).to_be_visible()
                 expect(page.locator('#split-stock-table [data-stock-group]')).to_have_count(2)
                 expect(page.locator('#split-stock-table [name="stock_indoor_0"]').first).not_to_be_visible()
