@@ -6,7 +6,7 @@ from django.urls import reverse
 
 class SalesPlanningTests(TestCase):
     def test_access_requires_active_administrator(self):
-        for name in ('sales_planning_index', 'sales_planning_split', 'sales_planning_directories'):
+        for name in ('sales_planning_index', 'sales_planning_split', 'sales_planning_directories', 'sales_planning_channels', 'sales_planning_goods'):
             url = reverse(name)
             self.assertEqual(self.client.get(url).status_code, 302)
             user, _ = User.objects.get_or_create(username='sales-reader-' + name)
@@ -30,7 +30,9 @@ class SalesPlanningTests(TestCase):
         self.assertNotContains(response, 'Источник не настроен')
         self.assertContains(response, 'Каналы продаж')
         self.assertContains(response, 'Номенклатура')
-        self.assertContains(response, 'name="action" value="load_channels"')
+        self.assertNotContains(response, 'name="action"')
+        self.assertContains(response, reverse('sales_planning_channels'))
+        self.assertContains(response, reverse('sales_planning_goods'))
         self.assertNotContains(response, 'localStorage')
         self.assertNotContains(response, 'демоданные')
         self.assertIn('no-store', response['Cache-Control'])
@@ -48,7 +50,9 @@ class SalesPlanningTests(TestCase):
             self.assertContains(overview, 'href="' + reverse('sales_planning_split') + '" aria-current="page"')
             directories = self.client.get(reverse('sales_planning_directories'))
             self.assertContains(directories, 'href="' + reverse('sales_planning_directories') + '" aria-current="page"')
-            self.assertContains(directories, 'name="action" value="load_goods"')
+            self.assertNotContains(directories, 'name="action"')
+            self.assertContains(self.client.get(reverse('sales_planning_goods')), 'name="action" value="load_goods"')
             self.assertEqual(self.client.post(reverse('sales_planning_split')).status_code, 405)
             channels.assert_not_called()
             goods.assert_not_called()
+

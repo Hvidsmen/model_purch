@@ -2,5 +2,7 @@
 <a href="{% url 'sales_planning_split' %}"{% if active == 'split' %} aria-current="page"{% endif %}>Split</a>
 <a href="{% url 'split_scenarios' %}"{% if active == 'scenarios' %} aria-current="page"{% endif %}>Сценарии плана</a>
 <a href="{% url 'sales_planning_directories' %}"{% if active == 'directories' %} aria-current="page"{% endif %}>Справочники</a>
+<a href="{% url 'sales_planning_channels' %}"{% if active == 'channels' %} aria-current="page"{% endif %}>Каналы продаж</a>
+<a href="{% url 'sales_planning_goods' %}"{% if active == 'goods' %} aria-current="page"{% endif %}>Номенклатура</a>
 </nav>
 
