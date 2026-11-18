@@ -120,8 +120,19 @@
             if (row.inputs.some(input => !Object.prototype.hasOwnProperty.call(data.values, input.dataset.month))) throw new Error('В ответе отсутствуют колонки распределения.');
             row.unit.value = 'percent';
             row.inputs.forEach(input => { input.value = data.values[input.dataset.month].replace('.', ','); });
+            if (powers && data.parameters) {
+                row.params.forEach(input => {
+                    if (input.value.trim()) return;
+                    const key = input.closest('[data-power-config]').dataset.powerConfig;
+                    const value = data.parameters[key]?.[input.dataset.powerParam];
+                    if (value === null || value === undefined || value === '') return;
+                    if (input.tagName === 'SELECT') {
+                        if (Array.from(input.options).some(option => option.value === String(value))) input.value = String(value);
+                    } else input.value = String(value).replace('.', ',');
+                });
+            }
             row.token = data.token; row.dirty = true;
-            row.element.querySelector('[data-row-rule]').textContent = [data.basis.rule_label,data.basis.rule_detail,'Не сохранено'].filter(Boolean).join(' · ');
+            row.element.querySelector('[data-row-rule]').textContent = [data.basis.rule_label,data.basis.rule_detail,data.basis.parameter_note,'Не сохранено'].filter(Boolean).join(' · ');
         } catch (error) {
             if (id !== row.requestId) return;
             row.mode = oldMode; row.requestError = error.message;

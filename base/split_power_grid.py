@@ -21,9 +21,12 @@ def selected(scenario, gid):
 def preview(scenario, gid, cid=''):
     group = selected(scenario,gid)
     values,basis = resolve_proposal(scenario,group,'','powers')
+    from .split_power_defaults import defaults
+    parameters, issues = defaults(scenario, group, basis)
     basis = metadata(basis)
-    token = signing.dumps({'identity':[scenario.pk,scenario.revision,gid],'values':values,'basis':basis},salt=SALT,compress=True)
-    return {'values':values,'basis':basis,'token':token}
+    basis['parameter_note'] = ' '.join(issues)
+    token = signing.dumps({'identity':[scenario.pk,scenario.revision,gid],'values':values,'basis':basis,'parameters':parameters},salt=SALT,compress=True)
+    return {'values':values,'basis':basis,'token':token,'parameters':parameters}
 
 
 @precise
@@ -56,6 +59,7 @@ def apply_grid(scenario, raw):
         if any(value > HUNDRED for value in parsed.values()) or sum(parsed.values()) != HUNDRED:
             raise ValidationError(original['ref']['name']+': сумма долей мощностей должна быть ровно 100%.')
         source = None
+        defaults = {}
         if mode == 'equal' and parsed != dict(zip(keys,allocate(HUNDRED,[Decimal(1)]*len(keys)))):
             raise ValidationError('Равномерное распределение изменено. Выберите «Вручную».')
         if mode == 'fact':
@@ -71,6 +75,7 @@ def apply_grid(scenario, raw):
                     if signed['identity'] != [scenario.pk,scenario.revision,gid] or parsed != {key:Decimal(value) for key,value in signed['values'].items()}:
                         raise signing.BadSignature
                     source = signed['basis']
+                    defaults = signed.get('parameters', {})
                 except (signing.BadSignature,KeyError,TypeError,ValueError):
                     raise ValidationError('Распределение из факта устарело или изменено. Получите его заново либо выберите «Вручную».')
         group = state['groups'][gid]
@@ -79,11 +84,12 @@ def apply_grid(scenario, raw):
             raise ValidationError('Некорректные параметры мощностей.')
         for key,power in group['powers'].items():
             power['share'] = stored(parsed[key]) if key in parsed else '0'
-            if key not in parameters:
+            if key not in parameters and key not in defaults:
                 continue
-            params = parameters[key]
+            params = parameters.get(key, {})
             if not isinstance(params,dict):
                 raise ValidationError('Некорректные параметры мощности.')
+            params = {**defaults.get(key, {}), **params}
             factor,cost = number(params.get('factor'),optional=True),number(params.get('cost'),optional=True)
             if factor is not None and factor <= 0 or cost is not None and cost > HUNDRED:
                 raise ValidationError('Соотношение DDP должно быть положительным, доля стоимости — от 0 до 100%.')
