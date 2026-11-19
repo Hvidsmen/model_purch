@@ -71,7 +71,7 @@
           if (child.dataset.stockChild === gid) child.toggleAttribute('data-view-excluded', excluded);
         });
       });
-      const width = [...table.tHead.rows[0].cells].filter(cell => !cell.hidden).reduce((sum,cell) => sum + cell.colSpan, 0);
+      const width = [...table.tHead.rows[0].cells].filter(cell => !cell.hidden && !cell.hasAttribute('data-split-metric-off')).reduce((sum,cell) => sum + cell.colSpan, 0);
       nodes.forEach(node => {
         const visible = node.descendants.filter(row => !row.hasAttribute('data-reference-excluded'));
         const gids = new Set(visible.map(row => row.dataset.stockGroup || row.dataset.gid));
@@ -100,6 +100,7 @@
     nodes.filter(node=>node.descendants.includes(row)).forEach(node=>{node.open=true;});sync();
   });
   document.addEventListener('split-reference-filter-change', sync);
+  document.addEventListener('split-metric-visibility-change', sync);
   if (!plan) new MutationObserver(sync).observe(table.tHead, {subtree:true, attributes:true, attributeFilter:['colspan','hidden']});
   sync();
 })();

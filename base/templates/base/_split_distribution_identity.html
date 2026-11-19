@@ -3,7 +3,7 @@
 {% if scenario.status == 'draft' %}<input type="checkbox" data-grid-select aria-label="Выбрать {{ row.name }}{% if row.cid %} {{ row.cid }}{% endif %}">{% endif %}
 <strong class="split-month-group-name" title="{{ row.name }}">{{ row.name }}</strong>
 {% include 'base/_split_group_card_link.html' with card_gid=row.gid card_name=row.name %}
-<small class="split-identity-plan" title="План продаж · комплекты">{{ row.quantity|split_number }} компл.</small>
+<small data-split-metric="quantity" class="split-identity-plan" title="План продаж · комплекты">{{ row.quantity|split_number }} компл.</small>
 <span class="split-distribution-status" data-row-status data-status="{{ row.status.key }}" title="{{ row.status.label }}">{{ row.status.label }}</span>
 <select data-row-mode aria-label="Способ распределения {{ row.name }}{% if not is_power %} {{ row.channel }}{% endif %}"{% if scenario.status == 'approved' %} disabled{% endif %}><option value="fact"{% if row.mode == 'fact' %} selected{% endif %}>Из факта</option><option value="equal"{% if row.mode == 'equal' %} selected{% endif %}>Равномерно</option><option value="manual"{% if row.mode == 'manual' %} selected{% endif %}>Вручную</option></select>
 <button type="button" class="split-identity-icon" data-row-recalculate title="Пересчитать из факта" aria-label="Пересчитать из факта {{ row.name }}{% if not is_power %} {{ row.channel }}{% endif %}"{% if row.mode != 'fact' %} hidden{% endif %}{% if scenario.status == 'approved' %} disabled{% endif %}>↻</button>
