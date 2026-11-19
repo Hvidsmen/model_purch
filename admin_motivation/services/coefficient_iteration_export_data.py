@@ -24,12 +24,25 @@ def project(run_id,field,paths):
         return result
     table=connection.ops.quote_name(CoefficientIterationRun._meta.db_table)
     column=connection.ops.quote_name(CoefficientIterationRun._meta.get_field(field).column)
-    # A single multipath extraction parses a large JSON column only once.
-    args=['$.__export_unused__',*[json_path(parts) for parts in paths]]
+    if not paths:return []
+    # Older SQLite builds (including Windows Python 3.12) allow only 127
+    # function arguments. Keep each call below that cap, while selecting all
+    # chunks in one statement so even a running snapshot is read consistently.
+    # A sentinel forces an array result for a chunk containing just one path.
+    expressions=[];args=[]
+    for offset in range(0,len(paths),100):
+        chunk=['$.__export_unused__',*[json_path(parts) for parts in paths[offset:offset+100]]]
+        expressions.append(f'json_extract({column},'+','.join(['%s']*len(chunk))+')')
+        args.extend(chunk)
     with connection.cursor() as cursor:
-        cursor.execute(f'SELECT json_extract({column},'+','.join(['%s']*len(args))+f') FROM {table} WHERE id=%s',[*args,run_id])
-        value=cursor.fetchone()[0]
-    return json.loads(value)[1:] if value is not None else [None]*len(paths)
+        cursor.execute('SELECT '+','.join(expressions)+f' FROM {table} WHERE id=%s',[*args,run_id])
+        row=cursor.fetchone()
+    result=[]
+    for index,value in enumerate(row):
+        count=min(100,len(paths)-index*100)
+        result.extend(json.loads(value)[1:] if value is not None else [None]*count)
+    return result
+
 
 
 def array_records(run_id,field,parts,fields):
