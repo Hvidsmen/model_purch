@@ -225,7 +225,8 @@ def execute(run,progress,connector=None):
                         try:
                             connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
                             connection.autocommit=True;connection.timeout=0
-                            through=timezone.localtime(run.started_at).date()
+                            from zoneinfo import ZoneInfo
+                            through=timezone.localtime(run.started_at,ZoneInfo('Europe/Moscow')).date()
                             facts,author_source=read_fact(cursor,rates,through)
                         finally:
                             if connection is not None:connection.close()

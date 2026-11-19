@@ -40,28 +40,29 @@ class AuthorAllocationTests(SimpleTestCase):
         self.assertEqual({r['employee'] for r in rows if r['kind']=='Политики'},{'Обычный'})
         self.assertEqual([r for r in rows if r['kind']=='Продажи'],[r for r in self.rows if r['kind']=='Продажи'])
 
-    def test_fact_reader_limits_q4_and_records_prepared_identity(self):
-        cursor=Mock();cursor.fetchone.side_effect=[(1,2,3),('run-1','2026-11-19'),('run-1',)]
+    def test_fact_reader_uses_current_sales_author_without_prepared_or_erp_fallbacks(self):
+        cursor=Mock()
         cursor.fetchall.return_value=[(MOSCOW,'Иванов','1. RAC','Бытовые кондиционеры','DAIKIN','ДИЛЕРСКИЙ',D(10),0)]
         facts,source=read_fact(cursor,self.rates,date(2026,11,19))
-        query=next(call.args for call in cursor.execute.call_args_list if 'SUM(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD)' in call.args[0])
+        query=cursor.execute.call_args.args
         self.assertEqual(query[1:3],(date(2026,10,1),date(2026,11,20)))
-        self.assertIn('PortalPreparedSales',query[0]);self.assertIn('SUM(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD)',query[0])
-        self.assertEqual(source['prepared_run_id'],'run-1');self.assertEqual(facts[0]['author'],'Иванов')
+        self.assertIn('FROM DataWH.dbo.Sales s',query[0])
+        self.assertIn('s.Даичи_АвторСделкиНаименование',query[0])
+        for forbidden in ('PortalPreparedSales','PortalOriginalDealAuthor','DataWH.erp','EmpAuthorID','Автор документа продажи'):
+            self.assertNotIn(forbidden,query[0])
+        cursor.execute.assert_called_once();cursor.fetchone.assert_not_called()
+        self.assertEqual(facts[0]['author'],'Иванов')
         self.assertEqual(source['named_authors'],1);self.assertEqual(source['missing_author_rows'],0)
-        self.assertIn('ERP',source['author_source'])
-        queries=cursor.execute.call_args_list
-        self.assertEqual(len(queries[2].args),1)
-        self.assertIn('TOP(0)',queries[2].args[0])
-        self.assertTrue(queries[3].args[0].startswith('INSERT INTO #iteration_document_author_keys'))
-        self.assertEqual(queries[3].args[1:3],(date(2026,10,1),date(2026,11,20)))
-        self.assertEqual(len(queries[4].args),1)
+        self.assertEqual(source['author_source'],'DataWH.dbo.Sales.Даичи_АвторСделкиНаименование')
+        self.assertEqual(source['source_table'],'DataWH.dbo.Sales')
+        self.assertNotIn('prepared_run_id',source)
 
-    def test_changed_prepared_snapshot_and_null_sums_fail(self):
-        for missing,current in [(1,'run-1'),(0,'other')]:
-            cursor=Mock();cursor.fetchone.side_effect=[(1,2,3),('run-1','stamp'),(current,)]
-            cursor.fetchall.return_value=[(MOSCOW,'Иванов','1. RAC','*','*','ДИЛЕРСКИЙ',D(10),missing)]
-            with self.assertRaises(ValidationError):read_fact(cursor,self.rates,date(2026,11,19))
+    def test_unknown_amount_is_rejected_and_blank_author_is_preserved(self):
+        cursor=Mock();cursor.fetchall.return_value=[(MOSCOW,'','1. RAC','*','*','ДИЛЕРСКИЙ',D(10),1)]
+        with self.assertRaises(ValidationError):read_fact(cursor,self.rates,date(2026,11,19))
+        cursor.fetchall.return_value=[(MOSCOW,'','1. RAC','*','*','ДИЛЕРСКИЙ',D(10),0)]
+        facts,source=read_fact(cursor,self.rates,date(2026,11,19))
+        self.assertEqual(facts[0]['author'],'');self.assertEqual(source['missing_author_rows'],1)
 
 from django.test import TestCase
 from unittest.mock import patch
@@ -74,10 +75,14 @@ class AuthorRunnerTests(TestCase):
     def test_new_author_run_freezes_basis_and_keeps_sales_aggregate(self):
         configuration={**self.config,'scenarios':['moscow_q4_2026'],'authors_q4_2026':True}
         run=start(self.iteration.pk,self.user,configuration,self.iteration.revision)
+        from datetime import datetime,timezone as dt_timezone
+        run.started_at=datetime(2026,11,18,22,30,tzinfo=dt_timezone.utc)
+        run.save(update_fields=['started_at'])
         facts=[{'branch':MOSCOW,'author':name,'planning':'1. RAC','goods':'Бытовые кондиционеры','brand':'DAIKIN','channel':'ДИЛЕРСКИЙ','amount':value} for name,value in [('Иванов','30'),('Петров','70')]]
         connection,cursor=Mock(),Mock()
-        with patch('admin_motivation.services.coefficient_iteration_authors_2026.read_fact',return_value=(facts,{'rule':'test','prepared_run_id':'frozen','through':'2026-11-19','author_source':'ERP-документы','named_authors':2,'missing_author_rows':0})):
+        with patch('admin_motivation.services.coefficient_iteration_authors_2026.read_fact',return_value=(facts,{'rule':'test','through':'2026-11-19','source_table':'DataWH.dbo.Sales','author_field':'Даичи_АвторСделкиНаименование','author_source':'DataWH.dbo.Sales.Даичи_АвторСделкиНаименование','named_authors':2,'missing_author_rows':0})) as reader:
             execute(run,Mock(),connector=Mock(return_value=(connection,cursor)))
+        self.assertEqual(reader.call_args.args[2],date(2026,11,19))
         self.assertEqual(run.state,'completed',run.results)
         rows=run.results['moscow_q4_2026']['rows']
         self.assertEqual({r['employee']:D(r['total']) for r in rows if r['kind']=='Политики'},{'Иванов':D(6),'Петров':D(14)})
@@ -91,4 +96,4 @@ class AuthorRunnerTests(TestCase):
         connection.close.assert_called_once()
         response=self.client.get(self.url,{'run':run.pk})
         self.assertContains(response,'Именованных авторов: 2.')
-        self.assertContains(response,'ERP-документы')
+        self.assertContains(response,'Источник авторов: DataWH.dbo.Sales.Даичи_АвторСделкиНаименование')

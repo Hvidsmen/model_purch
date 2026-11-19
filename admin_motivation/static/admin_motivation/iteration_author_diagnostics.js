@@ -18,7 +18,8 @@
           const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Заполненность полей автора в Sales и подготовленном факте';details.append(summary);
           for(const field of report.column_coverage){const line=document.createElement('p');line.textContent=field.table+'.'+field.column+': заполнено '+field.nonempty+' из '+field.rows;details.append(line);}output.append(details);
         }
-        if(report.same_prepared_snapshot!==true){const warning=document.createElement('p');warning.textContent=report.same_prepared_snapshot===false?'Подготовленный источник уже отличается от источника сохранённого запуска. В отчёте указаны оба идентификатора.':'В старом запуске не сохранён идентификатор подготовленного источника; сравнить источники нельзя.';output.append(warning);}
+        if(report.uses_prepared===false){const info=document.createElement('p');info.textContent='Именованных авторов сейчас: '+report.current_named_authors+'. В сохранённом запуске: '+report.saved_named_authors+'.';output.append(info);}
+        else if(report.same_prepared_snapshot!==true){const warning=document.createElement('p');warning.textContent=report.same_prepared_snapshot===false?'Подготовленный источник уже отличается от источника сохранённого запуска. В отчёте указаны оба идентификатора.':'В старом запуске не сохранён идентификатор подготовленного источника; сравнить источники нельзя.';output.append(warning);}
         if(downloadURL)URL.revokeObjectURL(downloadURL);
         downloadURL=URL.createObjectURL(new Blob([JSON.stringify(report,null,2)],{type:'application/json;charset=utf-8'}));
         const link=document.createElement('a');link.href=downloadURL;link.download='iteration-'+report.run+'-author-diagnostics.json';link.className='btn btn-outline-primary';link.textContent='Скачать диагностику авторов';output.append(link);

@@ -92,6 +92,8 @@ def field_coverage(cursor,fields,predicate,params):
 
 def diagnose(snapshot,connector=None):
     predicate,params,frozen_source=scope(snapshot)
+    if frozen_source.get('source_table')=='DataWH.dbo.Sales':
+        return diagnose_live_sales(snapshot,predicate,params,frozen_source,connector)
     connection=None
     try:
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH');connection.timeout=120
@@ -133,5 +135,37 @@ def diagnose(snapshot,connector=None):
                 'saved_named_authors':frozen_source.get('named_authors'),'saved_missing_groups':frozen_source.get('missing_author_rows'),
                 'coverage':coverage,'samples':samples,'author_fields':author_fields,'column_coverage':columns,
                 'note':'Проверены физические строки факта политиков IV квартала в периоде и исключениях сохранённого запуска, независимо от фильтров экрана. Число строк отличается от числа группировок расчёта. План и результаты не изменены. Ключ по дате/номеру — только диагностическая гипотеза, он не применяется к выплатам.'}
+    finally:
+        if connection is not None:connection.close()
+
+
+def diagnose_live_sales(snapshot,predicate,params,frozen_source,connector=None):
+    """New runs read Sales directly; do not require the prepared publication."""
+    from .iteration_live_sales_authors import TABLE,FIELD,LABEL
+    connection=None
+    source=FROM.replace('DataWH.motivation.PortalPreparedSales',TABLE)
+    author=f"NULLIF(LTRIM(RTRIM(s.[{FIELD}])),N'')"
+    category=f"CASE WHEN {author} IS NULL THEN 'sales_author_blank' ELSE 'sales_author' END"
+    try:
+        connection,cursor=(connector or connect_database)('vm-dwh','DataWH');connection.timeout=120
+        cursor.execute('SELECT '+category+',COUNT_BIG(*),SUM(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD),COUNT(DISTINCT s.DocumentKey),COUNT(DISTINCT '+author+') '+source+' WHERE '+predicate+' GROUP BY '+category,*params)
+        coverage=[];named=0
+        for kind,count,amount,documents,people in cursor.fetchall():
+            named+=people
+            coverage.append({'status':kind,'label':'Автор сделки есть в текущем Sales' if kind=='sales_author' else 'В текущем Sales пустое поле автора сделки',
+                             'rows':count,'amount_usd':amount,'documents':documents})
+        cursor.execute('SELECT TOP(20) s.DocumentKey,s.DateInvoice,s.DocumentNumber,s.ModelCodeERP,p.ModelCode,p.PlanningGroupSalesErp,'+author+',s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD '+source+' WHERE '+predicate+' AND '+author+' IS NULL ORDER BY ABS(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD) DESC',*params)
+        fields=('document_key','invoice_date','invoice_number','model_erp','model','planning_group','author','amount_usd')
+        samples=[dict(zip(fields,row)) for row in cursor.fetchall()]
+        cursor.execute(FIELDS)
+        author_fields=[{'schema':schema,'table':table,'column':column,'type':kind} for schema,table,column,kind in cursor.fetchall()
+                       if schema.casefold()=='dbo' and table.casefold()=='sales']
+        columns=field_coverage(cursor,author_fields,predicate,params)
+        return {'run':snapshot.pk,'from':str(params[0]),'through':str(params[1]-timedelta(days=1)),
+                'source_table':TABLE,'author_field':FIELD,'uses_prepared':False,'same_prepared_snapshot':None,
+                'saved_named_authors':frozen_source.get('named_authors'),'current_named_authors':named,
+                'saved_missing_groups':frozen_source.get('missing_author_rows'),'coverage':coverage,'samples':samples,
+                'author_fields':author_fields,'column_coverage':columns,
+                'note':'Источник авторов: '+LABEL+'. Проверено текущее состояние Sales; в запуске хранится отдельный снимок прочитанного факта. Подготовленный набор, автор документа и ERP-подстановки не используются. План и результаты не изменены.'}
     finally:
         if connection is not None:connection.close()

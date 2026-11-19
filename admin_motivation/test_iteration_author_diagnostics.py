@@ -76,6 +76,18 @@ class DiagnosticsSourceTests(SimpleTestCase):
         self.assertEqual(query[0].count('('),query[0].count(')'))
         self.assertIn('FROM DataWH.dbo.Sales',query[0])
 
+    def test_live_sales_diagnostics_do_not_require_a_prepared_publication(self):
+        snap=snapshot();snap.results['moscow_q4_2026']['source']['source_table']='DataWH.dbo.Sales'
+        cursor=Mock();connection=Mock()
+        cursor.fetchall.side_effect=[[('sales_author',3831,Decimal(1000),50,9)],[],[]]
+        report=diagnose(snap,connector=Mock(return_value=(connection,cursor)))
+        self.assertFalse(report['uses_prepared']);self.assertEqual(report['current_named_authors'],9)
+        self.assertEqual(report['author_field'],'Даичи_АвторСделкиНаименование')
+        query=cursor.execute.call_args_list[0].args
+        self.assertIn('FROM DataWH.dbo.Sales s',query[0])
+        self.assertNotIn('PortalOriginalDealAuthor',query[0]);cursor.fetchone.assert_not_called()
+        connection.close.assert_called_once()
+
 
 def setup(test):
     fixture.CalculationTests.setUp(test)
