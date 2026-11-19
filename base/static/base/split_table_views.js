@@ -42,10 +42,22 @@
     }
     emit(root);
   }
+  let characteristics = true;
+  const referenceCells = [...table.querySelectorAll('.split-distribution-reference, .split-reference-heading')];
+  if (plan) table.querySelectorAll('thead tr:first-child, [data-plan-group], [data-plan-power-group], .split-matrix-grand-total').forEach(row => referenceCells.push(...[...row.cells].slice(0,4)));
+  if (!plan && table.classList.contains('split-stock-table')) table.querySelectorAll('.split-stock-power-row, tfoot tr').forEach(row => referenceCells.push(...[...row.cells].slice(0,4)));
+  panel.querySelector('[data-reference-columns]').addEventListener('click', event => {
+    characteristics = !characteristics;
+    event.currentTarget.setAttribute('aria-pressed',String(characteristics));
+    referenceCells.forEach(cell => {cell.hidden=!characteristics;});
+    table.querySelectorAll('.split-plan-subtotal > th:first-child').forEach(cell => {cell.colSpan=characteristics ? 5 : 1;});
+    table.querySelectorAll('[data-plan-empty], [data-stock-fullspan]').forEach(cell => {cell.colSpan += characteristics ? 4 : -4;});
+    sync();
+  });
   function sync() {
     const nested = mode === 'nested';
     table.dataset.tableView = mode;
-    panel.querySelectorAll('[data-table-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.tableView === mode)));
+  panel.querySelectorAll('[data-table-view]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.tableView === mode)));
     panel.querySelectorAll('[data-view-expand], [data-view-collapse]').forEach(button => { button.hidden = !nested; });
     if (plan) {
       document.dispatchEvent(new CustomEvent('split-table-view-change', {detail:{mode}}));

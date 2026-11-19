@@ -1,0 +1,58 @@
+"""Read-only workflow guidance, based on the existing validation result."""
+from urllib.parse import urlencode
+
+STAGES = [('composition', 'Состав плана', 'Выберите группы, каналы и способ задания объёма.'),
+          ('plan', 'Продажи', 'Задайте объёмы продаж, DDP и наценки. Сравните результат с фактом.'),
+          ('distribution', 'Распределение', 'Настройте месяцы, мощности и пары моделей для групп с планом.'),
+          ('stock', 'Запасы и поставки', 'Проверьте обеспеченность плана товаром и добавьте новые поставки.'),
+          ('checks', 'Проверка и утверждение', 'Исправьте ошибки, проверьте предупреждения и утвердите версию.')]
+
+
+def destination(message):
+    text = message.casefold()
+    if any(word in text for word in ('остат', 'поступлен', 'дефицит', 'прогноз', 'закуп', 'постав')):
+        return 'stock'
+    if any(word in text for word in ('мощност', 'сезонност', 'месячн', 'пару блок', 'внутреннего блока')):
+        return 'distribution'
+    if 'справочник' in text:
+        return 'composition'
+    return 'plan'
+
+
+def presentation(scenario, result, tab):
+    issues = []
+    for severity, messages in [('error', result['errors']), ('warning', result['warnings'])]:
+        for message in messages:
+            target = destination(message)
+            group = next(((gid,g) for gid,g in sorted(scenario.state['groups'].items(), key=lambda item: -len(item[1]['ref']['name']))
+                          if message.startswith(g['ref']['name'] + ':') or message.startswith(g['ref']['name'] + ' · ')), None)
+            query = {'tab':target}
+            if group:
+                query.update(group=group[0], focus='1')
+                if target == 'distribution':
+                    query['section'] = 'powers' if any(word in message.casefold() for word in ('мощност','пару блок','внутреннего блока')) else 'months'
+            issues.append({'message':message,'severity':severity,'tab':target,'url':'?' + urlencode(query),'action':'Перейти к исправлению' if severity == 'error' else 'Посмотреть'})
+    has_composition = bool(scenario.state['groups'] and scenario.state['channels'])
+    stages = []
+    for index, (key,title,description) in enumerate(STAGES, 1):
+        errors = [issue for issue in issues if issue['severity']=='error' and (key=='checks' or issue['tab']==key)]
+        warnings = [issue for issue in issues if issue['severity']=='warning' and (key=='checks' or issue['tab']==key)]
+        if key == 'composition':
+            detail = f"Групп: {len(scenario.state['groups'])} · каналов: {len(scenario.state['channels'])}"
+        elif errors:
+            detail = f'Нужно исправить: {len(errors)}'
+        elif warnings:
+            detail = f'Предупреждений: {len(warnings)}'
+        else:
+            detail = 'По сохранённым данным'
+        status = 'Не начат' if not has_composition else 'Требует внимания' if errors or warnings else 'Заполнен'
+        if key == 'composition' and has_composition and not errors:
+            status = 'Заполнен'
+        if key in ('distribution', 'stock') and not any(line.get('quantity') for line in result.get('lines', [])):
+            status, detail = 'Не начат', 'Сначала задайте положительный план продаж'
+        if key == 'checks' and scenario.status == 'approved':
+            status = 'Утверждён'
+        stages.append({'key':key,'title':title,'description':description,'number':index,'status':status,'detail':detail,'current':tab==key})
+    return {'stages':stages,'current':next((stage for stage in stages if stage['key']==tab), None),
+            'errors':[issue for issue in issues if issue['severity']=='error'],
+            'warnings':[issue for issue in issues if issue['severity']=='warning']}

@@ -6,12 +6,13 @@
 <label>Тип наружного блока<select data-reference-filter="outdoor_type"><option value="">Все</option></select></label>
 <label>Завод<select data-reference-filter="factory"><option value="">Все</option></select></label>
 <button type="button" class="admin-button secondary" data-reference-reset>Сбросить справочные фильтры</button>
-</div><p role="status" data-reference-filter-count></p><small>Фильтры скрывают строки без изменения введённых данных. Подытоги и общие итоги относятся ко всему сценарию.</small>
+</div><p role="status" data-reference-filter-count></p><details class="split-filter-help"><summary>О фильтрах и итогах</summary><small>Фильтры скрывают строки без изменения введённых данных. Подытоги и общие итоги относятся ко всему сценарию.</small></details>
 </section>
 
 <div class="split-table-view-controls" data-table-view-controls="{{ scenario.pk }}" role="group" aria-label="Вид таблицы">
 <button type="button" class="admin-button secondary" data-table-view="flat" aria-pressed="false">Таблица</button>
 <button type="button" class="admin-button secondary" data-table-view="nested" aria-pressed="true">Вложенный вид</button>
+<button type="button" class="admin-button secondary" data-reference-columns aria-pressed="true">Характеристики</button>
 <button type="button" class="admin-button secondary" data-view-expand>Развернуть разделы</button>
 <button type="button" class="admin-button secondary" data-view-collapse>Свернуть разделы</button>
 </div>

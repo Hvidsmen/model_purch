@@ -51,8 +51,8 @@ def scenario(request, pk):
     if not can_access(request.user, 'admin'):
         raise PermissionDenied
     item = get_object_or_404(SplitScenario, pk=pk)
-    tab = request.GET.get('tab', 'plan')
-    if tab not in ('plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
+    tab = request.GET.get('tab', 'composition' if not item.state['groups'] or not item.state['channels'] else 'plan')
+    if tab not in ('composition', 'plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
         tab = 'plan'
     distribution_section = request.GET.get('section', 'months')
     if distribution_section not in ('months','powers'):
@@ -63,6 +63,16 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
+    if request.method == 'POST' and request.POST.get('action') == 'save_stock_rows':
+        try:
+            if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
+                raise ValidationError('Расчёт изменён или утверждён. Обновите страницу.')
+            from .split_stock_batch import apply as apply_stock_batch
+            state, count = apply_stock_batch(item, request.POST.get('rows', ''))
+            persist(item, request.user, request.POST.get('revision'), state, f'Сток и поставки · сохранено групп: {count}')
+            return JsonResponse({'ok': True, 'count': count})
+        except ValidationError as exc:
+            return JsonResponse({'ok': False, 'error': ' '.join(exc.messages)}, status=400)
     if request.method == 'POST' and request.POST.get('action') in ('preview_month_grid','save_month_grid','preview_power_grid','save_power_grid'):
         try:
             if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
@@ -202,6 +212,8 @@ def scenario(request, pk):
         except ValidationError as exc:
             error = ' '.join(exc.messages)
     data = evaluate(item)
+    from .split_workspace_ux import presentation as workflow_presentation
+    workflow_ux = workflow_presentation(item, data, tab)
     from .split_history import presentation as history_presentation
     historical = history_presentation(item)
     from .split_matrix_totals import enrich_history, plan_totals, hide_empty_history_years
@@ -278,7 +290,7 @@ def scenario(request, pk):
         old_lines = {(row['gid'], row['cid']): row for row in old['lines']}
         comparison = {'scenario': reference, 'old': old['totals'], 'new': data['totals'], 'rows': [
             {'new': row, 'old': old_lines.get((row['gid'], row['cid']))} for row in data['lines']]}
-    return render(request, 'base/split_scenario.html', {'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
+    return render(request, 'base/split_scenario.html', {'workflow_ux': workflow_ux, 'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'history': historical,
