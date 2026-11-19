@@ -13,7 +13,7 @@ def summarize_plan_facts(details,year):
     for row in details:
         branch=row.get('branch');kind=row.get('kind')
         if not branch or kind not in KINDS:continue
-        if year!=2025:
+        if year!=2025 and not str(row.get('scenario','')).startswith('actual_q'):
             day=str(row.get('date') or '')
             try:q=(int(day[5:7])-1)//3+1
             except (ValueError,TypeError):continue

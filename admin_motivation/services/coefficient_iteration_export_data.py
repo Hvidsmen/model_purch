@@ -7,7 +7,7 @@ from ..models import CoefficientIterationRun
 from .coefficient_iteration_runner import SCENARIOS
 from .coefficient_iteration_export_summary import summarize_plan_facts
 
-FIELDS=('branch','kind','date','period','original_branch','planning','goods','brand','formula','department_plan','department_fact','plan','fact','segments','author_allocation','employee')
+FIELDS=('branch','kind','date','period','original_branch','planning','goods','brand','formula','department_plan','department_fact','plan','fact','segments','author_allocation','employee','scenario')
 
 
 def json_path(parts):return '$'+''.join('.'+json.dumps(str(part),ensure_ascii=False) for part in parts)
@@ -53,7 +53,7 @@ def array_records(run_id,field,parts,fields):
 
 def export_snapshot(run,*,include_bases=True):
     stamp=run.completed_at or run.started_at
-    key=f'iteration-compact-export-v3:{include_bases}:{run.pk}:{run.state}:{stamp.isoformat() if stamp else ""}'
+    key=f'iteration-compact-export-v4:{include_bases}:{run.pk}:{run.state}:{stamp.isoformat() if stamp else ""}'
     data=cache.get(key) if run.state!='running' else None
     if data is None:
         paths=[['rule'],['revision'],['excluded_subdivision_names'],['subdivision_policy'],['coefficient_exclusions'],
