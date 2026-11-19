@@ -8,8 +8,8 @@ from decimal import Decimal, InvalidOperation
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 from model_purch.conns import connect_database
-from .sales_planning_scope import PRODUCT_GROUP, split_groups
-from .sales_planning_group_service import group_key
+from .sales_planning_scope import PRODUCT_GROUP, split_groups, UNGROUPED_NAME
+from .sales_planning_group_service import group_key, ensure_ungrouped
 
 
 SNAPSHOT_SQL = 'SELECT COUNT_BIG(*) FROM DataWH.erp.StreamGoods WHERE ReportDate = ?'
@@ -71,7 +71,9 @@ def groups_from_stock(day, *, include_transit=True):
             continue
         name = str(name or '').strip()
         if not name:
-            raise ValidationError('На стоке или в пути есть номенклатура без группы планирования. Исправьте источник и обновите справочники.')
+            name = UNGROUPED_NAME
+            if group_key(name) not in available:
+                available[group_key(name)] = ensure_ungrouped()
         group = available.get(group_key(name))
         if group is None:
             missing.add(name)

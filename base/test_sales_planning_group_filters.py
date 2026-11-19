@@ -95,9 +95,9 @@ class GroupFilterTests(TestCase):
         old.is_active = False
         old.save()
         rebuild_groups()
-        self.assertEqual(self.names({}), {'Live'})
-        self.assertEqual(self.names({'inactive': '1'}), {'Live', 'Old'})
-        self.assertEqual(self.names({'inactive': '1', 'brand': ['B']}), set())
+        self.assertEqual(self.names({}), {'Live', 'Без группы планирования'})
+        self.assertEqual(self.names({'inactive': '1'}), {'Live', 'Old', 'Без группы планирования'})
+        self.assertEqual(self.names({'inactive': '1', 'brand': ['B']}), {'Без группы планирования'})
         response = self.client.get(self.url, {'brand': ['A']})
         self.assertEqual(response.context['ungrouped_count'], 1)
-        self.assertEqual(response.context['rows'][0]['pair_status'], 'Не настроены')
+        self.assertEqual(next(row for row in response.context['rows'] if row['group'].name == 'Live')['pair_status'], 'Не настроены')

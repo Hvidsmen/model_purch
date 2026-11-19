@@ -27,7 +27,7 @@ class GroupDirectoryTests(TestCase):
         return SalesPlanningGroup.objects.get(source_key=group_key('KUMO'))
 
     def test_normalized_groups_keep_all_models_and_empty_names_are_issues(self):
-        self.assertEqual(rebuild_groups(), 2)
+        self.assertEqual(rebuild_groups(), 3)
         group = self.group()
         self.assertEqual(set(group_goods(group).values_list('pk', flat=True)), {self.indoor.pk, self.outdoor.pk})
         stat = group_summaries([group])[0]
@@ -35,7 +35,7 @@ class GroupDirectoryTests(TestCase):
         self.assertEqual(stat['power_class'], ['07'])
         self.assertEqual(stat['block_type'], ['Внутренний', 'Наружный'])
         self.assertEqual(ungrouped_goods().count(), 1)
-        self.assertEqual(rebuild_groups(), 2)
+        self.assertEqual(rebuild_groups(), 3)
         self.assertEqual(self.group().pk, group.pk)
 
     def test_refresh_keeps_manual_settings_and_flags_obsolete_pairs(self):
