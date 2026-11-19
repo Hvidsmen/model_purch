@@ -25,7 +25,13 @@ def loaded_plan_versions():
     return versions
 
 
+class PreparationScheduleForm(forms.Form):
+    time=forms.TimeField(label='Время подготовки · МСК',widget=forms.TimeInput(format='%H:%M',attrs={'type':'time','required':True}),input_formats=['%H:%M'])
+    enabled=forms.BooleanField(label='Ежедневная подготовка включена',required=False)
+
+
 class JobForm(forms.ModelForm):
+    mode = forms.ChoiceField(label='Расписание',choices=[('manual','Только вручную'),('daily','После успешной ежедневной подготовки'),('once','Однократно')])
     variant = forms.ChoiceField(label='Вариант расчёта', choices=[('main', 'Основной · IV квартал'), ('all_2026', 'Все кварталы 2026')], required=False, initial='main')
 
     def clean_variant(self):
@@ -36,7 +42,7 @@ class JobForm(forms.ModelForm):
     plan_version = forms.ChoiceField(label='Загруженная версия плана продаж')
     quarter_share = forms.DecimalField(label='Квартальная доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=80)
     year_share = forms.DecimalField(label='Годовая доля, %', min_value=0, max_value=100, max_digits=9, decimal_places=6, initial=20)
-    run_at = forms.DateTimeField(label='Дата и время (Москва)', required=False,
+    run_at = forms.DateTimeField(label='Однократный запуск · дата и время (Москва)', required=False,
                                  widget=forms.DateTimeInput(attrs={'type': 'datetime-local'}, format='%Y-%m-%dT%H:%M'))
     class Meta:
         model = MotivationCalculationSchedule
@@ -66,7 +72,7 @@ class JobForm(forms.ModelForm):
 
     def clean(self):
         values = super().clean()
-        if values.get('enabled') and values.get('mode') != 'manual' and not values.get('run_at'):
+        if values.get('enabled') and values.get('mode') == 'once' and not values.get('run_at'):
             self.add_error('run_at', 'Укажите дату и время запуска.')
         if values.get('enabled') and values.get('mode') == 'once' and values.get('run_at') and values['run_at'] <= timezone.now():
             self.add_error('run_at', 'Однократный запуск должен быть в будущем.')
@@ -89,7 +95,7 @@ def calculations(request):
         from .services import prepared_sales
         try:
             prepared_sales.start()
-            messages.success(request, 'Подготовка факта запущена. Ежедневное задание настроено на 08:00 МСК.')
+            messages.success(request, 'Запущена только подготовка факта. Расчёт можно запустить отдельно; ежедневная цепочка работает по сохранённому расписанию.')
         except prepared_sales.PreparationBusy as exc:
             messages.info(request,str(exc))
         except Exception as exc:
@@ -98,10 +104,24 @@ def calculations(request):
             logger.exception('Prepared sales start failed [%s]',reference)
             messages.error(request, calculation_jobs.failure_message(exc,reference))
         return redirect('motivation_calculations')
+    preparation_form=PreparationScheduleForm(initial={'time':'09:00','enabled':True})
+    if request.method=='POST' and request.POST.get('action')=='save_preparation_schedule':
+        preparation_form=PreparationScheduleForm(request.POST)
+        if preparation_form.is_valid():
+            from .services import preparation_schedule
+            try:
+                preparation_schedule.save(preparation_form.cleaned_data['time'],preparation_form.cleaned_data['enabled'])
+                messages.success(request,'Расписание подготовки сохранено. Ежедневные расчёты запускаются после её успешного завершения.')
+                return redirect('motivation_calculations')
+            except Exception as exc:
+                from uuid import uuid4
+                reference=uuid4().hex[:12]
+                logger.exception('Preparation schedule save failed [%s]',reference)
+                preparation_form.add_error(None,calculation_jobs.failure_message(exc,reference))
     plan_versions = loaded_plan_versions()
     form = JobForm(plan_versions=plan_versions, main_only=True)
     edited_job_id = None
-    if request.method == 'POST':
+    if request.method == 'POST' and request.POST.get('action')!='save_preparation_schedule':
         job = get_object_or_404(MotivationCalculationSchedule.objects.filter(variant='main'), pk=request.POST['job']) if request.POST.get('job') else None
         edited_job_id = job.pk if job else None
         try:
@@ -141,19 +161,14 @@ def calculations(request):
         job.edit_open = bool(edited_job_id == job.pk)
         if job.run_at:
             job.edit_form.initial['run_at'] = job.run_at.astimezone(ZoneInfo('Europe/Moscow')).replace(tzinfo=None)
-        from datetime import timedelta
-        now=timezone.now().astimezone(ZoneInfo('Europe/Moscow'))
-        if job.mode=='manual' or not job.enabled or not job.run_at:
+        if job.mode=='daily' and job.enabled:
+            job.next_run_label='После успешной подготовки факта'
+        elif job.mode=='manual' or not job.enabled or not job.run_at:
             job.next_run_label='Только вручную' if job.mode=='manual' else 'Автозапуск отключён'
-        elif job.mode=='daily':
-            next_run=now.replace(hour=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).hour,minute=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).minute,second=job.run_at.second,microsecond=0)
-            if next_run<=now:next_run+=timedelta(days=1)
-            if next_run<job.run_at:next_run=job.run_at.astimezone(ZoneInfo('Europe/Moscow'))
-            job.next_run_label=next_run.strftime('%d.%m %H:%M')+' · по расписанию'
         else:
             job.next_run_label=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M') if job.run_at>timezone.now() else 'Время прошло · проверьте историю'
         job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
-    return render(request, 'admin_motivation/calculations.html', {'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions, main_only=True) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
+    return render(request, 'admin_motivation/calculations.html', {'preparation_form':preparation_form,'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions, main_only=True) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
 
 
 @never_cache

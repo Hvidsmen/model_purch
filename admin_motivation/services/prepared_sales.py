@@ -246,8 +246,8 @@ def install(cursor):
     cursor.execute(DDL+profile.DDL)
     cursor.execute(f"IF OBJECT_ID(N'{PROC}',N'P') IS NULL EXEC(N'CREATE PROCEDURE {PROC} AS RETURN;');")
     cursor.execute(procedure_sql())
-    # The daily schedule is fixed at 08:00 Moscow, converted to server-local time.
-    cursor.execute(f"""DECLARE @JobId uniqueidentifier,@Time int;
+    # Keep the independent manual job; the daily chain has its own Agent job.
+    cursor.execute(f"""DECLARE @JobId uniqueidentifier;
 SELECT @JobId=job_id FROM msdb.dbo.sysjobs WHERE name=N'{JOB}';
 IF @JobId IS NULL
 BEGIN
@@ -257,11 +257,10 @@ BEGIN
 END
 ELSE
  EXEC msdb.dbo.sp_update_jobstep @job_id=@JobId,@step_id=1,@command=N'EXEC {PROC};';
-IF NOT EXISTS(SELECT 1 FROM msdb.dbo.sysjobschedules js JOIN msdb.dbo.sysschedules s ON s.schedule_id=js.schedule_id WHERE js.job_id=@JobId AND s.name=N'{JOB}_0800_Moscow')
-BEGIN
- SET @Time=CONVERT(int,REPLACE(CONVERT(varchar(8),DATEADD(minute,DATEPART(TZOFFSET,SYSDATETIMEOFFSET())-180,DATEADD(hour,8,CONVERT(datetime,'19000101',112))),108),':',''));
- EXEC msdb.dbo.sp_add_jobschedule @job_id=@JobId,@name=N'{JOB}_0800_Moscow',@freq_type=4,@freq_interval=1,@active_start_time=@Time;
-END;""")
+""")
+    from .preparation_schedule import install as install_schedule
+    install_schedule(cursor)
+
 
 
 class PreparationBusy(RuntimeError):
@@ -298,17 +297,18 @@ def monitor(connector=None):
     try:
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH');connection.timeout=10
         cursor.execute("SELECT OBJECT_ID(N'motivation.PortalPreparedSalesRun')")
-        if not cursor.fetchone()[0]:return {'configured':False,'status':'Не настроено','history':[]}
+        if not cursor.fetchone()[0]:return {'configured':False,'status':'Не настроено','history':[],'schedule':{'time':'09:00','enabled':True,'configured':False}}
         cursor.execute("SELECT TOP(10) RunId,StartedAt,CompletedAt,State_,Stage_,RowCount_,ErrorNumber_ FROM motivation.PortalPreparedSalesRun ORDER BY StartedAt DESC")
         rows=cursor.fetchall()
         history=[dict(run_id=str(r[0]),started_at=r[1].isoformat()+'Z',completed_at=r[2].isoformat()+'Z' if r[2] else None,state=r[3],stage=r[4],row_count=r[5],error_number=r[6]) for r in rows]
         cursor.execute("SELECT r.RunId,r.CompletedAt,r.RowCount_ FROM motivation.PortalPreparedSalesActive a JOIN motivation.PortalPreparedSalesRun r ON r.RunId=a.RunId WHERE a.Id=1 AND r.State_=N'completed'")
         ready=cursor.fetchone()
-        cursor.execute(f"""SELECT a.start_execution_date,a.stop_execution_date,h.run_status
+        cursor.execute(f"""SELECT TOP(1) a.start_execution_date,a.stop_execution_date,h.run_status,j.name
  FROM msdb.dbo.sysjobs j LEFT JOIN msdb.dbo.sysjobactivity a ON a.job_id=j.job_id
  AND a.session_id=(SELECT MAX(session_id) FROM msdb.dbo.syssessions)
  OUTER APPLY(SELECT TOP(1) run_status FROM msdb.dbo.sysjobhistory WHERE job_id=j.job_id AND step_id=0 ORDER BY instance_id DESC) h
- WHERE j.name=N'{JOB}'""")
+ WHERE j.name IN(N'{JOB}',N'{JOB}_Daily')
+ ORDER BY CASE WHEN a.start_execution_date IS NOT NULL AND a.stop_execution_date IS NULL THEN 0 ELSE 1 END,a.start_execution_date DESC""")
         agent=cursor.fetchone();running=bool(agent and agent[0] and not agent[1])
         if history and history[0]['state']=='running' and agent and agent[1]:
             history[0]['state']='interrupted';history[0]['stage']='Подготовка прервана; предыдущий набор сохранён'
@@ -317,8 +317,11 @@ def monitor(connector=None):
         if not running and agent and agent[2]==0 and (not history or history[0]['state']=='completed'):
             status='Последний запуск задания завершился ошибкой. Проверьте историю SQL Agent'
         from .calculation_live_progress import read as live_read
-        live=live_read(cursor,JOB) if running else {}
-        return {'configured':bool(agent),'status':status,'agent_running':running,'history':history,'live':live,
+        live=live_read(cursor,agent[3] if len(agent)>3 else JOB) if running else {}
+        if running and history and history[0]['state']=='completed':status='Подготовка завершена · выполняются ежедневные расчёты'
+        from .preparation_schedule import read as read_schedule
+        schedule=read_schedule(cursor)
+        return {'schedule':schedule,'configured':bool(agent),'status':status,'agent_running':running,'history':history,'live':live,
             'running':running or bool(history and history[0]['state']=='running'),
             'stages':profile.read(cursor,history[0]['run_id']) if history else [],
             'ready':{'run_id':str(ready[0]),'completed_at':ready[1].isoformat()+'Z','row_count':ready[2]} if ready else None}

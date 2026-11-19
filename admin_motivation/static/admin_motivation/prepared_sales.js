@@ -4,6 +4,8 @@
  const status=root.querySelector('[data-prepared-status]'),ready=root.querySelector('[data-prepared-ready]');
  const start=root.querySelector('[data-prepared-start]');
  const form=start?.form;
+ const scheduleForm=root.querySelector('[data-preparation-schedule-form]');let scheduleEdited=scheduleForm?.dataset.bound==='true';
+ scheduleForm?.addEventListener('input',()=>{scheduleEdited=true;});
  let submitting=false,fetching=false;
  function startState(label,disabled){
   if(!start)return;
@@ -37,11 +39,17 @@
    const response=await fetch(root.dataset.monitorUrl,{cache:'no-store',headers:{Accept:'application/json'}});
    const data=await response.json();if(!response.ok)throw new Error(data.error||'Ошибка проверки статуса');
    renderStages(data.stages);
+   if(data.schedule){
+    const label=root.querySelector('[data-prepared-schedule]');if(label)label.textContent=data.schedule.configured===false?'Расписание ещё не настроено · по умолчанию '+data.schedule.time+' МСК':(data.schedule.enabled?'Ежедневно в '+data.schedule.time+' МСК':'Ежедневная подготовка отключена');
+    const save=root.querySelector('[data-preparation-save]');if(save)save.disabled=false;
+    if(scheduleForm&&!scheduleEdited){scheduleForm.elements.time.value=data.schedule.time;scheduleForm.elements.enabled.checked=data.schedule.enabled;}
+   }
    const current=data.history?.[0];
    const seconds=current?Math.max(0,Math.floor(((current.completed_at?Date.parse(current.completed_at):Date.now())-Date.parse(current.started_at))/1000)):0;
    status.textContent=`${data.status}${current?' · '+Math.floor(seconds/60)+' мин '+seconds%60+' сек':''}`;
    if(data.agent_running&&data.live?.waiting)status.textContent+=' · '+data.live.waiting+' · '+(data.live.wait_ms||0)+' мс (текущее ожидание)';
    const running=data.running===true||data.agent_running===true||current?.state==='running';
+   const progress=root.querySelector('[data-prepared-progress]');if(progress)progress.hidden=!running;
    if(!submitting)startState(running?'Подготовка выполняется…':'Подготовить сейчас',running);
    ready.textContent=data.ready?`Готовый набор: ${data.ready.run_id} · ${format(data.ready.completed_at)} МСК · строк: ${data.ready.row_count}`:'Готового набора пока нет. Сначала выполните подготовку.';
    const history=root.querySelector('[data-prepared-history]');history.replaceChildren();
