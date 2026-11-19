@@ -161,7 +161,7 @@ class CalculationTests(TestCase):
                     planning_group_sales='1. RAC',group='Бытовые кондиционеры',brand='DAIKIN',amount_usd=100,segment_amounts={'O0':'0','O1':'100','O2':'0','O3':'0','O4':'0'},
                     source_subdivisions={sub.subdivision_key:{'channel':'iteration-test','amount':'100','segments':{'O0':'0','O1':'100','O2':'0','O3':'0','O4':'0'}}})
             self.plans[year]=plan
-        self.version=GlobalCoeffVersion.objects.get(effective_from=date(2001,1,1));self.version.status='approved'
+        self.version,_=GlobalCoeffVersion.objects.get_or_create(effective_from=date(2001,1,1));self.version.status='approved'
         from django.db.models import QuerySet
         QuerySet(model=GlobalCoeffVersion).filter(pk=self.version.pk).update(status='approved')
         self.config={'scenarios':['moscow_q4_2026','full_2027'],'plan_2025':None,'plan_2026':self.plans[2026].pk,'plan_2027':self.plans[2027].pk,

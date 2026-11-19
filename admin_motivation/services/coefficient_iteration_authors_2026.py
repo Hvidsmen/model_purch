@@ -10,8 +10,9 @@ from .sales_plans import number
 from .prepared_sales import RULE as PREPARED_RULE, SCHEMA
 from .subdivision_scope import included
 from .motivation_exclusions import allowed
+from .iteration_document_authors import AUTHOR,RESOLVED,JOIN,create_keys,fill_keys,MAP_SQL
 
-RULE='q4-2026-author-plan-shares-v1'
+RULE='q4-2026-author-plan-shares-v2-erp-documents'
 SQL="""SELECT sub.SubdivisionName,
  COALESCE(NULLIF(LTRIM(RTRIM(s.Даичи_АвторСделкиНаименование)),N''),NULLIF(LTRIM(RTRIM(s.PortalOriginalDealAuthor)),N''),N''),
  COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesErp)),N''),N'9. OTHER'),
@@ -29,6 +30,7 @@ SQL="""SELECT sub.SubdivisionName,
  COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesErp)),N''),N'9. OTHER'),
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE N'' END,
  CASE WHEN p.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE N'' END,sub.Chanel"""
+SQL=SQL.replace(AUTHOR,RESOLVED).replace('INNER JOIN DataWH.dbo.Subdivisions sub',JOIN+'\n INNER JOIN DataWH.dbo.Subdivisions sub')
 
 
 def read_fact(cursor,rates,through):
@@ -46,6 +48,10 @@ def read_fact(cursor,rates,through):
     if not names:raise ValidationError('Не найдены Москва и ТТ для факта авторов.')
     from datetime import timedelta
     end=min(date(2027,1,1),through+timedelta(days=1))
+    cursor.execute(create_keys('DataWH.motivation.PortalPreparedSales'))
+    predicate='s.ClosedDealDate>=? AND s.ClosedDealDate<? AND EXISTS(SELECT 1 FROM DataWH.dbo.Subdivisions sub WHERE sub.SubdivisionKey=s.Subdivision AND sub.SubdivisionName IN ('+','.join('?' for _ in names)+'))'
+    cursor.execute(fill_keys('DataWH.motivation.PortalPreparedSales',predicate),date(2026,10,1),end,*names)
+    cursor.execute(MAP_SQL)
     cursor.execute(SQL.replace('__BRANCHES__',','.join('?' for _ in names)),date(2026,10,1),end,*names)
     facts=[]
     for sub,author,p,g,b,channel,amount,missing in cursor.fetchall():
@@ -56,7 +62,10 @@ def read_fact(cursor,rates,through):
     cursor.execute('SELECT CONVERT(nvarchar(36),RunId) FROM motivation.PortalPreparedSalesActive WHERE Id=1')
     current=cursor.fetchone()
     if not current or str(current[0])!=str(ready[0]):raise ValidationError('Подготовленный факт изменился во время чтения. Повторите расчёт.')
-    return facts,{'rule':RULE,'prepared_run_id':str(ready[0]),'completed_at':str(ready[1]),'from':'2026-10-01','through':str(min(through,date(2026,12,31))),'rows':len(facts)}
+    return facts,{'rule':RULE,'prepared_run_id':str(ready[0]),'completed_at':str(ready[1]),'from':'2026-10-01','through':str(min(through,date(2026,12,31))),'rows':len(facts),
+                  'author_source':'Автор подготовленного факта → исходный автор Sales → однозначный автор ERP-документа реализации или основания корректировки',
+                  'named_authors':len({norm(fact['author']) for fact in facts if fact['author'] and allowed('Политики',fact['planning'],fact['channel'])}),
+                  'missing_author_rows':sum(not fact['author'] and allowed('Политики',fact['planning'],fact['channel']) for fact in facts)}
 
 
 def split_value(value,weights):

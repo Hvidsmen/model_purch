@@ -44,10 +44,18 @@ class AuthorAllocationTests(SimpleTestCase):
         cursor=Mock();cursor.fetchone.side_effect=[(1,2,3),('run-1','2026-11-19'),('run-1',)]
         cursor.fetchall.return_value=[(MOSCOW,'Иванов','1. RAC','Бытовые кондиционеры','DAIKIN','ДИЛЕРСКИЙ',D(10),0)]
         facts,source=read_fact(cursor,self.rates,date(2026,11,19))
-        query=cursor.execute.call_args_list[2].args
+        query=next(call.args for call in cursor.execute.call_args_list if 'SUM(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD)' in call.args[0])
         self.assertEqual(query[1:3],(date(2026,10,1),date(2026,11,20)))
         self.assertIn('PortalPreparedSales',query[0]);self.assertIn('SUM(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD)',query[0])
         self.assertEqual(source['prepared_run_id'],'run-1');self.assertEqual(facts[0]['author'],'Иванов')
+        self.assertEqual(source['named_authors'],1);self.assertEqual(source['missing_author_rows'],0)
+        self.assertIn('ERP',source['author_source'])
+        queries=cursor.execute.call_args_list
+        self.assertEqual(len(queries[2].args),1)
+        self.assertIn('TOP(0)',queries[2].args[0])
+        self.assertTrue(queries[3].args[0].startswith('INSERT INTO #iteration_document_author_keys'))
+        self.assertEqual(queries[3].args[1:3],(date(2026,10,1),date(2026,11,20)))
+        self.assertEqual(len(queries[4].args),1)
 
     def test_changed_prepared_snapshot_and_null_sums_fail(self):
         for missing,current in [(1,'run-1'),(0,'other')]:
@@ -68,7 +76,7 @@ class AuthorRunnerTests(TestCase):
         run=start(self.iteration.pk,self.user,configuration,self.iteration.revision)
         facts=[{'branch':MOSCOW,'author':name,'planning':'1. RAC','goods':'Бытовые кондиционеры','brand':'DAIKIN','channel':'ДИЛЕРСКИЙ','amount':value} for name,value in [('Иванов','30'),('Петров','70')]]
         connection,cursor=Mock(),Mock()
-        with patch('admin_motivation.services.coefficient_iteration_authors_2026.read_fact',return_value=(facts,{'rule':'test','prepared_run_id':'frozen','through':'2026-11-19'})):
+        with patch('admin_motivation.services.coefficient_iteration_authors_2026.read_fact',return_value=(facts,{'rule':'test','prepared_run_id':'frozen','through':'2026-11-19','author_source':'ERP-документы','named_authors':2,'missing_author_rows':0})):
             execute(run,Mock(),connector=Mock(return_value=(connection,cursor)))
         self.assertEqual(run.state,'completed',run.results)
         rows=run.results['moscow_q4_2026']['rows']
@@ -81,3 +89,6 @@ class AuthorRunnerTests(TestCase):
         base=next(row for row in run.results['moscow_q4_2026']['plan_fact_summary'] if row['kind']=='Политики')
         self.assertEqual(D(base['plan']),D(200));self.assertEqual(D(base['fact']),D(200))
         connection.close.assert_called_once()
+        response=self.client.get(self.url,{'run':run.pk})
+        self.assertContains(response,'Именованных авторов: 2.')
+        self.assertContains(response,'ERP-документы')

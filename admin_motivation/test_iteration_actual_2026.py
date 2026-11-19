@@ -69,7 +69,7 @@ class ActualQuarterTests(SimpleTestCase):
         with patch('admin_motivation.services.coefficient_iteration_2025.read_2025',return_value=([self.sample()],{})) as read, \
              patch('admin_motivation.services.coefficient_iteration_2025.read_details',return_value=([],[])), \
              patch('admin_motivation.services.coefficient_iteration_runner.directors_2025',return_value=([],[])):
-            rows,details,source=calculate(cursor,plans,rates,{'payout_threshold':'.8'},{},Mock())
+            rows,details,source=calculate(cursor,plans,rates,{'payout_threshold':'.8'},{'coefficients':[]},Mock())
         selected=read.call_args.args[1]
         self.assertEqual(len(selected),6)
         self.assertEqual({row['branch_name'] for row in selected},{MERGED})
@@ -78,7 +78,7 @@ class ActualQuarterTests(SimpleTestCase):
         self.assertEqual(len(ddl),1)
         self.assertIn('CREATE TABLE #iteration_actual_subdivisions',ddl[0])
         self.assertIn('CREATE TABLE #iteration_actual_formula_keys',ddl[0])
-        query=cursor.execute.call_args_list[1].args
+        query=next(call.args for call in cursor.execute.call_args_list if call.args[0].startswith('INSERT INTO #iteration_actual_subdivisions'))
         self.assertIn('INSERT INTO #iteration_actual_subdivisions',query[0])
         self.assertEqual(set(query[1:]),{MOSCOW,TT})
         self.assertEqual(source['through'],'2026-09-30')
