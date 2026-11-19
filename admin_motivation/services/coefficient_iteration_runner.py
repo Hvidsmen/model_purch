@@ -192,13 +192,14 @@ def execute(run,progress,connector=None):
                 'loaded_at':plan.loaded_at,'sha256':sha256(json.dumps(safe(rows),sort_keys=True).encode()).hexdigest(),'rows':rows}
             plans[year]=rows
         inputs['plans']=safe(snapshots);run.inputs=inputs;run.save(update_fields=['inputs'])
-        actual_2026=None
+        actual_2026=None;actual_2026_error=None
         for scenario in SCENARIOS:
             if scenario not in settings['scenarios']:continue
             year,title=SCENARIOS[scenario]
             try:
                 if scenario.startswith('actual_q'):
                     from .coefficient_iteration_actual_2026 import calculate,quarter_result
+                    if actual_2026_error:raise ValidationError(actual_2026_error)
                     if actual_2026 is None:
                         connection=None
                         try:
@@ -266,6 +267,7 @@ def execute(run,progress,connector=None):
                     reference=uuid.uuid4().hex[:12]
                     logging.getLogger(__name__).exception('Coefficient iteration %s failed [%s]',run.pk,reference)
                     message='Не удалось выполнить сценарий. Подробности в журнале сервера. Код: '+reference
+                if scenario.startswith('actual_q') and actual_2026 is None:actual_2026_error=message
                 results[scenario]={'state':'failed','title':title,'year':year,'error':message}
             run.results=results;run.save(update_fields=['results'])
         run.state='failed' if failed else 'completed'

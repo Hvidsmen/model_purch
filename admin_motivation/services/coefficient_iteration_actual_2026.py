@@ -45,9 +45,20 @@ def calculate(cursor,plans,rates,settings,formulas,progress):
     if {rates.role(r.get('branch_name') or rates.name_for_key(r['branch'])) for r in selected}!={MOSCOW,TT}:
         raise ValidationError('Для I–III кварталов нужны планы Москвы и Термотрейда.')
     names=sorted({name for name in rates.names.values() if rates.role(name) in (MOSCOW,TT)})
-    cursor.execute('SELECT * INTO #iteration_actual_subdivisions FROM dbo.Subdivisions WHERE SubdivisionName IN ('+','.join('?' for _ in names)+')',*names)
+    if {rates.role(name) for name in names}!={MOSCOW,TT}:
+        raise ValidationError('В снимке справочника не найдены Москва и Термотрейд. Обновите сопоставление подразделений.')
+    # SQL Server ODBC executes parameterized batches in a nested RPC scope.
+    # A temp table created in that scope disappears when execute returns.
+    # Create both tables in the caller session; bind values only in INSERTs.
+    cursor.execute('''CREATE TABLE #iteration_actual_subdivisions(
+ SubdivisionKey nvarchar(255) COLLATE DATABASE_DEFAULT,
+ SubdivisionName nvarchar(255) COLLATE DATABASE_DEFAULT,
+ Chanel nvarchar(255) COLLATE DATABASE_DEFAULT);
+ CREATE TABLE #iteration_actual_formula_keys(SubdivisionKey nvarchar(255) COLLATE DATABASE_DEFAULT);''')
+    cursor.execute('''INSERT INTO #iteration_actual_subdivisions(SubdivisionKey,SubdivisionName,Chanel)
+ SELECT CONVERT(nvarchar(255),SubdivisionKey),SubdivisionName,Chanel FROM dbo.Subdivisions WHERE SubdivisionName IN ('''+','.join('?' for _ in names)+')',*names)
     moscow=[name for name in names if rates.role(name)==MOSCOW]
-    cursor.execute('SELECT SubdivisionKey INTO #iteration_actual_formula_keys FROM #iteration_actual_subdivisions WHERE SubdivisionName IN ('+','.join('?' for _ in moscow)+')',*moscow)
+    cursor.execute('INSERT INTO #iteration_actual_formula_keys(SubdivisionKey) SELECT SubdivisionKey FROM #iteration_actual_subdivisions WHERE SubdivisionName IN ('+','.join('?' for _ in moscow)+')',*moscow)
     cursor.execute('UPDATE #iteration_actual_subdivisions SET SubdivisionName=?',MERGED)
     private=Cursor(cursor);adapter=Rates(rates)
     selected=[{**row,'branch_name':MERGED} for row in selected]
