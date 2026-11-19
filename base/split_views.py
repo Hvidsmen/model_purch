@@ -63,6 +63,15 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
+    if request.method == 'POST' and request.POST.get('action') in ('ddp_catalog','preview_ddp'):
+        try:
+            if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
+                raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            from .split_ddp import catalog,preview
+            result=catalog(item,request.POST.get('purchase')) if request.POST['action']=='ddp_catalog' else preview(item,request.POST)
+            return JsonResponse({'ok':True,**result})
+        except ValidationError as exc:
+            return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     if request.method == 'POST' and request.POST.get('action') == 'save_plan_rows':
         try:
             if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
@@ -313,7 +322,12 @@ def scenario(request, pk):
         old_lines = {(row['gid'], row['cid']): row for row in old['lines']}
         comparison = {'scenario': reference, 'old': old['totals'], 'new': data['totals'], 'rows': [
             {'new': row, 'old': old_lines.get((row['gid'], row['cid']))} for row in data['lines']]}
-    return render(request, 'base/split_scenario.html', {'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
+    from model_purch.models import ScenarioModel
+    from django.utils import timezone
+    from zoneinfo import ZoneInfo
+    return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' else [],
+        'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
+        'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'history': historical,

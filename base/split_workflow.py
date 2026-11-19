@@ -191,6 +191,8 @@ def changed_state(scenario, post, *, allow_empty=False):
                 line.update(input=decimal_input(post, 'q_' + suffix, optional=False), fact=decimal_input(post, 'fact_' + suffix),
                     markup=decimal_input(post, 'markup_' + suffix), lock_qty=post.get('lockq_' + suffix) == 'on',
                     lock_markup=post.get('lockm_' + suffix) == 'on')
+        from .split_ddp import apply_pending
+        apply_pending(scenario,state,post)
     elif action in ('distribution', 'distribution_months', 'distribution_powers', 'equal_months', 'equal_powers'):
         gid, cid, group = selected(state, post)
         if action == 'equal_months':
