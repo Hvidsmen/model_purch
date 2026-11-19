@@ -7,9 +7,10 @@
   const find = (attribute, id) => controls(attribute).find(node => node.getAttribute(attribute) === id);
   function syncSpans() {
     const count = Array.from(table.tHead.rows[0].cells)
-      .filter(cell => !cell.hidden).reduce((sum, cell) => sum + cell.colSpan, 0);
-    table.querySelectorAll('[data-stock-fullspan]').forEach(cell => { cell.colSpan = count; });
+      .filter(cell => !cell.hidden && !cell.hasAttribute('data-split-metric-off')).reduce((sum, cell) => sum + cell.colSpan, 0);
+    table.querySelectorAll('[data-stock-fullspan]').forEach(cell => { if(cell.colSpan!==count)cell.colSpan = count; });
   }
+  document.addEventListener('split-metric-visibility-change',syncSpans);
   function choose(id, mode) {
     const state = states.find(node => node.dataset.forecastState === id);
     if (!state) return;

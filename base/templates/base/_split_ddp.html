@@ -1,5 +1,5 @@
 <style>#split-ddp-dialog{border:1px solid #d8d2f0;border-radius:12px;padding:24px;color:inherit}#split-ddp-dialog::backdrop{background:#17234066}#split-ddp-dialog .split-filter-row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}#split-ddp-dialog [hidden]{display:none!important}#split-ddp-dialog input[type=search]{min-width:220px;max-width:100%}#split-ddp-dialog article>select{margin:0 10px}#split-ddp-dialog [data-ddp-preview]{overflow:auto}#split-ddp-dialog td{white-space:normal;vertical-align:top}</style>
-<button type="button" class="admin-button secondary" data-ddp-open {% if scenario.status != 'draft' %}disabled{% endif %}>Заполнить DDP</button>
+<button type="button" class="admin-button secondary" data-split-metric="ddp" data-ddp-open {% if scenario.status != 'draft' %}disabled{% endif %}>Заполнить DDP</button>
 <dialog id="split-ddp-dialog" aria-labelledby="split-ddp-title" style="max-width:1000px;width:90vw;max-height:85vh;overflow:auto">
 <h2 id="split-ddp-title">Заполнить DDP</h2>
 <p>Сначала выберите источник и группы, затем проверьте предложение. Надбавка к себестоимости задаётся отдельно от наценки продаж.</p>
