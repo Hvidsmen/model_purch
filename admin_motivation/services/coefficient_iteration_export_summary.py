@@ -21,6 +21,7 @@ def summarize_plan_facts(details,year):
             period=f'{q} квартал';key=(branch,kind,period)
             # Multiple directors use the same base, once per original plan scope.
             scope=(branch,kind,row.get('original_branch'),day,row.get('planning'),row.get('goods'),row.get('brand'))
+            if row.get('author_allocation'):scope=(*scope,row.get('employee'))
             if scope in seen:continue
             seen.add(scope)
             target=grouped.setdefault(key,{'branch':branch,'kind':kind,'period':period,'plan':ZERO,'fact':ZERO,'segments':[ZERO]*5,'note':'Факт равен плану: сценарий 100%'})

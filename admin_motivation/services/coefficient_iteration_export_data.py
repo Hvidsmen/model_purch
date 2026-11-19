@@ -7,7 +7,7 @@ from ..models import CoefficientIterationRun
 from .coefficient_iteration_runner import SCENARIOS
 from .coefficient_iteration_export_summary import summarize_plan_facts
 
-FIELDS=('branch','kind','date','period','original_branch','planning','goods','brand','formula','department_plan','department_fact','plan','fact','segments')
+FIELDS=('branch','kind','date','period','original_branch','planning','goods','brand','formula','department_plan','department_fact','plan','fact','segments','author_allocation','employee')
 
 
 def json_path(parts):return '$'+''.join('.'+json.dumps(str(part),ensure_ascii=False) for part in parts)
@@ -53,7 +53,7 @@ def array_records(run_id,field,parts,fields):
 
 def export_snapshot(run,*,include_bases=True):
     stamp=run.completed_at or run.started_at
-    key=f'iteration-compact-export-v2:{include_bases}:{run.pk}:{run.state}:{stamp.isoformat() if stamp else ""}'
+    key=f'iteration-compact-export-v3:{include_bases}:{run.pk}:{run.state}:{stamp.isoformat() if stamp else ""}'
     data=cache.get(key) if run.state!='running' else None
     if data is None:
         paths=[['rule'],['revision'],['excluded_subdivision_names'],['subdivision_policy'],['coefficient_exclusions'],
@@ -73,11 +73,11 @@ def export_snapshot(run,*,include_bases=True):
         paths=[]
         for scenario in SCENARIOS:
             paths.extend([[scenario,field] if include_bases or field not in ('plan_fact_summary','plan_fact_summary_rub') else ['__unused_base__'] for field in ('state','title','year','rows','error','plan_fact_summary','plan_fact_summary_rub')])
-            paths.extend([[scenario,'source',field] for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub')])
+            paths.extend([[scenario,'source',field] for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub','rule','from','through')])
         values=iter(project(run.pk,'results',paths));results={}
         for scenario,(year,title) in SCENARIOS.items():
             item={field:next(values) for field in ('state','title','year','rows','error','plan_fact_summary','plan_fact_summary_rub')}
-            item['source']={field:next(values) for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub')}
+            item['source']={field:next(values) for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub','rule','from','through')}
             if item['state'] is None:continue
             item['year']=item['year'] or year;item['title']=item['title'] or title
             if include_bases and item['state']=='completed' and item['plan_fact_summary'] is None:

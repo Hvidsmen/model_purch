@@ -69,6 +69,8 @@ def table(book,title,headers,rows,text_columns=(),*,column_groups=(),percent_col
 def result_table(book,title,rows,year,names=None,currency="USD"):
     quarters=[4] if year==2026 else [1,2,3,4]
     headers=['Подразделение','Вид мотивации','Сотрудник']
+    author_plan=any('allocated_plan' in row for row in rows)
+    if author_plan:headers.append('Распределённый план IV квартала, USD')
     groups=[]
     for q in quarters:
         groups.append((len(headers)+1,len(headers)+1,len(headers)+2))
@@ -81,6 +83,7 @@ def result_table(book,title,rows,year,names=None,currency="USD"):
     def values():
         for row in rows:
             cells=[(names or {}).get(row['branch'],row['branch']),row['kind'],row.get('employee','')]
+            if author_plan:cells.append(row.get('allocated_plan'))
             for q in quarters:cells.extend([row['possible'][q-1],row['quarters'][q-1]])
             cells.append(sum((Decimal(str(value)) for value in row['quarters']),Decimal(0)))
             cells.extend(row['annual_quarters'][q-1] for q in quarters)
@@ -131,7 +134,7 @@ def workbook(run):
         else:meta.append([f'RUB {year}','В этом запуске RUB не сохранён; нужен новый расчёт.'])
         source=result.get('source') or {}
         if isinstance(source,dict):
-            for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub'):
+            for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub','rule','from','through'):
                 if source.get(field) is not None:meta.append([f'Источник {year}: {field}',str(source[field])])
         for currency,key in (('USD','plan_fact_summary'),('RUB','plan_fact_summary_rub')):
             if currency=='RUB' and result.get(key) is None:continue
