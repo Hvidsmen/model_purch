@@ -3,7 +3,7 @@
   const controllers=[];let leaving=false,nextURL='',saving=false;
   const dock=document.createElement('div');dock.className='split-unsaved-dock';dock.hidden=true;
   const status=document.createElement('span');status.setAttribute('role','status');
-  const save=document.createElement('button');save.type='button';save.className='admin-button';save.textContent='Сохранить все изменения';
+  const save=document.createElement('button');save.type='button';save.className='admin-button';save.textContent='Сохранить все изменения';save.title='Ctrl+S / Cmd+S';save.setAttribute('aria-keyshortcuts','Control+S Meta+S');
   const cancel=document.createElement('button');cancel.type='button';cancel.className='admin-button secondary';cancel.textContent='Отменить все изменения';dock.append(status,save,cancel);document.body.append(dock);
   new ResizeObserver(()=>document.documentElement.style.setProperty('--split-save-dock-height',dock.hidden?'0px':dock.offsetHeight+'px')).observe(dock);
   const dialog=document.createElement('dialog');dialog.className='split-unsaved-dialog';dialog.setAttribute('aria-label','Несохранённые изменения');
@@ -31,6 +31,20 @@
     try{await changed[0].save(url);}catch(failure){error.textContent=failure.message;status.textContent='Не сохранено: '+failure.message;}finally{saving=false;refresh();}
   }
   save.addEventListener('click',()=>saveAll(null));
+  document.addEventListener('keydown',event=>{
+    if(!(event.ctrlKey||event.metaKey)||event.altKey||event.shiftKey||event.isComposing||!(event.code==='KeyS'||event.key.toLowerCase()==='s'))return;
+    if(!controllers.length&&!document.querySelector('.split-workspace'))return;
+    event.preventDefault();
+    if(event.repeat||dialog.open||saving||controllers.some(controller=>controller.busy()))return;
+    const changed=dirty();
+    if(!changed.length){window.SplitProgress?.start('Сохранение').finish('Нет несохранённых изменений.');return;}
+    if(changed.some(controller=>!controller.canSave())){
+      window.SplitProgress?.start('Сохранение').fail('Исправьте ошибки ввода перед сохранением.');
+      document.querySelector('[aria-invalid="true"], .split-workspace input:invalid')?.focus();return;
+    }
+    saveAll(null);
+  });
+
   cancel.addEventListener('click',()=>{dirty().forEach(controller=>controller.discard());refresh();});
   yes.addEventListener('click',()=>saveAll(nextURL));
   no.addEventListener('click',()=>{dirty().forEach(controller=>controller.discard());dialog.close();navigate(nextURL);});
