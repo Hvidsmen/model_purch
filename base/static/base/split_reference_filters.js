@@ -6,6 +6,8 @@
   const storage = 'split-reference-filters-' + panel.dataset.referenceFilters;
   let saved = {};
   try { saved = JSON.parse(sessionStorage.getItem(storage) || '{}'); } catch (_) {}
+  const brand=document.querySelector('[data-brand-pages]')?.dataset.brandPages;
+  if(brand){try{if(sessionStorage.getItem(storage+'-brand')!==brand)delete saved.brand;sessionStorage.setItem(storage+'-brand',brand);}catch{}}
   const tokens = value => String(value || '—').split(',').map(part => part.trim()).filter(Boolean);
   const selectedValues = control => [...control.selectedOptions].map(option => option.value);
   const widgets = new Map();

@@ -305,3 +305,7 @@
 .split-plan-total-entry .admin-button{font-size:10px;min-height:28px;padding:4px 6px;margin:0}
 .split-plan-group-total .split-history-metrics>[data-split-metric="quantity"]{display:none}
 .split-workspace[data-split-metrics-compact] .split-plan-matrix input[type=number]{width:72px;padding:5px 6px}
+.split-brand-pages{margin-top:12px}.split-brand-pages>small{display:block;margin:5px 0;color:#64748b}
+.split-brand-links{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px;max-height:180px;overflow:auto}
+.split-brand-links .admin-button{min-height:30px;padding:4px 8px;font-size:12px;gap:5px}
+.split-brand-links [aria-current=page]{background:#ede8ff;color:#4e36af;border-color:#8065df;font-weight:600}

@@ -241,7 +241,11 @@ def scenario(request, pk):
                     messages.success(request, f"{scope_label} на {item.stock_date:%d.%m.%Y}: найдено групп {len(state['inventory_selection']['groups'])}, добавлено {state['inventory_selection']['added']}. Плановые значения не перезаписаны.")
                 else:
                     messages.success(request, 'Изменения сохранены.' if action != 'approve' else 'План утверждён. Редактирование заблокировано.')
-                return redirect(return_to(pk, tab, gid, cid, distribution_section))
+                target=return_to(pk,tab,gid,cid,distribution_section)
+                if request.GET.get('brand_page') and tab in ('plan','stock','distribution'):
+                    from urllib.parse import urlencode
+                    target+='&'+urlencode({'brand_page':request.GET['brand_page']})
+                return redirect(target)
         except ValidationError as exc:
             error = ' '.join(exc.messages)
         except IntegrityError:
@@ -260,24 +264,27 @@ def scenario(request, pk):
     from .split_workspace_ux import presentation as workflow_presentation
     workflow_ux = workflow_presentation(item, data, tab)
     from .split_history import presentation as history_presentation
-    historical = history_presentation(item)
+    from .split_brand_pages import scope as brand_scope
+    display_item,brand_page=brand_scope(item,request.GET) if tab in ('plan','stock','distribution') else (item,None)
+    display_data=evaluate(display_item) if display_item is not item else data
+    historical = history_presentation(display_item)
     from .split_matrix_totals import enrich_history, plan_totals, hide_empty_history_years
     hide_empty_history_years(historical)
     historical['latest_year'] = historical['years'][-1] if historical['snapshot'] and historical['years'] else None
     history_total = enrich_history(historical)
-    matrix_totals = plan_totals(data, item.state)
+    matrix_totals = plan_totals(display_data, display_item.state)
     from .split_plan_presentation import presentation as plan_presentation
-    plan_detail = plan_presentation(item, data) if tab == 'plan' else {}
-    inventory = stock_overview(item, data) if tab in ('plan', 'stock') else None
+    plan_detail = plan_presentation(display_item, display_data) if tab == 'plan' else {}
+    inventory = stock_overview(display_item, display_data) if tab in ('plan', 'stock') else None
     if tab == 'stock':
         from .split_plan_presentation import references
-        stock_references = references(item)
+        stock_references = references(display_item)
         for row in inventory['groups']:
             row['reference'] = stock_references[row['id']]
     from .split_plan_inventory import presentation as inventory_presentation
     plan_inventory = inventory_presentation(inventory) if tab == 'plan' else None
     from .split_plan_hierarchy import presentation as hierarchy_presentation
-    plan_hierarchy = hierarchy_presentation(item, plan_detail, data, historical, plan_inventory) if tab == 'plan' else []
+    plan_hierarchy = hierarchy_presentation(display_item, plan_detail, display_data, historical, plan_inventory) if tab == 'plan' else []
     plan_lines = {}
     for line in data['lines']:
         plan_lines.setdefault(line['gid'], {})[line['cid']] = line
@@ -311,9 +318,9 @@ def scenario(request, pk):
     distribution_overview = None
     if tab == 'distribution':
         from .split_distribution_overview import overview
-        distribution_overview = overview(item,distribution_section,distribution_filters)
+        distribution_overview = overview(display_item,distribution_section,distribution_filters)
         from .split_plan_presentation import references
-        distribution_references = references(item)
+        distribution_references = references(display_item)
         for row in distribution_overview['rows']:
             row['reference'] = distribution_references[row['gid']]
     reference_filters = None
@@ -340,7 +347,7 @@ def scenario(request, pk):
     from zoneinfo import ZoneInfo
     return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' else [],
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
-        'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
+        'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'history': historical,
