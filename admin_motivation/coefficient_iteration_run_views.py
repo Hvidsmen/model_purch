@@ -22,7 +22,7 @@ class CalculationForm(forms.Form):
     plan_2026=forms.ModelChoiceField(label='Загруженный план 2026',queryset=SalesPlanScenario.objects.none(),required=False)
     plan_2027=forms.ModelChoiceField(label='Загруженный план 2027',queryset=SalesPlanScenario.objects.none(),required=False)
     plan_2025=forms.ModelChoiceField(label='Загруженный план 2025',queryset=SalesPlanScenario.objects.none(),required=False)
-    formula_version=forms.ModelChoiceField(label='Утверждённая версия формул и поправок директоров для 2025',queryset=GlobalCoeffVersion.objects.none(),required=False)
+    formula_version=forms.ModelChoiceField(label='Утверждённая версия формул и поправок директоров для фактического расчёта',queryset=GlobalCoeffVersion.objects.none(),required=False)
     quarter_share=forms.DecimalField(label='Квартальная доля, %',initial=80,min_value=0,max_value=100,decimal_places=6)
     year_share=forms.DecimalField(label='Годовая доля, %',initial=20,min_value=0,max_value=100,decimal_places=6)
     payout_threshold=forms.DecimalField(label='Порог выплаты (0,8 = 80%)',initial='.8',min_value=0,max_value=1,decimal_places=8)
@@ -46,8 +46,8 @@ class CalculationForm(forms.Form):
         data=super().clean()
         if data.get('quarter_share') is not None and data.get('year_share') is not None and data['quarter_share']+data['year_share']!=100:
             raise ValidationError('Квартальная и годовая доли должны в сумме составлять 100%.')
-        if 'actual_2025' in data.get('scenarios',[]) and not data.get('formula_version'):
-            self.add_error('formula_version','Выберите утверждённую версию формул для директоров 2025.')
+        if any(s=='actual_2025' or s.startswith('actual_q') for s in data.get('scenarios',[])) and not data.get('formula_version'):
+            self.add_error('formula_version','Выберите утверждённую версию формул для фактического расчёта.')
         for scenario in data.get('scenarios',[]):
             year=SCENARIOS[scenario][0]
             if not data.get(f'plan_{year}'):self.add_error(f'plan_{year}',f'Выберите загруженный план {year}.')
@@ -113,7 +113,7 @@ def calculations(request,pk):
         snapshot=export_snapshot(run,include_bases=False)
         names=snapshot.inputs['export_names']
         for scenario,value in snapshot.results.items():
-            qs=[4] if value.get('year')==2026 else [1,2,3,4]
+            qs=[int(scenario[8])] if scenario.startswith('actual_q') else [4] if value.get('year')==2026 else [1,2,3,4]
             item={**value,'key':scenario,'quarters':qs}
             if value.get('state')=='completed':
                 from .services.coefficient_iteration_currency import display_rows

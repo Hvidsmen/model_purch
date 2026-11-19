@@ -24,6 +24,7 @@ class IterationCalculationBrowserTests(StaticLiveServerTestCase):
         self.page.get_by_role('link',name='Выбрать планы и запустить расчёт →').click()
         expect(self.page.get_by_role('heading',name='Расчёты новой итерации',exact=False)).to_be_visible()
         self.page.locator('input[name=scenarios][value=actual_2025]').uncheck()
+        for q in (1,2,3):self.page.locator(f'input[name=scenarios][value=actual_q{q}_2026]').uncheck()
         for year in (2026,2027):self.page.locator(f'#id_plan_{year}').select_option(str(plans[year]),force=True)
         self.page.locator('#id_usd_rub_2026').fill('75.5')
         self.page.locator('#id_usd_rub_2027').fill('81.25')

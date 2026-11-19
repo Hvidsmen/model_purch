@@ -15,7 +15,8 @@ from .coefficient_iteration_calculation import RateBook,plan_rows,at_full_plan,b
 from .sales_plans import number
 from .motivation_exclusions import rules as dimension_rules
 
-SCENARIOS={'moscow_q4_2026':(2026,'Москва + ТТ · IV квартал 2026 · 100%'),
+SCENARIOS={**{f'actual_q{q}_2026':(2026,f'Москва + ТТ · {roman} квартал 2026 · фактическое выполнение') for q,roman in ((1,'I'),(2,'II'),(3,'III'))},
+           'moscow_q4_2026':(2026,'Москва + ТТ · IV квартал 2026 · 100%'),
            'full_2027':(2027,'Все подразделения · 2027 · 100%'),
            'actual_2025':(2025,'Все подразделения · факт 2025 · новые ставки')}
 
@@ -155,7 +156,7 @@ def start(iteration_id,owner,configuration,revision,*,recover=False):
             obj.runs.filter(state='running').update(state='failed',error='Предыдущий процесс расчёта прерван. Результаты завершённых сценариев сохранены.',completed_at=timezone.now())
         elif obj.runs.filter(state='running').exists():raise ValidationError('Эта итерация уже рассчитывается. Дождитесь завершения.')
         version=GlobalCoeffVersion.objects.filter(pk=configuration.get('formula_version'),status='approved').first()
-        if 'actual_2025' in configuration['scenarios'] and not version:raise ValidationError('Не найдена утверждённая версия формул директоров 2025.')
+        if any(s=='actual_2025' or s.startswith('actual_q') for s in configuration['scenarios']) and not version:raise ValidationError('Выберите утверждённую версию формул директоров для фактического расчёта.')
         from .subdivision_scope import excluded_names,policy_signature
         inputs={'currency_rule':configuration['currency_rule'],'coefficient_exclusions':list(dimension_rules()),'excluded_subdivision_names':list(excluded_names()),'subdivision_policy':policy_signature(),'rule':RULE,'payload':obj.payload,'mappings':obj.mappings,'revision':obj.revision,
                 'subdivisions':dict(Subdivision.all_objects.values_list('pk','subdivision_key')),
@@ -181,6 +182,7 @@ def execute(run,progress,connector=None):
         snapshots={};plans={}
         for scenario in settings['scenarios']:
             year=SCENARIOS[scenario][0]
+            if year in plans:continue
             plan=SalesPlanScenario.objects.get(pk=settings[f'plan_{year}'],is_deleted=False)
             rows=plan_rows(plan,year)
             current=SalesPlanScenario.objects.get(pk=plan.pk)
@@ -190,11 +192,25 @@ def execute(run,progress,connector=None):
                 'loaded_at':plan.loaded_at,'sha256':sha256(json.dumps(safe(rows),sort_keys=True).encode()).hexdigest(),'rows':rows}
             plans[year]=rows
         inputs['plans']=safe(snapshots);run.inputs=inputs;run.save(update_fields=['inputs'])
+        actual_2026=None
         for scenario in SCENARIOS:
             if scenario not in settings['scenarios']:continue
             year,title=SCENARIOS[scenario]
             try:
-                if year!=2025:
+                if scenario.startswith('actual_q'):
+                    from .coefficient_iteration_actual_2026 import calculate,quarter_result
+                    if actual_2026 is None:
+                        connection=None
+                        try:
+                            progress('2026: фактические выплаты I–III кварталов',2)
+                            connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
+                            connection.autocommit=True;connection.timeout=0
+                            actual_2026=calculate(cursor,plans[2026],rates,settings,inputs['formulas'],progress)
+                        finally:
+                            if connection is not None:connection.close()
+                    rows,details=quarter_result(*actual_2026[:2],int(scenario[8]))
+                    source=dict(actual_2026[2])
+                elif year!=2025:
                     progress('Расчёт '+title,2 if year==2026 else 3)
                     rows,details=at_full_plan(plans[year],rates,year,number(settings['quarter_share']),number(settings['year_share']))
                     source={'source':'Сохранённый план; факт равен плану, выполнение 100%'}

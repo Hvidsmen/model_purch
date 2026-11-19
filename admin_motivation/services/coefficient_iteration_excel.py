@@ -66,8 +66,8 @@ def table(book,title,headers,rows,text_columns=(),*,column_groups=(),percent_col
     return sheet
 
 
-def result_table(book,title,rows,year,names=None,currency="USD"):
-    quarters=[4] if year==2026 else [1,2,3,4]
+def result_table(book,title,rows,year,names=None,currency="USD",quarters=None):
+    quarters=quarters or ([4] if year==2026 else [1,2,3,4])
     headers=['Подразделение','Вид мотивации','Сотрудник']
     author_plan=any('allocated_plan' in row for row in rows)
     if author_plan:headers.append('Распределённый план IV квартала, USD')
@@ -123,14 +123,16 @@ def workbook(run):
         for field in ('title','source','version','loaded_at','sha256'):meta.append([f'План {year}: {field}',str(plan.get(field,''))])
     for scenario,result in run.results.items():
         if result.get('state')!='completed':meta.append([result.get('title',scenario),result.get('error','Расчёт не завершён')]);continue
-        year=result['year'];name='IV кв 2026' if year==2026 else str(year)
-        result_table(book,'Сводка '+name,aggregate_rows(result['rows']),year,names)
-        result_table(book,'Получатели '+name,result['rows'],year,names)
+        year=result['year'];quarter=int(scenario[8]) if scenario.startswith('actual_q') else None
+        name={1:'I кв 2026 факт',2:'II кв 2026 факт',3:'III кв 2026 факт'}[quarter] if quarter else 'IV кв 2026' if year==2026 else str(year)
+        quarters=[quarter] if quarter else None
+        result_table(book,'Сводка '+name,aggregate_rows(result['rows']),year,names,quarters=quarters)
+        result_table(book,'Получатели '+name,result['rows'],year,names,quarters=quarters)
         from .coefficient_iteration_currency import display_rows
         rub_rows=display_rows(result['rows'],'RUB')
         if rub_rows is not None:
-            result_table(book,'Сводка '+name+' RUB',aggregate_rows(rub_rows),year,names,'RUB')
-            result_table(book,'Получатели '+name+' RUB',rub_rows,year,names,'RUB')
+            result_table(book,'Сводка '+name+' RUB',aggregate_rows(rub_rows),year,names,'RUB',quarters=quarters)
+            result_table(book,'Получатели '+name+' RUB',rub_rows,year,names,'RUB',quarters=quarters)
         else:meta.append([f'RUB {year}','В этом запуске RUB не сохранён; нужен новый расчёт.'])
         source=result.get('source') or {}
         if isinstance(source,dict):
