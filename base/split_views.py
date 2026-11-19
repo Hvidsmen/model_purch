@@ -76,7 +76,8 @@ def scenario(request, pk):
         try:
             if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
                 raise ValidationError('Расчёт изменён или утверждён. Обновите страницу.')
-            post = request.POST.copy()
+            from .split_plan_payload import unpack
+            post = unpack(request.POST)
             post['action'] = 'lines'
             state = changed_state(item, post)
             import json
