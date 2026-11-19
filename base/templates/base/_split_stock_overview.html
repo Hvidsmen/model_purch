@@ -1,6 +1,6 @@
 {% load split_format l10n %}
 <section class="admin-panel">
-<h2>Сток, поступления и прогноз · все группы</h2>
+<h2>Обеспеченность плана товаром</h2><p>Сток на начало + ожидаемые поступления + новые поставки − план продаж = сток на конец. Комплекты считаются отдельно по мощностям.</p>{% for balance in data.stock %}{% if balance.closing < 0 %}<p class="split-deficit">{{ balance.group }} · {{ balance.power }}: дефицит на конец {{ balance.closing|split_number }} компл.</p>{% endif %}{% endfor %}
 <p>Каналы: {% for key,channel in state.channels.items %}{{ channel.name }}{% if not forloop.last %}, {% endif %}{% empty %}добавьте каналы на вкладке «План продаж»{% endfor %}. Запас общий; продажи всех каналов суммируются.</p>
 <form method="post">{% csrf_token %}<input type="hidden" name="action" value="load_inventory_all"><input type="hidden" name="revision" value="{{ scenario.revision }}"><fieldset {% if scenario.status == 'approved' or not stock_overview.groups %}disabled{% endif %}>
 <p>Загрузка заменит сток и поступления всех групп. Сначала сохраните ручные правки. Новые поставки, прогнозы и планы каналов сохранятся.</p><button class="admin-button secondary">Загрузить остатки и приходы всех групп</button></fieldset></form>

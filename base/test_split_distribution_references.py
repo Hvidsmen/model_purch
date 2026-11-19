@@ -109,7 +109,7 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 self.assertIn(reverse('sales_planning_group_detail', args=[self.group.pk]), card.url)
                 card.close()
                 expect(page.get_by_label('Новые поставки G', exact=True)).to_have_value('9')
-                expect(page.locator('.split-stock-power-row').first).not_to_be_visible()
+                expect(page.locator('.split-stock-power-row').first).to_be_visible()
                 expect(stock_row.locator('.split-distribution-reference')).to_have_text(['RAC', 'Brand', 'INV', 'Factory <A>'])
                 expect(stock_row.locator('td').last).to_have_text('75')
             finally:
@@ -241,6 +241,11 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 for tab in ['plan','distribution&section=months','distribution&section=powers','stock']:
                     page.goto(self.live_server_url + self.url + '?tab=' + tab)
                     table = page.locator('.split-plan-matrix, .split-stock-table, [data-month-grid] table')
+                    first_header = table.locator('thead tr').first.locator('th').first
+                    page.locator('[data-reference-columns]').click()
+                    expect(first_header).not_to_be_visible()
+                    page.locator('[data-reference-columns]').click()
+                    expect(first_header).to_be_visible()
                     page.locator('button[data-table-view="nested"]').click()
                     expect(table).to_have_attribute('data-table-view','nested')
                     page.locator('[data-view-collapse]').click()
@@ -267,6 +272,40 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                         page.locator('[data-view-collapse]').click()
                         expect(page.locator('[data-grid-selected-count]')).to_have_text('Выбрано строк: 0')
                 self.assertEqual(errors, [])
+            finally:
+                context.close()
+                browser.close()
+
+    def test_workspace_steps_cancel_and_atomic_stock_save(self):
+        from playwright.sync_api import sync_playwright, expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1800,'height':1100})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                page.goto(self.live_server_url+self.url+'?tab=composition')
+                expect(page.locator('.split-workflow-step')).to_have_count(5)
+                expect(page.get_by_role('button',name='Добавить группы со стока',exact=True)).to_be_visible()
+                page.locator('.split-workflow-step[href="?tab=plan"]').click()
+                page.screenshot(path='/tmp/split-workspace-ux.png',full_page=False)
+                quantity=page.get_by_label('Количество G Дилеры',exact=True)
+                before=quantity.input_value()
+                quantity.fill('23')
+                expect(quantity).to_have_class('split-input-changed')
+                page.get_by_role('button',name='Отменить изменения',exact=True).click()
+                expect(quantity).to_have_value(before)
+                quantity.fill('24')
+                page.get_by_role('button',name='Сохранить объёмы и наценки',exact=True).click()
+                expect(quantity).to_have_value('24')
+                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                expect(page.locator('.split-workspace')).to_have_attribute('data-workspace-ux-ready','true')
+                buy=page.get_by_label('Новые поставки G',exact=True)
+                buy.fill('12')
+                expect(page.get_by_role('button',name='Сохранить изменения стока',exact=True)).to_be_enabled()
+                with page.expect_navigation():
+                    page.get_by_role('button',name='Сохранить изменения стока',exact=True).click()
+                expect(buy).to_have_value('12')
             finally:
                 context.close()
                 browser.close()
