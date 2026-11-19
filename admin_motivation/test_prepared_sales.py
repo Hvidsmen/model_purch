@@ -22,6 +22,31 @@ class PreparedSalesSQLTests(SimpleTestCase):
         self.assertNotIn('K0',sql);self.assertNotIn('PortalSubdivisionMerge',sql)
         self.assertIn('COUNT_BIG(*) > 1',sql)
 
+    def test_2026_author_snapshot_copies_final_field_before_publication(self):
+        sql=sales.procedure_sql()
+        position=sql.index(sales.FINAL_AUTHOR_2026)
+        self.assertLess(sql.index('SET s.DiscountMotivation'),position)
+        self.assertLess(sql.index('s.Даичи_АвторСделкиНаименование = ds.'),position)
+        self.assertLess(position,sql.index('CREATE INDEX IX_PortalPreparedSales_Date'))
+        self.assertLess(position,sql.index('BEGIN TRANSACTION;'))
+        self.assertNotIn('UPDATE DataWH.dbo.Sales',sales.FINAL_AUTHOR_2026)
+
+    def test_final_author_replaces_stale_2026_copy_without_changing_other_years(self):
+        import sqlite3
+        db=sqlite3.connect(':memory:')
+        try:
+            db.execute('CREATE TABLE stage(ClosedDealDate TEXT, PortalOriginalDealAuthor TEXT, Даичи_АвторСделкиНаименование TEXT)')
+            db.executemany('INSERT INTO stage VALUES(?,?,?)',[
+                ('20250101','Original 2025','Enriched 2025'),
+                ('20260101',None,'Иванов'),('20261231','Stale','Петров'),
+                ('20261119','Stale',None),('20270101','Original 2027','Enriched 2027')])
+            # Adapt only T-SQL table name and CONVERT; use the production predicate.
+            sql=sales.FINAL_AUTHOR_2026.replace('DataWH.motivation.PortalPreparedSalesStage','stage').replace('CONVERT(nvarchar(max),Даичи_АвторСделкиНаименование)','Даичи_АвторСделкиНаименование')
+            db.execute(sql)
+            self.assertEqual([row[0] for row in db.execute('SELECT PortalOriginalDealAuthor FROM stage ORDER BY rowid')],
+                             ['Original 2025','Иванов','Петров',None,'Original 2027'])
+        finally:db.close()
+
     def test_publication_is_atomic_and_old_snapshot_is_not_dropped_during_build(self):
         sql=sales.procedure_sql()
         publish=sql.index('BEGIN TRANSACTION;')

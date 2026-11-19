@@ -168,6 +168,13 @@ PRINT N'Подготовленный факт: строк='+CONVERT(nvarchar(30)
     return definition[:setup.start()]+replacement+definition[stop:]
 
 
+# For 2026 the allocation snapshot must contain the final prepared deal author.
+# Keep the historical 2025 source semantics and never update shared dbo.Sales.
+FINAL_AUTHOR_2026=f"""UPDATE DataWH.motivation.PortalPreparedSalesStage
+ SET {ORIGINAL_AUTHOR}=CONVERT(nvarchar(max),Даичи_АвторСделкиНаименование)
+ WHERE ClosedDealDate>='20260101' AND ClosedDealDate<'20270101';"""
+
+
 def procedure_sql():
     body=canonical_preparation()
     body=body.replace('DataWH.motivation.PortalCalculationSubdivisions','DataWH.dbo.Subdivisions')
@@ -214,6 +221,8 @@ BEGIN TRY
  {profile.begin('@RunId',PREPARATION_STAGES)}
  IF OBJECT_ID(N'motivation.PortalPreparedSalesStage',N'U') IS NOT NULL DROP TABLE motivation.PortalPreparedSalesStage;
  {body}
+ -- Freeze the final author only after document attributes and discounts are ready.
+ {FINAL_AUTHOR_2026}
  {profile.mark(4,'prepare_index')}
  UPDATE motivation.PortalPreparedSalesRun SET Stage_=N'Проверка набора и индекс' WHERE RunId=@RunId;
  SELECT @Rows=COUNT_BIG(*) FROM motivation.PortalPreparedSalesStage;
