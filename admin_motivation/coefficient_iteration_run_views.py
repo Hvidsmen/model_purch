@@ -77,8 +77,22 @@ def calculations(request,pk):
         try:run_id=int(request.GET['run'])
         except (ValueError,TypeError):raise Http404
         query=CoefficientIterationRun.objects.all()
-        if request.method=='GET':query=query.defer('inputs','results')
+        if request.method=='GET' or request.POST.get('action')=='diagnose_authors':query=query.defer('inputs','results')
         run=get_object_or_404(query,pk=run_id,iteration=iteration)
+    if request.method=='POST' and request.POST.get('action')=='diagnose_authors':
+        if not run:return JsonResponse({'ok':False,'error':'Сначала выберите запуск расчёта.'},status=400)
+        if run.state=='running':return JsonResponse({'ok':False,'error':'Дождитесь завершения расчёта.'},status=409)
+        try:
+            from .services.coefficient_iteration_export_data import export_snapshot
+            from .services.iteration_author_diagnostics import diagnose
+            report=diagnose(export_snapshot(run,include_bases=False))
+            response=JsonResponse({'ok':True,'report':report});response['Cache-Control']='no-store';return response
+        except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
+        except Exception:
+            import uuid,logging
+            reference=uuid.uuid4().hex[:12]
+            logging.getLogger(__name__).exception('Iteration author diagnostics run %s failed [%s]',run.pk,reference)
+            return JsonResponse({'ok':False,'error':'Не удалось проверить источник авторов. Код журнала: '+reference},status=500)
     if request.method=='GET' and run and request.GET.get('export')=='xlsx':
         if run.state=='running':return HttpResponse('Расчёт ещё выполняется. Excel будет доступен после завершения.',status=409)
         from .services.coefficient_iteration_excel import workbook
