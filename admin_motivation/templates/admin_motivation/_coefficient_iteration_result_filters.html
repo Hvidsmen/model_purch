@@ -1,0 +1,9 @@
+<style>.iteration-result-filters{display:flex;gap:12px;align-items:flex-start;flex-wrap:wrap;margin:18px 0}.iteration-result-filters details{min-width:200px;max-width:360px;border:1px solid #ddd5f3;border-radius:7px;padding:8px}.iteration-result-filters summary{cursor:pointer}.iteration-result-options{max-height:240px;overflow:auto;margin-top:8px}.iteration-result-options label{display:block;padding:5px}.iteration-result-filters input[type=search]{box-sizing:border-box;width:100%;margin-top:8px}.iteration-result-options [hidden]{display:none!important}</style>
+<form method="get" class="iteration-result-filters" aria-label="Фильтры результатов">
+<input type="hidden" name="run" value="{{ run.pk }}"><input type="hidden" name="currency" value="{{ currency }}">
+{% for field in result_filters.fields %}<details data-result-filter="{{ field.label }}"><summary>{{ field.label }} · {% if field.count %}выбрано {{ field.count }}{% else %}Все{% endif %}</summary>
+<input type="search" placeholder="Поиск…" aria-label="Поиск: {{ field.label }}" data-result-search>
+<div><button type="button" data-result-select-all>Выбрать найденные</button> <button type="button" data-result-clear>Снять выбор</button></div>
+<div class="iteration-result-options">{% for option in field.options %}<label><input type="checkbox" name="result_{{ field.key }}" value="{{ option.value }}"{% if option.selected %} checked{% endif %}> {{ option.label }}</label>{% empty %}<small>Нет значений в этом запуске.</small>{% endfor %}</div></details>{% endfor %}
+<button type="submit" class="btn btn-primary">Показать</button><a class="btn btn-outline-primary" href="?run={{ run.pk }}&amp;currency={{ currency }}">Сбросить фильтры</a>
+</form><p class="iteration-note">Итоги на экране рассчитаны по выбранным строкам. Без выбора показаны все значения. Excel содержит полный запуск.</p>
