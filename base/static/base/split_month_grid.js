@@ -92,6 +92,7 @@
         });
     }
     function toolbar() {
+        window.SplitUnsaved?.refresh();
         const changed = rows.filter(row => row.dirty), bad = changed.filter(row => !row.valid);
         const busy = rows.some(row => row.busy) || autoPending > 0 || bulkBusy;
         bulkToolbar(busy);
@@ -242,8 +243,7 @@
         });
         refresh(row);
     });
-    form.addEventListener('submit', async function (event) {
-        event.preventDefault();
+    async function saveGrid(next=null) {
         if (!draft || submitting || bulkBusy || rows.some(row => row.busy) || autoPending) return;
         rows.forEach(refresh);
         const changed = rows.filter(row => row.dirty);
@@ -268,19 +268,16 @@
         try {
             await request({action:saveAction,grid_payload:JSON.stringify(payload)});
             progress?.finish('Распределение сохранено');
-            window.location.reload();
+            window.SplitUnsaved ? window.SplitUnsaved.navigate(next) : window.location.reload();
         } catch (error) {
             submitting = false; rows.forEach(refresh); toolbar();
             message.textContent = 'Изменения не сохранены: ' + error.message;
             progress?.fail(error.message);
+            throw error;
         }
-    });
+    }
+    form.addEventListener('submit',event=>{event.preventDefault();saveGrid().catch(()=>{});});
     const reset = form.querySelector('[data-grid-reset]');
-    window.addEventListener('beforeunload', function (event) {
-        if (!submitting && rows.some(row => row.dirty && row.mode === 'manual')) {
-            event.preventDefault(); event.returnValue = '';
-        }
-    });
     if (reset) reset.addEventListener('click', function () {
         if (submitting || bulkBusy) return;
         stopAuto = true;
@@ -296,6 +293,7 @@
         });
         toolbar();
     });
+    if(draft)window.SplitUnsaved?.register({dirty:()=>rows.some(row=>row.dirty),busy:()=>submitting||bulkBusy||autoPending>0||rows.some(row=>row.busy),canSave:()=>rows.filter(row=>row.dirty).every(row=>row.valid),save:saveGrid,discard(){reset?.click();}});
     if (draft) {
         const defaults = rows.filter(row => row.element.dataset.autoFact === '1');
         autoPending = defaults.length;

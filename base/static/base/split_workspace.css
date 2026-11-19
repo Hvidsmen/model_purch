@@ -258,3 +258,10 @@
 .split-workspace .split-table-viewport{overflow:auto;max-height:70vh;position:relative;isolation:isolate}
 .split-workspace .split-table-viewport thead{position:sticky;top:0;z-index:10;background:#f6f7fb;box-shadow:0 1px 0 #d8ddeb}
 }
+.split-unsaved-dock{position:fixed;bottom:16px;left:320px;right:24px;z-index:1100;display:flex;flex-wrap:wrap;gap:12px;align-items:center;padding:14px 18px;background:#fff;border:2px solid #7957d5;border-radius:10px;box-shadow:0 4px 24px #2223}
+.split-unsaved-dock[hidden]{display:none!important}.split-has-unsaved .split-workspace{padding-bottom:110px}
+.split-unsaved-dialog{max-width:570px;border:1px solid #d9d0ef;border-radius:12px;padding:24px;color:#35445d}.split-unsaved-dialog::backdrop{background:#18203566}.split-unsaved-dialog button{margin:5px}.split-unsaved-dialog [role=alert]{color:#a1222b}
+@media(max-width:900px){.split-unsaved-dock{left:16px;right:16px}}
+.split-has-unsaved .split-plan-save-panel,.split-has-unsaved .split-month-save-bar{bottom:calc(var(--split-save-dock-height,90px) + 32px)}
+.split-has-unsaved .split-operation-status{bottom:auto;top:80px}
+.split-has-unsaved .split-workspace{padding-bottom:calc(var(--split-save-dock-height,90px) + 160px)}

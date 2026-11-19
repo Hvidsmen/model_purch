@@ -54,3 +54,18 @@ class WorkspaceUXTests(TestCase):
         self.assertIn('section=powers',ux['errors'][0]['url'])
         self.assertIn('power=07',ux['errors'][0]['url'])
         self.assertIn('group='+gid,ux['errors'][0]['url'])
+
+    def test_quick_save_preserves_supplies_and_applies_edited_total_atomically(self):
+        gid,group=next(iter(self.scenario.state['groups'].items()))
+        post={'action':'save_plan_rows','revision':self.scenario.revision,'ddp_'+gid:group['ddp'],'buy_'+gid:'17','pending_group_plans':json.dumps([gid]),'group_plan_'+gid:'90'}
+        for cid,line in group['channels'].items():
+            post.update({'q_'+gid+'_'+cid:line['input'],'markup_'+gid+'_'+cid:line['markup'],'fact_'+gid+'_'+cid:line.get('fact') or ''})
+        invalid={**post,'group_plan_'+gid:'-1'}
+        self.assertEqual(self.client.post(self.url,invalid).status_code,400)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.revision,post['revision'])
+        self.assertEqual(self.client.post(self.url,post).status_code,200)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.state['groups'][gid]['buy'],'17')
+        self.assertEqual(sum(float(line['input']) for line in self.scenario.state['groups'][gid]['channels'].values()),90)
+        self.assertEqual(self.client.post(self.url,post).status_code,400)

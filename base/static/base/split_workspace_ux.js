@@ -44,13 +44,29 @@
       dirty = !!count;
       status.textContent = count ? 'Несохранённых полей: ' + count : 'Изменения сохранены';
       cancel.disabled = !dirty;
+      window.SplitUnsaved?.refresh();
     }
     plan.addEventListener('input', update); plan.addEventListener('change', update);
     cancel.addEventListener('click', () => {
       original.forEach((value,input) => { if (input.type === 'checkbox') input.checked=value; else input.value=value; }); update();
     });
-    plan.addEventListener('submit', () => { submitted = true; });
-    window.addEventListener('beforeunload', event => { if (dirty && !submitted) { event.preventDefault(); event.returnValue=''; } });
+    plan.addEventListener('submit', event => {
+      if(event.submitter?.value==='lines' && window.SplitUnsaved){event.preventDefault();savePlan().catch(()=>{});}
+      else{submitted=true;window.SplitUnsaved?.allow();}
+    });
+    let busy=false;
+    async function savePlan(next=null){
+        if(busy||!plan.reportValidity())return;
+        const payload=new FormData(plan);payload.set('action','save_plan_rows');
+        payload.set('pending_group_plans',JSON.stringify(inputs.filter(input=>input.name.startsWith('group_plan_') && input.value!==original.get(input)).map(input=>input.name.slice('group_plan_'.length))));
+        const progress=window.SplitProgress?.start('Сохранение изменений плана');busy=true;window.SplitUnsaved.refresh();
+        try{
+          const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:payload});const data=await response.json();
+          if(!response.ok||!data.ok)throw new Error(data.error||'Не удалось сохранить изменения.');
+          progress?.finish('Изменения сохранены');submitted=true;remember();window.SplitUnsaved.navigate(next);
+        }catch(error){progress?.fail(error.message);throw error;}finally{busy=false;window.SplitUnsaved.refresh();}
+    }
+    window.SplitUnsaved?.register({dirty:()=>dirty&&!submitted,busy:()=>busy,canSave:()=>plan.checkValidity(),save:savePlan,discard(){original.forEach((value,input)=>{if(input.type==='checkbox')input.checked=value;else input.value=value;});update();}});
     update();
   }
   const stockForms = [...workspace.querySelectorAll('form')].filter(form => form.querySelector('[name="action"][value="stock"]'));
@@ -68,10 +84,11 @@
       status.textContent = changed.length ? 'Изменено групп: '+changed.length : 'Изменения сохранены';
       save.disabled = cancel.disabled = busy || !changed.length;
       initial.forEach((value,input) => input.classList.toggle('split-input-changed',input.type!=='hidden' && input.value!==value));
+      window.SplitUnsaved?.refresh();
     }
     workspace.addEventListener('input', update); workspace.addEventListener('change',update);
     cancel.addEventListener('click', () => { initial.forEach((value,input) => {input.value=value;}); update(); });
-    save.addEventListener('click', async () => {
+    async function saveStock(next=null) {
       if (busy || !changed.length || changed.some(form => !form.reportValidity())) return;
       const payload = changed.map(form => ({gid:form.elements.namedItem('group').value, entries:[...new FormData(form)]}));
       const first=stockForms[0];
@@ -82,11 +99,12 @@
         const data=await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'Не удалось сохранить изменения.');
         progress?.finish('Изменения сохранены');
-        submitted=true; remember(); location.reload();
-      } catch(error) {busy=false;update();status.textContent='Не сохранено: '+error.message;progress?.fail(error.message);}
-    });
-    workspace.addEventListener('submit',()=>{submitted=true;});
-    window.addEventListener('beforeunload',event=>{if(changed.length && !submitted){event.preventDefault();event.returnValue='';}});
+        submitted=true; remember(); window.SplitUnsaved ? window.SplitUnsaved.navigate(next) : location.reload();
+      } catch(error) {busy=false;update();status.textContent='Не сохранено: '+error.message;progress?.fail(error.message);throw error;}
+    }
+    save.addEventListener('click',()=>saveStock().catch(()=>{}));
+    workspace.addEventListener('submit',()=>{submitted=true;window.SplitUnsaved?.allow();});
+    window.SplitUnsaved?.register({dirty:()=>!!changed.length&&!submitted,busy:()=>busy,canSave:()=>changed.every(form=>form.checkValidity()),save:saveStock,discard(){initial.forEach((value,input)=>{input.value=value;});update();}});
     update();
   }
   workspace.querySelectorAll('[data-plan-inventory="closing"], .split-stock-group-row td:last-child, .split-stock-power-row td:last-child').forEach(cell => {
