@@ -141,7 +141,7 @@ class PowerDefaultsBrowserTests(StaticLiveServerTestCase):
                 first.locator('[data-power-param="factor"]').fill('3')
                 with patch('base.split_power_grid.resolve_proposal', return_value=({'07': '75', '09': '25'}, self.basis)), \
                      patch('base.split_power_defaults.load_costs', return_value=self.costs):
-                    page.get_by_role('button', name='Из факта', exact=True).click()
+                    page.locator('[data-row-mode]').first.select_option('fact')
                     expect(first.locator('[data-power-param="cost"]')).to_have_value('30,000000')
                 expect(first.locator('[data-power-param="factor"]')).to_have_value('3')
                 expect(first.locator('[data-power-param="indoor"]')).to_have_value(str(self.models[0].pk))

@@ -654,3 +654,44 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
             finally:
                 context.close()
                 browser.close()
+
+    def test_compact_identity_keeps_modes_details_and_recalculate_accessible(self):
+        from playwright.sync_api import sync_playwright, expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1800,'height':1000})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                for section in ['months','powers']:
+                    page.goto(self.live_server_url+self.url+'?tab=distribution&section='+section)
+                    row=page.locator('[data-grid-row]').first
+                    line=row.locator('.split-identity-line')
+                    self.assertLessEqual(line.bounding_box()['height'],34)
+                    expect(row.locator('.split-group-card-link')).to_have_text('↗')
+                    expect(row.locator('[data-row-info]')).not_to_have_attribute('open','')
+                    row.locator('[data-row-mode]').select_option('manual')
+                    expect(row.locator('[data-month]').first).to_be_editable()
+                    row.locator('[data-row-mode]').select_option('equal')
+                    expect(row.locator('[data-month]').first).not_to_be_editable()
+                    keys=row.locator('[data-month]').evaluate_all('elements=>elements.map(element=>element.dataset.month)')
+                    proposal={'values':{key:'100' if index==0 else '0' for index,key in enumerate(keys)},'token':'test-token','basis':{'rule_label':'Проверенное основание'}}
+                    target='base.split_month_grid.preview' if section=='months' else 'base.split_power_grid.preview'
+                    with patch(target,return_value=proposal):
+                        row.locator('[data-row-mode]').select_option('fact')
+                        expect(row.locator('[data-month]').first).to_have_value('100')
+                        expect(row.locator('[data-row-recalculate]')).to_be_visible()
+                        row.locator('[data-row-recalculate]').click()
+                        expect(row.locator('[data-row-recalculate]')).to_be_enabled()
+                    expect(row.locator('[data-row-info]')).not_to_have_attribute('open','')
+                    row.locator('[data-row-info-toggle]').click()
+                    expect(row.locator('[data-row-rule]')).to_be_visible()
+                    expect(row.locator('[data-row-rule]')).to_contain_text('Проверенное основание')
+                    row.locator('[data-row-info-toggle]').click()
+                    expect(row.locator('[data-row-rule]')).not_to_be_visible()
+                    self.assertLessEqual(line.bounding_box()['height'],34)
+                    page.locator('[data-grid-reset]').click()
+                page.screenshot(path='/tmp/split-compact-identity.png',full_page=False)
+            finally:
+                context.close()
+                browser.close()
