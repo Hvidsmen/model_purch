@@ -74,8 +74,12 @@ class ActualQuarterTests(SimpleTestCase):
         self.assertEqual(len(selected),6)
         self.assertEqual({row['branch_name'] for row in selected},{MERGED})
         self.assertTrue(all(row['date'].month<=9 for row in selected))
-        query=cursor.execute.call_args_list[0].args
-        self.assertIn('SELECT * INTO #iteration_actual_subdivisions',query[0])
+        ddl=cursor.execute.call_args_list[0].args
+        self.assertEqual(len(ddl),1)
+        self.assertIn('CREATE TABLE #iteration_actual_subdivisions',ddl[0])
+        self.assertIn('CREATE TABLE #iteration_actual_formula_keys',ddl[0])
+        query=cursor.execute.call_args_list[1].args
+        self.assertIn('INSERT INTO #iteration_actual_subdivisions',query[0])
         self.assertEqual(set(query[1:]),{MOSCOW,TT})
         self.assertEqual(source['through'],'2026-09-30')
 
@@ -98,6 +102,18 @@ class ActualQuarterTests(SimpleTestCase):
 
 class ActualRunnerTests(TestCase):
     def setUp(self):fixture.CalculationTests.setUp(self)
+
+    def test_shared_actual_failure_is_not_retried_for_each_quarter(self):
+        from .services.coefficient_iteration_runner import start,execute
+        config={**self.config,'scenarios':[f'actual_q{q}_2026' for q in (1,2,3)]}
+        run=start(self.iteration.pk,self.user,config,self.iteration.revision)
+        connection=Mock();connector=Mock(return_value=(connection,Mock()))
+        with patch('admin_motivation.services.coefficient_iteration_actual_2026.calculate',side_effect=RuntimeError('SQL internal details')) as calc:
+            with self.assertLogs('admin_motivation.services.coefficient_iteration_runner',level='ERROR') as logs:
+                execute(run,Mock(),connector=connector)
+        self.assertEqual(run.state,'failed');calc.assert_called_once();connector.assert_called_once();connection.close.assert_called_once()
+        errors=[run.results[f'actual_q{q}_2026']['error'] for q in (1,2,3)]
+        self.assertEqual(len(set(errors)),1);self.assertNotIn('SQL internal details',errors[0]);self.assertEqual(len(logs.records),1)
 
     def test_actual_native_calculation_runs_once_for_three_sheets(self):
         from .services.coefficient_iteration_runner import start,execute
