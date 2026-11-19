@@ -572,3 +572,59 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
             finally:
                 context.close()
                 browser.close()
+
+    def test_save_shortcuts_for_plan_stock_and_distribution(self):
+        from threading import Event
+        from .split_views import persist as original_persist
+        from playwright.sync_api import sync_playwright, expect
+        gate=Event()
+        def slow_save(*args,**kwargs):
+            gate.wait(10)
+            return original_persist(*args,**kwargs)
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1500,'height':900})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page();posts=[]
+                page.on('request',lambda request:posts.append(request) if request.method=='POST' else None)
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                expect(page.locator('.split-workspace')).to_have_attribute('data-workspace-ux-ready','true')
+                quantity=page.get_by_label('Количество G Дилеры',exact=True)
+                quantity.fill('31')
+                with patch('base.split_views.persist',side_effect=slow_save):
+                    page.keyboard.press('Control+s')
+                    expect(page.locator('.split-operation-status')).to_have_attribute('data-state','running')
+                    page.keyboard.press('Control+s')
+                    self.assertEqual(len(posts),1)
+                    with page.expect_navigation():gate.set()
+                expect(quantity).to_have_value('31')
+                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                expect(page.locator('.split-workspace')).to_have_attribute('data-workspace-ux-ready','true')
+                page.get_by_label('Новые поставки G',exact=True).fill('7')
+                with page.expect_navigation():page.keyboard.press('Meta+s')
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('7')
+                page.goto(self.live_server_url+self.url+'?tab=distribution&section=months')
+                page.locator('[data-grid-select-all]').click()
+                page.locator('[data-grid-bulk-mode]').select_option('equal')
+                page.locator('[data-grid-bulk-apply]').click()
+                with page.expect_navigation():page.keyboard.press('Control+s')
+                expect(page.locator('[data-mode-button="equal"]').first).to_have_attribute('aria-pressed','true')
+                count=len(posts)
+                page.keyboard.press('Control+s')
+                expect(page.locator('.split-operation-status')).to_contain_text('Нет несохранённых изменений')
+                self.assertEqual(len(posts),count)
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                expect(page.locator('.split-workspace')).to_have_attribute('data-workspace-ux-ready','true')
+                quantity.fill('44')
+                with page.expect_navigation():
+                    suppressed=page.evaluate("!document.dispatchEvent(new KeyboardEvent('keydown',{key:'ы',code:'KeyS',ctrlKey:true,bubbles:true,cancelable:true}))")
+                self.assertTrue(suppressed)
+                expect(quantity).to_have_value('44')
+                count=len(posts)
+                quantity.fill('-1');page.keyboard.press('Control+s')
+                expect(page.locator('.split-operation-status')).to_contain_text('Исправьте ошибки ввода')
+                self.assertEqual(len(posts),count)
+                quantity.fill('44')
+            finally:
+                gate.set();context.close();browser.close()
