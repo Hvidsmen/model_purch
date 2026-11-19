@@ -92,6 +92,9 @@ def field_coverage(cursor,fields,predicate,params):
 
 def diagnose(snapshot,connector=None):
     predicate,params,frozen_source=scope(snapshot)
+    from .iteration_prepared_author import FIELD as PREPARED_FIELD
+    if frozen_source.get('source_table')=='DataWH.motivation.PortalPreparedSales' and frozen_source.get('author_field')==PREPARED_FIELD:
+        return diagnose_live_sales(snapshot,predicate,params,frozen_source,connector,prepared_original=True,prepared_field=PREPARED_FIELD)
     if frozen_source.get('author_field')=='PortalOriginalDealAuthor':
         return diagnose_live_sales(snapshot,predicate,params,frozen_source,connector,prepared_original=True)
     if frozen_source.get('source_table')=='DataWH.dbo.Sales':
@@ -141,11 +144,12 @@ def diagnose(snapshot,connector=None):
         if connection is not None:connection.close()
 
 
-def diagnose_live_sales(snapshot,predicate,params,frozen_source,connector=None,*,prepared_original=False):
+def diagnose_live_sales(snapshot,predicate,params,frozen_source,connector=None,*,prepared_original=False,prepared_field=None):
     """Inspect the exact author field selected by the saved calculation rule."""
     from .iteration_live_sales_authors import TABLE,FIELD,LABEL
     if prepared_original:
         from .prepared_sales import TABLE,ORIGINAL_AUTHOR as FIELD
+        FIELD=prepared_field or FIELD
         LABEL=TABLE+'.'+FIELD
     connection=None
     source=FROM.replace('DataWH.motivation.PortalPreparedSales',TABLE)
@@ -163,7 +167,7 @@ def diagnose_live_sales(snapshot,predicate,params,frozen_source,connector=None,*
         coverage=[];named=0
         for kind,count,amount,documents,people in cursor.fetchall():
             named+=people
-            coverage.append({'status':kind,'label':('PortalOriginalDealAuthor заполнен' if kind=='sales_author' else 'PortalOriginalDealAuthor пуст') if prepared_original else ('Автор сделки есть в текущем Sales' if kind=='sales_author' else 'В текущем Sales пустое поле автора сделки'),
+            coverage.append({'status':kind,'label':(FIELD+' заполнен' if kind=='sales_author' else FIELD+' пуст') if prepared_original else ('Автор сделки есть в текущем Sales' if kind=='sales_author' else 'В текущем Sales пустое поле автора сделки'),
                              'rows':count,'amount_usd':amount,'documents':documents})
         cursor.execute('SELECT TOP(20) s.DocumentKey,s.DateInvoice,s.DocumentNumber,s.ModelCodeERP,p.ModelCode,p.PlanningGroupSalesErp,'+author+',s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD '+source+' WHERE '+predicate+' AND '+author+' IS NULL ORDER BY ABS(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD) DESC',*params)
         fields=('document_key','invoice_date','invoice_number','model_erp','model','planning_group','author','amount_usd')

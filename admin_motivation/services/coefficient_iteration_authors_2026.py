@@ -10,12 +10,12 @@ from .sales_plans import number
 from django.utils import timezone
 from .subdivision_scope import included
 from .motivation_exclusions import allowed
-from .prepared_sales import RULE as PREPARED_RULE, SCHEMA, TABLE, ORIGINAL_AUTHOR
-LABEL=TABLE+'.'+ORIGINAL_AUTHOR
+from .prepared_sales import RULE as PREPARED_RULE, SCHEMA
+from .iteration_prepared_author import TABLE,FIELD,LABEL
 
-RULE='q4-2026-author-plan-shares-v4-original-author'
-SQL="""SELECT sub.SubdivisionName,
- COALESCE(NULLIF(LTRIM(RTRIM(s.PortalOriginalDealAuthor)),N''),N''),
+RULE='q4-2026-author-plan-shares-v5-unified-prepared-author'
+SQL=f"""SELECT sub.SubdivisionName,
+ COALESCE(NULLIF(LTRIM(RTRIM(s.{FIELD})),N''),N''),
  COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesErp)),N''),N'9. OTHER'),
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE N'' END,
  CASE WHEN p.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE N'' END,
@@ -27,7 +27,7 @@ SQL="""SELECT sub.SubdivisionName,
  INNER JOIN DataWH.dbo.Customer c ON c.CustomerKey=s.CustomerKey
  WHERE s.ClosedDealDate>=? AND s.ClosedDealDate<? AND sub.SubdivisionName IN (__BRANCHES__)
  GROUP BY sub.SubdivisionName,
- COALESCE(NULLIF(LTRIM(RTRIM(s.PortalOriginalDealAuthor)),N''),N''),
+ COALESCE(NULLIF(LTRIM(RTRIM(s.{FIELD})),N''),N''),
  COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesErp)),N''),N'9. OTHER'),
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE N'' END,
  CASE WHEN p.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE N'' END,sub.Chanel"""
@@ -58,7 +58,7 @@ def read_fact(cursor,rates,through):
     cursor.execute('SELECT CONVERT(nvarchar(36),RunId) FROM motivation.PortalPreparedSalesActive WHERE Id=1')
     current=cursor.fetchone()
     if not current or str(current[0]).casefold()!=str(ready[0]).casefold():raise ValidationError('Подготовленный факт изменился во время чтения. Повторите расчёт.')
-    return facts,{'rule':RULE,'source_table':TABLE,'author_field':ORIGINAL_AUTHOR,
+    return facts,{'rule':RULE,'source_table':TABLE,'author_field':FIELD,
                   'prepared_run_id':str(ready[0]),'completed_at':str(ready[1]),
                   'loaded_at':timezone.now().isoformat(),'from':'2026-10-01','through':str(min(through,date(2026,12,31))),'rows':len(facts),
                   'author_source':LABEL,

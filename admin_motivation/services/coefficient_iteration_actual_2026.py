@@ -18,10 +18,6 @@ def sql_2026(sql):
     sql=sql.replace('DataWH.motivation.vSubdivisionMotiveCoeffTo old','#iteration_actual_policy_formulas old')
     sql=sql.replace("OBJECT_ID(N'motivation.PortalFormulaDefaults')","OBJECT_ID(N'tempdb..#iteration_actual_defaults')")
     sql=sql.replace('FROM motivation.PortalFormulaDefaults','FROM #iteration_actual_defaults')
-    if re.search(r';\s*WITH\s+fact\s+AS\s*\(',sql,re.I):
-        from .calculation_sales_isolation import WORKING_TABLE
-        sql,count=re.subn(r';\s*WITH\s+fact\s+AS\s*\(',lambda m:f";\nUPDATE {WORKING_TABLE} SET Даичи_АвторСделкиНаименование=COALESCE(NULLIF(LTRIM(RTRIM(PortalOriginalDealAuthor)),N''),N'');\n;WITH fact AS (",sql,flags=re.I)
-        if count!=1:raise ValidationError('Не распознана граница обогащения авторов факта.')
     return re.sub(r'\b(?:DataWH\.)?dbo\.Subdivisions\b','#iteration_actual_subdivisions',sql,flags=re.I)
 
 
@@ -103,8 +99,7 @@ def calculate(cursor,plans,rates,settings,formulas,progress):
     directors,director_details=directors_2025(private,selected,adapter,actual_settings,formulas)
     rows.extend(directors);details.extend(director_details)
     source.update({'source':'Москва + Термотрейд: фактическое выполнение I–III кварталов 2026; годовая часть только начислена. Доли авторов плана — по факту I–III кварталов.',
-                   'rule':'iteration-actual-2026-q1-q3-v4-versioned-formulas-original-author','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical,
-                   'author_field':'DataWH.motivation.PortalPreparedSales.PortalOriginalDealAuthor'})
+                   'rule':'iteration-actual-2026-q1-q3-v5-versioned-formulas-unified-prepared-author','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical})
     return rows,details,source
 
 

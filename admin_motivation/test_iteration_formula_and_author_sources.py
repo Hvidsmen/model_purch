@@ -25,7 +25,8 @@ class SourceContractTests(SimpleTestCase):
         self.assertIn('FROM #iteration_defaults',sql)
         self.assertIn('FROM #iteration_actual_defaults',sql_2026("SELECT Date_,DefaultFormula FROM motivation.PortalFormulaDefaults WHERE Date_<'20260101'"))
         self.assertNotIn('FROM motivation.PortalFormulaDefaults',sql)
-        self.assertIn("SET Даичи_АвторСделкиНаименование=COALESCE(NULLIF(LTRIM(RTRIM(PortalOriginalDealAuthor)),N''),N'')",sql)
+        self.assertIn("SET [Даичи_АвторСделкиНаименование]=NULLIF(LTRIM(RTRIM([Даичи_АвторСделкиНаименование])),N'')",sql)
+        self.assertNotIn('PortalOriginalDealAuthor',sql)
         self.assertNotIn('INTO #iteration_live_sales_authors',sql)
         self.assertNotIn('FROM DataWH.dbo.Sales r',sql)
         self.assertNotIn('FROM DataWH.erp.',sql)
@@ -61,6 +62,23 @@ class SourceContractTests(SimpleTestCase):
                 db.execute(source,{'DateFrom':'2026-01-01','DateTo':'2026-10-01'})
                 self.assertEqual(db.execute('SELECT AuthorCount,AuthorName FROM author_map').fetchone(),(expected_count,expected_name))
             self.assertEqual(db.execute('SELECT [Даичи_АвторСделкиНаименование] FROM prepared').fetchone()[0],'Stale author')
+        finally:db.close()
+
+    def test_all_native_periods_read_same_prepared_author_without_legacy_fallback(self):
+        from .services.coefficient_iteration_2025 import build_sql
+        from .services.iteration_prepared_author import FIELD,normalize_private
+        import sqlite3
+        original=build_sql()
+        for sql in (original,sql_2026(original)):
+            self.assertIn('FROM DataWH.motivation.PortalPreparedSales',sql)
+            self.assertNotIn('PortalOriginalDealAuthor',sql)
+            self.assertEqual(sql.count(normalize_private('#portal_motivation_sales')),1)
+        db=sqlite3.connect(':memory:')
+        try:
+            db.execute('CREATE TABLE private_fact(year INTEGER, ['+FIELD+'] TEXT, PortalOriginalDealAuthor TEXT)')
+            db.executemany('INSERT INTO private_fact VALUES(?,?,?)',[(2025,'  Иванов  ','Другой'),(2026,'Петров','Старый'),(2026,' ','Автор только в старом поле')])
+            db.execute(normalize_private('private_fact').replace("N''","''"))
+            self.assertEqual(db.execute('SELECT ['+FIELD+'] FROM private_fact ORDER BY rowid').fetchall(),[('Иванов',),('Петров',),(None,)])
         finally:db.close()
 
 
