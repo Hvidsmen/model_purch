@@ -107,17 +107,23 @@ def calculations(request,pk):
         else:error=' '.join((form.fields[name].label+': ' if name in form.fields else '')+' '.join(str(message) for message in messages) for name,messages in form.errors.items())
         if asynchronous:return JsonResponse({'error':error,'fields':form.errors,'progress_token':token_for(request.user)},status=400)
     currency='RUB' if request.GET.get('currency')=='RUB' else 'USD'
-    presentation=[]
+    presentation=[];result_filters=None;currency_urls={}
     if run:
         from .services.coefficient_iteration_export_data import export_snapshot
         snapshot=export_snapshot(run,include_bases=False)
         names=snapshot.inputs['export_names']
+        from .services.coefficient_iteration_result_filters import ResultFilters
+        result_filters=ResultFilters(request.GET,snapshot.results,names)
+        currency_urls={unit:ResultFilters.currency_url(request.GET,run.pk,unit) for unit in ('USD','RUB')}
         for scenario,value in snapshot.results.items():
+            if not result_filters.year(value):continue
             qs=[int(scenario[8])] if scenario.startswith('actual_q') else [4] if value.get('year')==2026 else [1,2,3,4]
             item={**value,'key':scenario,'quarters':qs}
             if value.get('state')=='completed':
                 from .services.coefficient_iteration_currency import display_rows
-                selected_rows=display_rows(value['rows'],currency)
+                filtered_rows=result_filters.rows(value['rows'])
+                if not filtered_rows:continue
+                selected_rows=display_rows(filtered_rows,currency)
                 if selected_rows is None:
                     item['currency_unavailable']=True;presentation.append(item);continue
                 def present(row):
@@ -129,4 +135,4 @@ def calculations(request,pk):
             presentation.append(item)
     return render(request,'admin_motivation/coefficient_iteration_calculations.html',{
         'iteration':iteration,'form':form,'run':run,'runs':iteration.runs.defer('inputs','results')[:15],
-        'presentation':presentation,'currency':currency,'error':error,'progress_token':token_for(request.user),'skip_motivation_workflow':True})
+        'presentation':presentation,'result_filters':result_filters,'currency_urls':currency_urls,'currency':currency,'error':error,'progress_token':token_for(request.user),'skip_motivation_workflow':True})
