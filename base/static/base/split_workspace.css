@@ -262,6 +262,26 @@
 .split-unsaved-dock[hidden]{display:none!important}.split-has-unsaved .split-workspace{padding-bottom:110px}
 .split-unsaved-dialog{max-width:570px;border:1px solid #d9d0ef;border-radius:12px;padding:24px;color:#35445d}.split-unsaved-dialog::backdrop{background:#18203566}.split-unsaved-dialog button{margin:5px}.split-unsaved-dialog [role=alert]{color:#a1222b}
 @media(max-width:900px){.split-unsaved-dock{left:16px;right:16px}}
-.split-has-unsaved .split-plan-save-panel,.split-has-unsaved .split-month-save-bar{bottom:calc(var(--split-save-dock-height,90px) + 32px)}
+.split-has-unsaved .split-plan-save-panel,.split-has-unsaved .split-month-save-bar{position:static;bottom:auto}
 .split-has-unsaved .split-operation-status{bottom:auto;top:80px}
 .split-has-unsaved .split-workspace{padding-bottom:calc(var(--split-save-dock-height,90px) + 160px)}
+.split-reference-table .split-month-identity-col{width:620px}
+.split-reference-table:not(.split-power-table){min-width:2060px}.split-power-table{min-width:1860px}
+.split-workspace .split-month-table .split-month-identity{padding:6px 8px;vertical-align:middle}
+.split-identity-line{display:flex;align-items:center;gap:6px;white-space:nowrap;min-height:30px}
+.split-identity-line .split-month-group-name{display:inline-block;flex:1 1 160px;min-width:60px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.split-identity-line .split-identity-plan{display:inline;white-space:nowrap;flex:0 0 auto;margin:0;font-size:10px}
+.split-identity-line .split-distribution-status{margin:0;max-width:88px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+.split-identity-line select{width:105px;min-width:0;font-size:10px;padding:4px;flex:0 0 auto}
+.split-identity-line .split-month-unit{margin:0;flex:0 0 auto}.split-identity-line .split-month-unit select{width:78px}
+.split-workspace .split-month-table .split-group-card-link,.split-workspace .split-month-table .split-identity-icon{width:24px;min-width:24px;max-width:24px;min-height:24px;padding:2px;margin:0;flex:0 0 24px;white-space:nowrap;font-size:12px}
+.split-month-modes[hidden],.split-identity-line [hidden],.split-identity-details summary[hidden]{display:none!important}
+.split-identity-details{font-size:10px;white-space:normal}.split-identity-details[open]{margin-top:5px;padding:5px 0;border-top:1px solid #e5e4ef}
+.split-plan-matrix .split-matrix-group,.split-stock-table .split-stock-label{font-size:11px}.split-stock-protected{display:inline;font-size:9px;margin-left:4px}
+@media(max-width:700px){.split-identity-line{flex-wrap:wrap;white-space:normal}.split-reference-table:not(.split-power-table),.split-power-table{min-width:0}}
+.split-plan-matrix [data-plan-group-toggle],.split-stock-table [data-stock-toggle]{display:inline-block;max-width:calc(100% - 58px);overflow:hidden;white-space:nowrap;text-overflow:ellipsis;vertical-align:middle}
+.split-group-card-link{min-height:22px;line-height:18px;padding:1px 5px;margin:0 3px;vertical-align:middle}
+.split-reference-table .split-distribution-reference,.split-stock-table .split-distribution-reference{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:155px}
+.split-plan-matrix [data-plan-group]>td:nth-child(-n+4){white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.split-workspace .split-view-section>th{padding-top:4px;padding-bottom:4px}
+.split-workspace .split-view-section .split-stock-toggle{min-height:20px;padding:0;font-size:11px;line-height:1.3}

@@ -80,6 +80,13 @@
             button.setAttribute('aria-pressed', String(button.dataset.modeButton === row.mode));
             button.disabled = !draft || row.busy || submitting;
         });
+        const modeSelect=row.element.querySelector('[data-row-mode]');
+        if(modeSelect){modeSelect.value=row.mode;modeSelect.disabled=!draft||row.busy||submitting;}
+        const recalculate=row.element.querySelector('[data-row-recalculate]');
+        if(recalculate){recalculate.hidden=row.mode!=='fact';recalculate.disabled=!draft||row.busy||submitting;}
+        badge.title=badge.textContent;
+        const info=row.element.querySelector('[data-row-info]');
+        if(info && !row.busy && (row.requestError || row.dirty&&!row.valid))info.open=true;
         row.unit.disabled = !draft || row.mode !== 'manual' || row.busy || submitting;
         row.unit.closest('label').hidden = powers || !draft || row.mode !== 'manual';
         row.params.forEach(function (input) {
@@ -204,6 +211,10 @@
                 refresh(row); toolbar();
             });
         });
+        row.element.querySelector('[data-row-mode]')?.addEventListener('change',event=>{row.element.querySelector('[data-mode-button="'+event.target.value+'"]').click();});
+        row.element.querySelector('[data-row-recalculate]')?.addEventListener('click',()=>row.element.querySelector('[data-mode-button="fact"]').click());
+        const info=row.element.querySelector('[data-row-info]'),infoToggle=row.element.querySelector('[data-row-info-toggle]');
+        if(info&&infoToggle){infoToggle.addEventListener('click',()=>{info.open=!info.open;});info.addEventListener('toggle',()=>infoToggle.setAttribute('aria-expanded',String(info.open)));}
         row.unit.addEventListener('change', function () { manual(row); refresh(row); toolbar(); });
         row.params.forEach(function (input) {
             input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', function () {
