@@ -1,0 +1,1 @@
+{% load split_format %}{% with card_url=group_card_urls|lookup:card_gid %}{% if card_url %}<a class="admin-button secondary split-group-card-link" href="{{ card_url }}" target="_blank" rel="noopener" aria-label="Карточка группы {{ card_name }} (новая вкладка)">Карточка группы ↗</a>{% endif %}{% endwith %}

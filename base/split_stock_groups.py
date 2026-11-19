@@ -23,7 +23,19 @@ GROUP BY n.Даичи_ГруппаПланирования, sg.Номенкла�
 HAVING SUM(COALESCE(sg.ВНаличии, 0)) > 0 OR SUM(COALESCE(sg.ВПути, 0)) > 0'''
 
 
-def groups_from_stock(day):
+ON_HAND_SQL = """SELECT n.Даичи_ГруппаПланирования,
+    SUM(COALESCE(sg.ВНаличии, 0)) AS StockQuantity,
+    0 AS TransitQuantity
+FROM DataWH.erp.StreamGoods sg
+INNER JOIN DataWH.erp.[Справочники.Номенклатура] n ON n.Ссылка = sg.НоменклатураСсылка
+INNER JOIN DataWH.erp.[Справочник.Склады] store ON store.Ссылка = sg.СкладСсылка
+WHERE sg.ReportDate = ? AND LTRIM(RTRIM(n.Родитель)) = ?
+    AND store.даичи_НазначениеСклада = N'Продажа'
+GROUP BY n.Даичи_ГруппаПланирования, sg.НоменклатураСсылка
+HAVING SUM(COALESCE(sg.ВНаличии, 0)) > 0"""
+
+
+def groups_from_stock(day, *, include_transit=True):
     connection = cursor = None
     try:
         connection, cursor = connect_database('vm-dwh', 'DataWH')
@@ -32,7 +44,7 @@ def groups_from_stock(day):
         snapshot = cursor.fetchone()
         if not snapshot or not snapshot[0]:
             raise ValidationError('В DataWH нет среза стока на ' + day.strftime('%d.%m.%Y') + '. Состав плана не изменён.')
-        cursor.execute(PRESENCE_SQL, str(day), PRODUCT_GROUP)
+        cursor.execute(PRESENCE_SQL if include_transit else ON_HAND_SQL, str(day), PRODUCT_GROUP)
         rows = cursor.fetchall()
     except ValidationError:
         raise
@@ -55,7 +67,7 @@ def groups_from_stock(day):
                 raise InvalidOperation
         except (InvalidOperation, ValueError):
             raise ValidationError('Источник вернул некорректные количества. Состав плана не изменён.')
-        if stock <= 0 and transit <= 0:
+        if stock <= 0 and (not include_transit or transit <= 0):
             continue
         name = str(name or '').strip()
         if not name:
@@ -71,4 +83,5 @@ def groups_from_stock(day):
         raise ValidationError('На стоке или в пути найдены группы вне текущего активного справочника: '
             + ', '.join(sorted(missing)[:10]) + '. Обновите номенклатуру и группы планирования; состав пока не изменён.')
     return {'date': str(day), 'checked_at': timezone.now().isoformat(), 'source': 'DataWH.erp.StreamGoods',
+            'scope': 'stock_and_transit' if include_transit else 'on_hand',
             'groups': sorted(found.values(), key=lambda row: row['name'])}

@@ -139,7 +139,7 @@ def changed_state(scenario, post, *, allow_empty=False):
         inputs['action'] = 'lines'
         state = changed_state(scenario, inputs)
         return distribute(scenario, state, target, post.get('group_plan_' + target))
-    if member_action in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups'):
+    if member_action in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups', 'add_onhand_groups'):
         if scenario.status != 'draft':
             raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')
         from django.http import QueryDict
@@ -149,9 +149,10 @@ def changed_state(scenario, post, *, allow_empty=False):
             inputs['action'] = 'lines'
             draft.state = changed_state(scenario, inputs)
         gids, cids = list(draft.state['groups']), list(draft.state['channels'])
-        if member_action == 'add_stock_groups':
+        if member_action in ('add_stock_groups', 'add_onhand_groups'):
             from .split_stock_groups import groups_from_stock
-            inventory = deepcopy(groups_from_stock(scenario.stock_date))
+            inventory = deepcopy(groups_from_stock(scenario.stock_date) if member_action == 'add_stock_groups'
+                                 else groups_from_stock(scenario.stock_date, include_transit=False))
             added = [row['id'] for row in inventory['groups'] if row['id'] not in gids]
             gids.extend(added)
             inventory['added'] = len(added)

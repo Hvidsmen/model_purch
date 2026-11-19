@@ -11,7 +11,7 @@
     const save = form.querySelector('[data-grid-save]');
     const csrf = form.querySelector('[name=csrfmiddlewaretoken]').value;
     const revision = form.querySelector('[name=revision]').value;
-    let submitting = false, autoPending = 0, stopAuto = false;
+    let submitting = false, autoPending = 0, stopAuto = false, bulkBusy = false;
 
     function parse(raw, unit) {
         let text = String(raw).replace(/[\s\u00a0\u202f]/g, '');
@@ -93,7 +93,8 @@
     }
     function toolbar() {
         const changed = rows.filter(row => row.dirty), bad = changed.filter(row => !row.valid);
-        const busy = rows.some(row => row.busy) || autoPending > 0;
+        const busy = rows.some(row => row.busy) || autoPending > 0 || bulkBusy;
+        bulkToolbar(busy);
         if (save) save.disabled = submitting || busy || !changed.length || !!bad.length;
         message.textContent = submitting ? 'Сохранение…' : busy ? 'Получаем предложения из факта…' :
             changed.length ? 'Изменено строк: ' + changed.length + (bad.length ? '. Исправьте ошибки: ' + bad.length + '.' : '. Суммы проверены; сохраните изменения.') : 'Показаны сохранённые значения.';
@@ -140,6 +141,40 @@
             if (id === row.requestId) { row.busy = false; refresh(row); toolbar(); }
         }
     }
+    function visible(row) { return !row.element.hidden && !row.element.hasAttribute('data-reference-excluded'); }
+    function chosen() { return rows.filter(row => visible(row) && row.element.querySelector('[data-grid-select]')?.checked); }
+    function bulkToolbar(busy) {
+        const count = form.querySelector('[data-grid-selected-count]');
+        if (!count) return;
+        count.textContent = 'Выбрано строк: ' + chosen().length;
+        form.querySelectorAll('[data-grid-select], [data-grid-select-all], [data-grid-select-none], [data-grid-bulk-mode]').forEach(control => { control.disabled = !draft || busy || submitting; });
+        form.querySelector('[data-grid-bulk-apply]').disabled = !draft || busy || submitting || !chosen().length;
+    }
+    form.querySelector('[data-grid-select-all]')?.addEventListener('click', () => {
+        rows.filter(visible).forEach(row => { row.element.querySelector('[data-grid-select]').checked = true; }); toolbar();
+    });
+    form.querySelector('[data-grid-select-none]')?.addEventListener('click', () => {
+        rows.forEach(row => { row.element.querySelector('[data-grid-select]').checked = false; }); toolbar();
+    });
+    form.querySelectorAll('[data-grid-select]').forEach(control => control.addEventListener('change', toolbar));
+    document.addEventListener('split-reference-filter-change', toolbar);
+    form.querySelector('[data-grid-bulk-apply]')?.addEventListener('click', async () => {
+        if (!draft || submitting || bulkBusy || autoPending || rows.some(row => row.busy)) return;
+        const selected = chosen(), mode = form.querySelector('[data-grid-bulk-mode]').value;
+        if (!selected.length) return;
+        bulkBusy = true; toolbar();
+        form.querySelector('[data-grid-bulk-result]').textContent = 'Применяем распределение…';
+        try {
+            for (const row of selected) {
+                if (mode === 'fact') await fact(row);
+                else row.element.querySelector('[data-mode-button="' + mode + '"]').click();
+            }
+        } finally {
+            bulkBusy = false; toolbar();
+            const failures = selected.filter(row => row.requestError).length;
+            form.querySelector('[data-grid-bulk-result]').textContent = 'Обработано строк: ' + selected.length + (failures ? '. Не удалось обработать: ' + failures + '. Проверьте сообщения в строках.' : '. Проверьте распределение и сохраните изменения.');
+        }
+    });
     rows.forEach(function (row) {
         row.element.querySelectorAll('[data-mode-button]').forEach(function (button) {
             button.addEventListener('click', function () {
@@ -197,7 +232,7 @@
     });
     form.addEventListener('submit', async function (event) {
         event.preventDefault();
-        if (!draft || submitting || rows.some(row => row.busy) || autoPending) return;
+        if (!draft || submitting || bulkBusy || rows.some(row => row.busy) || autoPending) return;
         rows.forEach(refresh);
         const changed = rows.filter(row => row.dirty);
         if (!changed.length || changed.some(row => !row.valid)) { toolbar(); return; }
@@ -232,7 +267,7 @@
         }
     });
     if (reset) reset.addEventListener('click', function () {
-        if (submitting) return;
+        if (submitting || bulkBusy) return;
         stopAuto = true;
         rows.forEach(function (row) {
             if (row.controller) row.controller.abort();

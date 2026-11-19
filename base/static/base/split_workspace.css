@@ -207,3 +207,15 @@
  .split-reference-table .split-distribution-reference{grid-column:1/-1;display:flex;gap:8px}
  .split-distribution-reference::before{content:attr(data-label) ': ';color:#64748b;min-width:115px}
 }
+
+.split-stock-table .split-reference-heading,.split-stock-table .split-distribution-reference{white-space:normal;min-width:95px;max-width:155px;overflow-wrap:anywhere}
+.split-stock-table .split-distribution-reference{font-size:11px;font-weight:400}
+
+[data-reference-excluded]{display:none!important}
+.split-reference-filter-fields{display:flex;flex-wrap:wrap;gap:12px;align-items:end}
+.split-reference-filter-fields label{display:flex;flex-direction:column;gap:4px;min-width:150px}
+.split-reference-filter-fields select{max-width:250px}
+
+.split-distribution-bulk{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 0}
+.split-distribution-bulk p{flex-basis:100%;margin:0}
+.split-group-card-link{display:inline-block;font-size:11px;padding:3px 7px;margin:4px 0;white-space:nowrap}

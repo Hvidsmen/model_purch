@@ -1,0 +1,10 @@
+{{ reference_filters|json_script:'split-reference-values' }}
+<section class="admin-panel split-reference-filters" data-reference-filters="{{ scenario.pk }}" aria-label="Фильтры по справочной информации">
+<div class="split-reference-filter-fields">
+<label>Группа планов продаж<select data-reference-filter="sales_plan_group"><option value="">Все</option></select></label>
+<label>Марка<select data-reference-filter="brand"><option value="">Все</option></select></label>
+<label>Тип наружного блока<select data-reference-filter="outdoor_type"><option value="">Все</option></select></label>
+<label>Завод<select data-reference-filter="factory"><option value="">Все</option></select></label>
+<button type="button" class="admin-button secondary" data-reference-reset>Сбросить справочные фильтры</button>
+</div><p role="status" data-reference-filter-count></p><small>Фильтры скрывают строки без изменения введённых данных. Подытоги и общие итоги относятся ко всему сценарию.</small>
+</section>
