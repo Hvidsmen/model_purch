@@ -475,3 +475,38 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
             finally:
                 context.close()
                 browser.close()
+
+    def test_sticky_headers_and_synchronized_top_scroll_in_all_tables(self):
+        from copy import deepcopy
+        from playwright.sync_api import sync_playwright, expect
+        original=self.scenario.state['groups'][self.gid]
+        for index in range(10):
+            group=deepcopy(original);group['ref']['name']='Group '+str(index);group['ref']['source_key']='group-'+str(index)
+            self.scenario.state['groups']['extra-'+str(index)]=group
+        self.scenario.save(update_fields=['state'])
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1100,'height':900})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                for tab in ['plan','distribution&section=months','distribution&section=powers','stock']:
+                    page.goto(self.live_server_url+self.url+'?tab='+tab)
+                    viewport=page.locator('.split-table-viewport')
+                    bar=page.get_by_role('region',name='Горизонтальная прокрутка таблицы',exact=True)
+                    expect(bar).to_be_visible()
+                    bar.evaluate('el=>el.scrollLeft=200')
+                    page.wait_for_function("document.querySelector('.split-table-viewport').scrollLeft > 100")
+                    bar.evaluate('el=>el.scrollLeft=el.scrollWidth')
+                    page.wait_for_function("Math.abs(document.querySelector('.split-table-top-scroll').scrollLeft-document.querySelector('.split-table-viewport').scrollLeft)<2")
+                    viewport.evaluate('el=>el.scrollLeft=40')
+                    page.wait_for_function("Math.abs(document.querySelector('.split-table-top-scroll').scrollLeft-40)<2")
+                    viewport.evaluate('el=>el.scrollTop=400')
+                    page.wait_for_function("document.querySelector('.split-table-viewport').scrollTop > 100")
+                    positions=viewport.evaluate("el=>({viewport:el.getBoundingClientRect().top,header:el.querySelector('thead').getBoundingClientRect().top})")
+                    self.assertLess(abs(positions['viewport']-positions['header']),3)
+                    page.locator('[data-reference-columns]').click()
+                    page.wait_for_function("Math.abs(parseFloat(document.querySelector('.split-table-top-scroll>div').style.width)-document.querySelector('.split-table-viewport').scrollWidth)<2")
+            finally:
+                context.close()
+                browser.close()
