@@ -46,13 +46,13 @@ class CalculationJobsTests(TestCase):
         self.assertFalse(form.is_valid())
 
     @patch.object(jobs, 'prepare')
-    def test_daily_schedule_converts_moscow_to_server_time(self, prepare):
-        self.job.enabled, self.job.mode = True, 'daily'
+    def test_once_schedule_converts_moscow_to_server_time(self, prepare):
+        self.job.enabled, self.job.mode = True, 'once'
         self.job.run_at = datetime(2030, 1, 1, 12, 30, tzinfo=ZoneInfo('Europe/Moscow'))
         self.cursor.fetchone.side_effect = [(1,), None, None, (0,)]
         jobs.sync_job(self.job, self.connector)
         schedule = next(call.args for call in self.cursor.execute.call_args_list if 'sp_add_jobschedule' in call.args[0])
-        self.assertEqual(schedule[-3:], (4, 20300101, 93000))
+        self.assertEqual(schedule[-3:], (1, 20300101, 93000))
         self.connection.commit.assert_called_once()
         self.connection.close.assert_called_once()
 

@@ -315,7 +315,9 @@ def sync_job(job, connector=None):
         if schedule:
             cursor.execute('EXEC msdb.dbo.sp_detach_schedule @job_name=?, @schedule_id=?, @delete_unused_schedule=1', name, schedule[0])
         stage = 'Настройка расписания SQL Agent'
-        if job.enabled and job.mode != 'manual':
+        from .preparation_schedule import register
+        register(cursor,name,job.enabled and job.mode=='daily')
+        if job.enabled and job.mode == 'once':
             if job.run_at is None:
                 raise ValidationError('Укажите дату и время расписания.')
             # Agent uses server-local time. SQL converts an aware Moscow instant
@@ -324,7 +326,7 @@ def sync_job(job, connector=None):
             offset = int(cursor.fetchone()[0])
             instant = job.run_at.astimezone(ZoneInfo('UTC')).replace(tzinfo=None) + timedelta(minutes=offset)
             cursor.execute('EXEC msdb.dbo.sp_add_jobschedule @job_name=?, @name=?, @freq_type=?, @freq_interval=1, @active_start_date=?, @active_start_time=?',
-                           name, name, 4 if job.mode == 'daily' else 1, int(instant.strftime('%Y%m%d')), int(instant.strftime('%H%M%S')))
+                           name, name, 1, int(instant.strftime('%Y%m%d')), int(instant.strftime('%H%M%S')))
         stage = 'Сохранение задания SQL Agent'
         connection.commit()
     except Exception as error:

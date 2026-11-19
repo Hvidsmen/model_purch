@@ -48,3 +48,26 @@ class PreparedSalesButtonBrowserTests(StaticLiveServerTestCase):
         expect(button).to_be_disabled()
         self.assertTrue(all(method=='GET' for method in requests))
         self.assertEqual(self.errors,[])
+
+    def test_saved_schedule_loads_and_polling_preserves_unsaved_clock(self):
+        from playwright.sync_api import expect
+        state={'status':'Готово','running':False,'history':[], 'schedule':{'time':'10:35','enabled':True,'configured':True}}
+        self.page.route('**'+reverse('motivation_prepared_sales_monitor')+'*',lambda route:route.fulfill(content_type='application/json',body=json.dumps(state)))
+        self.page.goto(self.live_server_url+reverse('motivation_calculations'))
+        self.page.get_by_text('Настроить время подготовки',exact=True).click()
+        clock=self.page.locator('[data-preparation-schedule-form] input[type=time]')
+        expect(clock).to_have_value('10:35')
+        expect(self.page.locator('[data-prepared-schedule]')).to_have_text('Ежедневно в 10:35 МСК')
+        expect(self.page.locator('[data-preparation-save]')).to_be_enabled()
+        clock.fill('11:10')
+        state['schedule']['time']='09:00'
+        with self.page.expect_response(lambda r:reverse('motivation_prepared_sales_monitor') in r.url):
+            self.page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        expect(clock).to_have_value('11:10')
+        expect(self.page.locator('[data-prepared-progress]')).to_be_hidden()
+        state.update(running=True,status='Подготовка документов')
+        with self.page.expect_response(lambda r:reverse('motivation_prepared_sales_monitor') in r.url):
+            self.page.evaluate("document.dispatchEvent(new Event('visibilitychange'))")
+        expect(self.page.locator('[data-prepared-progress]')).to_be_visible()
+        expect(self.page.locator('[data-prepared-start]')).to_be_disabled()
+        self.assertEqual(self.errors,[])

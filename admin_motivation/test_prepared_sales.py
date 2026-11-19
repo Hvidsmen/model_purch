@@ -93,17 +93,17 @@ class PreparedSalesSQLTests(SimpleTestCase):
             self.assertNotIn('#portal_shared_sales',command)
             self.assertIn('$.prepared_sales_run',command)
 
-    def test_installer_has_one_daily_job_at_0800_moscow_and_no_dynamic_user_sql(self):
+    def test_installer_has_one_daily_job_at_0900_moscow_and_no_dynamic_user_sql(self):
         cursor=Mock();sales.install(cursor)
         statements=[call.args[0] for call in cursor.execute.call_args_list]
         self.assertEqual(sum('ALTER PROCEDURE motivation.PortalPrepareSales AS' in s for s in statements),1)
-        agent=statements[-1]
+        agent='\n'.join(statements)
         self.assertIn('PortalMotivation_PrepareSales',agent)
         self.assertIn('@freq_type=4,@freq_interval=1',agent)
         self.assertIn('DATEPART(TZOFFSET,SYSDATETIMEOFFSET())-180',agent)
-        self.assertIn('DATEADD(hour,8',agent)
+        self.assertIn("VALUES(1,'09:00',1)",agent)
         self.assertIn('IF NOT EXISTS',agent)
-        self.assertNotIn('sp_start_job',agent)
+        self.assertTrue(any('sp_add_jobstep' in c.args[0] and any('WHILE @Outcome IS NULL' in str(a) for a in c.args[1:]) for c in cursor.execute.call_args_list))
 
     def test_start_configures_commits_releases_lock_before_start_and_closes(self):
         conn=Mock();cursor=Mock()
@@ -141,7 +141,7 @@ class PreparedSalesSQLTests(SimpleTestCase):
 
     def test_monitor_reports_ready_snapshot_when_latest_build_failed(self):
         conn=Mock();cursor=Mock();now=datetime(2026,11,11,5)
-        cursor.fetchone.side_effect=[(1,),('old-ready',now,123),(now,now,0)]
+        cursor.fetchone.side_effect=[(1,),('old-ready',now,123),(now,now,0),('09:00',True)]
         cursor.fetchall.return_value=[('new-failed',now,now,'failed','Ошибка подготовки',None,50040)]
         data=sales.monitor(lambda *_:(conn,cursor))
         self.assertEqual(data['ready']['run_id'],'old-ready')
@@ -151,7 +151,7 @@ class PreparedSalesSQLTests(SimpleTestCase):
 
     def test_running_audit_disables_start_even_before_agent_activity_is_available(self):
         conn=Mock();cursor=Mock();now=datetime(2026,11,11,5)
-        cursor.fetchone.side_effect=[(1,),None,None]
+        cursor.fetchone.side_effect=[(1,),None,None,('09:00',True)]
         cursor.fetchall.return_value=[('building',now,None,'running','Подготовка документов',None,None)]
         data=sales.monitor(lambda *_:(conn,cursor))
         self.assertFalse(data['agent_running'])
@@ -160,7 +160,7 @@ class PreparedSalesSQLTests(SimpleTestCase):
 
     def test_cancelled_agent_is_not_left_disabled_as_running(self):
         conn=Mock();cursor=Mock();now=datetime(2026,11,11,5)
-        cursor.fetchone.side_effect=[(1,),None,(now,now,3)]
+        cursor.fetchone.side_effect=[(1,),None,(now,now,3),('09:00',True)]
         cursor.fetchall.return_value=[('cancelled',now,None,'running','Расчёт скидок',None,None)]
         data=sales.monitor(lambda *_:(conn,cursor))
         self.assertEqual(data['history'][0]['state'],'interrupted')
@@ -174,7 +174,7 @@ class PreparedSalesViewsTests(TestCase):
         with patch.object(sales,'monitor') as monitor,patch.object(sales,'start') as start:
             response=self.client.get(reverse('motivation_calculations'))
         self.assertContains(response,'Подготовка факта продаж с 2025 года')
-        self.assertContains(response,'08:00 МСК');self.assertContains(response,'data-prepared-start disabled')
+        self.assertContains(response,'09:00 МСК');self.assertContains(response,'data-prepared-start disabled')
         monitor.assert_not_called();start.assert_not_called()
 
     def test_post_starts_independent_preparation_not_a_calculation_job(self):
@@ -232,7 +232,7 @@ class PreparedSalesBrowserTests(StaticLiveServerTestCase):
                 page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
                 page.goto(self.live_server_url+reverse('motivation_calculations'))
                 card=page.locator('[data-prepared-sales]')
-                expect(card).to_contain_text('08:00 МСК');expect(card.locator('[data-prepared-ready]')).to_contain_text('test-version')
+                expect(card).to_contain_text('09:00 МСК');expect(card.locator('[data-prepared-ready]')).to_contain_text('test-version')
                 card.get_by_role('button',name='Подготовить сейчас',exact=True).click()
                 expect(page.locator('[data-prepared-ready]')).to_contain_text('строк: 123')
                 start.assert_called_once()
