@@ -9,11 +9,20 @@ from django.db.models.functions import Trim
 from django.utils import timezone
 
 from .models import SalesPlanningGoods, SalesPlanningGroup, SalesPlanningDirectoryLoad, SalesPlanningBlockPair
-from .sales_planning_scope import split_goods, PRODUCT_GROUP
+from .sales_planning_scope import split_goods, PRODUCT_GROUP, planning_group_name, UNGROUPED_NAME
 
 
 def group_key(name):
-    return sha256(name.strip().casefold().encode('utf-8')).hexdigest()
+    return sha256(planning_group_name(name).casefold().encode('utf-8')).hexdigest()
+
+
+def ensure_ungrouped():
+    aliases = list(split_goods().annotate(trimmed=Trim('planning_group')).filter(trimmed='').values_list('planning_group', flat=True).distinct())
+    group, _ = SalesPlanningGroup.objects.get_or_create(source_key=group_key(UNGROUPED_NAME), defaults={'name': UNGROUPED_NAME})
+    group.source_names = sorted(set(group.source_names + aliases + ['']))
+    group.is_active = True
+    group.save(update_fields=['source_names', 'is_active'])
+    return group
 
 
 def ungrouped_goods():
@@ -26,11 +35,10 @@ def rebuild_groups():
         raise ValidationError('Сначала загрузите номенклатуру из DataWH.')
     names = {}
     for raw in split_goods().order_by().values_list('planning_group', flat=True).distinct():
-        if raw.strip():
-            names.setdefault(group_key(raw), []).append(raw)
+        names.setdefault(group_key(raw), []).append(raw)
     SalesPlanningGroup.objects.update(is_active=False)
     for key, aliases in names.items():
-        group, created = SalesPlanningGroup.objects.get_or_create(source_key=key, defaults={'name': aliases[0].strip()})
+        group, created = SalesPlanningGroup.objects.get_or_create(source_key=key, defaults={'name': planning_group_name(aliases[0])})
         group.source_names, group.is_active = sorted(aliases), True
         group.save(update_fields=['source_names', 'is_active'])
     SalesPlanningDirectoryLoad.objects.update_or_create(directory='groups', defaults={

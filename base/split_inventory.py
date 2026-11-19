@@ -14,9 +14,9 @@ from .split_engine import number,stored,ZERO
 # Keep ModelCodeERP membership, but neither multiply quantities by its
 # outdoor-only accounting flag nor multiply rows by duplicate model mappings.
 SCOPE = ''';WITH goods AS (
- SELECT DISTINCT n.Ссылка,n.Наименование,n.БИТ_КлассМощности,n.БИТ_ТипБлока,LTRIM(RTRIM(n.Даичи_ГруппаПланирования)) AS PlanningGroup
+ SELECT DISTINCT n.Ссылка,n.Наименование,n.БИТ_КлассМощности,n.БИТ_ТипБлока,COALESCE(NULLIF(LTRIM(RTRIM(n.Даичи_ГруппаПланирования)), N''), N'Без группы планирования') AS PlanningGroup
  FROM DataWH.erp.[Справочники.Номенклатура] n
- WHERE LTRIM(RTRIM(n.Родитель))=? AND LTRIM(RTRIM(n.Даичи_ГруппаПланирования))=?
+ WHERE LTRIM(RTRIM(n.Родитель))=? AND COALESCE(NULLIF(LTRIM(RTRIM(n.Даичи_ГруппаПланирования)), N''), N'Без группы планирования')=?
  AND EXISTS(SELECT 1 FROM DataWH.dbo.ModelCodeERP m WHERE m.ModelCode=n.Наименование)
 ), raw AS (
  SELECT sg.ReportDate,sg.НоменклатураСсылка,sg.ВНаличии,sg.ВПути,sg.КПоступлению,sg.ТипПоступления,sg.ДатаПоступления,
@@ -68,10 +68,10 @@ def source_rows_many(scenario,groups):
         values=list(groups.values())
         for offset in range(0,len(values),500):
             batch=values[offset:offset+500]
-            condition='LTRIM(RTRIM(n.Даичи_ГруппаПланирования)) IN ('+','.join('?' for _ in batch)+')'
+            condition="COALESCE(NULLIF(LTRIM(RTRIM(n.Даичи_ГруппаПланирования)), N''), N'Без группы планирования') IN ("+','.join('?' for _ in batch)+')'
             args=[PRODUCT_GROUP,*[group['ref']['name'] for group in batch],str(scenario.stock_date)]
             for index,sql in enumerate((STOCK_SQL,INCOME_SQL)):
-                cursor.execute(sql.replace('LTRIM(RTRIM(n.Даичи_ГруппаПланирования))=?',condition),*args)
+                cursor.execute(sql.replace("COALESCE(NULLIF(LTRIM(RTRIM(n.Даичи_ГруппаПланирования)), N''), N'Без группы планирования')=?",condition),*args)
                 for row in cursor.fetchall():
                     gid=owners.get(group_key(str(row[-1] or '')))
                     if gid is None:raise ValidationError('Источник вернул неизвестную группу. Данные не изменены.')

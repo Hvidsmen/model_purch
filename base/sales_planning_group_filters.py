@@ -26,8 +26,6 @@ def filter_groups(queryset, query):
         for field in choices:
             if row[field].strip():
                 choices[field].add(row[field].strip())
-        if not row['planning_group'].strip():
-            continue
         key = group_key(row['planning_group'])
         group = state.setdefault(key, {'powers': set(), 'valid': set(), 'review': False})
         power = row['power_class'].strip()

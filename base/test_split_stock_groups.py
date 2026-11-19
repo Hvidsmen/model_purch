@@ -45,7 +45,7 @@ class StockGroupSelectionTests(TestCase):
         connection.close.assert_called_once()
 
     def test_missing_snapshot_unmapped_groups_and_invalid_quantities_do_not_report_empty_success(self):
-        for rows, count in [([],0), ([('Missing',1,0)],1), ([('',1,0)],1), ([('G','NaN',0)],1)]:
+        for rows, count in [([],0), ([('Missing',1,0)],1), ([('G','NaN',0)],1)]:
             connection, cursor = self.provider(rows, count)
             with patch('base.split_stock_groups.connect_database', return_value=(connection,cursor)):
                 with self.assertRaises(ValidationError):
@@ -140,3 +140,33 @@ class StockGroupSelectionTests(TestCase):
         with patch('base.split_stock_groups.groups_from_stock') as source:
             self.client.post(url, {'action': 'add_onhand_groups', 'revision': self.scenario.revision})
             source.assert_not_called()
+
+    def test_blank_group_is_added_as_named_bucket_with_models_and_no_duplicates(self):
+        from .sales_planning_group_service import group_goods
+        SalesPlanningGoods.objects.create(source_key='blank-model', name='Blank group model', product_group=PRODUCT_GROUP,
+            planning_group='   ', power_class='09', block_type='Наружный')
+        connection, cursor = self.provider([(None, 3, 0), ('  ', 2, 0), ('G', 1, 0)])
+        with patch('base.split_stock_groups.connect_database', return_value=(connection, cursor)):
+            inventory = groups_from_stock(self.scenario.stock_date)
+        bucket = SalesPlanningGroup.objects.get(name='Без группы планирования')
+        self.assertEqual(group_goods(bucket).count(), 1)
+        self.assertEqual(len(inventory['groups']), 2)
+        with patch('base.split_stock_groups.groups_from_stock', return_value=inventory):
+            state = changed_state(self.scenario, {'action': 'add_stock_groups'})
+        group = state['groups'][str(bucket.pk)]
+        self.assertEqual(group['ref']['name'], 'Без группы планирования')
+        self.assertEqual(group['powers']['09']['models'][0]['key'], 'blank-model')
+        self.scenario.state = state
+        with patch('base.split_stock_groups.groups_from_stock', return_value=inventory):
+            self.assertEqual(changed_state(self.scenario, {'action': 'add_stock_groups'})['inventory_selection']['added'], 0)
+
+    def test_inventory_routes_blank_source_group_to_same_bucket(self):
+        from .split_inventory import source_rows_many
+        connection, cursor = self.provider([])
+        cursor.fetchall.side_effect = [[('model', '09', None)], [('receipt', '09', '')]]
+        with patch('base.split_inventory.connect_database', return_value=(connection, cursor)):
+            result = source_rows_many(self.scenario, {'blank': {'ref': {'name': 'Без группы планирования'}}})
+        self.assertEqual(result['blank'], ([('model', '09')], [('receipt', '09')]))
+        for call in cursor.execute.call_args_list[1:]:
+            self.assertIn("COALESCE(NULLIF(LTRIM(RTRIM(n.Даичи_ГруппаПланирования)), N''), N'Без группы планирования')", call.args[0])
+            self.assertIn('Без группы планирования', call.args)
