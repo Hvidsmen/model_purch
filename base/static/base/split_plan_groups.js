@@ -10,10 +10,14 @@
     button.setAttribute('aria-expanded', String(value));
     button.querySelector('[data-plan-subtotal-arrow]').textContent = value ? '▾' : '▸';
   }
+  let nested = true;
+  document.addEventListener('split-table-view-change', event => { nested = event.detail.mode === 'nested'; syncTree(); });
   function syncTree() {
+    nodes.forEach(node => { node.toggleAttribute('data-view-excluded', !nested); });
+    table.closest('.split-workspace').querySelectorAll('.split-hierarchy-tools').forEach(tool => { tool.hidden = !nested; });
     table.querySelectorAll('[data-plan-parent]').forEach(row => {
       let parent = row.dataset.planParent, visible = true;
-      while (parent && nodes.has(parent)) {
+      while (nested && parent && nodes.has(parent)) {
         const ancestor = nodes.get(parent);
         if (!nodeExpanded(ancestor)) { visible = false; break; }
         parent = ancestor.dataset.planParent;

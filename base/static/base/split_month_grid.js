@@ -141,7 +141,7 @@
             if (id === row.requestId) { row.busy = false; refresh(row); toolbar(); }
         }
     }
-    function visible(row) { return !row.element.hidden && !row.element.hasAttribute('data-reference-excluded'); }
+    function visible(row) { return !row.element.hidden && !row.element.hasAttribute('data-reference-excluded') && !row.element.hasAttribute('data-view-excluded'); }
     function chosen() { return rows.filter(row => visible(row) && row.element.querySelector('[data-grid-select]')?.checked); }
     function bulkToolbar(busy) {
         const count = form.querySelector('[data-grid-selected-count]');
@@ -158,6 +158,7 @@
     });
     form.querySelectorAll('[data-grid-select]').forEach(control => control.addEventListener('change', toolbar));
     document.addEventListener('split-reference-filter-change', toolbar);
+    document.addEventListener('split-table-visibility-change', toolbar);
     form.querySelector('[data-grid-bulk-apply]')?.addEventListener('click', async () => {
         if (!draft || submitting || bulkBusy || autoPending || rows.some(row => row.busy)) return;
         const selected = chosen(), mode = form.querySelector('[data-grid-bulk-mode]').value;
@@ -207,10 +208,11 @@
                 if (!text) return;
                 try {
                     const matrix = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n').map(line => line.split('\t'));
-                    const r0 = rows.indexOf(row), c0 = columns.indexOf(input.dataset.month), width = matrix[0].length;
-                    if (r0+matrix.length > rows.length || c0 < 0 || c0+width > columns.length || matrix.some(line => line.length !== width)) throw new Error('Блок Excel выходит за границы видимых строк или колонок либо имеет разную ширину.');
+                    const pasteRows = Array.from(form.querySelectorAll('[data-grid-row]'), element => rows.find(item => item.element === element)).filter(visible);
+                    const r0 = pasteRows.indexOf(row), c0 = columns.indexOf(input.dataset.month), width = matrix[0].length;
+                    if (r0 < 0 || r0+matrix.length > pasteRows.length || c0 < 0 || c0+width > columns.length || matrix.some(line => line.length !== width)) throw new Error('Блок Excel выходит за границы видимых строк или колонок либо имеет разную ширину.');
                     const prepared = matrix.map(function (line,index) {
-                        const target = rows[r0+index];
+                        const target = pasteRows[r0+index];
                         if (target.busy) throw new Error('Дождитесь загрузки факта перед вставкой.');
                         return line.map(function (value,col) {
                             const cell = target.inputs.find(item => item.dataset.month === columns[c0+col]);
@@ -219,7 +221,7 @@
                         });
                     });
                     prepared.forEach(function (line,index) {
-                        const target = rows[r0+index]; manual(target);
+                        const target = pasteRows[r0+index]; manual(target);
                         line.forEach(cell => { cell.input.value = cell.value === null ? '' : format(cell.value, ','); });
                         target.element.querySelector('[data-row-rule]').textContent = 'Вручную · вставка из Excel · не сохранено';
                         refresh(target);

@@ -219,3 +219,8 @@
 .split-distribution-bulk{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:12px 0}
 .split-distribution-bulk p{flex-basis:100%;margin:0}
 .split-group-card-link{display:inline-block;font-size:11px;padding:3px 7px;margin:4px 0;white-space:nowrap}
+
+[data-view-excluded]{display:none!important}
+.split-table-view-controls{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}
+.split-table-view-controls [aria-pressed="true"]{background:#eee9ff;border-color:#7355d6}
+.split-view-section{background:#f0f2fa}

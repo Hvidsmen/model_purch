@@ -227,3 +227,46 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
             finally:
                 context.close()
                 browser.close()
+
+    def test_flat_and_nested_views_keep_inputs_filters_and_selection(self):
+        from playwright.sync_api import sync_playwright, expect
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            context = browser.new_context(viewport={'width':1800,'height':1100})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page = context.new_page()
+                errors = []
+                page.on('pageerror', lambda error: errors.append(str(error)))
+                for tab in ['plan','distribution&section=months','distribution&section=powers','stock']:
+                    page.goto(self.live_server_url + self.url + '?tab=' + tab)
+                    table = page.locator('.split-plan-matrix, .split-stock-table, [data-month-grid] table')
+                    page.locator('button[data-table-view="nested"]').click()
+                    expect(table).to_have_attribute('data-table-view','nested')
+                    page.locator('[data-view-collapse]').click()
+                    leaf = page.locator('[data-plan-group], [data-grid-row], [data-stock-group]').first
+                    expect(leaf).not_to_be_visible()
+                    page.locator('button[data-table-view="flat"]').click()
+                    expect(leaf).to_be_visible()
+                    page.locator('button[data-table-view="nested"]').click()
+                    expect(leaf).not_to_be_visible()
+                    page.locator('[data-view-expand]').click()
+                    expect(leaf).to_be_visible()
+                    if tab == 'stock':
+                        page.get_by_label('Новые поставки G',exact=True).fill('19')
+                        page.locator('button[data-table-view="flat"]').click()
+                        expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('19')
+                        page.locator('button[data-table-view="nested"]').click()
+                        page.locator('[data-stock-band-toggle="stock"]').click()
+                        width = table.locator('.split-view-section th').first.get_attribute('colspan')
+                        self.assertEqual(width, '15')
+                        page.get_by_label('Новые поставки G',exact=True).fill('0')
+                    if tab.startswith('distribution'):
+                        page.locator('[data-grid-select-all]').click()
+                        self.assertNotEqual(page.locator('[data-grid-selected-count]').inner_text(), 'Выбрано строк: 0')
+                        page.locator('[data-view-collapse]').click()
+                        expect(page.locator('[data-grid-selected-count]')).to_have_text('Выбрано строк: 0')
+                self.assertEqual(errors, [])
+            finally:
+                context.close()
+                browser.close()
