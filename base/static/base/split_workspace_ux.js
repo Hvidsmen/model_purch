@@ -31,7 +31,7 @@
     const status = document.createElement('span'); status.setAttribute('role','status');
     const cancel = document.createElement('button'); cancel.type = 'button'; cancel.className = 'admin-button secondary'; cancel.textContent = 'Отменить изменения';
     save.before(bar); bar.append(status, save, cancel);
-    const inputs = [...plan.querySelectorAll('input, select, textarea')].filter(input => input.type !== 'hidden');
+    const inputs = [...plan.querySelectorAll('input, select, textarea')].filter(input => input.type !== 'hidden' || input.name.startsWith('ddp_proposal_'));
     const original = new Map(inputs.map(input => [input, input.type === 'checkbox' ? input.checked : input.value]));
     let dirty = false, submitted = false;
     function update() {

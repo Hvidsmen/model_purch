@@ -15,6 +15,7 @@
 <section class="admin-panel"><h2>Добавление групп и загрузка данных</h2><form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ scenario.revision }}"><fieldset {% if scenario.status == 'approved' %}disabled{% endif %}>{% include 'base/_split_composition_tools.html' %}</fieldset></form></section>
 {% elif tab == 'plan' %}
 <section class="admin-panel"><h2>Объём и наценка по каналам</h2>
+{% include "base/_split_ddp.html" %}
 {% if history.snapshot and history.years %}<div class="split-history-filter" aria-label="Показывать исторический факт"><span>Показывать исторический факт:</span>{% for year in history.years %}<label><input type="checkbox" data-history-year-choice="{{ year }}" {% if year == history.latest_year %}checked{% endif %}>{{ year }}</label>{% endfor %}</div>{% endif %}
 <form method="post" id="split-plan-inputs">{% csrf_token %}<input type="hidden" name="revision" value="{{ scenario.revision }}"><input type="hidden" name="with_lines" value="1"><fieldset {% if scenario.status == 'approved' %}disabled{% endif %}>
 <details class="split-inline-tools"><summary>Группы, каналы и загрузка данных</summary>{% include 'base/_split_composition_tools.html' %}</details>
@@ -55,4 +56,4 @@
 
 
 
-{% block module_js %}{{ block.super }}<script src="{% static 'base/split_reference_filters.js' %}?v=2" defer></script><script src="{% static 'base/split_plan_groups.js' %}?v=4" defer></script><script src="{% static 'base/split_stock_table.js' %}?v=5" defer></script><script src="{% static 'base/split_history.js' %}?v=3" defer></script><script src="{% static 'base/split_month_grid.js' %}?v=8" defer></script><script src="{% static 'base/split_table_views.js' %}?v=3" defer></script><script src="{% static 'base/split_workspace_ux.js' %}?v=4" defer></script>{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'base/split_ddp.js' %}?v=1" defer></script><script src="{% static 'base/split_reference_filters.js' %}?v=2" defer></script><script src="{% static 'base/split_plan_groups.js' %}?v=4" defer></script><script src="{% static 'base/split_stock_table.js' %}?v=5" defer></script><script src="{% static 'base/split_history.js' %}?v=3" defer></script><script src="{% static 'base/split_month_grid.js' %}?v=8" defer></script><script src="{% static 'base/split_table_views.js' %}?v=3" defer></script><script src="{% static 'base/split_workspace_ux.js' %}?v=5" defer></script>{% endblock %}
