@@ -19,8 +19,9 @@
    table.querySelectorAll('[data-history-band]').forEach(band=>{
     let width=0;
     if(band.dataset.historyBand==='all'){
-     const start=headers.findIndex(h=>h.dataset.splitMetric==='stock');
-     if(start>=0)width=headers.slice(start).filter(visible).length;
+     width=headers.filter(h=>visible(h)&&(h.classList.contains('split-matrix-total')||
+      h.hasAttribute('data-plan-opening-component')||h.dataset.planMetricBand==='all'||
+      (h.hasAttribute('data-history-year-column')&&(h.dataset.historyBandKey||h.dataset.historyMonthColumn?.slice(0,-5))==='all'))).length;
     }else{
      width=headers.filter(h=>visible(h)&&(h.dataset.planMetricBand===band.dataset.historyBand ||
       (h.hasAttribute('data-history-year-column')&&(h.dataset.historyBandKey||h.dataset.historyMonthColumn?.slice(0,-5))===band.dataset.historyBand))).length;
