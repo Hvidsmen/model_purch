@@ -88,6 +88,21 @@ class DiagnosticsSourceTests(SimpleTestCase):
         self.assertNotIn('PortalOriginalDealAuthor',query[0]);cursor.fetchone.assert_not_called()
         connection.close.assert_called_once()
 
+    def test_original_author_diagnostics_use_exact_prepared_field_without_erp(self):
+        snap=snapshot();snap.results['moscow_q4_2026']['source'].update(source_table='DataWH.motivation.PortalPreparedSales',author_field='PortalOriginalDealAuthor')
+        cursor=Mock();connection=Mock()
+        cursor.fetchone.side_effect=[('frozen',timezone.now(),date(2025,1,1),date(2027,1,1),RULE),('frozen',)]
+        cursor.fetchall.side_effect=[[('sales_author',3800,Decimal(1000),50,9),('sales_author_blank',31,Decimal(100),0,0)],[],[]]
+        report=diagnose(snap,connector=Mock(return_value=(connection,cursor)))
+        self.assertTrue(report['uses_prepared']);self.assertTrue(report['same_prepared_snapshot'])
+        self.assertEqual(report['author_field'],'PortalOriginalDealAuthor');self.assertEqual(report['current_named_authors'],9)
+        query=cursor.execute.call_args_list[1].args[0]
+        self.assertIn('s.[PortalOriginalDealAuthor]',query)
+        self.assertIn('FROM DataWH.motivation.PortalPreparedSales s',query)
+        for call in cursor.execute.call_args_list:
+            self.assertNotIn('DataWH.erp',call.args[0]);self.assertNotIn('s.Даичи_АвторСделкиНаименование',call.args[0])
+        connection.close.assert_called_once()
+
 
 def setup(test):
     fixture.CalculationTests.setUp(test)
