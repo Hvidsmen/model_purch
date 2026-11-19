@@ -425,3 +425,53 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 for gate in gates:gate.set()
                 context.close()
                 browser.close()
+
+    def test_click_deficit_reveals_exact_power_without_losing_edits(self):
+        from copy import deepcopy
+        from playwright.sync_api import sync_playwright, expect
+        group=self.scenario.state['groups'][self.gid]
+        next(iter(group['channels'].values()))['input']='200'
+        other=deepcopy(group)
+        other['ref']['name']='Other group';other['ref']['source_key']='other-group'
+        other['ref']['details']={**self.reference,'factory':'Other factory'}
+        for line in other['channels'].values():line['input']='0'
+        self.scenario.state['groups']['other']=other
+        self.scenario.save(update_fields=['state'])
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1600,'height':1000})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                page.goto(self.live_server_url+self.url+'?tab=stock')
+                expect(page.locator('.split-workspace')).to_have_attribute('data-workspace-ux-ready','true')
+                page.locator('button[data-table-view="nested"]').click()
+                page.get_by_label('Новые поставки G',exact=True).fill('23')
+                page.locator('[data-reference-filter="factory"]').select_option('Other factory',force=True)
+                page.locator('[data-view-collapse]').click()
+                issue=page.locator('[data-stock-issue-group="'+self.gid+'"]')
+                expect(issue).to_have_count(1)
+                issue.click()
+                power=page.locator('[data-stock-child="'+self.gid+'"][data-stock-power="07"]')
+                expect(power).to_be_visible()
+                expect(power).to_have_class('split-stock-power-row split-focus-row')
+                expect(power.locator('td').last).to_be_focused()
+                expect(page.locator('.split-stock-table')).to_have_attribute('data-table-view','nested')
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('23')
+                expect(page.locator('[data-reference-filter="factory"]')).to_have_values([])
+                issue.click()
+                expect(power).to_be_visible()
+                page.get_by_label('Новые поставки G',exact=True).fill('0')
+                page.goto(self.live_server_url+self.url+'?tab=checks')
+                link=page.locator('a[href*="power=07"]')
+                expect(link).to_have_count(1)
+                link.click()
+                expect(power).to_be_visible()
+                expect(power.locator('td').last).to_be_focused()
+                page.goto(self.live_server_url+self.url+'?tab=distribution&section=powers&group='+self.gid+'&power=07&focus=1')
+                config=page.locator('[data-grid-row][data-gid="'+self.gid+'"] [data-power-config="07"]')
+                expect(config).to_have_attribute('open','')
+                expect(config.locator('input').first).to_be_focused()
+            finally:
+                context.close()
+                browser.close()

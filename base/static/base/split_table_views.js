@@ -93,6 +93,12 @@
     if (plan) document.querySelector(button.hasAttribute('data-view-expand') ? '[data-plan-tree-expand]' : '[data-plan-tree-collapse]').click();
     else { nodes.forEach(node => { node.open = button.hasAttribute('data-view-expand'); }); sync(); }
   }));
+  document.addEventListener('split-reveal-group',event=>{
+    if(plan)return;
+    const row=[...table.querySelectorAll('[data-stock-group], [data-grid-row]')].find(row=>(row.dataset.stockGroup||row.dataset.gid)===event.detail.gid);
+    if(!row)return;
+    nodes.filter(node=>node.descendants.includes(row)).forEach(node=>{node.open=true;});sync();
+  });
   document.addEventListener('split-reference-filter-change', sync);
   if (!plan) new MutationObserver(sync).observe(table.tHead, {subtree:true, attributes:true, attributeFilter:['colspan','hidden']});
   sync();

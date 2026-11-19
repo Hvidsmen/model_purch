@@ -251,3 +251,4 @@
 .split-reference-popup>input{width:100%}.split-reference-actions{display:flex;gap:8px;padding:8px 0}.split-reference-actions button{font-size:11px;border:1px solid #ddd5f3;background:#f7f4ff;border-radius:4px;padding:5px;cursor:pointer}
 .split-reference-options{max-height:240px;overflow:auto}.split-reference-options label{display:flex;flex-direction:row;align-items:center;gap:7px;padding:5px;min-width:0;overflow-wrap:anywhere}.split-reference-options label[hidden]{display:none!important}
 .split-reference-options input{flex:0 0 auto}
+.split-deficit a{color:inherit;text-underline-offset:3px}

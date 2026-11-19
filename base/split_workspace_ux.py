@@ -29,6 +29,9 @@ def presentation(scenario, result, tab):
             query = {'tab':target}
             if group:
                 query.update(group=group[0], focus='1')
+                power = next((key for key in group[1]['powers'] if ' · '+key+':' in message), None)
+                if power is not None:
+                    query['power'] = power
                 if target == 'distribution':
                     query['section'] = 'powers' if any(word in message.casefold() for word in ('мощност','пару блок','внутреннего блока')) else 'months'
             issues.append({'message':message,'severity':severity,'tab':target,'url':'?' + urlencode(query),'action':'Перейти к исправлению' if severity == 'error' else 'Посмотреть'})

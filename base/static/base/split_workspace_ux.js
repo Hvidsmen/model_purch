@@ -95,14 +95,38 @@
     if(cell.textContent.trim()==='—')cell.title='Недостаточно данных. Проверьте прогноз, остатки, поступления и распределение.';
   });
   workspace.dataset.workspaceUxReady='true';
+  function revealStock(gid,power) {
+    const group=workspace.querySelector('[data-stock-group="'+CSS.escape(gid)+'"]');
+    if(!group)return false;
+    if(group.hasAttribute('data-reference-excluded'))workspace.querySelector('[data-reference-reset]')?.click();
+    document.dispatchEvent(new CustomEvent('split-reveal-group',{detail:{gid}}));
+    const toggle=group.querySelector('[data-stock-toggle]');
+    if(toggle?.getAttribute('aria-expanded')==='false')toggle.click();
+    const row=power ? workspace.querySelector('[data-stock-child="'+CSS.escape(gid)+'"][data-stock-power="'+CSS.escape(power)+'"]') : group;
+    if(!row)return false;
+    workspace.querySelectorAll('.split-focus-row').forEach(node=>node.classList.remove('split-focus-row'));
+    row.classList.add('split-focus-row');
+    const target=row.matches('.split-stock-power-row') ? row.lastElementChild : row;
+    target.setAttribute('tabindex','-1');target.focus({preventScroll:true});target.scrollIntoView({block:'center',inline:'center'});
+    return true;
+  }
+  workspace.addEventListener('click',event=>{
+    const link=event.target.closest('[data-stock-issue-group]');
+    if(!link||event.ctrlKey||event.metaKey||event.shiftKey||event.altKey)return;
+    if(revealStock(link.dataset.stockIssueGroup,link.dataset.stockIssuePower))event.preventDefault();
+  });
   const focus = new URLSearchParams(location.search);
   if (focus.get('focus') === '1' && focus.get('group')) {
-    const gid = CSS.escape(focus.get('group'));
-    const row = workspace.querySelector('[data-plan-group="'+gid+'"], [data-stock-group="'+gid+'"], [data-grid-row][data-gid="'+gid+'"]');
-    if (row) {
-      workspace.querySelector('[data-table-view="flat"]')?.click();
-      workspace.querySelector('[data-reference-reset]')?.click();
-      row.classList.add('split-focus-row'); row.scrollIntoView({block:'center'});
+    const gid=focus.get('group');
+    if(!revealStock(gid,focus.get('power'))) {
+      const row=workspace.querySelector('[data-plan-group="'+CSS.escape(gid)+'"], [data-grid-row][data-gid="'+CSS.escape(gid)+'"]');
+      if(row){
+        workspace.querySelector('[data-table-view="flat"]')?.click();workspace.querySelector('[data-reference-reset]')?.click();
+        row.classList.add('split-focus-row');
+        const config=focus.get('power') ? row.querySelector('[data-power-config="'+CSS.escape(focus.get('power'))+'"]') : null;
+        if(config){config.open=true;config.scrollIntoView({block:'center',inline:'center'});config.querySelector('input,select')?.focus({preventScroll:true});}
+        else row.scrollIntoView({block:'center'});
+      }
     }
   }
 })();

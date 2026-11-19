@@ -49,7 +49,8 @@ class WorkspaceUXTests(TestCase):
 
     def test_issue_links_resolve_group_and_distribution_section(self):
         gid,group=next(iter(self.scenario.state['groups'].items()))
-        result={'errors':[group['ref']['name']+' · 09: выберите действующую пару блоков.'],'warnings':[]}
+        result={'errors':[group['ref']['name']+' · 07: выберите действующую пару блоков.'],'warnings':[]}
         ux=presentation(self.scenario,result,'checks')
         self.assertIn('section=powers',ux['errors'][0]['url'])
+        self.assertIn('power=07',ux['errors'][0]['url'])
         self.assertIn('group='+gid,ux['errors'][0]['url'])
