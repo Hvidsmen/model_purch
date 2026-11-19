@@ -34,7 +34,8 @@ class SplitInventoryBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('button',name='Раскрыть группу G',exact=True).click()
                 expect(page.locator('#split-stock-table [name="stock_indoor_0"]').first).to_be_visible()
                 with patch('base.split_inventory.source_rows_many',return_value={self.gid:(self.stock,self.incomes),'other':([],[])}):
-                    page.get_by_role('button',name='Загрузить остатки и приходы всех групп').click()
+                    with page.expect_navigation():
+                        page.get_by_role('button',name='Загрузить остатки и приходы всех групп').click()
                     expect(page.locator('[name="stock_indoor_0"][form="split-stock-form-'+self.gid+'"]')).to_have_value('15')
                     expect(page.locator('[name="stock_outdoor_0"][form="split-stock-form-'+self.gid+'"]')).to_have_value('12')
                     expect(page.locator('[name="prior_indoor_0"][form="split-stock-form-'+self.gid+'"]')).to_have_value('6')
@@ -44,25 +45,29 @@ class SplitInventoryBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('.split-workspace table')).to_have_count(1)
                 page.locator('[name="forecast_2026-11"][form="split-stock-form-'+self.gid+'"]').fill('2')
                 page.locator('[name="forecast_2026-12"][form="split-stock-form-'+self.gid+'"]').fill('3')
-                page.locator('.split-stock-tools-row[data-stock-child="'+self.gid+'"]').get_by_role('button',name='Сохранить группу').click()
+                with page.expect_navigation():
+                    page.locator('.split-stock-tools-row[data-stock-child="'+self.gid+'"]').get_by_role('button',name='Сохранить группу').click()
                 opening=page.locator('.split-stock-power-row[data-stock-child="'+self.gid+'"]').first
                 expect(opening.locator('[data-opening="indoor"]')).to_have_text('16')
                 expect(opening.locator('[data-opening="outdoor"]')).to_have_text('7')
                 expect(opening.locator('[data-opening="sets"]')).to_have_text('7')
                 # The forecast column is editable at both group and power grain.
                 page.get_by_label('Прогноз группы G',exact=True).fill('8')
-                page.locator('[data-stock-group="'+self.gid+'"]').get_by_role('button',name='Сохранить',exact=True).click()
+                with page.expect_navigation():
+                    page.locator('[data-stock-group="'+self.gid+'"]').get_by_role('button',name='Сохранить',exact=True).click()
                 expect(page.get_by_label('Прогноз мощности G 07',exact=True)).to_have_value(re.compile(r'^8(?:\.0+)?$'))
                 expect(page.locator('.split-stock-power-row[data-stock-child="'+self.gid+'"] [data-opening="sets"]')).to_have_text('4')
                 expect(page.get_by_role('button',name='Раскрыть группу G',exact=True)).to_have_attribute('aria-expanded','true')
                 page.get_by_label('Прогноз мощности G 07',exact=True).fill('3')
                 expect(page.get_by_label('Прогноз группы G',exact=True)).to_have_value('3')
-                page.locator('.split-stock-tools-row[data-stock-child="'+self.gid+'"]').get_by_role('button',name='Сохранить группу').click()
+                with page.expect_navigation():
+                    page.locator('.split-stock-tools-row[data-stock-child="'+self.gid+'"]').get_by_role('button',name='Сохранить группу').click()
                 expect(page.get_by_label('Прогноз мощности G 07',exact=True)).to_have_value('3')
                 expect(page.locator('.split-stock-power-row[data-stock-child="'+self.gid+'"] [data-opening="sets"]')).to_have_text('9')
                 # A collapsed group's summary cell can be edited and saved too.
                 page.get_by_label('Прогноз группы H',exact=True).fill('0')
-                page.locator('[data-stock-group="other"]').get_by_role('button',name='Сохранить',exact=True).click()
+                with page.expect_navigation():
+                    page.locator('[data-stock-group="other"]').get_by_role('button',name='Сохранить',exact=True).click()
                 expect(page.get_by_label('Прогноз группы H',exact=True)).to_have_value('0')
                 # Saving G must not send the identically named inputs of H.
                 other=page.locator('.split-stock-power-row[data-stock-child="other"]')
