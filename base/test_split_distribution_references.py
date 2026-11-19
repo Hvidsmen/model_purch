@@ -695,3 +695,36 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
             finally:
                 context.close()
                 browser.close()
+
+    def test_all_planning_pages_enhance_every_table_with_headers_and_top_scroll(self):
+        from playwright.sync_api import sync_playwright, expect
+        urls=[reverse('sales_planning_goods'),reverse('sales_planning_channels'),reverse('sales_planning_groups'),reverse('sales_planning_group_detail',args=[self.group.pk]),reverse('split_scenarios'),self.url+'?tab=detail',self.url+'?tab=sources',self.url+'?tab=versions']
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1300,'height':900})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                for url in urls:
+                    page.goto(self.live_server_url+url)
+                    page.evaluate("document.querySelectorAll('details').forEach(el=>{if(el.querySelector('table'))el.open=true;})")
+                    tables=page.locator('#portal-main table')
+                    self.assertGreater(tables.count(),0,url)
+                    for table in tables.all():
+                        if not table.locator('thead').count():continue
+                        expect(table.locator('..')).to_have_attribute('data-table-scroll-ready','true')
+                        table.evaluate("""table=>{
+                            table.style.width='1800px';table.style.minWidth='1800px';
+                            const viewport=table.parentElement;viewport.style.maxHeight='180px';
+                            const body=table.tBodies[0], first=body?.rows[0];
+                            if(first){for(let i=0;i<8;i++)body.append(first.cloneNode(true));[...body.rows].forEach(row=>row.style.height='80px');}
+                        }""")
+                        page.wait_for_function("table=>!table.parentElement.previousElementSibling.hidden",arg=table.element_handle())
+                        table.evaluate('table=>table.parentElement.previousElementSibling.scrollLeft=200')
+                        page.wait_for_function('table=>table.parentElement.scrollLeft>100',arg=table.element_handle())
+                        table.evaluate('table=>table.parentElement.scrollTop=100')
+                        page.wait_for_function('table=>table.parentElement.scrollTop>50',arg=table.element_handle())
+                        positions=table.evaluate('table=>({head:table.tHead.getBoundingClientRect().top,viewport:table.parentElement.getBoundingClientRect().top})')
+                        self.assertLess(abs(positions['head']-positions['viewport']),3,url)
+            finally:
+                context.close();browser.close()
