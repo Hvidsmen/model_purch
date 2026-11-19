@@ -100,3 +100,22 @@ class BrandPageTests(TestCase):
             total=response.context['all_history_total']
             self.assertEqual([year['total']['qty'] for year in total['years']],[5,10])
             self.assertEqual(len(response.context['history_total']['years']),2)
+
+
+    def test_multiple_brand_combinations_share_other_page_without_changing_references(self):
+        groups=self.scenario.state['groups']
+        groups['other']['ref']['details']['brand']='BOSCH, KENTATSU'
+        third=deepcopy(groups['other']);third['ref']['details']['brand']='AIRWAVE, MIDEA, Other'
+        groups['third']=third
+        self.scenario.save(update_fields=['state'])
+        before=deepcopy(self.scenario.state)
+        for tab in ('plan','stock','distribution'):
+            response=self.client.get(self.url,{'tab':tab,'brand_page':'прочее'})
+            self.assertEqual(set(response.context['state']['groups']),{'other','third'})
+            self.assertEqual([(p['name'],p['count']) for p in response.context['brand_page']['pages']],[('Alpha',1),('Прочее',2)])
+            self.assertEqual(response.context['state']['groups']['other']['ref']['details']['brand'],'BOSCH, KENTATSU')
+        response=self.client.get(self.url,{'tab':'plan','brand_page':'bosch, kentatsu'})
+        self.assertEqual(response.context['brand_page']['name'],'Прочее')
+        self.assertEqual(response.context['matrix_totals']['total']['qty'],60)
+        self.assertEqual(response.context['all_matrix_totals']['total']['qty'],90)
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,before)

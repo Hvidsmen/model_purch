@@ -9,10 +9,12 @@ def scope(scenario,params):
     refs=references(scenario);brands={}
     for gid in scenario.state['groups']:
         name=str(refs.get(gid,{}).get('brand') or '').strip() or 'Без бренда'
+        if len({part.strip().casefold() for part in name.split(',') if part.strip()})>1:name='Прочее'
         key=name.casefold();entry=brands.setdefault(key,{'key':key,'name':name,'gids':[]});entry['gids'].append(gid)
     ordered=sorted(brands.values(),key=lambda row:row['name'].casefold())
     if len(ordered)<2:return scenario,None
     selected=params.get('brand_page','')
+    if len({part.strip().casefold() for part in selected.split(',') if part.strip()})>1:selected='прочее'
     if params.get('focus')=='1':
         selected=next((row['key'] for row in ordered if params.get('group') in row['gids']),selected)
     if selected!='_all_' and selected not in brands:
