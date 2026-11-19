@@ -113,6 +113,8 @@
     }
     async function fact(row) {
         const id = ++row.requestId, oldMode = row.mode;
+        const progress = !bulkBusy && !autoPending ? window.SplitProgress?.start('Получение распределения из факта: ' + row.element.querySelector('.split-month-group-name').textContent) : null;
+        row.progress=progress;
         row.controller = new AbortController();
         row.mode = 'fact'; row.busy = true; row.requestError = ''; refresh(row); toolbar();
         try {
@@ -133,10 +135,12 @@
                 });
             }
             row.token = data.token; row.dirty = true;
+            progress?.finish('Предложение получено. Проверьте и сохраните изменения.');
             row.element.querySelector('[data-row-rule]').textContent = [data.basis.rule_label,data.basis.rule_detail,data.basis.parameter_note,'Не сохранено'].filter(Boolean).join(' · ');
         } catch (error) {
             if (id !== row.requestId) return;
             row.mode = oldMode; row.requestError = error.message;
+            progress?.fail(error.message);
         } finally {
             if (id === row.requestId) { row.busy = false; refresh(row); toolbar(); }
         }
@@ -163,16 +167,22 @@
         if (!draft || submitting || bulkBusy || autoPending || rows.some(row => row.busy)) return;
         const selected = chosen(), mode = form.querySelector('[data-grid-bulk-mode]').value;
         if (!selected.length) return;
+        const progress=window.SplitProgress?.start('Массовое распределение',selected.length);
+        let completed=0;
         bulkBusy = true; toolbar();
         form.querySelector('[data-grid-bulk-result]').textContent = 'Применяем распределение…';
         try {
             for (const row of selected) {
                 if (mode === 'fact') await fact(row);
                 else row.element.querySelector('[data-mode-button="' + mode + '"]').click();
+                progress?.update(++completed);
+                if(mode!=='fact' && completed%20===0)await new Promise(resolve=>setTimeout(resolve,0));
             }
         } finally {
             bulkBusy = false; toolbar();
             const failures = selected.filter(row => row.requestError).length;
+            if(failures)progress?.fail('Обработано '+completed+' из '+selected.length+'. Ошибок: '+failures+'. Проверьте сообщения в строках.');
+            else progress?.finish('Обработано '+completed+' из '+selected.length+'. Проверьте результат и сохраните изменения.');
             form.querySelector('[data-grid-bulk-result]').textContent = 'Обработано строк: ' + selected.length + (failures ? '. Не удалось обработать: ' + failures + '. Проверьте сообщения в строках.' : '. Проверьте распределение и сохраните изменения.');
         }
     });
@@ -253,13 +263,16 @@
             }));
             return item;
         });
+        const progress=window.SplitProgress?.start('Сохранение распределения · строк: '+changed.length);
         submitting = true; rows.forEach(refresh); toolbar();
         try {
             await request({action:saveAction,grid_payload:JSON.stringify(payload)});
+            progress?.finish('Распределение сохранено');
             window.location.reload();
         } catch (error) {
             submitting = false; rows.forEach(refresh); toolbar();
             message.textContent = 'Изменения не сохранены: ' + error.message;
+            progress?.fail(error.message);
         }
     });
     const reset = form.querySelector('[data-grid-reset]');
@@ -273,6 +286,7 @@
         stopAuto = true;
         rows.forEach(function (row) {
             if (row.controller) row.controller.abort();
+            row.progress?.finish('Операция отменена.');
             row.requestId++; row.busy = false; row.dirty = false; row.requestError = ''; row.token = '';
             row.mode = row.original.mode; row.unit.value = row.original.unit;
             row.inputs.forEach((input,index) => { input.value = row.original.values[index]; });
@@ -285,10 +299,12 @@
     if (draft) {
         const defaults = rows.filter(row => row.element.dataset.autoFact === '1');
         autoPending = defaults.length;
+        const autoProgress=defaults.length ? window.SplitProgress?.start('Автоматическое получение распределения',defaults.length) : null;
+        let autoCompleted=0;
         let queue = Promise.resolve();
         defaults.forEach(row => { queue = queue.then(async function () {
             try { if (!stopAuto && row.mode === 'fact' && !row.dirty) await fact(row); }
-            finally { autoPending--; toolbar(); }
+            finally {autoPending--;autoProgress?.update(++autoCompleted);toolbar();if(!autoPending){const failures=defaults.filter(row=>row.requestError).length;if(failures)autoProgress?.fail('Не удалось получить предложение для строк: '+failures);else autoProgress?.finish(stopAuto ? 'Автоматическая загрузка остановлена.' : 'Предложения получены. Проверьте распределение и сохраните изменения.');}}
         }); });
     }
     toolbar();
