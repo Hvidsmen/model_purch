@@ -33,6 +33,13 @@ class DistributionReferenceTests(TestCase):
                     self.assertContains(response, label)
                 self.assertContains(response, 'Factory &lt;A&gt;')
                 self.assertNotContains(response, 'Factory <A>')
+            stock = self.client.get(self.url, {'tab': 'stock'})
+            self.assertEqual(stock.context['stock_overview']['groups'][0]['reference'], self.reference)
+            self.assertContains(stock, 'Factory &lt;A&gt;')
+            card_url = reverse('sales_planning_group_detail', args=[self.group.pk])
+            for tab in ['plan', 'distribution', 'stock', 'detail']:
+                response = self.client.get(self.url, {'tab': tab})
+                self.assertContains(response, 'href="' + card_url + '" target="_blank"')
 
     def test_old_snapshot_uses_local_nomenclature_and_missing_values_stay_blank(self):
         group = self.scenario.state['groups'][self.gid]
@@ -81,6 +88,142 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('[data-grid-row]').first.locator('.split-distribution-reference')).to_have_text(['RAC', 'Brand', 'INV', 'Factory <A>'])
                 page.locator('[data-power-config] summary').first.click()
                 expect(page.locator('[data-power-param="factor"]').first).to_be_visible()
+                page.goto(self.live_server_url + self.url + '?tab=stock')
+                stock_row = page.locator('.split-stock-group-row')
+                expect(stock_row.locator('.split-distribution-reference')).to_have_text(['RAC', 'Brand', 'INV', 'Factory <A>'])
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '13')
+                page.locator('[data-stock-channel-toggle]').click()
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '15')
+                page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
+                page.locator('[data-stock-band-toggle="stock"]').click()
+                expect(page.locator('[data-stock-fullspan]').first).to_have_attribute('colspan', '17')
+                expect(page.get_by_label('Сток внутренние G 07', exact=True)).to_be_visible()
+                page.get_by_label('Новые поставки G', exact=True).fill('5')
+                page.get_by_role('button', name='Сохранить поставки', exact=True).click()
+                expect(page.get_by_label('Новые поставки G', exact=True)).to_have_value('5')
+                page.get_by_label('Новые поставки G', exact=True).fill('9')
+                with page.expect_popup() as popup:
+                    stock_row.locator('.split-group-card-link').click()
+                card = popup.value
+                card.wait_for_load_state()
+                self.assertIn(reverse('sales_planning_group_detail', args=[self.group.pk]), card.url)
+                card.close()
+                expect(page.get_by_label('Новые поставки G', exact=True)).to_have_value('9')
+                expect(page.locator('.split-stock-power-row').first).not_to_be_visible()
+                expect(stock_row.locator('.split-distribution-reference')).to_have_text(['RAC', 'Brand', 'INV', 'Factory <A>'])
+                expect(stock_row.locator('td').last).to_have_text('75')
+            finally:
+                context.close()
+                browser.close()
+
+    def test_reference_filters_across_tabs_preserve_hidden_values_and_tree(self):
+        from copy import deepcopy
+        from playwright.sync_api import sync_playwright, expect
+        second = deepcopy(self.scenario.state['groups'][self.gid])
+        second['ref']['name'] = 'Other group'
+        second['ref']['details'] = {'sales_plan_group': 'Other', 'brand': 'Other brand', 'outdoor_type': 'OFF', 'factory': 'Other factory'}
+        self.scenario.state['groups']['other'] = second
+        self.scenario.save(update_fields=['state'])
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            context = browser.new_context(viewport={'width': 1800, 'height': 1100})
+            try:
+                context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url}])
+                page = context.new_page()
+                for tab in ['plan', 'distribution&section=months', 'distribution&section=powers', 'stock']:
+                    page.goto(self.live_server_url + self.url + '?tab=' + tab)
+                    filters = page.locator('[data-reference-filter]')
+                    expect(filters).to_have_count(4)
+                    page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                    expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 1')
+                    rows = page.locator('[data-plan-group="other"], [data-stock-group="other"], [data-grid-row][data-gid="other"]')
+                    for row in rows.all():
+                        expect(row).not_to_be_visible()
+                    if tab == 'plan':
+                        page.locator('[data-reference-reset]').click()
+                        page.get_by_label('Количество Other group Дилеры', exact=True).fill('17')
+                        page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                        page.get_by_role('button', name='Сохранить объёмы и наценки', exact=True).click()
+                        expect(page.locator('[data-reference-filter="factory"]')).to_have_value('Factory <A>')
+                        page.locator('[data-reference-reset]').click()
+                        expect(page.get_by_label('Количество Other group Дилеры', exact=True)).to_have_value('17')
+                        page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                        page.locator('[data-plan-group="' + self.gid + '"] [data-plan-group-toggle]').click()
+                        expect(page.locator('[data-plan-power-group="' + self.gid + '"]').first).to_be_visible()
+                        expect(page.locator('[data-plan-power-group="other"]').first).not_to_be_visible()
+                    page.locator('[data-reference-filter="brand"]').select_option('Other brand')
+                    expect(page.locator('[data-reference-filter-count]')).to_have_text('Нет групп по выбранным условиям.')
+                    page.locator('[data-reference-reset]').click()
+                    expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 2')
+                page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                page.get_by_label('Новые поставки G', exact=True).fill('5')
+                page.locator('[data-stock-group="' + self.gid + '"]').get_by_role('button', name='Сохранить поставки').click()
+                expect(page.locator('[data-reference-filter="factory"]')).to_have_value('Factory <A>')
+                page.locator('[data-reference-reset]').click()
+                expect(page.get_by_label('Новые поставки Other group', exact=True)).to_have_value('0')
+            finally:
+                context.close()
+                browser.close()
+
+    def test_bulk_modes_select_visible_rows_and_save_only_changed_rows(self):
+        from copy import deepcopy
+        from playwright.sync_api import sync_playwright, expect
+        second = deepcopy(self.scenario.state['groups'][self.gid])
+        second['ref']['details'] = {**self.reference, 'factory': 'Other factory'}
+        self.scenario.state['groups']['other'] = second
+        self.scenario.save(update_fields=['state'])
+        with sync_playwright() as driver:
+            browser = driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'), headless=True)
+            context = browser.new_context(viewport={'width': 1800, 'height': 1100})
+            try:
+                context.add_cookies([{'name':'sessionid', 'value':self.client.cookies['sessionid'].value, 'url':self.live_server_url}])
+                page = context.new_page()
+                page.goto(self.live_server_url + self.url + '?tab=distribution&section=months')
+                first = page.locator('[data-grid-row]').first
+                other = page.locator('[data-grid-row][data-gid="other"]').first
+                previous = other.locator('[data-month]').first.input_value()
+                first.locator('[data-grid-select]').check()
+                page.locator('[data-grid-bulk-mode]').select_option('equal')
+                page.locator('[data-grid-bulk-apply]').click()
+                expect(first.locator('[data-mode-button="equal"]')).to_have_attribute('aria-pressed', 'true')
+                expect(other.locator('[data-month]').first).to_have_value(previous)
+                page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                page.locator('[data-grid-select-all]').click()
+                expect(page.locator('[data-grid-selected-count]')).to_have_text('Выбрано строк: 2')
+                page.locator('[data-grid-bulk-apply]').click()
+                expect(page.locator('[data-grid-bulk-result]')).to_contain_text('Обработано строк: 2')
+                with page.expect_navigation():
+                    page.locator('[data-grid-save]').click()
+                expect(first.locator('[data-mode-button="equal"]')).to_have_attribute('aria-pressed', 'true')
+                page.locator('[data-grid-select-all]').click()
+                page.locator('[data-grid-bulk-mode]').select_option('manual')
+                page.locator('[data-grid-bulk-apply]').click()
+                expect(first.locator('[data-month]').first).to_be_editable()
+                page.locator('[data-grid-select-none]').click()
+                expect(page.locator('[data-grid-selected-count]')).to_have_text('Выбрано строк: 0')
+                expect(page.locator('[data-grid-bulk-apply]')).to_be_disabled()
+                page.locator('[data-grid-reset]').click()
+                from .split_engine import planning_months
+                from django.core.exceptions import ValidationError
+                proposal = {'values': {month: '100' if month.endswith('-01') else '0' for month in planning_months(self.scenario)}, 'token': 'test-token', 'basis': {'rule_label': 'Из факта'}}
+                page.locator('[data-grid-select-all]').click()
+                page.locator('[data-grid-bulk-mode]').select_option('fact')
+                with patch('base.split_month_grid.preview', return_value=proposal) as preview:
+                    page.locator('[data-grid-bulk-apply]').click()
+                    expect(page.locator('[data-grid-bulk-result]')).to_contain_text('Обработано строк: 2')
+                    expect(first.locator('[data-month]').first).to_have_value('100')
+                    self.assertEqual(preview.call_count, 2)
+                page.locator('[data-grid-reset]').click()
+                with patch('base.split_month_grid.preview', side_effect=ValidationError('Нет факта')):
+                    page.locator('[data-grid-bulk-apply]').click()
+                    expect(page.locator('[data-grid-bulk-result]')).to_contain_text('Не удалось обработать: 2')
+                page.locator('[data-grid-reset]').click()
+                page.goto(self.live_server_url + self.url + '?tab=distribution&section=powers')
+                page.locator('[data-grid-select-all]').click()
+                expect(page.locator('[data-grid-selected-count]')).to_have_text('Выбрано строк: 1')
+                page.locator('[data-grid-bulk-mode]').select_option('equal')
+                page.locator('[data-grid-bulk-apply]').click()
+                expect(page.locator('[data-grid-row]').first.locator('[data-mode-button="equal"]')).to_have_attribute('aria-pressed', 'true')
             finally:
                 context.close()
                 browser.close()

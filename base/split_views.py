@@ -178,12 +178,14 @@ def scenario(request, pk):
                      'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам',
                      'add_group': 'Добавлена группа в план', 'remove_group': 'Группа исключена из плана',
                      'add_channel': 'Добавлен канал в план', 'remove_channel': 'Канал исключён из плана',
+                     'add_onhand_groups': 'Добавлены группы со стока',
                      'add_stock_groups': 'Добавлены группы из стока и товара в пути'}.get((action or '').split(':')[0], action))
             if preview is None and forecast is None or action == 'forecast_apply':
-                if action == 'composition' or (action or '').split(':')[0] in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups'):
+                if action == 'composition' or (action or '').split(':')[0] in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups', 'add_onhand_groups'):
                     gid, cid = next(iter(state['groups']), ''), next(iter(state['channels']), '')
-                if action == 'add_stock_groups':
-                    messages.success(request, f"Сток и товар в пути на {item.stock_date:%d.%m.%Y}: найдено групп {len(state['inventory_selection']['groups'])}, добавлено {state['inventory_selection']['added']}. Плановые значения не перезаписаны.")
+                if action in ('add_stock_groups', 'add_onhand_groups'):
+                    scope_label = 'Сток' if action == 'add_onhand_groups' else 'Сток и товар в пути'
+                    messages.success(request, f"{scope_label} на {item.stock_date:%d.%m.%Y}: найдено групп {len(state['inventory_selection']['groups'])}, добавлено {state['inventory_selection']['added']}. Плановые значения не перезаписаны.")
                 else:
                     messages.success(request, 'Изменения сохранены.' if action != 'approve' else 'План утверждён. Редактирование заблокировано.')
                 return redirect(return_to(pk, tab, gid, cid, distribution_section))
@@ -210,6 +212,11 @@ def scenario(request, pk):
     from .split_plan_presentation import presentation as plan_presentation
     plan_detail = plan_presentation(item, data) if tab == 'plan' else {}
     inventory = stock_overview(item, data) if tab in ('plan', 'stock') else None
+    if tab == 'stock':
+        from .split_plan_presentation import references
+        stock_references = references(item)
+        for row in inventory['groups']:
+            row['reference'] = stock_references[row['id']]
     from .split_plan_inventory import presentation as inventory_presentation
     plan_inventory = inventory_presentation(inventory) if tab == 'plan' else None
     from .split_plan_hierarchy import presentation as hierarchy_presentation
@@ -252,6 +259,17 @@ def scenario(request, pk):
         distribution_references = references(item)
         for row in distribution_overview['rows']:
             row['reference'] = distribution_references[row['gid']]
+    reference_filters = None
+    if tab == 'plan':
+        reference_filters = {gid: detail['reference'] for gid, detail in plan_detail.items()}
+    elif tab == 'stock':
+        reference_filters = stock_references
+    elif tab == 'distribution':
+        reference_filters = distribution_references
+    card_keys = {group['ref']['source_key'] for group in item.state['groups'].values()}
+    card_ids = dict(split_groups().filter(source_key__in=card_keys).values_list('source_key', 'pk'))
+    group_card_urls = {gid: reverse('sales_planning_group_detail', args=[card_ids[group['ref']['source_key']]])
+                       for gid, group in item.state['groups'].items() if group['ref']['source_key'] in card_ids}
     versions = SplitScenario.objects.filter(family=item.family).order_by('-version')
     compare_id = request.GET.get('compare') or (str(item.parent_id) if item.parent_id else '')
     if compare_id:
@@ -271,7 +289,7 @@ def scenario(request, pk):
         'history_total_colspan': 5 + (1 if historical['latest_year'] else 0),
         'matrix_colspan': 11 + len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'plan_inventory': plan_inventory,
-        'plan_hierarchy': plan_hierarchy,
+        'group_card_urls': group_card_urls, 'plan_hierarchy': plan_hierarchy, 'reference_filters': reference_filters,
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'stock_overview': inventory if tab == 'stock' else None,

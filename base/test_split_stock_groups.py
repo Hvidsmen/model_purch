@@ -98,3 +98,45 @@ class StockGroupSelectionTests(TestCase):
         self.assertNotContains(response,'password=secret')
         self.scenario.refresh_from_db()
         self.assertEqual(self.scenario.state,state)
+
+    def test_on_hand_selection_excludes_transit_and_filters_sales_warehouses(self):
+        from .split_stock_groups import ON_HAND_SQL
+        connection, cursor = self.provider([('G', 3, 0), ('Transit only', 0, 20)])
+        with patch('base.split_stock_groups.connect_database', return_value=(connection, cursor)):
+            result = groups_from_stock(self.scenario.stock_date, include_transit=False)
+        self.assertEqual(cursor.execute.call_args_list[1].args, (ON_HAND_SQL, str(self.scenario.stock_date), PRODUCT_GROUP))
+        self.assertIn("store.даичи_НазначениеСклада = N'Продажа'", ON_HAND_SQL)
+        self.assertNotIn('sg.ВПути', ON_HAND_SQL)
+        self.assertEqual([row['name'] for row in result['groups']], ['G'])
+        self.assertEqual(result['scope'], 'on_hand')
+        cursor.close.assert_called_once()
+        connection.close.assert_called_once()
+
+    def test_on_hand_button_adds_missing_groups_once_and_keeps_inline_plan(self):
+        gid, cid = str(self.group.pk), str(self.channels[0].pk)
+        other = SalesPlanningGroup.objects.get(name='Transit only')
+        url = reverse('split_scenario', args=[self.scenario.pk])
+        response = self.client.get(url)
+        self.assertContains(response, 'value="add_onhand_groups">Добавить группы со стока')
+        post = {'action': 'add_onhand_groups', 'revision': self.scenario.revision, 'with_lines': '1', 'ddp_' + gid: '100'}
+        for key, line in self.scenario.state['groups'][gid]['channels'].items():
+            post.update({'q_' + gid + '_' + key: line['input'], 'markup_' + gid + '_' + key: line['markup'], 'fact_' + gid + '_' + key: ''})
+        post['q_' + gid + '_' + cid] = '23'
+        inventory = {'date': str(self.scenario.stock_date), 'scope': 'on_hand', 'groups': [{'id': str(other.pk), 'name': other.name, 'stock': True, 'transit': False}]}
+        with patch('base.split_stock_groups.groups_from_stock', return_value=inventory) as source:
+            self.assertEqual(self.client.post(url, post).status_code, 302)
+            source.assert_called_once_with(self.scenario.stock_date, include_transit=False)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.state['groups'][gid]['channels'][cid]['input'], '23')
+        self.assertIn(str(other.pk), self.scenario.state['groups'])
+        self.assertEqual(self.scenario.state['inventory_selection']['added'], 1)
+        with patch('base.split_stock_groups.groups_from_stock', return_value=inventory):
+            self.assertEqual(self.client.post(url, {'action': 'add_onhand_groups', 'revision': self.scenario.revision}).status_code, 302)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.state['inventory_selection']['added'], 0)
+        self.assertEqual(len(self.scenario.state['groups']), 2)
+        approve(self.scenario, self.actor, self.scenario.revision, False)
+        self.scenario.refresh_from_db()
+        with patch('base.split_stock_groups.groups_from_stock') as source:
+            self.client.post(url, {'action': 'add_onhand_groups', 'revision': self.scenario.revision})
+            source.assert_not_called()
