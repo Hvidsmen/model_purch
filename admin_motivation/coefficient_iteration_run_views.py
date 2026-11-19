@@ -58,6 +58,7 @@ class CalculationForm(forms.Form):
 
     def configuration(self):
         result=dict(self.cleaned_data);result.pop('revision',None)
+        result['authors_q4_2026']=True
         for name in ('plan_2025','plan_2026','plan_2027','formula_version'):
             result[name]=result[name].pk if result.get(name) else None
         return result
@@ -122,6 +123,7 @@ def calculations(request,pk):
                 def present(row):
                     from decimal import Decimal
                     return {**row,'branch_name':names.get(row['branch'],row['branch']),'payments':[row['quarters'][q-1] for q in qs],'quarter_total':sum((Decimal(str(v)) for v in row['quarters']),Decimal(0))}
+                item['show_author_plan']=any('allocated_plan' in row for row in selected_rows)
                 item['summary']=[present(row) for row in aggregate_rows(selected_rows)]
                 item['recipients']=[present(row) for row in selected_rows]
             presentation.append(item)

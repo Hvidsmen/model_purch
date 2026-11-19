@@ -34,7 +34,7 @@ def display_rows(rows,currency='USD'):
     if currency=='USD':return rows
     if any(not isinstance(row.get('rub'),dict) or any(field not in row['rub'] for field in (*ARRAYS,*SCALARS)) for row in rows):
         return None  # Never invent historical RUB values for an old snapshot.
-    return [{**row,**money(row['rub'])} for row in rows]
+    return [{**row,**money(row['rub']),**({'allocated_plan':row.get('allocated_plan_rub')} if 'allocated_plan' in row else {})} for row in rows]
 
 
 def convert_bases(rows,rate):

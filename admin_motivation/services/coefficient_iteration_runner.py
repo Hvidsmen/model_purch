@@ -198,6 +198,23 @@ def execute(run,progress,connector=None):
                     progress('Расчёт '+title,2 if year==2026 else 3)
                     rows,details=at_full_plan(plans[year],rates,year,number(settings['quarter_share']),number(settings['year_share']))
                     source={'source':'Сохранённый план; факт равен плану, выполнение 100%'}
+                    if year==2026 and settings.get('authors_q4_2026'):
+                        from .coefficient_iteration_authors_2026 import read_fact,allocate
+                        progress('2026 IV квартал: доли авторов по факту',3)
+                        connection=None
+                        try:
+                            connection,cursor=(connector or connect_database)('vm-dwh','DataWH')
+                            connection.autocommit=True;connection.timeout=0
+                            through=timezone.localtime(run.started_at).date()
+                            facts,author_source=read_fact(cursor,rates,through)
+                        finally:
+                            if connection is not None:connection.close()
+                        inputs['author_fact_q4_2026']=safe({'source':author_source,'rows':facts,'sha256':sha256(json.dumps(safe(facts),sort_keys=True).encode()).hexdigest()})
+                        run.inputs=inputs;run.save(update_fields=['inputs'])
+                        rows,details=allocate(rows,details,facts,rates)
+                        source.update(author_source)
+                        source['source']='Сценарий 100%; план по авторам распределён по положительному факту IV квартала 2026 (Москва + ТТ), по классификации с расширением базы при отсутствии точного факта. Без базы — отдельная нераспределённая строка.'
+
                 else:
                     validate_directors_2025(plans[year],rates,inputs['formulas'])
                     connection=None
@@ -219,7 +236,9 @@ def execute(run,progress,connector=None):
                 if settings.get('currency_rule')==CURRENCY_RULE:
                     if year!=2025:
                         rate=settings[f'usd_rub_{year}']
-                        for row in rows:row['rub']=convert_money(row,rate)
+                        for row in rows:
+                            row['rub']=convert_money(row,rate)
+                            if 'allocated_plan' in row:row['allocated_plan_rub']=number(row['allocated_plan'])*number(rate)
                         rub_bases=convert_bases(bases,rate)
                         source['usd_rub']=rate
                     source['currency_rule']=CURRENCY_RULE

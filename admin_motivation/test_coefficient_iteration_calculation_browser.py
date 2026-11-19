@@ -29,7 +29,11 @@ class IterationCalculationBrowserTests(StaticLiveServerTestCase):
         self.page.locator('#id_usd_rub_2027').fill('81.25')
         from .services.coefficient_iteration_calculation import at_full_plan
         def slow(*args,**kwargs):time.sleep(.5);return at_full_plan(*args,**kwargs)
-        with patch('admin_motivation.services.coefficient_iteration_runner.at_full_plan',side_effect=slow):
+        facts=[{'branch':'Д-Москва','author':'Иванов','planning':'1. RAC','goods':'Бытовые кондиционеры','brand':'DAIKIN','channel':'ДИЛЕРСКИЙ','amount':'100'}]
+        from unittest.mock import Mock
+        with patch('admin_motivation.services.coefficient_iteration_runner.at_full_plan',side_effect=slow), \
+             patch('admin_motivation.conns.connect_database',return_value=(Mock(),Mock())), \
+             patch('admin_motivation.services.coefficient_iteration_authors_2026.read_fact',return_value=(facts,{'rule':'test','prepared_run_id':'snapshot','through':'2026-11-19'})):
             button=self.page.get_by_role('button',name='Рассчитать выбранные сценарии')
             button.click();expect(button).to_be_disabled()
             expect(self.page.locator('#director-progress')).to_be_visible()
@@ -38,6 +42,9 @@ class IterationCalculationBrowserTests(StaticLiveServerTestCase):
         expect(self.page.get_by_role('heading',name='Москва + ТТ · IV квартал 2026 · 100%')).to_be_visible()
         expect(self.page.get_by_role('heading',name='Все подразделения · 2027 · 100%')).to_be_visible()
         expect(self.page.locator('.iteration-table').first).to_contain_text('Все выбранные подразделения')
+        self.page.locator('details>summary').filter(has_text='По авторам и директорам').first.click()
+        expect(self.page.get_by_role('columnheader',name='План IV квартала, USD',exact=True)).to_be_visible()
+        expect(self.page.get_by_role('cell',name='Иванов',exact=True)).to_be_visible()
         self.page.get_by_role('link',name='RUB',exact=True).click()
         expect(self.page.locator('.iteration-table').first).to_contain_text('Общая выплата, RUB')
         expect(self.page.get_by_text('Курсы этого запуска:',exact=False)).to_contain_text('75.5')
