@@ -1,12 +1,12 @@
 {{ reference_filters|json_script:'split-reference-values' }}
 <section class="admin-panel split-reference-filters" data-reference-filters="{{ scenario.pk }}" aria-label="Фильтры по справочной информации">
 <div class="split-reference-filter-fields">
-<label>Группа планов продаж<select data-reference-filter="sales_plan_group"><option value="">Все</option></select></label>
-<label>Марка<select data-reference-filter="brand"><option value="">Все</option></select></label>
-<label>Тип наружного блока<select data-reference-filter="outdoor_type"><option value="">Все</option></select></label>
-<label>Завод<select data-reference-filter="factory"><option value="">Все</option></select></label>
+<div class="split-reference-filter"><span>Группа планов продаж</span><select multiple data-reference-filter="sales_plan_group" aria-label="Группа планов продаж"></select></div>
+<div class="split-reference-filter"><span>Марка</span><select multiple data-reference-filter="brand" aria-label="Марка"></select></div>
+<div class="split-reference-filter"><span>Тип наружного блока</span><select multiple data-reference-filter="outdoor_type" aria-label="Тип наружного блока"></select></div>
+<div class="split-reference-filter"><span>Завод</span><select multiple data-reference-filter="factory" aria-label="Завод"></select></div>
 <button type="button" class="admin-button secondary" data-reference-reset>Сбросить справочные фильтры</button>
-</div><p role="status" data-reference-filter-count></p><details class="split-filter-help"><summary>О фильтрах и итогах</summary><small>Фильтры скрывают строки без изменения введённых данных. Подытоги и общие итоги относятся ко всему сценарию.</small></details>
+</div><p role="status" data-reference-filter-count></p><details class="split-filter-help"><summary>О фильтрах и итогах</summary><small>Внутри фильтра достаточно совпадения с одним выбранным значением; разные фильтры применяются совместно. Фильтры скрывают строки без изменения введённых данных. Подытоги и общие итоги относятся ко всему сценарию.</small></details>
 </section>
 
 <div class="split-table-view-controls" data-table-view-controls="{{ scenario.pk }}" role="group" aria-label="Вид таблицы">

@@ -134,7 +134,7 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                     page.goto(self.live_server_url + self.url + '?tab=' + tab)
                     filters = page.locator('[data-reference-filter]')
                     expect(filters).to_have_count(4)
-                    page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                    page.locator('[data-reference-filter="factory"]').select_option('Factory <A>', force=True)
                     expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 1')
                     rows = page.locator('[data-plan-group="other"], [data-stock-group="other"], [data-grid-row][data-gid="other"]')
                     for row in rows.all():
@@ -142,23 +142,23 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                     if tab == 'plan':
                         page.locator('[data-reference-reset]').click()
                         page.get_by_label('Количество Other group Дилеры', exact=True).fill('17')
-                        page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                        page.locator('[data-reference-filter="factory"]').select_option('Factory <A>', force=True)
                         page.get_by_role('button', name='Сохранить объёмы и наценки', exact=True).click()
-                        expect(page.locator('[data-reference-filter="factory"]')).to_have_value('Factory <A>')
+                        expect(page.locator('[data-reference-filter="factory"]')).to_have_values(['Factory <A>'])
                         page.locator('[data-reference-reset]').click()
                         expect(page.get_by_label('Количество Other group Дилеры', exact=True)).to_have_value('17')
-                        page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                        page.locator('[data-reference-filter="factory"]').select_option('Factory <A>', force=True)
                         page.locator('[data-plan-group="' + self.gid + '"] [data-plan-group-toggle]').click()
                         expect(page.locator('[data-plan-power-group="' + self.gid + '"]').first).to_be_visible()
                         expect(page.locator('[data-plan-power-group="other"]').first).not_to_be_visible()
-                    page.locator('[data-reference-filter="brand"]').select_option('Other brand')
+                    page.locator('[data-reference-filter="brand"]').select_option('Other brand', force=True)
                     expect(page.locator('[data-reference-filter-count]')).to_have_text('Нет групп по выбранным условиям.')
                     page.locator('[data-reference-reset]').click()
                     expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 2')
-                page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                page.locator('[data-reference-filter="factory"]').select_option('Factory <A>', force=True)
                 page.get_by_label('Новые поставки G', exact=True).fill('5')
                 page.locator('[data-stock-group="' + self.gid + '"]').get_by_role('button', name='Сохранить поставки').click()
-                expect(page.locator('[data-reference-filter="factory"]')).to_have_value('Factory <A>')
+                expect(page.locator('[data-reference-filter="factory"]')).to_have_values(['Factory <A>'])
                 page.locator('[data-reference-reset]').click()
                 expect(page.get_by_label('Новые поставки Other group', exact=True)).to_have_value('0')
             finally:
@@ -187,7 +187,7 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 page.locator('[data-grid-bulk-apply]').click()
                 expect(first.locator('[data-mode-button="equal"]')).to_have_attribute('aria-pressed', 'true')
                 expect(other.locator('[data-month]').first).to_have_value(previous)
-                page.locator('[data-reference-filter="factory"]').select_option('Factory <A>')
+                page.locator('[data-reference-filter="factory"]').select_option('Factory <A>', force=True)
                 page.locator('[data-grid-select-all]').click()
                 expect(page.locator('[data-grid-selected-count]')).to_have_text('Выбрано строк: 2')
                 page.locator('[data-grid-bulk-apply]').click()
@@ -306,6 +306,52 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 with page.expect_navigation():
                     page.get_by_role('button',name='Сохранить изменения стока',exact=True).click()
                 expect(buy).to_have_value('12')
+            finally:
+                context.close()
+                browser.close()
+
+    def test_search_multiple_reference_values_and_mixed_factories(self):
+        from copy import deepcopy
+        from playwright.sync_api import sync_playwright, expect
+        group=self.scenario.state['groups'][self.gid]
+        group['ref']['details']['factory']='Factory <A>, Mixed factory'
+        other=deepcopy(group)
+        other['ref']['details']={**self.reference,'factory':'Other factory','brand':'Other brand'}
+        self.scenario.state['groups']['other']=other
+        self.scenario.save(update_fields=['state'])
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1600,'height':1000})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                page.get_by_label('Завод: выбрать значения',exact=True).click()
+                search=page.get_by_role('searchbox',name='Поиск: Завод',exact=True)
+                search.fill('mixed')
+                page.get_by_role('checkbox',name='Mixed factory',exact=True).check()
+                expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 1')
+                search.fill('other')
+                page.get_by_role('checkbox',name='Other factory',exact=True).check()
+                expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 2')
+                search.fill('no such factory')
+                expect(page.locator('.split-reference-multi[open]').get_by_text('Ничего не найдено',exact=True)).to_be_visible()
+                expect(page.locator('[data-reference-filter="factory"]')).to_have_values(['Mixed factory','Other factory'])
+                search.press('Escape')
+                page.get_by_label('Марка: выбрать значения',exact=True).click()
+                page.get_by_role('checkbox',name='Brand',exact=True).check()
+                expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 1')
+                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                expect(page.locator('[data-reference-filter="factory"]')).to_have_values(['Mixed factory','Other factory'])
+                expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 1')
+                page.get_by_role('button',name='Сбросить справочные фильтры',exact=True).click()
+                expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 2')
+                page.get_by_label('Завод: выбрать значения',exact=True).click()
+                page.get_by_role('searchbox',name='Поиск: Завод',exact=True).fill('other')
+                page.get_by_role('button',name='Выбрать найденные',exact=True).click()
+                expect(page.locator('[data-reference-filter="factory"]')).to_have_values(['Other factory'])
+                page.get_by_role('button',name='Снять выбор',exact=True).click()
+                expect(page.locator('[data-reference-filter="factory"]')).to_have_values([])
             finally:
                 context.close()
                 browser.close()
