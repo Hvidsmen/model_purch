@@ -232,6 +232,8 @@ def scenario(request, pk):
                 return split_exports.dwh_file(item)
         except ValidationError as exc:
             error = ' '.join(exc.messages)
+    from .split_stock_protection import protected_groups
+    stock_locked_groups = protected_groups(item.state)
     data = evaluate(item)
     from .split_workspace_ux import presentation as workflow_presentation
     workflow_ux = workflow_presentation(item, data, tab)
@@ -311,7 +313,7 @@ def scenario(request, pk):
         old_lines = {(row['gid'], row['cid']): row for row in old['lines']}
         comparison = {'scenario': reference, 'old': old['totals'], 'new': data['totals'], 'rows': [
             {'new': row, 'old': old_lines.get((row['gid'], row['cid']))} for row in data['lines']]}
-    return render(request, 'base/split_scenario.html', {'workflow_ux': workflow_ux, 'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
+    return render(request, 'base/split_scenario.html', {'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': item.state, 'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
         'history': historical,

@@ -133,6 +133,9 @@ def changed_state(scenario, post, *, allow_empty=False):
     state = deepcopy(scenario.state)
     action = post.get('action')
     member_action, _, target = (action or '').partition(':')
+    if member_action == 'remove_group':
+        from .split_stock_protection import validate_removal
+        validate_removal(scenario.state, [target])
     if member_action == 'group_plan':
         from .split_group_plan import distribute
         inputs = post.copy()
@@ -277,6 +280,8 @@ def changed_state(scenario, post, *, allow_empty=False):
         allowed_channels = {str(channel.pk): channel for channel in SalesPlanningChannel.objects.filter(is_active=True)}
         if ((not gids or not cids) and not allow_empty) or not gids <= set(allowed_groups) | set(state['groups']) or not cids <= set(allowed_channels) | set(state['channels']):
             raise ValidationError('Выберите допустимые группы и каналы. Состав не может быть пустым.')
+        from .split_stock_protection import validate_removal
+        validate_removal(scenario.state, set(state['groups']) - gids)
         archived_groups = state.setdefault('archived_groups', {})
         for key in list(state['groups']):
             if key not in gids:

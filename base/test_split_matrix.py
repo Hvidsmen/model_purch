@@ -53,6 +53,9 @@ class SplitMatrixTests(TestCase):
         self.assertEqual(self.scenario.state['groups'][self.gid]['channels'][self.cid]['input'], '33')
 
     def test_remove_last_group_then_last_channel_and_restore_them(self):
+        for power in self.scenario.state['groups'][self.gid]['powers'].values():
+            power.update(stock_indoor='0', stock_outdoor='0')
+        self.scenario.save(update_fields=['state'])
         self.assertEqual(self.client.post(self.url, self.inputs('remove_group:' + self.gid)).status_code, 302)
         for channel in self.channels:
             self.assertEqual(self.client.post(self.url, self.inputs('remove_channel:' + str(channel.pk))).status_code, 302)

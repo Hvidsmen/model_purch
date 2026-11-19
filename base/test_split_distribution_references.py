@@ -628,3 +628,29 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 quantity.fill('44')
             finally:
                 gate.set();context.close();browser.close()
+
+    def test_stock_group_cannot_be_removed_and_composition_keeps_it(self):
+        from playwright.sync_api import sync_playwright, expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1500,'height':900})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                expect(page.get_by_role('button',name='Удалить группу G из плана',exact=True)).to_be_disabled()
+                expect(page.get_by_text('Есть остатки · удаление недоступно',exact=True)).to_be_visible()
+                page.locator('.split-workflow-step[href="?tab=composition"]').click()
+                option=page.locator('select[name="groups"] option[value="'+self.gid+'"]')
+                expect(option).to_have_attribute('disabled','')
+                values=page.locator('input[name="action"][value="composition"]').evaluate('el=>new FormData(el.form).getAll("groups")')
+                self.assertEqual(values,[self.gid])
+                page.get_by_label('Подтверждаю выбранный состав и способ задания объёма',exact=True).check()
+                with page.expect_navigation():
+                    page.get_by_role('button',name='Сохранить состав плана',exact=True).click()
+                page.locator('.split-workflow-step[href="?tab=plan"]').click()
+                expect(page.locator('[data-plan-group="'+self.gid+'"]')).to_be_visible()
+                expect(page.get_by_role('button',name='Удалить группу G из плана',exact=True)).to_be_disabled()
+            finally:
+                context.close()
+                browser.close()
