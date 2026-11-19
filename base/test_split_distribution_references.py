@@ -355,3 +355,73 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
             finally:
                 context.close()
                 browser.close()
+
+    def test_progress_reports_completed_rows_and_failures(self):
+        from threading import Event
+        from django.core.exceptions import ValidationError
+        from .split_engine import planning_months
+        from playwright.sync_api import sync_playwright, expect
+        gates=[Event(),Event()]
+        calls=[]
+        proposal={'values':{month:'100' if month.endswith('-01') else '0' for month in planning_months(self.scenario)},'token':'test-token','basis':{'rule_label':'Из факта'}}
+        def slow_preview(*args):
+            index=len(calls);calls.append(args)
+            gates[index].wait(10)
+            return proposal
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1800,'height':1100})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                page.goto(self.live_server_url+self.url+'?tab=distribution&section=months')
+                page.locator('[data-grid-select-all]').click()
+                region=page.locator('.split-operation-status')
+                with patch('base.split_month_grid.preview',side_effect=slow_preview):
+                    page.locator('[data-grid-bulk-apply]').click()
+                    expect(region).to_be_visible()
+                    expect(region.locator('progress')).to_have_attribute('max','2')
+                    expect(region.locator('progress')).to_have_attribute('value','0')
+                    gates[0].set()
+                    expect(region.locator('progress')).to_have_attribute('value','1')
+                    expect(region).to_contain_text('осталось 1')
+                    gates[1].set()
+                    expect(region).to_have_attribute('data-state','done')
+                    expect(region.locator('progress')).to_have_attribute('value','2')
+                page.locator('[data-grid-reset]').click()
+                with patch('base.split_month_grid.preview',side_effect=ValidationError('Нет данных')):
+                    page.locator('[data-grid-bulk-apply]').click()
+                    expect(region).to_have_attribute('data-state','error')
+                    expect(region).to_contain_text('Ошибок: 2')
+                region.get_by_role('button',name='Закрыть',exact=True).click()
+                expect(region).not_to_be_visible()
+                with page.expect_download() as download:
+                    page.get_by_role('link',name='↓ Excel',exact=True).click()
+                self.assertTrue(download.value.suggested_filename.endswith('.xlsx'))
+                expect(region).to_have_attribute('data-state','done')
+                page.goto(self.live_server_url+self.url+'?tab=stock')
+                expect(page.locator('.split-workspace')).to_have_attribute('data-workspace-ux-ready','true')
+                from .split_views import persist as original_persist
+                native_gate=Event()
+                gates.append(native_gate)
+                def slow_save(*args,**kwargs):
+                    native_gate.wait(10)
+                    return original_persist(*args,**kwargs)
+                page.get_by_label('Новые поставки G',exact=True).fill('6')
+                page.evaluate("""() => {
+                    const frame=document.createElement('iframe');frame.name='progress-test-frame';frame.hidden=true;document.body.append(frame);
+                    document.querySelector('[name=action][value=stock]').form.target=frame.name;
+                }""")
+                with patch('base.split_views.persist',side_effect=slow_save):
+                    page.get_by_role('button',name='Сохранить поставки',exact=True).evaluate('button => button.click()')
+                    expect(region).to_be_visible()
+                    expect(region).to_have_attribute('data-state','running')
+                    self.assertIsNone(region.locator('progress').get_attribute('value'))
+                    with page.expect_response(lambda response: response.request.method=='POST' and response.url.startswith(self.live_server_url+self.url)):
+                        native_gate.set()
+                page.reload()
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('6')
+            finally:
+                for gate in gates:gate.set()
+                context.close()
+                browser.close()

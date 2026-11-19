@@ -75,13 +75,15 @@
       if (busy || !changed.length || changed.some(form => !form.reportValidity())) return;
       const payload = changed.map(form => ({gid:form.elements.namedItem('group').value, entries:[...new FormData(form)]}));
       const first=stockForms[0];
+      const progress=window.SplitProgress?.start('Сохранение стока и поставок · групп: '+changed.length);
       busy=true; update(); status.textContent='Сохранение…';
       try {
         const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:new URLSearchParams({action:'save_stock_rows',revision:first.elements.namedItem('revision').value,csrfmiddlewaretoken:first.elements.namedItem('csrfmiddlewaretoken').value,rows:JSON.stringify(payload)})});
         const data=await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || 'Не удалось сохранить изменения.');
+        progress?.finish('Изменения сохранены');
         submitted=true; remember(); location.reload();
-      } catch(error) {busy=false;update();status.textContent='Не сохранено: '+error.message;}
+      } catch(error) {busy=false;update();status.textContent='Не сохранено: '+error.message;progress?.fail(error.message);}
     });
     workspace.addEventListener('submit',()=>{submitted=true;});
     window.addEventListener('beforeunload',event=>{if(changed.length && !submitted){event.preventDefault();event.returnValue='';}});

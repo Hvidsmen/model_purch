@@ -1,0 +1,3 @@
+.split-operation-status{position:fixed;right:24px;bottom:90px;z-index:1200;display:grid;gap:9px;width:min(440px,calc(100vw - 32px));padding:16px;border:1px solid #cfc4f4;border-radius:10px;background:#fff;box-shadow:0 6px 30px #2223;color:#35445d;font-size:13px}
+.split-operation-status[hidden]{display:none!important}.split-operation-status progress{width:100%;height:12px;accent-color:#6b4dcb}.split-operation-status [role=status]{overflow-wrap:anywhere}.split-operation-status[data-state=error]{border-color:#d75665}.split-operation-status button{justify-self:end;border:1px solid #ddd5ef;background:#faf8ff;border-radius:5px;padding:5px 10px}
+@media(prefers-reduced-motion:reduce){.split-operation-status *{animation:none!important}}
