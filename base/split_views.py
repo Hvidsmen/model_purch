@@ -63,6 +63,27 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
+    if request.method == 'POST' and request.POST.get('action') == 'save_plan_rows':
+        try:
+            if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
+                raise ValidationError('Расчёт изменён или утверждён. Обновите страницу.')
+            post = request.POST.copy()
+            post['action'] = 'lines'
+            state = changed_state(item, post)
+            import json
+            try:
+                targets = json.loads(post.get('pending_group_plans', '[]'))
+            except (ValueError, TypeError):
+                raise ValidationError('Некорректный список итоговых планов.')
+            if not isinstance(targets, list) or any(not isinstance(gid, str) or gid not in state['groups'] for gid in targets) or len(set(targets)) != len(targets):
+                raise ValidationError('Некорректный список итоговых планов.')
+            from .split_group_plan import distribute
+            for gid in targets:
+                state = distribute(item, state, gid, post.get('group_plan_' + gid))
+            persist(item, request.user, request.POST.get('revision'), state, 'Сохранены продажи и новые поставки')
+            return JsonResponse({'ok': True})
+        except ValidationError as exc:
+            return JsonResponse({'ok': False, 'error': ' '.join(exc.messages)}, status=400)
     if request.method == 'POST' and request.POST.get('action') == 'save_stock_rows':
         try:
             if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):

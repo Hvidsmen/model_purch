@@ -143,7 +143,8 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                         page.locator('[data-reference-reset]').click()
                         page.get_by_label('Количество Other group Дилеры', exact=True).fill('17')
                         page.locator('[data-reference-filter="factory"]').select_option('Factory <A>', force=True)
-                        page.get_by_role('button', name='Сохранить объёмы и наценки', exact=True).click()
+                        with page.expect_navigation():
+                            page.get_by_role('button', name='Сохранить объёмы и наценки', exact=True).click()
                         expect(page.locator('[data-reference-filter="factory"]')).to_have_values(['Factory <A>'])
                         page.locator('[data-reference-reset]').click()
                         expect(page.get_by_label('Количество Other group Дилеры', exact=True)).to_have_value('17')
@@ -296,7 +297,8 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('button',name='Отменить изменения',exact=True).click()
                 expect(quantity).to_have_value(before)
                 quantity.fill('24')
-                page.get_by_role('button',name='Сохранить объёмы и наценки',exact=True).click()
+                with page.expect_navigation():
+                    page.get_by_role('button',name='Сохранить объёмы и наценки',exact=True).click()
                 expect(quantity).to_have_value('24')
                 page.locator('.split-workflow-step[href="?tab=stock"]').click()
                 expect(page.locator('.split-workspace')).to_have_attribute('data-workspace-ux-ready','true')
@@ -507,6 +509,66 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                     self.assertLess(abs(positions['viewport']-positions['header']),3)
                     page.locator('[data-reference-columns]').click()
                     page.wait_for_function("Math.abs(parseFloat(document.querySelector('.split-table-top-scroll>div').style.width)-document.querySelector('.split-table-viewport').scrollWidth)<2")
+            finally:
+                context.close()
+                browser.close()
+
+    def test_always_visible_save_and_three_way_navigation_guard(self):
+        from django.core.exceptions import ValidationError
+        from playwright.sync_api import sync_playwright, expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1400,'height':700})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                quantity=page.get_by_label('Количество G Дилеры',exact=True)
+                quantity.fill('77')
+                dock=page.locator('.split-unsaved-dock')
+                page.evaluate('window.scrollTo(0,0)')
+                expect(dock).to_be_visible()
+                bounds=dock.bounding_box();self.assertLessEqual(bounds['y']+bounds['height'],700)
+                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                dialog=page.get_by_role('dialog',name='Несохранённые изменения',exact=True)
+                expect(dialog).to_be_visible()
+                dialog.get_by_role('button',name='Остаться на странице',exact=True).click()
+                expect(quantity).to_have_value('77')
+                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                with page.expect_navigation():
+                    dialog.get_by_role('button',name='Сохранить и перейти',exact=True).click()
+                expect(page.locator('[data-stock-plan-channel]').first).to_have_value('77')
+                buy=page.get_by_label('Новые поставки G',exact=True)
+                buy.fill('19')
+                page.locator('.split-workflow-step[href="?tab=plan"]').click()
+                with page.expect_navigation():
+                    dialog.get_by_role('button',name='Перейти без сохранения',exact=True).click()
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('0')
+                expect(quantity).to_have_value('77')
+                quantity.fill('88')
+                with patch('base.split_views.persist',side_effect=ValidationError('Проверочная ошибка')):
+                    page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                    dialog.get_by_role('button',name='Сохранить и перейти',exact=True).click()
+                    expect(dialog.get_by_role('alert')).to_contain_text('Проверочная ошибка')
+                    expect(dialog).to_be_visible()
+                    expect(quantity).to_have_value('88')
+                dialog.get_by_role('button',name='Остаться на странице',exact=True).click()
+                with page.expect_navigation():
+                    dock.get_by_role('button',name='Сохранить все изменения',exact=True).click()
+                expect(quantity).to_have_value('88')
+                page.goto(self.live_server_url+self.url+'?tab=distribution&section=months')
+                page.locator('[data-grid-select-all]').click()
+                page.locator('[data-grid-bulk-mode]').select_option('equal')
+                page.locator('[data-grid-bulk-apply]').click()
+                expect(dock).to_be_visible()
+                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                with page.expect_navigation():
+                    dialog.get_by_role('button',name='Сохранить и перейти',exact=True).click()
+                buy.fill('12')
+                page.locator('.split-workflow-step[href="?tab=plan"]').click()
+                with page.expect_navigation():
+                    dialog.get_by_role('button',name='Сохранить и перейти',exact=True).click()
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('12')
             finally:
                 context.close()
                 browser.close()

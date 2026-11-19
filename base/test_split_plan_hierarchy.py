@@ -109,13 +109,14 @@ class PlanHierarchyBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('[data-plan-power-group]:visible')).to_have_count(1)
                 page.get_by_label('Количество G Дилеры', exact=True).fill('12')
                 page.get_by_role('button', name='Свернуть разделы', exact=True).click()
-                page.get_by_role('button', name='Сохранить объёмы и наценки', exact=True).click()
+                with page.expect_navigation():
+                    page.get_by_role('button', name='Сохранить объёмы и наценки', exact=True).click()
                 expect(root.locator('[data-subtotal-total] strong').first).to_have_text('52')
                 expect(page.locator('[data-plan-group]:visible')).to_have_count(0)
                 page.get_by_role('button', name='Развернуть разделы', exact=True).click()
                 expect(page.locator('[data-plan-group]:visible')).to_have_count(2)
                 expect(page.get_by_label('Количество G Дилеры', exact=True)).to_have_value('12')
-                expect(page.locator('[data-plan-power-group]:visible')).to_have_count(0)
+                expect(page.locator('[data-plan-power-group]:visible')).to_have_count(1)
             finally:
                 context.close()
                 browser.close()
