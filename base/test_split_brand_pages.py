@@ -64,3 +64,39 @@ class BrandPageTests(TestCase):
         for scope in ('[]','["missing"]',json.dumps([self.gid,self.gid])):
             from django.core.exceptions import ValidationError
             with self.assertRaises(ValidationError):changed_state(self.scenario,{'action':'lines','plan_group_ids':scope})
+
+    def test_brand_and_all_brand_summaries_have_distinct_weighted_totals(self):
+        from decimal import Decimal
+        other=self.scenario.state['groups']['other'];other['ddp']='200'
+        for line in other['channels'].values():line['markup']='2'
+        self.scenario.save(update_fields=['state'])
+        before=deepcopy(self.scenario.state)
+        for brand,revenue in [('alpha',4500),('beta',12000)]:
+            response=self.client.get(self.url,{'tab':'plan','brand_page':brand})
+            self.assertEqual(response.context['matrix_totals']['total']['revenue'],Decimal(revenue))
+            total=response.context['all_matrix_totals']['total']
+            self.assertEqual(total['qty'],60)
+            self.assertEqual(total['cost'],9000)
+            self.assertEqual(total['revenue'],16500)
+            self.assertAlmostEqual(total['markup'],Decimal(16500)/Decimal(9000))
+            self.assertContains(response,'data-plan-summary="brand"',count=1)
+            self.assertContains(response,'data-plan-summary="all"',count=1)
+            self.assertGreater(response.context['all_plan_inventory']['total']['stock'],response.context['plan_inventory']['total']['stock'])
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,before)
+
+    def test_history_summary_keeps_same_year_columns_for_brand_and_all(self):
+        from .split_history import normalized
+        groups=self.scenario.state['groups'];groups['other']['ref']['source_key']='beta-source'
+        alpha=groups[self.gid]['ref']['source_key']
+        channel=normalized(next(iter(self.scenario.state['channels'].values()))['name'])
+        self.scenario.state['history']={'through':'2026-11-19','groups':[alpha,'beta-source'],
+            'channels':[normalized(ch['name']) for ch in self.scenario.state['channels'].values()],
+            'rows':[{'group':key,'channel':channel,'year':year,'month':1,'qty':str(qty),'revenue':'100','cost':'50'}
+                    for key,year,qty in [(alpha,2026,10),('beta-source',2025,5)]]}
+        self.scenario.save(update_fields=['state'])
+        for brand in ('alpha','beta'):
+            response=self.client.get(self.url,{'tab':'plan','brand_page':brand})
+            self.assertEqual(response.context['history']['years'],[2025,2026])
+            total=response.context['all_history_total']
+            self.assertEqual([year['total']['qty'] for year in total['years']],[5,10])
+            self.assertEqual(len(response.context['history_total']['years']),2)

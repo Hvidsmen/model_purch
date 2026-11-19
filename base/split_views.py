@@ -267,12 +267,16 @@ def scenario(request, pk):
     from .split_brand_pages import scope as brand_scope
     display_item,brand_page=brand_scope(item,request.GET) if tab in ('plan','stock','distribution') else (item,None)
     display_data=evaluate(display_item) if display_item is not item else data
-    historical = history_presentation(display_item)
+    historical = history_presentation(item if tab == 'plan' else display_item)
     from .split_matrix_totals import enrich_history, plan_totals, hide_empty_history_years
     hide_empty_history_years(historical)
     historical['latest_year'] = historical['years'][-1] if historical['snapshot'] and historical['years'] else None
+    all_history_total = enrich_history(historical)
+    if tab == 'plan' and display_item is not item:
+        historical['groups'] = [row for row in historical['groups'] if row['gid'] in display_item.state['groups']]
     history_total = enrich_history(historical)
     matrix_totals = plan_totals(display_data, display_item.state)
+    all_matrix_totals = plan_totals(data, item.state) if tab == 'plan' and display_item is not item else matrix_totals
     from .split_plan_presentation import presentation as plan_presentation
     plan_detail = plan_presentation(display_item, display_data) if tab == 'plan' else {}
     inventory = stock_overview(display_item, display_data) if tab in ('plan', 'stock') else None
@@ -283,12 +287,13 @@ def scenario(request, pk):
             row['reference'] = stock_references[row['id']]
     from .split_plan_inventory import presentation as inventory_presentation
     plan_inventory = inventory_presentation(inventory) if tab == 'plan' else None
+    all_plan_inventory = inventory_presentation(stock_overview(item, data)) if tab == 'plan' and display_item is not item else plan_inventory
     from .split_plan_hierarchy import presentation as hierarchy_presentation
     plan_hierarchy = hierarchy_presentation(display_item, plan_detail, display_data, historical, plan_inventory) if tab == 'plan' else []
     plan_lines = {}
     for line in data['lines']:
         plan_lines.setdefault(line['gid'], {})[line['cid']] = line
-    for historical_group in [*historical['groups'], history_total]:
+    for historical_group in [*historical['groups'], history_total, all_history_total]:
         for year in historical_group['years']:
             year['by_channel'] = dict(zip(item.state['channels'], year['annual']))
             for month in year['months']:
@@ -347,6 +352,7 @@ def scenario(request, pk):
     from zoneinfo import ZoneInfo
     return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' else [],
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
+        'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
         'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
