@@ -2,7 +2,7 @@
 from copy import deepcopy
 import re
 from django.core.exceptions import ValidationError
-from .coefficient_iteration_calculation import MOSCOW,TT,MERGED,ZERO
+from .coefficient_iteration_calculation import MOSCOW,TT,MERGED,ZERO,key
 
 
 def sql_2026(sql):
@@ -14,7 +14,31 @@ def sql_2026(sql):
                     "DECLARE @DateTo date = CONVERT(date,'20261001');")
     sql=sql.replace('ON CONVERT(nvarchar(255),old.Subdivision)=named.SubdivisionKey',
         'ON CONVERT(nvarchar(255),old.Subdivision)=named.SubdivisionKey AND named.SubdivisionKey IN (SELECT SubdivisionKey FROM #iteration_actual_formula_keys)')
+    # The selected approved portal version, never a view mixing revisions.
+    sql=sql.replace('DataWH.motivation.vSubdivisionMotiveCoeffTo old','#iteration_actual_policy_formulas old')
+    sql=sql.replace("OBJECT_ID(N'motivation.PortalFormulaDefaults')","OBJECT_ID(N'tempdb..#iteration_actual_defaults')")
+    sql=sql.replace('FROM motivation.PortalFormulaDefaults','FROM #iteration_actual_defaults')
+    if re.search(r';\s*WITH\s+fact\s+AS\s*\(',sql,re.I):
+        from .iteration_document_authors import enrich_private
+        from .calculation_sales_isolation import WORKING_TABLE
+        sql,count=re.subn(r';\s*WITH\s+fact\s+AS\s*\(',lambda m:';\n'+enrich_private(WORKING_TABLE)+'\n;WITH fact AS (',sql,flags=re.I)
+        if count!=1:raise ValidationError('Не распознана граница обогащения авторов факта.')
     return re.sub(r'\b(?:DataWH\.)?dbo\.Subdivisions\b','#iteration_actual_subdivisions',sql,flags=re.I)
+
+
+def policy_formulas(snapshot,rates):
+    if 'coefficients' not in snapshot:raise ValidationError('В запуске нет снимка формул выбранной версии. Создайте новый запуск расчёта.')
+    from .motivation_exclusions import kind_name
+    rows={};identities={}
+    for sub,kind,p,g,b,formula in snapshot['coefficients']:
+        kind=kind_name(kind)
+        if rates.role(rates.name_for_key(str(sub)))!=MOSCOW or kind not in ('Политики','Продажи'):continue
+        identity=(kind,*key((p,g,b)))
+        if identity in identities and identities[identity]!=formula:
+            raise ValidationError('В выбранной версии разные формулы одного товарного ключа: '+' · '.join(identity)+'. Исправьте формулы по сегментам.')
+        identities[identity]=formula
+        rows[(str(sub),*identity)]=(str(sub),kind,p,g,b,formula)
+    return list(rows.values())
 
 
 class Cursor:
@@ -41,6 +65,7 @@ class Rates:
 def calculate(cursor,plans,rates,settings,formulas,progress):
     from .coefficient_iteration_2025 import read_2025,read_details
     from .coefficient_iteration_runner import directors_2025
+    local_formulas=policy_formulas(formulas,rates)
     selected=[row for row in plans if row['date'].month<=9 and rates.role(row.get('branch_name') or rates.name_for_key(row['branch'])) in (MOSCOW,TT)]
     if {rates.role(r.get('branch_name') or rates.name_for_key(r['branch'])) for r in selected}!={MOSCOW,TT}:
         raise ValidationError('Для I–III кварталов нужны планы Москвы и Термотрейда.')
@@ -54,7 +79,15 @@ def calculate(cursor,plans,rates,settings,formulas,progress):
  SubdivisionKey nvarchar(255) COLLATE DATABASE_DEFAULT,
  SubdivisionName nvarchar(255) COLLATE DATABASE_DEFAULT,
  Chanel nvarchar(255) COLLATE DATABASE_DEFAULT);
- CREATE TABLE #iteration_actual_formula_keys(SubdivisionKey nvarchar(255) COLLATE DATABASE_DEFAULT);''')
+ CREATE TABLE #iteration_actual_formula_keys(SubdivisionKey nvarchar(255) COLLATE DATABASE_DEFAULT);
+ CREATE TABLE #iteration_actual_policy_formulas(Subdivision nvarchar(255) COLLATE DATABASE_DEFAULT,
+ TypeCoeff nvarchar(30) COLLATE DATABASE_DEFAULT,PGSales nvarchar(255) COLLATE DATABASE_DEFAULT,
+ Group_ nvarchar(255) COLLATE DATABASE_DEFAULT,Brand nvarchar(255) COLLATE DATABASE_DEFAULT,
+ VariationCalculate nvarchar(64) COLLATE DATABASE_DEFAULT,DateFrom date,DateTo date);
+ CREATE TABLE #iteration_actual_defaults(Date_ date,DefaultFormula nvarchar(64) COLLATE DATABASE_DEFAULT);''')
+    if local_formulas:
+        cursor.executemany("INSERT INTO #iteration_actual_policy_formulas VALUES (?,?,?,?,?,?,'20260101','20261231')",local_formulas)
+    cursor.execute("INSERT INTO #iteration_actual_defaults VALUES ('20260101',?)",formulas.get('default') or None)
     cursor.execute('''INSERT INTO #iteration_actual_subdivisions(SubdivisionKey,SubdivisionName,Chanel)
  SELECT CONVERT(nvarchar(255),SubdivisionKey),SubdivisionName,Chanel FROM dbo.Subdivisions WHERE SubdivisionName IN ('''+','.join('?' for _ in names)+')',*names)
     moscow=[name for name in names if rates.role(name)==MOSCOW]
@@ -71,7 +104,7 @@ def calculate(cursor,plans,rates,settings,formulas,progress):
     directors,director_details=directors_2025(private,selected,adapter,actual_settings,formulas)
     rows.extend(directors);details.extend(director_details)
     source.update({'source':'Москва + Термотрейд: фактическое выполнение I–III кварталов 2026; годовая часть только начислена. Доли авторов плана — по факту I–III кварталов.',
-                   'rule':'iteration-actual-2026-q1-q3-v1','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical})
+                   'rule':'iteration-actual-2026-q1-q3-v2-versioned-formulas-erp-authors','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical})
     return rows,details,source
 
 

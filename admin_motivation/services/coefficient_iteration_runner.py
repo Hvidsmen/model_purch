@@ -10,7 +10,7 @@ from django.core.exceptions import ValidationError
 from django.db import transaction,IntegrityError
 from django.utils import timezone
 from ..models import (CoefficientIteration,CoefficientIterationRun,SalesPlanScenario,Subdivision,
- DirectorEmployee,GlobalCoeffVersion,SubdivisionDirectorCoeff,SubdivisionManagerCoeff)
+ DirectorEmployee,GlobalCoeffVersion,SubdivisionDirectorCoeff,SubdivisionManagerCoeff,SubdivisionCoeff)
 from .coefficient_iteration_calculation import RateBook,plan_rows,at_full_plan,branch,key,MOSCOW,TT,MERGED,ZERO,RULE,empty_row,motivation_plan_rows
 from .sales_plans import number
 from .motivation_exclusions import rules as dimension_rules
@@ -35,6 +35,9 @@ def formulas_snapshot(version):
     formulas=list(SubdivisionDirectorCoeff.objects.filter(version=version).values_list(
         'subdivision__subdivision_key','employee_id','goods__planning_group_sales','goods__group','goods__brand','variation_calculate__variation_name'))
     return {'version_id':version.pk,'version_name':str(version),'default':version.fallback_variation,
+            'coefficients':list(SubdivisionCoeff.objects.filter(version=version).values_list(
+                'subdivision__subdivision_key','type_coeff__type_coeff_name','goods__planning_group_sales',
+                'goods__group','goods__brand','variation_calculate__variation_name').distinct()),
             'aliases':mapping(),'directors':formulas,'corrections':corrections}
 
 
