@@ -99,6 +99,7 @@ class PlanInventoryBrowserTests(StaticLiveServerTestCase):
                 self.assertLess(facts.first.bounding_box()['x'], page.get_by_label('Общий план G', exact=True).bounding_box()['x'])
                 self.assertLess(page.get_by_label('Общий план G', exact=True).bounding_box()['x'], row.locator('.split-plan-cell').first.bounding_box()['x'])
                 self.assertLess(page.locator('[data-history-band="all"]').bounding_box()['x'], page.locator('[data-plan-channel]').first.bounding_box()['x'])
+                self.assertLess(facts.first.bounding_box()['x'], row.locator('[data-plan-inventory="opening"]').bounding_box()['x'])
                 expect(row.locator('[data-plan-inventory="opening"]')).to_have_text('105')
                 expect(row.locator('[data-plan-inventory="existing"]')).to_have_text('12')
                 expect(row.locator('[data-plan-inventory="new"] input')).to_have_value('5')
