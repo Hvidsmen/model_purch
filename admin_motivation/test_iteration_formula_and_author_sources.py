@@ -25,9 +25,9 @@ class SourceContractTests(SimpleTestCase):
         self.assertIn('FROM #iteration_defaults',sql)
         self.assertIn('FROM #iteration_actual_defaults',sql_2026("SELECT Date_,DefaultFormula FROM motivation.PortalFormulaDefaults WHERE Date_<'20260101'"))
         self.assertNotIn('FROM motivation.PortalFormulaDefaults',sql)
-        self.assertIn('FROM DataWH.dbo.Sales r',sql)
-        self.assertEqual(sql.count('INTO #iteration_live_sales_authors'),1)
-        self.assertIn('current_sale.[Даичи_АвторСделкиНаименование]=COALESCE(live_author.AuthorName',sql)
+        self.assertIn("SET Даичи_АвторСделкиНаименование=COALESCE(NULLIF(LTRIM(RTRIM(PortalOriginalDealAuthor)),N''),N'')",sql)
+        self.assertNotIn('INTO #iteration_live_sales_authors',sql)
+        self.assertNotIn('FROM DataWH.dbo.Sales r',sql)
         self.assertNotIn('FROM DataWH.erp.',sql)
 
     def test_private_author_refresh_is_exact_and_never_changes_live_sales(self):

@@ -92,6 +92,8 @@ def field_coverage(cursor,fields,predicate,params):
 
 def diagnose(snapshot,connector=None):
     predicate,params,frozen_source=scope(snapshot)
+    if frozen_source.get('author_field')=='PortalOriginalDealAuthor':
+        return diagnose_live_sales(snapshot,predicate,params,frozen_source,connector,prepared_original=True)
     if frozen_source.get('source_table')=='DataWH.dbo.Sales':
         return diagnose_live_sales(snapshot,predicate,params,frozen_source,connector)
     connection=None
@@ -139,33 +141,51 @@ def diagnose(snapshot,connector=None):
         if connection is not None:connection.close()
 
 
-def diagnose_live_sales(snapshot,predicate,params,frozen_source,connector=None):
-    """New runs read Sales directly; do not require the prepared publication."""
+def diagnose_live_sales(snapshot,predicate,params,frozen_source,connector=None,*,prepared_original=False):
+    """Inspect the exact author field selected by the saved calculation rule."""
     from .iteration_live_sales_authors import TABLE,FIELD,LABEL
+    if prepared_original:
+        from .prepared_sales import TABLE,ORIGINAL_AUTHOR as FIELD
+        LABEL=TABLE+'.'+FIELD
     connection=None
     source=FROM.replace('DataWH.motivation.PortalPreparedSales',TABLE)
     author=f"NULLIF(LTRIM(RTRIM(s.[{FIELD}])),N'')"
     category=f"CASE WHEN {author} IS NULL THEN 'sales_author_blank' ELSE 'sales_author' END"
     try:
         connection,cursor=(connector or connect_database)('vm-dwh','DataWH');connection.timeout=120
+        ready=None
+        if prepared_original:
+            cursor.execute("SELECT CONVERT(nvarchar(36),r.RunId),r.CompletedAt,r.PreparedFrom,r.PreparedTo,r.Rule_ FROM motivation.PortalPreparedSalesActive a JOIN motivation.PortalPreparedSalesRun r ON r.RunId=a.RunId WHERE a.Id=1 AND r.State_=N'completed'")
+            ready=cursor.fetchone()
+            if not ready or ready[4]!=PREPARED_RULE or ready[2]>params[0] or ready[3]<params[1]:
+                raise ValidationError('Нет совместимого подготовленного факта. Повторите подготовку факта продаж.')
         cursor.execute('SELECT '+category+',COUNT_BIG(*),SUM(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD),COUNT(DISTINCT s.DocumentKey),COUNT(DISTINCT '+author+') '+source+' WHERE '+predicate+' GROUP BY '+category,*params)
         coverage=[];named=0
         for kind,count,amount,documents,people in cursor.fetchall():
             named+=people
-            coverage.append({'status':kind,'label':'Автор сделки есть в текущем Sales' if kind=='sales_author' else 'В текущем Sales пустое поле автора сделки',
+            coverage.append({'status':kind,'label':('PortalOriginalDealAuthor заполнен' if kind=='sales_author' else 'PortalOriginalDealAuthor пуст') if prepared_original else ('Автор сделки есть в текущем Sales' if kind=='sales_author' else 'В текущем Sales пустое поле автора сделки'),
                              'rows':count,'amount_usd':amount,'documents':documents})
         cursor.execute('SELECT TOP(20) s.DocumentKey,s.DateInvoice,s.DocumentNumber,s.ModelCodeERP,p.ModelCode,p.PlanningGroupSalesErp,'+author+',s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD '+source+' WHERE '+predicate+' AND '+author+' IS NULL ORDER BY ABS(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD) DESC',*params)
         fields=('document_key','invoice_date','invoice_number','model_erp','model','planning_group','author','amount_usd')
         samples=[dict(zip(fields,row)) for row in cursor.fetchall()]
         cursor.execute(FIELDS)
         author_fields=[{'schema':schema,'table':table,'column':column,'type':kind} for schema,table,column,kind in cursor.fetchall()
-                       if schema.casefold()=='dbo' and table.casefold()=='sales']
+                       if (schema.casefold(),table.casefold())==(('motivation','portalpreparedsales') if prepared_original else ('dbo','sales'))]
         columns=field_coverage(cursor,author_fields,predicate,params)
+        prepared_metadata={}
+        if prepared_original:
+            cursor.execute('SELECT CONVERT(nvarchar(36),RunId) FROM motivation.PortalPreparedSalesActive WHERE Id=1')
+            current=cursor.fetchone()
+            if not current or str(current[0]).casefold()!=str(ready[0]).casefold():
+                raise ValidationError('Подготовленный факт изменился во время проверки. Повторите диагностику.')
+            prepared_metadata={'prepared_run_id':ready[0],'prepared_completed_at':ready[1],
+                               'saved_prepared_run_id':frozen_source.get('prepared_run_id'),
+                               'same_prepared_snapshot':str(ready[0]).casefold()==str(frozen_source.get('prepared_run_id','')).casefold()}
         return {'run':snapshot.pk,'from':str(params[0]),'through':str(params[1]-timedelta(days=1)),
-                'source_table':TABLE,'author_field':FIELD,'uses_prepared':False,'same_prepared_snapshot':None,
+                'source_table':TABLE,'author_field':FIELD,'uses_prepared':prepared_original,'same_prepared_snapshot':None,**prepared_metadata,
                 'saved_named_authors':frozen_source.get('named_authors'),'current_named_authors':named,
                 'saved_missing_groups':frozen_source.get('missing_author_rows'),'coverage':coverage,'samples':samples,
                 'author_fields':author_fields,'column_coverage':columns,
-                'note':'Источник авторов: '+LABEL+'. Проверено текущее состояние Sales; в запуске хранится отдельный снимок прочитанного факта. Подготовленный набор, автор документа и ERP-подстановки не используются. План и результаты не изменены.'}
+                'note':('Источник авторов: '+LABEL+'. Проверен текущий подготовленный факт. После обновления Sales повторите подготовку факта и расчёт. Пустые авторы не заменяются другими полями. План и результаты не изменены.') if prepared_original else ('Источник авторов: '+LABEL+'. Проверено текущее состояние Sales; в запуске хранится отдельный снимок прочитанного факта. Подготовленный набор, автор документа и ERP-подстановки не используются. План и результаты не изменены.')}
     finally:
         if connection is not None:connection.close()
