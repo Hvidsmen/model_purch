@@ -7,51 +7,37 @@ from django.core.exceptions import ValidationError
 from .coefficient_iteration_calculation import MOSCOW, TT, MERGED, ZERO, branch, key, empty_row
 from .coefficient_iteration import norm
 from .sales_plans import number
-from .prepared_sales import RULE as PREPARED_RULE, SCHEMA
+from django.utils import timezone
 from .subdivision_scope import included
 from .motivation_exclusions import allowed
-from .iteration_document_authors import AUTHOR,RESOLVED,JOIN,create_keys,fill_keys,MAP_SQL
+from .iteration_live_sales_authors import LABEL
 
-RULE='q4-2026-author-plan-shares-v2-erp-documents'
+RULE='q4-2026-author-plan-shares-v3-live-sales'
 SQL="""SELECT sub.SubdivisionName,
- COALESCE(NULLIF(LTRIM(RTRIM(s.Даичи_АвторСделкиНаименование)),N''),NULLIF(LTRIM(RTRIM(s.PortalOriginalDealAuthor)),N''),N''),
+ COALESCE(NULLIF(LTRIM(RTRIM(s.Даичи_АвторСделкиНаименование)),N''),N''),
  COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesErp)),N''),N'9. OTHER'),
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE N'' END,
  CASE WHEN p.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE N'' END,
  sub.Chanel,SUM(s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD),
  SUM(CASE WHEN s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD IS NULL THEN 1 ELSE 0 END)
- FROM DataWH.motivation.PortalPreparedSales s
+ FROM DataWH.dbo.Sales s
  INNER JOIN DataWH.dbo.Subdivisions sub ON sub.SubdivisionKey=s.Subdivision
  INNER JOIN DataWH.dbo.Product p ON p.ProductCode=s.ProductCode AND p.[Тип номенклатуры]=N'Товар'
  INNER JOIN DataWH.dbo.Customer c ON c.CustomerKey=s.CustomerKey
  WHERE s.ClosedDealDate>=? AND s.ClosedDealDate<? AND sub.SubdivisionName IN (__BRANCHES__)
  GROUP BY sub.SubdivisionName,
- COALESCE(NULLIF(LTRIM(RTRIM(s.Даичи_АвторСделкиНаименование)),N''),NULLIF(LTRIM(RTRIM(s.PortalOriginalDealAuthor)),N''),N''),
+ COALESCE(NULLIF(LTRIM(RTRIM(s.Даичи_АвторСделкиНаименование)),N''),N''),
  COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesErp)),N''),N'9. OTHER'),
  CASE WHEN p.PlanningGroupSalesErp IN ('1. RAC','2. VRF','3. PROF') THEN p.GroupERP ELSE N'' END,
  CASE WHEN p.GroupERP IN (N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE N'' END,sub.Chanel"""
-SQL=SQL.replace(AUTHOR,RESOLVED).replace('INNER JOIN DataWH.dbo.Subdivisions sub',JOIN+'\n INNER JOIN DataWH.dbo.Subdivisions sub')
 
 
 def read_fact(cursor,rates,through):
     if through < date(2026,10,1):raise ValidationError('Для долей авторов ещё нет периода IV квартала 2026.')
-    cursor.execute("SELECT OBJECT_ID(N'motivation.PortalPreparedSalesActive'),OBJECT_ID(N'motivation.PortalPreparedSalesRun'),OBJECT_ID(N'motivation.PortalPreparedSales')")
-    objects=cursor.fetchone()
-    if not objects or not all(objects):raise ValidationError('Подготовьте факт продаж в Центре расчётов.')
-    cursor.execute(f"""SELECT r.RunId,r.CompletedAt FROM motivation.PortalPreparedSalesActive a
- JOIN motivation.PortalPreparedSalesRun r ON r.RunId=a.RunId
- WHERE a.Id=1 AND r.State_=N'completed' AND r.Rule_=? AND r.PreparedFrom<='20261001'
- AND r.PreparedTo>='20270101' AND r.SourceSchema={SCHEMA}""",PREPARED_RULE)
-    ready=cursor.fetchone()
-    if not ready:raise ValidationError('Нет совместимого подготовленного факта за IV квартал 2026. Повторите подготовку факта.')
     names=sorted({name for name in rates.names.values() if rates.role(name) in (MOSCOW,TT)})
     if not names:raise ValidationError('Не найдены Москва и ТТ для факта авторов.')
     from datetime import timedelta
     end=min(date(2027,1,1),through+timedelta(days=1))
-    cursor.execute(create_keys('DataWH.motivation.PortalPreparedSales'))
-    predicate='s.ClosedDealDate>=? AND s.ClosedDealDate<? AND EXISTS(SELECT 1 FROM DataWH.dbo.Subdivisions sub WHERE sub.SubdivisionKey=s.Subdivision AND sub.SubdivisionName IN ('+','.join('?' for _ in names)+'))'
-    cursor.execute(fill_keys('DataWH.motivation.PortalPreparedSales',predicate),date(2026,10,1),end,*names)
-    cursor.execute(MAP_SQL)
     cursor.execute(SQL.replace('__BRANCHES__',','.join('?' for _ in names)),date(2026,10,1),end,*names)
     facts=[]
     for sub,author,p,g,b,channel,amount,missing in cursor.fetchall():
@@ -59,11 +45,9 @@ def read_fact(cursor,rates,through):
         if missing or amount is None:raise ValidationError('В факте IV квартала 2026 есть сделки без суммы. Доли авторов не рассчитаны.')
         if rates.role(sub) not in (MOSCOW,TT):raise ValidationError('Источник вернул подразделение вне Москвы и ТТ.')
         facts.append({'branch':branch(sub),'author':str(author or '').strip(),'planning':p or '*','goods':g or '*','brand':b or '*','channel':channel or '', 'amount':str(number(amount))})
-    cursor.execute('SELECT CONVERT(nvarchar(36),RunId) FROM motivation.PortalPreparedSalesActive WHERE Id=1')
-    current=cursor.fetchone()
-    if not current or str(current[0])!=str(ready[0]):raise ValidationError('Подготовленный факт изменился во время чтения. Повторите расчёт.')
-    return facts,{'rule':RULE,'prepared_run_id':str(ready[0]),'completed_at':str(ready[1]),'from':'2026-10-01','through':str(min(through,date(2026,12,31))),'rows':len(facts),
-                  'author_source':'Автор подготовленного факта → исходный автор Sales → однозначный автор ERP-документа реализации или основания корректировки',
+    return facts,{'rule':RULE,'source_table':'DataWH.dbo.Sales','author_field':'Даичи_АвторСделкиНаименование',
+                  'loaded_at':timezone.now().isoformat(),'from':'2026-10-01','through':str(min(through,date(2026,12,31))),'rows':len(facts),
+                  'author_source':LABEL,
                   'named_authors':len({norm(fact['author']) for fact in facts if fact['author'] and allowed('Политики',fact['planning'],fact['channel'])}),
                   'missing_author_rows':sum(not fact['author'] and allowed('Политики',fact['planning'],fact['channel']) for fact in facts)}
 

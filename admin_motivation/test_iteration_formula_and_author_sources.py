@@ -3,7 +3,7 @@ from django.test import SimpleTestCase,TestCase
 from . import test_coefficient_iteration_calculation as fixtures
 from .services.coefficient_iteration_calculation import RateBook,MOSCOW,TT
 from .services.coefficient_iteration_actual_2026 import policy_formulas,sql_2026
-from .services.iteration_document_authors import create_keys,fill_keys,MAP_SQL,enrich_private,RESOLVED
+from .services.iteration_live_sales_authors import refresh_private,KEYS
 
 
 class SourceContractTests(SimpleTestCase):
@@ -25,25 +25,43 @@ class SourceContractTests(SimpleTestCase):
         self.assertIn('FROM #iteration_defaults',sql)
         self.assertIn('FROM #iteration_actual_defaults',sql_2026("SELECT Date_,DefaultFormula FROM motivation.PortalFormulaDefaults WHERE Date_<'20260101'"))
         self.assertNotIn('FROM motivation.PortalFormulaDefaults',sql)
-        self.assertIn('da.AuthorCount=1',sql)
-        self.assertEqual(sql.count('INTO #iteration_document_authors'),1)
-        self.assertIn('UPDATE s SET s.Даичи_АвторСделкиНаименование=da.AuthorName',sql)
+        self.assertIn('FROM DataWH.dbo.Sales r',sql)
+        self.assertEqual(sql.count('INTO #iteration_live_sales_authors'),1)
+        self.assertIn('current_sale.[Даичи_АвторСделкиНаименование]=COALESCE(live_author.AuthorName',sql)
+        self.assertNotIn('FROM DataWH.erp.',sql)
 
-    def test_document_lookup_includes_corrections_without_product_line_fanout(self):
-        self.assertIn('Документы.РеализацияТоваровУслуг',MAP_SQL)
-        self.assertIn('Документы.КорректировкаРеализации',MAP_SQL)
-        self.assertIn('rtu.Ссылка=kr.ДокументОснование_Многосостав',MAP_SQL)
-        self.assertIn('COUNT(DISTINCT AuthorName)',MAP_SQL)
-        self.assertIn('GROUP BY DocumentKey',MAP_SQL)
-        self.assertNotIn('РеализацияТоваровУслугТовары',MAP_SQL)
-        self.assertNotIn('ModelCodeERP',MAP_SQL)
-        self.assertIn('s.PortalOriginalDealAuthor',RESOLVED)
-        self.assertLess(RESOLVED.index('s.PortalOriginalDealAuthor'),RESOLVED.index('da.AuthorCount=1'))
-        self.assertIn('TOP(0)',create_keys('private_sales'))
-        self.assertTrue(fill_keys('private_sales','s.ClosedDealDate>=?').startswith('INSERT INTO'))
-        sql=enrich_private('#private_sales')
-        self.assertIn("=N'' AND da.AuthorCount=1",sql)
-        self.assertNotIn('UPDATE DataWH',sql)
+    def test_private_author_refresh_is_exact_and_never_changes_live_sales(self):
+        sql=refresh_private('#private_sales')
+        self.assertIn('FROM DataWH.dbo.Sales r',sql)
+        self.assertIn('AuthorCount>1',sql)
+        self.assertIn('THROW 50040',sql)
+        self.assertIn("live_author.AuthorName,N''",sql)
+        self.assertIn('r.ClosedDealDate>=@DateFrom',sql)
+        self.assertIn('r.ClosedDealDate<@DateTo',sql)
+        self.assertIn('GROUP BY',sql)
+        self.assertIn('FROM #private_sales current_sale LEFT JOIN',sql)
+        self.assertIn('DocumentNumber',KEYS)
+        self.assertIn('IS NULL',sql)
+        for forbidden in ('PortalOriginalDealAuthor','DataWH.erp','EmpAuthorID','EmpDealAuthorID','UPDATE DataWH'):
+            self.assertNotIn(forbidden,sql)
+
+    def test_live_map_reads_new_names_and_blank_values_with_null_document_keys(self):
+        import sqlite3
+        db=sqlite3.connect(':memory:')
+        try:
+            columns=','.join('['+field+'] TEXT' for field in KEYS)+',[Даичи_АвторСделкиНаименование] TEXT'
+            for table in ('raw','prepared'):db.execute('CREATE TABLE '+table+'('+columns+')')
+            identity=('branch','2026-03-01',None,None,'product','customer','2026-02-01','invoice')
+            db.execute('INSERT INTO prepared VALUES ('+','.join('?' for _ in range(9))+')',(*identity,'Stale author'))
+            source=refresh_private('prepared').split(';\nIF EXISTS',1)[0]
+            source='CREATE TEMP TABLE author_map AS '+source.replace('INTO #iteration_live_sales_authors FROM DataWH.dbo.Sales','FROM raw').replace("N''","''")
+            for names,expected_count,expected_name in ((['Current author'],1,'Current author'),([None],1,''),(['Alice','Bob'],2,'Alice'),(['Alice',None],2,'')):
+                db.execute('DELETE FROM raw');db.execute('DROP TABLE IF EXISTS author_map')
+                for name in names:db.execute('INSERT INTO raw VALUES ('+','.join('?' for _ in range(9))+')',(*identity,name))
+                db.execute(source,{'DateFrom':'2026-01-01','DateTo':'2026-10-01'})
+                self.assertEqual(db.execute('SELECT AuthorCount,AuthorName FROM author_map').fetchone(),(expected_count,expected_name))
+            self.assertEqual(db.execute('SELECT [Даичи_АвторСделкиНаименование] FROM prepared').fetchone()[0],'Stale author')
+        finally:db.close()
 
 
 class FormulaSnapshotTests(TestCase):
