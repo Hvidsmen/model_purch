@@ -47,3 +47,40 @@ class MetricPreferencesBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(errors,[])
             finally:context.close();browser.close()
         self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,before)
+
+    def test_hiding_metrics_reduces_measured_table_width_and_row_height(self):
+        from unittest.mock import Mock,patch
+        from .split_history import load_history
+        from playwright.sync_api import sync_playwright,expect
+        connection,cursor=Mock(),Mock()
+        channel=next(iter(self.scenario.state['channels'].values()))['name']
+        cursor.fetchall.return_value=[(self.scenario.state['groups'][self.gid]['ref']['name'],channel,2026,1,10,1500,1000)]
+        with patch('base.split_history.connect_database',return_value=(connection,cursor)):
+            self.scenario.state['history']=load_history(self.scenario)
+        self.scenario.save(update_fields=['state'])
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1400,'height':1000})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                expect(page.locator('thead [data-history-year-column]').first).to_be_visible()
+                table=page.locator('.split-plan-matrix');row=page.locator('[data-plan-group]').first
+                before={'width':table.bounding_box()['width'],'height':row.bounding_box()['height']}
+                page.locator('[data-split-metric-preferences] summary').click()
+                for metric in ['revenue','markup','ddp','stock','incoming','planned_incoming']:
+                    page.locator('[data-split-metric-choice="'+metric+'"]').uncheck()
+                page.wait_for_function("document.querySelector('.split-plan-matrix').getBoundingClientRect().width < "+str(before['width']-50))
+                after={'width':table.bounding_box()['width'],'height':row.bounding_box()['height']}
+                self.assertLess(after['height'],before['height']-15,(before,after))
+                page.screenshot(path='/tmp/split-quantity-only.png',full_page=True)
+                page.locator('[data-split-metric-choice="quantity"]').uncheck()
+                expect(page.locator('thead [data-plan-metric-band]').first).not_to_be_visible()
+                expect(page.locator('[data-history-band]').first).not_to_be_visible()
+                expect(page.locator('thead [data-history-year-column]').first).not_to_be_visible()
+                page.locator('[data-split-metrics-reset]').click()
+                expect(page.locator('thead [data-plan-metric-band]').first).to_be_visible()
+                self.assertGreater(table.bounding_box()['width'],after['width']+50)
+                self.assertEqual(errors,[])
+            finally:context.close();browser.close()
