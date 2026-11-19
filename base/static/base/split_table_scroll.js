@@ -1,6 +1,10 @@
 (() => {
-  document.querySelectorAll('.split-plan-matrix, .split-stock-table, .split-reference-table').forEach(table => {
-    const viewport=table.parentElement;
+  document.querySelectorAll('#portal-main table').forEach(table => {
+    if(!table.tHead)return;
+    let viewport=table.parentElement;
+    if(!viewport.matches('.admin-table-scroll, .split-month-table-wrap, .split-stock-table-scroll, .split-table-viewport') || [...viewport.children].filter(child=>child.tagName==='TABLE').length>1){
+      viewport=document.createElement('div');table.before(viewport);viewport.append(table);
+    }
     if(viewport.dataset.tableScrollReady)return;
     viewport.dataset.tableScrollReady='true';viewport.classList.add('split-table-viewport');
     const bar=document.createElement('div');bar.className='split-table-top-scroll';bar.tabIndex=0;
