@@ -103,6 +103,21 @@ class DiagnosticsSourceTests(SimpleTestCase):
             self.assertNotIn('DataWH.erp',call.args[0]);self.assertNotIn('s.Даичи_АвторСделкиНаименование',call.args[0])
         connection.close.assert_called_once()
 
+    def test_unified_author_diagnostics_ignore_legacy_copy(self):
+        snap=snapshot();snap.results['moscow_q4_2026']['source'].update(source_table='DataWH.motivation.PortalPreparedSales',author_field='Даичи_АвторСделкиНаименование')
+        cursor=Mock();connection=Mock()
+        cursor.fetchone.side_effect=[('frozen',timezone.now(),date(2025,1,1),date(2027,1,1),RULE),('frozen',)]
+        cursor.fetchall.side_effect=[[('sales_author',3820,Decimal(1000),50,25),('sales_author_blank',11,Decimal(100),0,0)],[],[]]
+        report=diagnose(snap,connector=Mock(return_value=(connection,cursor)))
+        self.assertEqual(report['author_field'],'Даичи_АвторСделкиНаименование')
+        self.assertEqual(report['current_named_authors'],25);self.assertTrue(report['same_prepared_snapshot'])
+        self.assertEqual(report['coverage'][0]['label'],'Даичи_АвторСделкиНаименование заполнен')
+        query=cursor.execute.call_args_list[1].args[0]
+        self.assertIn('s.[Даичи_АвторСделкиНаименование]',query)
+        self.assertNotIn('PortalOriginalDealAuthor',query)
+        self.assertIn('FROM DataWH.motivation.PortalPreparedSales s',query)
+        connection.close.assert_called_once()
+
 
 def setup(test):
     fixture.CalculationTests.setUp(test)

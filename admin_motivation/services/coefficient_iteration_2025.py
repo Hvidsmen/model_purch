@@ -59,7 +59,12 @@ def build_sql(cursor=None,*,rub=False):
     source=performance(source)
     source=private_sales(source,cursor=cursor).replace('DataWH.motivation.PortalCalculationSubdivisions','DataWH.dbo.Subdivisions')
     source=source.replace('SELECT SubdivisionKey FROM DataWH.dbo.Subdivisions',"SELECT d.SubdivisionKey FROM DataWH.dbo.Subdivisions d WHERE d.SubdivisionName IN (SELECT n.SubdivisionName FROM #iteration_plan p JOIN #iteration_names n ON n.SubdivisionKey=p.Subdivision)")
-    source=prepared(source,historical_author=True,cursor=cursor)
+    source=prepared(source,cursor=cursor)
+    from .iteration_prepared_author import normalize_private
+    from .calculation_sales_isolation import WORKING_TABLE
+    marker=';WITH fact AS ('
+    if source.count(marker)!=1:raise ValidationError('Не распознана граница нормализации автора факта.')
+    source=source.replace(marker,normalize_private(WORKING_TABLE)+marker,1)
     # The saved importer maps blank planning groups to 9. OTHER. Apply the
     # identical classification to fact so those rows can match the saved plan.
     planning_expression="COALESCE(NULLIF(LTRIM(RTRIM(p.PlanningGroupSalesERP)),N''),N'9. OTHER')"
@@ -217,7 +222,8 @@ def read_2025(cursor,plan,rates,settings,progress):
     if not grouped:raise ValidationError('Расчёт 2025 не вернул результаты. Нулевой результат не подставлен.')
     cursor.execute('''SELECT r.RunId,r.CompletedAt FROM motivation.PortalPreparedSalesRun r WHERE r.RunId=? AND r.State_=N'completed' ''',used_run)
     ready=cursor.fetchone()
-    metadata={'prepared_run_id':str(ready[0]) if ready else '', 'completed_at':str(ready[1]) if ready else '', 'policy_formula_defaults':defaults}
+    from .iteration_prepared_author import TABLE,FIELD,LABEL
+    metadata={'source_table':TABLE,'author_field':FIELD,'author_source':LABEL,'prepared_run_id':str(ready[0]) if ready else '', 'completed_at':str(ready[1]) if ready else '', 'policy_formula_defaults':defaults}
     return list(grouped.values()),metadata
 
 
