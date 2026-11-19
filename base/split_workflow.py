@@ -181,6 +181,8 @@ def changed_state(scenario, post, *, allow_empty=False):
     if action == 'lines':
         for gid, group in state['groups'].items():
             group['ddp'] = decimal_input(post, 'ddp_' + gid)
+            if 'buy_' + gid in post:
+                group['buy'] = decimal_input(post, 'buy_' + gid, optional=False)
             for cid, line in group['channels'].items():
                 suffix = gid + '_' + cid
                 line.update(input=decimal_input(post, 'q_' + suffix, optional=False), fact=decimal_input(post, 'fact_' + suffix),

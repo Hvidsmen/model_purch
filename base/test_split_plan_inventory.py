@@ -61,6 +61,22 @@ class PlanInventoryTests(TestCase):
         self.assertIsNone(result['total']['stock'])
 
 
+    def test_inline_new_supplies_validate_and_preserve_old_posts(self):
+        from .split_workflow import changed_state
+        from django.core.exceptions import ValidationError
+        group=self.scenario.state['groups'][self.gid]
+        post={'action':'lines','ddp_'+self.gid:group['ddp']}
+        for cid,line in group['channels'].items():
+            post.update({'q_'+self.gid+'_'+cid:line['input'],'markup_'+self.gid+'_'+cid:line['markup'],'fact_'+self.gid+'_'+cid:line.get('fact') or ''})
+        self.assertEqual(changed_state(self.scenario,post)['groups'][self.gid]['buy'],'5')
+        post['buy_'+self.gid]='17'
+        self.assertEqual(changed_state(self.scenario,post)['groups'][self.gid]['buy'],'17')
+        for value in ['','-1','NaN','0.0000001']:
+            post['buy_'+self.gid]=value
+            with self.assertRaises(ValidationError):changed_state(self.scenario,post)
+        self.assertEqual(self.scenario.state['groups'][self.gid]['buy'],'5')
+
+
 @skipUnless(os.environ.get('RUN_BROWSER_TESTS') == '1' and importlib.util.find_spec('playwright'), 'Requires Chromium')
 class PlanInventoryBrowserTests(StaticLiveServerTestCase):
     def setUp(self):
@@ -83,7 +99,7 @@ class PlanInventoryBrowserTests(StaticLiveServerTestCase):
                 self.assertLess(facts.last.bounding_box()['x'], page.get_by_label('Общий план G', exact=True).bounding_box()['x'])
                 expect(row.locator('[data-plan-inventory="opening"]')).to_have_text('105')
                 expect(row.locator('[data-plan-inventory="existing"]')).to_have_text('12')
-                expect(row.locator('[data-plan-inventory="new"]')).to_have_text('5')
+                expect(row.locator('[data-plan-inventory="new"] input')).to_have_value('5')
                 expect(row.locator('[data-plan-inventory="closing"]')).to_have_text('92')
                 expect(page.locator('.split-matrix-grand-total [data-plan-inventory="closing"]')).to_have_text('92')
                 expect(page.locator('[data-plan-opening-component]:visible')).to_have_count(0)
@@ -102,6 +118,32 @@ class PlanInventoryBrowserTests(StaticLiveServerTestCase):
                 expect(band).to_have_attribute('colspan', '18')
                 expect(page.locator('[data-plan-opening-component]:visible')).to_have_count(0)
                 expect(page.locator('[data-plan-power-group]')).to_be_visible()
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_be_disabled()
+            finally:
+                context.close()
+                browser.close()
+
+    def test_new_supplies_edit_on_plan_and_are_shared_with_stock(self):
+        from playwright.sync_api import sync_playwright, expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1800,'height':1100})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page()
+                page.goto(self.live_server_url+self.url)
+                row=page.locator('[data-plan-group]')
+                page.get_by_role('button',name='Раскрыть мощности G',exact=True).click()
+                page.get_by_label('Новые поставки G',exact=True).fill('17')
+                with page.expect_navigation():
+                    page.get_by_role('button',name='Сохранить объёмы и наценки',exact=True).click()
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('17')
+                expect(row.locator('[data-plan-inventory="closing"]')).to_have_text('104')
+                expect(page.locator('.split-matrix-grand-total [data-plan-inventory="new"]')).to_have_text('17')
+                expect(page.locator('.split-matrix-grand-total [data-plan-inventory="closing"]')).to_have_text('104')
+                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('17')
+
             finally:
                 context.close()
                 browser.close()
