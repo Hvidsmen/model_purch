@@ -14,6 +14,15 @@
       sessionStorage.removeItem(key);
     }
   } catch (_) {}
+  async function readSaveResponse(response){
+    const text=await response.text();let data;
+    try{data=JSON.parse(text);}catch{
+      if(response.redirected)throw new Error('Сеанс входа мог истечь. Войдите в портал в другой вкладке и повторите сохранение. Введённые значения остаются на странице.');
+      throw new Error('Сервер вернул неожиданный ответ (HTTP '+response.status+'). Изменения не подтверждены; введённые значения остаются на странице.');
+    }
+    if(!response.ok||!data||data.ok!==true)throw new Error(data?.error||'Не удалось сохранить изменения.');
+    return data;
+  }
   function remember() {
     const expanded = [];
     workspace.querySelectorAll('[data-plan-group-toggle], [data-stock-toggle], [data-stock-band-toggle], [data-stock-channel-toggle]').forEach(toggle => {
@@ -57,12 +66,12 @@
     let busy=false;
     async function savePlan(next=null){
         if(busy||!plan.reportValidity())return;
-        const payload=new FormData(plan);payload.set('action','save_plan_rows');
+        const fields=new FormData(plan);
+        const payload=new URLSearchParams({action:'save_plan_rows',revision:fields.get('revision'),csrfmiddlewaretoken:fields.get('csrfmiddlewaretoken'),plan_payload:JSON.stringify([...fields])});
         payload.set('pending_group_plans',JSON.stringify(inputs.filter(input=>input.name.startsWith('group_plan_') && input.value!==original.get(input)).map(input=>input.name.slice('group_plan_'.length))));
         const progress=window.SplitProgress?.start('Сохранение изменений плана');busy=true;window.SplitUnsaved.refresh();
         try{
-          const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:payload});const data=await response.json();
-          if(!response.ok||!data.ok)throw new Error(data.error||'Не удалось сохранить изменения.');
+          const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:payload});await readSaveResponse(response);
           progress?.finish('Изменения сохранены');submitted=true;remember();window.SplitUnsaved.navigate(next);
         }catch(error){progress?.fail(error.message);throw error;}finally{busy=false;window.SplitUnsaved.refresh();}
     }
@@ -96,8 +105,7 @@
       busy=true; update(); status.textContent='Сохранение…';
       try {
         const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:new URLSearchParams({action:'save_stock_rows',revision:first.elements.namedItem('revision').value,csrfmiddlewaretoken:first.elements.namedItem('csrfmiddlewaretoken').value,rows:JSON.stringify(payload)})});
-        const data=await response.json();
-        if (!response.ok || !data.ok) throw new Error(data.error || 'Не удалось сохранить изменения.');
+        await readSaveResponse(response);
         progress?.finish('Изменения сохранены');
         submitted=true; remember(); window.SplitUnsaved ? window.SplitUnsaved.navigate(next) : location.reload();
       } catch(error) {busy=false;update();status.textContent='Не сохранено: '+error.message;progress?.fail(error.message);throw error;}
