@@ -182,7 +182,15 @@ def changed_state(scenario, post, *, allow_empty=False):
         composition.setlist('channels', cids)
         return changed_state(draft, composition, allow_empty=True)
     if action == 'lines':
+        scope=None
+        if 'plan_group_ids' in post:
+            import json
+            try:scope=json.loads(post.get('plan_group_ids',''))
+            except (ValueError,TypeError):raise ValidationError('Некорректный список групп страницы.')
+            if not isinstance(scope,list) or not scope or any(not isinstance(gid,str) or gid not in state['groups'] for gid in scope) or len(set(scope))!=len(scope):raise ValidationError('Некорректный список групп страницы.')
+            scope=set(scope)
         for gid, group in state['groups'].items():
+            if scope is not None and gid not in scope:continue
             group['ddp'] = decimal_input(post, 'ddp_' + gid)
             if 'buy_' + gid in post:
                 group['buy'] = decimal_input(post, 'buy_' + gid, optional=False)

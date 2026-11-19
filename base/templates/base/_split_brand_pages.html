@@ -1,0 +1,8 @@
+{% if brand_page %}
+<nav class="split-brand-pages admin-panel" aria-label="Страницы по брендам" data-brand-pages="{{ brand_page.key }}">
+<strong>Бренд: {{ brand_page.name }}</strong> <small>{% if brand_page.number %}Страница {{ brand_page.number }} из {{ brand_page.total }} · {% endif %}Групп: {{ brand_page.count }}. {% if brand_page.key == '_all_' %}Показаны все бренды.{% else %}Карточки сверху — весь сценарий, таблица — выбранный бренд.{% endif %}</small>
+<div class="split-brand-links">{% if brand_page.previous %}<a class="admin-button secondary" href="{{ brand_page.previous }}">← Предыдущий бренд</a>{% endif %}
+{% for page in brand_page.pages %}<a class="admin-button secondary" href="{{ page.url }}"{% if page.selected %} aria-current="page"{% endif %}>{{ page.name }} <small>({{ page.count }})</small></a>{% endfor %}
+{% if brand_page.next %}<a class="admin-button secondary" href="{{ brand_page.next }}">Следующий бренд →</a>{% endif %}<a class="admin-button secondary" href="{{ brand_page.all_url }}"{% if brand_page.key == '_all_' %} aria-current="page"{% endif %}>Все бренды</a></div>
+</nav>
+{% endif %}

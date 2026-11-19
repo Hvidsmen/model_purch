@@ -131,7 +131,7 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 context.add_cookies([{'name': 'sessionid', 'value': self.client.cookies['sessionid'].value, 'url': self.live_server_url}])
                 page = context.new_page()
                 for tab in ['plan', 'distribution&section=months', 'distribution&section=powers', 'stock']:
-                    page.goto(self.live_server_url + self.url + '?tab=' + tab)
+                    page.goto(self.live_server_url + self.url + '?brand_page=_all_&tab=' + tab)
                     filters = page.locator('[data-reference-filter]')
                     expect(filters).to_have_count(4)
                     page.locator('[data-reference-filter="factory"]').select_option('Factory <A>', force=True)
@@ -327,7 +327,7 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
             try:
                 context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
                 page=context.new_page()
-                page.goto(self.live_server_url+self.url+'?tab=plan')
+                page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=_all_')
                 page.get_by_label('Завод: выбрать значения',exact=True).click()
                 search=page.get_by_role('searchbox',name='Поиск: Завод',exact=True)
                 search.fill('mixed')
@@ -343,7 +343,7 @@ class DistributionReferenceBrowserTests(StaticLiveServerTestCase):
                 page.get_by_label('Марка: выбрать значения',exact=True).click()
                 page.get_by_role('checkbox',name='Brand',exact=True).check()
                 expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 1')
-                page.locator('.split-workflow-step[href="?tab=stock"]').click()
+                page.get_by_role('link',name='Сток и закупки',exact=True).click()
                 expect(page.locator('[data-reference-filter="factory"]')).to_have_values(['Mixed factory','Other factory'])
                 expect(page.locator('[data-reference-filter-count]')).to_have_text('Показано групп: 1')
                 page.get_by_role('button',name='Сбросить справочные фильтры',exact=True).click()
