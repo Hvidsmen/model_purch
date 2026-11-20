@@ -1,5 +1,6 @@
 (() => {
  const dialog=document.getElementById('split-forecast-history');if(!dialog)return;
+ const staged=()=>!!document.querySelector('[data-stock-workspace]');
  const find=name=>dialog.querySelector('[data-forecast-history-'+name+']'),status=find('status');
  let proposals=[],busy=false;
  const number=value=>value==null?'—':Number(value).toLocaleString('ru-RU',{maximumFractionDigits:6});
@@ -14,6 +15,7 @@
  const groups=()=>[...find('groups').querySelectorAll('label')];
  document.querySelector('[data-forecast-history-open]').addEventListener('click',()=>{
   if(document.querySelector('.split-unsaved-dock:not([hidden])')){window.SplitProgress?.start('Прогноз').fail('Сначала сохраните изменения таблицы, затем рассчитайте прогноз.');return;}
+  if(staged())find('apply').textContent='Подтвердить и внести в таблицу';
   clear();status.textContent='Выберите группы для предпросмотра.';find('groups').replaceChildren();
   document.querySelectorAll('[data-stock-group]').forEach(row=>{
    if(row.hasAttribute('data-reference-excluded'))return;
@@ -48,8 +50,10 @@
  find('apply').addEventListener('click',async()=>{
   const tokens=[...find('results').querySelectorAll('input:checked:not(:disabled)')].map(input=>input.dataset.forecastToken);
   if(!tokens.length){status.textContent='Выберите предложения для применения.';return;}
-  setBusy(true);status.textContent='Сохраняем прогноз…';const progress=window.SplitProgress?.start('Сохранение прогноза');
-  try{const result=await request('apply_forecast_history',{tokens:JSON.stringify(tokens),only_empty:find('empty').checked?'1':'0'});progress?.finish('Прогноз сохранён · групп: '+result.count);location.reload();}
+  setBusy(true);status.textContent=staged()?'Вносим прогноз в таблицу…':'Сохраняем прогноз…';const progress=window.SplitProgress?.start(staged()?'Подтверждение прогноза':'Сохранение прогноза');
+  try{
+   if(staged()){if(!window.SplitStockWorkspace)throw Error('Дождитесь загрузки страницы и повторите подтверждение.');await window.SplitStockWorkspace.stageForecast(proposals.filter(row=>tokens.includes(row.token)),find('empty').checked);progress?.finish('Прогноз внесён в таблицу');setBusy(false);dialog.close();return;}
+   const result=await request('apply_forecast_history',{tokens:JSON.stringify(tokens),only_empty:find('empty').checked?'1':'0'});progress?.finish('Прогноз сохранён · групп: '+result.count);location.reload();}
   catch(error){status.textContent=error.message;progress?.fail(error.message);setBusy(false);}
  });
 })();

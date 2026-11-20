@@ -141,4 +141,5 @@ def apply(scenario,post):
         group['forecast_mode']='powers';group['forecast_before_total']=proposal['total']
         for key,value in proposal['powers'].items():group['powers'][key]['forecast_before']=value
         group['forecast_history_source']=proposal['source']
+        group.pop('forecast_workspace_source',None)
     return state,len(seen)

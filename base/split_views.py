@@ -55,6 +55,32 @@ def scenario(request, pk):
     tab = request.GET.get('tab', 'composition' if not item.state['groups'] or not item.state['channels'] else 'plan')
     if tab not in ('composition', 'plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
         tab = 'plan'
+    if request.method=='POST' and request.POST.get('action') in ('preview_stock_workspace','save_stock_workspace','propose_stock_workspace','load_stock_workspace_inventory'):
+        try:
+            if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
+                raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            from .split_stock_workspace import candidate,presentation as stock_presentation,serialize,propose,group_ids
+            if request.POST['action']=='load_stock_workspace_inventory':
+                from .split_inventory import source_rows_many,apply_inventory,model_map
+                ids=group_ids(item,request.POST.get('groups','[]'))
+                state=deepcopy(item.state);groups={gid:state['groups'][gid] for gid in ids}
+                for group in groups.values():model_map(group)
+                sources=source_rows_many(item,groups)
+                for gid,group in groups.items():apply_inventory(item,group,sources[gid])
+                persist(item,request.user,request.POST.get('revision'),state,'Обновлены остатки и поступления · групп: '+str(len(ids)))
+                return JsonResponse({'ok':True})
+            if request.POST['action']=='propose_stock_workspace':
+                return JsonResponse({'ok':True,'rows':propose(item,request.POST,request.user)})
+            state=candidate(item,request.POST.get('changes','{}'),request.POST.get('proposal_tokens','[]'),request.POST.get('forecast_tokens','[]'),request.POST.get('forecast_only_empty','1'))
+            draft=deepcopy(item);draft.state=state
+            report=serialize(stock_presentation(draft))
+            if request.POST.get('page_groups') and request.POST['page_groups']!='[]':
+                ids=group_ids(item,request.POST['page_groups']);page=deepcopy(draft);page.state['groups']={gid:draft.state['groups'][gid] for gid in ids}
+                page_report=serialize(stock_presentation(page));report['page_totals']=page_report['totals'];report['page_counts']=page_report['counts']
+            if request.POST['action']=='save_stock_workspace':
+                persist(item,request.user,request.POST.get('revision'),state,'Сохранены остатки, целевой запас и поставки')
+            return JsonResponse({'ok':True,**report})
+        except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     sales_view='brands' if request.GET.get('sales_view')=='brands' else 'groups'
     if request.method=='POST' and request.POST.get('action') in ('brand_preview','brand_apply'):
         try:
@@ -372,10 +398,32 @@ def scenario(request, pk):
         old_lines = {(row['gid'], row['cid']): row for row in old['lines']}
         comparison = {'scenario': reference, 'old': old['totals'], 'new': data['totals'], 'rows': [
             {'new': row, 'old': old_lines.get((row['gid'], row['cid']))} for row in data['lines']]}
+    stock_workspace=stock_all_workspace=stock_workspace_data=None
+    stock_step=request.GET.get('stock_step','opening')
+    if stock_step not in ('opening','targets','supplies'):stock_step='opening'
+    stock_filters=[]
+    if tab=='stock':
+        from .split_stock_workspace import presentation as stock_presentation,serialize
+        stock_workspace=stock_presentation(display_item)
+        stock_all_workspace=stock_presentation(item) if display_item is not item else stock_workspace
+        stock_workspace_data=serialize(stock_all_workspace)
+        page_report=serialize(stock_workspace);stock_workspace_data['page_totals']=page_report['totals'];stock_workspace_data['page_counts']=page_report['counts']
+        stock_workspace['loaded']=sum(bool(row['group'].get('inventory_source')) for row in stock_workspace['rows'])
+        stock_workspace['forecast_filled']=sum(row['opening']['forecast_total'] is not None for row in stock_workspace['rows'])
+        stage=next((stage for stage in workflow_ux['stages'] if stage['key']=='stock'),None)
+        if stage is not None:
+            counts=stock_all_workspace['counts']['supplies'];stage['detail']=f"Проверено: {counts['ready']} из {stock_all_workspace['total']} групп"
+            stage['status']='Требует внимания' if counts['missing'] or counts['deficit'] else 'Заполнен'
+        for row in stock_workspace['rows']:
+            row['reference']=stock_references.get(row['id'],{})
+        for name,label in (('sales_plan_group','Группа планов продаж'),('outdoor_type','Тип наружного блока'),('factory','Завод')):
+            choices=sorted({str(ref.get(name) or 'Не указано') for ref in stock_references.values()})
+            stock_filters.append({'name':name,'label':label,'choices':choices})
     from model_purch.models import ScenarioModel
     from django.utils import timezone
     from zoneinfo import ZoneInfo
-    return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' and can_access(request.user,'purchases') else [],
+    return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab in ('plan','stock') and can_access(request.user,'purchases') else [],
+        'stock_workspace':stock_workspace,'stock_all_workspace':stock_all_workspace,'stock_step':stock_step,'stock_workspace_data':stock_workspace_data,'stock_filters':stock_filters,
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
         'sales_view':sales_view,'sales_summary':sales_summary,'composition_rows':composition_rows, 'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
         'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,

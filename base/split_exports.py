@@ -54,6 +54,12 @@ def workbook(scenario):
     stock.append(['Группа', 'Мощность', 'Продажи комплектов', 'Прогноз до начала', 'Новые поставки · компл.', 'Внутренние на конец', 'Наружные на конец', 'Комплекты на конец', 'Поставки SQL · внутренние', 'Поставки SQL · наружные', 'Корректировка поставок · компл.'])
     for row in data['stock']:
         stock.append([text_cell(row[key]) for key in ('group', 'power', 'quantity', 'forecast', 'buy', 'indoor', 'outdoor', 'closing', 'incoming_sql_indoor', 'incoming_sql_outdoor', 'supply_adjustment')])
+    from .split_stock_workspace import presentation as stock_presentation
+    targets=book.create_sheet('Целевой запас и поставки')
+    targets.append(['Группа','Конец периода','Запас %','Целевой запас, компл.','План продаж, компл.','Остаток на начало, компл.','Ожидается, компл.','Новые поставки, компл.','Остаток на конец, компл.','Источник процента','Сценарий закупок','Загружено / изменено','Источник новых поставок'])
+    for row in stock_presentation(scenario)['rows']:
+        origin=row['target_source']
+        targets.append([text_cell(value) for value in [row['group']['ref']['name'],str(scenario.end),row['target_percent'],row['target'],row['planned'],row['opening']['totals']['sets'],row['incoming'],row['new_supply'],row['closing'],origin.get('label',''),origin.get('id'),origin.get('at',''),row['group'].get('buy_source',{}).get('label','')]])
     output = BytesIO()
     try:
         book.save(output)
