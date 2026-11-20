@@ -117,6 +117,9 @@ def scenario(request, pk):
         distribution_section = 'months'
     distribution_edit = request.GET.get('edit') == '1' or request.method == 'POST'
     distribution_filters = {key:request.GET.get('filter_'+key,'').strip() for key in ('group','channel','status','q')}
+    distribution_channels=[value.strip() for value in request.GET.getlist('filter_channel') if value.strip()]
+    distribution_filters['channels']=distribution_channels if distribution_channels or request.GET.get('filter_channels_set')=='1' else None
+    distribution_filters['channel_unfiltered']=distribution_filters['channels'] is None
     distribution_filters['positive_only']=request.GET.get('positive_only')=='1'
     gid = request.POST.get('group') or request.GET.get('group') or next(iter(item.state['groups']), '')
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')

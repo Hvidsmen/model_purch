@@ -103,7 +103,9 @@ def overview(scenario, section, filters):
         if filters.get('positive_only') and row['quantity']==0:continue
         if filters.get('group') and row['gid'] != filters['group']:
             continue
-        if filters.get('channel') and filters['channel'] not in row['channel_ids']:
+        if filters.get('channels') is not None:
+            if not set(filters['channels']) & row['channel_ids']:continue
+        elif filters.get('channel') and filters['channel'] not in row['channel_ids']:
             continue
         if filters.get('status') and row['status']['key'] != filters['status']:
             continue
