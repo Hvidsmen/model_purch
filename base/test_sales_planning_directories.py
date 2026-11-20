@@ -115,10 +115,10 @@ class SeparateDirectoryBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('tbody tr')).to_contain_text('Kent')
                 page.get_by_role('link', name='Каналы продаж', exact=True).click()
                 expect(page.get_by_role('heading', name='Каналы продаж', exact=True)).to_be_visible()
-                expect(page.locator('tbody tr')).to_have_text('DealerАктивна')
+                expect(page.locator('.split-channel-item h2')).to_have_text('Dealer')
                 page.get_by_label('Активность', exact=True).select_option('inactive')
                 page.get_by_role('button', name='Применить', exact=True).click()
-                expect(page.locator('tbody tr')).to_have_text('Old retailНеактивна')
+                expect(page.locator('.split-channel-item h2')).to_have_text('Old retail')
             finally:
                 context.close()
                 browser.close()
