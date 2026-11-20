@@ -27,6 +27,8 @@
         return value;
     }
     function format(value, separator) {
+        if(value===null)return '';
+        if(value<0n)return '-'+format(-value,separator);
         const tail = String(value % scale).padStart(6, '0').replace(/0+$/, '');
         return String(value / scale) + (tail ? separator + tail : '');
     }
@@ -60,13 +62,22 @@
             const value = parse(input.value,input.dataset.powerParam === 'cost' ? 'percent' : 'quantity');
             if (input.dataset.powerParam === 'factor' && value === 0n) error = 'Соотношение DDP должно быть положительным.';
         }
+        if(powers)for(const cell of row.element.querySelectorAll('[data-power-config]')){
+            const share=cell.querySelector('[data-month]')||cell.parentElement.querySelector('[data-month]');
+            if(share&&parse(share.value,'percent')>0n){
+                if([...cell.querySelectorAll('select[data-power-param]')].some(input=>!input.value))error='Не выбрана пара моделей';
+                else if([...cell.querySelectorAll('input[data-power-param]')].some(input=>!input.value))error='Заполните параметры стоимости мощности';
+            }
+        }
         return {sum, error};
     }
     function refresh(row) {
         const badge = row.element.querySelector('[data-row-status]');
         let result;
         try { result = validate(row); } catch (error) { result = {sum:null, error:error.message}; }
-        const error = row.requestError || result.error;
+        const error = row.element.dataset.quantity==='0'&&!row.dirty?'':row.requestError || result.error;
+        const jump=row.element.querySelector('[data-row-jump]');if(jump){jump.hidden=!error;jump.textContent=error||'К ошибке';}
+        try{const qty=parse(row.element.dataset.quantity,'quantity');const allocated=qty===null||result.sum===null?null:row.unit.value==='percent'?qty*result.sum/hundred:result.sum;row.element.querySelector('[data-row-allocated]').textContent=format(allocated,',')||'—';row.element.querySelector('[data-row-remaining]').textContent=qty===null||allocated===null?'—':format(qty-allocated,',');}catch{row.element.querySelector('[data-row-allocated]').textContent='—';row.element.querySelector('[data-row-remaining]').textContent='—';}
         row.valid = !error;
         row.element.querySelector('[data-row-sum]').textContent = result.sum === null ? '—' : format(result.sum, ',') + (row.unit.value === 'percent' ? '%' : '');
         row.element.querySelector('[data-row-unit]').textContent = row.unit.value === 'percent' ? 'Доли, %' : 'Компл.';
@@ -89,6 +100,7 @@
         if(info && !row.busy && (row.requestError || row.dirty&&!row.valid))info.open=true;
         row.unit.disabled = !draft || row.mode !== 'manual' || row.busy || submitting;
         row.unit.closest('label').hidden = powers || !draft || row.mode !== 'manual';
+        row.lastUnit=row.unit.value;
         row.params.forEach(function (input) {
             if (input.tagName === 'SELECT') input.disabled = !draft || row.busy || submitting;
             else input.readOnly = !draft || row.busy || submitting;
@@ -98,14 +110,18 @@
             input.setAttribute('aria-invalid', String(row.dirty && !row.valid));
         });
     }
+    function canSaveRow(row){
+        try{row.inputs.forEach(input=>parse(input.value,row.unit.value));row.params.filter(input=>['factor','cost'].includes(input.dataset.powerParam)).forEach(input=>parse(input.value,input.dataset.powerParam==='cost'?'percent':'quantity'));if(row.mode==='manual')return true;if(row.mode==='fact')return !!row.token||(powers&&row.original.mode==='fact'&&row.element.dataset.existingFact==='1');return row.inputs.reduce((sum,input)=>sum+(parse(input.value,'percent')||0n),0n)===hundred;}catch{return false;}
+    }
     function toolbar() {
         window.SplitUnsaved?.refresh();
         const changed = rows.filter(row => row.dirty), bad = changed.filter(row => !row.valid);
         const busy = rows.some(row => row.busy) || autoPending > 0 || bulkBusy;
         bulkToolbar(busy);
-        if (save) save.disabled = submitting || busy || !changed.length || !!bad.length;
+        const globalUnit=form.querySelector('[data-grid-global-unit]');if(globalUnit){const units=[...new Set(rows.filter(visible).map(row=>row.unit.value))];if(units.length>1&&!globalUnit.querySelector('[value=mixed]')){const option=new Option('Смешанные единицы','mixed');option.disabled=true;globalUnit.append(option);}globalUnit.value=units.length===1?units[0]:'mixed';}
+        if (save) save.disabled = submitting || busy || !changed.length || changed.some(row=>!canSaveRow(row));
         message.textContent = submitting ? 'Сохранение…' : busy ? 'Получаем предложения из факта…' :
-            changed.length ? 'Изменено строк: ' + changed.length + (bad.length ? '. Исправьте ошибки: ' + bad.length + '.' : '. Суммы проверены; сохраните изменения.') : 'Показаны сохранённые значения.';
+            changed.length ? 'Изменено строк: ' + changed.length + (bad.length ? '. В строках есть ошибки: ' + bad.length + '. Черновик можно сохранить; утверждение потребует исправлений.' : '. Суммы проверены; сохраните изменения.') : 'Показаны сохранённые значения.';
     }
     function manual(row) {
         row.mode = 'manual'; row.token = ''; row.requestError = ''; row.dirty = true;
@@ -144,7 +160,7 @@
             }
             row.token = data.token; row.dirty = true;
             progress?.finish('Предложение получено. Проверьте и сохраните изменения.');
-            row.element.querySelector('[data-row-rule]').textContent = [data.basis.rule_label,data.basis.rule_detail,data.basis.parameter_note,'Не сохранено'].filter(Boolean).join(' · ');
+            row.element.querySelector('[data-row-rule]').textContent = [data.basis.rule_label,data.basis.rule_detail,data.basis.first_year&&data.basis.last_year?data.basis.first_year+'–'+data.basis.last_year:'',data.basis.through?'По '+data.basis.through:'',data.basis.parameter_note,'Не сохранено'].filter(Boolean).join(' · ');
         } catch (error) {
             if (id !== row.requestId) return;
             row.mode = oldMode; row.requestError = error.message;
@@ -159,8 +175,9 @@
         const count = form.querySelector('[data-grid-selected-count]');
         if (!count) return;
         count.textContent = 'Выбрано строк: ' + chosen().length;
+        const selection=form.querySelector('[data-grid-selection-toolbar]');if(selection)selection.hidden=!chosen().length;
         form.querySelectorAll('[data-grid-select], [data-grid-select-all], [data-grid-select-none], [data-grid-bulk-mode]').forEach(control => { control.disabled = !draft || busy || submitting; });
-        form.querySelector('[data-grid-bulk-apply]').disabled = !draft || busy || submitting || !chosen().length;
+        form.querySelector('[data-grid-bulk-apply]').disabled = !draft || busy || submitting || !rows.some(visible);
     }
     form.querySelector('[data-grid-select-all]')?.addEventListener('click', () => {
         rows.filter(visible).forEach(row => { row.element.querySelector('[data-grid-select]').checked = true; }); toolbar();
@@ -168,13 +185,15 @@
     form.querySelector('[data-grid-select-none]')?.addEventListener('click', () => {
         rows.forEach(row => { row.element.querySelector('[data-grid-select]').checked = false; }); toolbar();
     });
-    form.querySelectorAll('[data-grid-select]').forEach(control => control.addEventListener('change', toolbar));
+    form.querySelectorAll('[data-grid-select]').forEach(control => control.addEventListener('change',()=>{const scope=form.querySelector('[data-grid-scope]');if(scope)scope.value=chosen().length?'selected':'all';if(chosen().length)form.querySelector('.split-distribution-bulk').open=true;toolbar();}));
     document.addEventListener('split-reference-filter-change', toolbar);
     document.addEventListener('split-table-visibility-change', toolbar);
     form.querySelector('[data-grid-bulk-apply]')?.addEventListener('click', async () => {
         if (!draft || submitting || bulkBusy || autoPending || rows.some(row => row.busy)) return;
-        const selected = chosen(), mode = form.querySelector('[data-grid-bulk-mode]').value;
-        if (!selected.length) return;
+        const scope=form.querySelector('[data-grid-scope]')?.value||'selected';
+        const onlyEmpty=form.querySelector('[data-grid-only-empty]')?.checked;
+        const selected=(scope==='selected'?chosen():rows.filter(row=>visible(row)&&parse(row.element.dataset.quantity,'quantity')>0n)).filter(row=>!onlyEmpty||row.inputs.every(input=>!input.value.trim())), mode = form.querySelector('[data-grid-bulk-mode]').value;
+        if (!selected.length){form.querySelector('[data-grid-bulk-result]').textContent='Нет подходящих строк: заполненные и частичные значения сохранены. Для их замены снимите «Только незаполненные». Выбор не переносится на другие страницы.';return;}
         const progress=window.SplitProgress?.start('Массовое распределение',selected.length);
         let completed=0;
         bulkBusy = true; toolbar();
@@ -215,7 +234,7 @@
         row.element.querySelector('[data-row-recalculate]')?.addEventListener('click',()=>row.element.querySelector('[data-mode-button="fact"]').click());
         const info=row.element.querySelector('[data-row-info]'),infoToggle=row.element.querySelector('[data-row-info-toggle]');
         if(info&&infoToggle){infoToggle.addEventListener('click',()=>{info.open=!info.open;});info.addEventListener('toggle',()=>infoToggle.setAttribute('aria-expanded',String(info.open)));}
-        row.unit.addEventListener('change', function () { manual(row); refresh(row); toolbar(); });
+        row.unit.addEventListener('change', function () { convertUnit(row,row.unit.value); toolbar(); });
         row.params.forEach(function (input) {
             input.addEventListener(input.tagName === 'SELECT' ? 'change' : 'input', function () {
                 row.dirty = true; row.requestError = ''; refresh(row); toolbar();
@@ -258,7 +277,7 @@
         if (!draft || submitting || bulkBusy || rows.some(row => row.busy) || autoPending) return;
         rows.forEach(refresh);
         const changed = rows.filter(row => row.dirty);
-        if (!changed.length || changed.some(row => !row.valid)) { toolbar(); return; }
+        if (!changed.length || changed.some(row => !canSaveRow(row))) { toolbar(); return; }
         const payload = changed.map(function (row) {
             const item = {gid:row.element.dataset.gid,cid:row.element.dataset.cid,mode:row.mode,unit:row.unit.value,token:row.token,
                 values:Object.fromEntries(row.inputs.map(input => [input.dataset.month,format(parse(input.value,row.unit.value),'.')]))};
@@ -277,7 +296,7 @@
         const progress=window.SplitProgress?.start('Сохранение распределения · строк: '+changed.length);
         submitting = true; rows.forEach(refresh); toolbar();
         try {
-            await request({action:saveAction,grid_payload:JSON.stringify(payload)});
+            await request({action:saveAction,save_draft:'1',grid_payload:JSON.stringify(payload)});
             progress?.finish('Распределение сохранено');
             window.SplitUnsaved ? window.SplitUnsaved.navigate(next) : window.location.reload();
         } catch (error) {
@@ -304,8 +323,8 @@
         });
         toolbar();
     });
-    if(draft)window.SplitUnsaved?.register({dirty:()=>rows.some(row=>row.dirty),busy:()=>submitting||bulkBusy||autoPending>0||rows.some(row=>row.busy),canSave:()=>rows.filter(row=>row.dirty).every(row=>row.valid),save:saveGrid,discard(){reset?.click();}});
-    if (draft) {
+    if(draft)window.SplitUnsaved?.register({dirty:()=>rows.some(row=>row.dirty),busy:()=>submitting||bulkBusy||autoPending>0||rows.some(row=>row.busy),canSave:()=>rows.filter(row=>row.dirty).every(canSaveRow),save:saveGrid,discard(){reset?.click();}});
+    if (draft && form.dataset.autoLoad==='1') {
         const defaults = rows.filter(row => row.element.dataset.autoFact === '1');
         autoPending = defaults.length;
         const autoProgress=defaults.length ? window.SplitProgress?.start('Автоматическое получение распределения',defaults.length) : null;
@@ -316,5 +335,24 @@
             finally {autoPending--;autoProgress?.update(++autoCompleted);toolbar();if(!autoPending){const failures=defaults.filter(row=>row.requestError).length;if(failures)autoProgress?.fail('Не удалось получить предложение для строк: '+failures);else autoProgress?.finish(stopAuto ? 'Автоматическая загрузка остановлена.' : 'Предложения получены. Проверьте распределение и сохраните изменения.');}}
         }); });
     }
+    function convertUnit(row,unit){
+        const previous=row.lastUnit||row.original.unit;if(previous===unit)return;
+        try{
+            const qty=parse(row.element.dataset.quantity,'quantity');if(!qty)throw Error('Для пересчёта единиц нужен положительный план.');
+            const values=row.inputs.map(input=>parse(input.value,previous));
+            const converted=values.map(value=>value===null?null:previous==='percent'?value*qty/hundred:value*hundred/qty);
+            if(values.every(value=>value!==null)&&values.reduce((a,b)=>a+b,0n)===(previous==='percent'?hundred:qty)){
+                converted[converted.length-1]+=(unit==='quantity'?qty:hundred)-converted.reduce((a,b)=>a+b,0n);
+            }
+            row.inputs.forEach((input,index)=>input.value=converted[index]===null?'':format(converted[index],','));
+            manual(row);row.unit.value=unit;refresh(row);
+        }catch(error){row.unit.value=previous;message.textContent=error.message;}
+    }
+    form.querySelector('[data-grid-global-unit]')?.addEventListener('change',event=>{
+        if(!draft)return;const unit=event.target.value;for(const row of rows.filter(visible))convertUnit(row,unit);toolbar();
+    });
+    for(const row of rows)row.element.querySelector('[data-row-jump]')?.addEventListener('click',()=>{
+        const missingParam=row.params.find(input=>!input.value||(input.dataset.powerParam==='factor'&&Number(input.value.replace(',','.'))<=0));const target=missingParam||row.inputs.find(input=>!input.value.trim())||row.inputs.at(-1);const details=target?.closest('details');if(details)details.open=true;target?.scrollIntoView({block:'center',inline:'center'});target?.focus();
+    });
     toolbar();
 }());

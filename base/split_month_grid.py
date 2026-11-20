@@ -28,7 +28,7 @@ def preview(scenario, gid, cid):
 
 
 @precise
-def apply_grid(scenario, raw):
+def apply_grid(scenario, raw, *, allow_incomplete=False):
     if len(raw) > 2_000_000:
         raise ValidationError('Слишком большой блок распределения.')
     try:
@@ -53,9 +53,10 @@ def apply_grid(scenario, raw):
         values = row.get('values')
         if not isinstance(values,dict) or set(values) != set(months):
             raise ValidationError('Передайте значения всех плановых месяцев.')
-        parsed = {month:number(values[month]) for month in months}
-        target = HUNDRED if unit == 'percent' else quantity(scenario,original['channels'][cid])
-        if (unit == 'percent' and any(value > HUNDRED for value in parsed.values())) or sum(parsed.values()) != target:
+        partial=allow_incomplete and mode=='manual'
+        parsed = {month:number(values[month],optional=partial) for month in months}
+        target = HUNDRED if unit == 'percent' or partial else quantity(scenario,original['channels'][cid])
+        if any(value is not None and value>HUNDRED for value in parsed.values()) and unit=='percent' or not partial and sum(parsed.values()) != target:
             raise ValidationError(original['ref']['name']+' · '+scenario.state['channels'][cid]['name']+
                 (': сумма должна быть ровно 100%.' if unit == 'percent' else ': месячные количества должны совпадать с планом.'))
         source = None

@@ -1,9 +1,6 @@
-<div class="split-distribution-bulk">
-<button type="button" class="admin-button secondary" data-grid-select-all>Выбрать все показанные</button>
-<button type="button" class="admin-button secondary" data-grid-select-none>Снять выбор</button>
-<span role="status" data-grid-selected-count>Выбрано строк: 0</span>
-<label>Способ распределения <select data-grid-bulk-mode aria-label="Способ массового распределения"><option value="fact">Из факта</option><option value="equal">Равномерно</option><option value="manual">Вручную</option></select></label>
-<button type="button" class="admin-button" data-grid-bulk-apply disabled>Применить к выбранным</button>
-<p>Действие применяется к выбранным строкам, показанным по текущим фильтрам. «Вручную» открывает ввод и сохраняет текущие доли. После проверки нажмите «Сохранить изменения».</p>
-<p role="status" data-grid-bulk-result></p>
-</div>
+<details class="split-distribution-bulk"><summary>Заполнить распределение</summary>
+<div class="split-distribution-fill"><label>Применить к <select data-grid-scope><option value="all">Всем показанным строкам бренда с планом</option><option value="selected">Выбранным строкам</option></select></label>
+<label>Способ <select data-grid-bulk-mode aria-label="Способ массового распределения"><option value="fact">По истории продаж</option><option value="equal">Равномерно</option><option value="manual">Вручную</option></select></label>
+<label><input type="checkbox" data-grid-only-empty checked> Только незаполненные строки</label><button type="button" class="admin-button" data-grid-bulk-apply>Заполнить</button></div>
+<small>Заполненные и частично введённые доли сохраняются, пока включено «Только незаполненные». История показывает период и источник в подробностях строки. Результат заполнения сначала проверяется в таблице, затем сохраняется.</small>
+<div data-grid-selection-toolbar hidden><button type="button" class="admin-button secondary" data-grid-select-all>Выбрать все показанные</button><button type="button" class="admin-button secondary" data-grid-select-none>Снять выбор</button><span role="status" data-grid-selected-count>Выбрано строк: 0</span></div><p role="status" data-grid-bulk-result></p></details>

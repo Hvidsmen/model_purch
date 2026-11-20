@@ -6,7 +6,7 @@
   if (!table) return;
   const storage = 'split-table-view-' + panel.dataset.tableViewControls;
   const references = JSON.parse(document.getElementById('split-reference-values')?.textContent || '{}');
-  let mode = 'nested';
+  let mode = plan||table.closest('[data-month-grid]') ? 'flat' : 'nested';
   try { mode = sessionStorage.getItem(storage) || mode; } catch (_) {}
   const levels = [['sales_plan_group','Группа планов продаж'],['brand','Марка'],['outdoor_type','Тип наружного блока'],['factory','Завод']];
   const nodes = [];
@@ -42,14 +42,16 @@
     }
     emit(root);
   }
-  let characteristics = true;
+  let characteristics = !table.closest('[data-month-grid]');
   const referenceCells = [...table.querySelectorAll('.split-distribution-reference, .split-reference-heading')];
   if (plan) table.querySelectorAll('thead tr:first-child, [data-plan-group], [data-plan-power-group], .split-matrix-grand-total, .split-plan-summary').forEach(row => referenceCells.push(...[...row.cells].slice(0,4)));
   if (!plan && table.classList.contains('split-stock-table')) table.querySelectorAll('.split-stock-power-row, tfoot tr').forEach(row => referenceCells.push(...[...row.cells].slice(0,4)));
+  function syncReferences(){referenceCells.forEach(cell=>cell.hidden=!characteristics);table.querySelectorAll('col.split-distribution-reference-col').forEach(col=>col.hidden=!characteristics);table.toggleAttribute('data-reference-columns-hidden',!characteristics);panel.querySelector('[data-reference-columns]').setAttribute('aria-pressed',String(characteristics));}
+  syncReferences();
   panel.querySelector('[data-reference-columns]').addEventListener('click', event => {
     characteristics = !characteristics;
     event.currentTarget.setAttribute('aria-pressed',String(characteristics));
-    referenceCells.forEach(cell => {cell.hidden=!characteristics;});
+    syncReferences();
     table.querySelectorAll('.split-plan-subtotal > th:first-child').forEach(cell => {cell.colSpan=characteristics ? 5 : 1;});
     table.querySelectorAll('[data-plan-empty], [data-stock-fullspan]').forEach(cell => {cell.colSpan += characteristics ? 4 : -4;});
     sync();

@@ -1,4 +1,4 @@
-<details class="split-metric-preferences" data-split-metric-preferences data-storage-key="split-visible-metrics-v1-{{ request.user.pk }}">
+<details class="split-metric-preferences" data-split-metric-preferences{% if tab == 'plan' %} data-default-off="incoming planned_incoming"{% endif %} data-storage-key="split-visible-metrics-v1-{{ request.user.pk }}">
 <summary>Показатели таблиц</summary>
 <div class="split-metric-choices">
 <label><input type="checkbox" data-split-metric-choice="quantity" checked> Количество · шт./компл.</label>

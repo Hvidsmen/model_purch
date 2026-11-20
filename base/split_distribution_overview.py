@@ -57,7 +57,7 @@ def overview(scenario, section, filters):
                 quantities[cid] = None
         sales_required = any(qty is None or qty > 0 for qty in quantities.values())
         stock_present = any(power.get('stock_indoor') is not None or power.get('stock_outdoor') is not None for power in group['powers'].values())
-        powers = power_status(group,sales_required or stock_present,models_required=sales_required)
+        powers = power_status(group,sales_required,models_required=sales_required)
         if section == 'powers':
             rows.append({'gid':gid,'cid':next(iter(group['channels']),''),'name':group['ref']['name'],
                          'channels':list(scenario.state['channels'].values()), 'quantity':sum(quantities.values(),Decimal(0)) if all(qty is not None for qty in quantities.values()) else None,
@@ -95,9 +95,14 @@ def overview(scenario, section, filters):
             auto_fact = not by_quantity and qty is not None and qty > 0 and all(value in (None,'') for value in values)
             rows[-1]['mode'] = 'fact' if auto_fact else mode
             rows[-1]['auto_fact'] = auto_fact
+    for row in rows:
+        total=row['status']['sum'];qty=row['quantity']
+        row['allocated']=None if qty is None or total is None and row['status']['key']=='invalid' else (total or Decimal(0)) if row.get('by_quantity') else qty*(total or Decimal(0))/HUNDRED
+        row['remaining']=None if qty is None or row['allocated'] is None else qty-row['allocated']
     counts = {key:sum(row['status']['key'] == key for row in rows) for key in ('ready','missing','invalid','not_required')}
     filtered = []
     for row in rows:
+        if filters.get('positive_only') and row['quantity']==0:continue
         if filters.get('group') and row['gid'] != filters['group']:
             continue
         if filters.get('channel') and filters['channel'] not in row['channel_ids']:
@@ -107,4 +112,4 @@ def overview(scenario, section, filters):
         if filters.get('q') and filters['q'].casefold() not in row['name'].casefold():
             continue
         filtered.append(row)
-    return {'rows':filtered,'counts':counts,'total':len(rows),'shown':len(filtered),'months':months,'power_columns':power_columns}
+    return {'rows':filtered,'counts':counts,'total':len(rows),'shown':len(filtered),'months':months,'power_columns':power_columns,'required_total':sum(row['quantity'] is None or row['quantity']>0 for row in rows)}
