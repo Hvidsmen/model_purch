@@ -30,7 +30,7 @@
     save.disabled=yes.disabled=busy||changed.some(controller=>!controller.canSave());cancel.disabled=no.disabled=busy;stay.disabled=saving;
     if(dialog.open && !busy && yes.disabled)error.textContent='Сначала исправьте ошибки ввода. Можно остаться на странице или перейти без сохранения.';
   }
-  function navigate(url){leaving=true;location.assign(url||location.href);}
+  function navigate(url){const target=new URL(url||location.href,location.href);if(target.href===location.href&&window.SplitLiveSave)return window.SplitLiveSave.refresh();leaving=true;location.assign(target.href);}
   async function saveAll(url){
     const changed=dirty();if(!changed.length){if(url)navigate(url);return;}
     if(changed.some(controller=>controller.busy()||!controller.canSave()))return;
@@ -66,5 +66,5 @@
     event.preventDefault();event.stopImmediatePropagation();nextURL=url.href;error.textContent='';refresh();dialog.showModal();stay.focus();
   },true);
   window.addEventListener('beforeunload',event=>{if(!leaving&&dirty().length){event.preventDefault();event.returnValue='';}});
-  window.SplitUnsaved={saveAndNavigate:saveAll,register(controller){controllers.push(controller);refresh();},refresh,navigate,allow(){leaving=true;}};
+  window.SplitUnsaved={reset(){controllers.length=0;leaving=false;dialog.close();refresh();},resume(){leaving=false;},saveAndNavigate:saveAll,register(controller){controllers.push(controller);refresh();},refresh,navigate,allow(){leaving=true;}};
 })();
