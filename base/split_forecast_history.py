@@ -34,7 +34,12 @@ def period(scenario,year):
     def moved(day):
         target=day.year-shift
         return date(target,day.month,min(day.day,monthrange(target,day.month)[1]))
-    if year<2000 or shift<1:raise ValidationError('Выберите предшествующий год факта, начиная с 2000.')
+    if year<2000 or shift<0:raise ValidationError('Выберите год факта от 2000 до года среза стока.')
+    if shift==0:
+        end=min(scenario.stock_date,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')))
+        start=date(year,1,1)
+        if end<start:raise ValidationError('За выбранный год ещё нет периода факта.')
+        return first,last,start,end
     start,end=moved(first),moved(last)
     if end>timezone.localdate(timezone=ZoneInfo('Europe/Moscow')):raise ValidationError('Аналогичный период факта ещё не завершён.')
     return first,last,start,end
@@ -85,10 +90,15 @@ def preview(scenario,post):
     except (ValueError,ArithmeticError):raise ValidationError('Введите корректировку в процентах.')
     if not adjustment.is_finite() or adjustment< -100 or adjustment>1000 or adjustment.as_tuple().exponent< -6:raise ValidationError('Корректировка должна быть от −100 до 1000%, до 6 знаков после запятой.')
     first,last,start,end=period(scenario,year)
+    partial=year==first.year
+    target_days=(last-first).days+1;fact_days=(end-start).days+1
+    multiplier=Decimal(target_days)/Decimal(fact_days) if partial else Decimal(1)
     facts,channels=source(scenario,start,end)
     metadata={'source':'DataWH.dbo.Sales.Quantity','year':year,'from':str(start),'through':str(end),
               'target_from':str(first),'target_through':str(last),'channels':channels,'adjustment_percent':stored(adjustment),
-              'loaded_at':timezone.now().isoformat(),'rule':'min-net-indoor-outdoor-per-power-v1'}
+              'loaded_at':timezone.now().isoformat(),'rule':'daily-net-indoor-outdoor-per-power-v1' if partial else 'min-net-indoor-outdoor-per-power-v1',
+              'method':'average_daily' if partial else 'same_calendar_dates','fact_days':fact_days,'target_days':target_days,
+              'calculation':'Чистые продажи за '+str(fact_days)+' дн. / '+str(fact_days)+' × '+str(target_days)+' дн. прогноза' if partial else 'Чистые продажи за те же календарные даты прошлого года'}
     rows=[]
     for gid in targets:
         group=scenario.state['groups'][gid];current=resolve(scenario,group)['total']
@@ -114,7 +124,7 @@ def preview(scenario,post):
             for key,counts in totals.items():
                 net=min(counts.values())
                 if net<0:warnings.append(key+': чистый факт отрицательный; прогноз принят равным 0')
-                value=(max(ZERO,net)*(1+adjustment/100)).quantize(STEP,rounding=ROUND_HALF_UP)
+                value=(max(ZERO,net)*multiplier*(1+adjustment/100)).quantize(STEP,rounding=ROUND_HALF_UP)
                 number(value);values[key]=stored(value)
                 row['powers'].append({'power':key,'indoor':stored(counts['indoor']),'outdoor':stored(counts['outdoor']),'sets':stored(value)})
             if not values:raise ValidationError('В группе нет мощностей для прогноза.')
