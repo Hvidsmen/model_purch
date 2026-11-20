@@ -331,6 +331,9 @@ def scenario(request, pk):
         try:
             if request.GET['export'] == 'xlsx':
                 return split_exports.workbook(item)
+            if request.GET['export'].startswith('plan_'):
+                from .split_sales_exports import workbook as sales_workbook
+                return sales_workbook(item,request.GET['export'][5:])
             if request.GET['export'] == 'dwh':
                 return split_exports.dwh_file(item)
         except ValidationError as exc:
