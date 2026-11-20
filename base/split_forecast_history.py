@@ -93,6 +93,30 @@ def needs_stock_repair(scenario,group):
     except ValidationError:return False
 
 
+def repair_existing_forecast(scenario,group,row,reason):
+    """Cap a previous automatic result when the selected source cannot replace it."""
+    if not row.get('needs_stock_repair'):return
+    from .split_forecast_plan import available_before
+    try:
+        values={};powers=[]
+        for key,power in group['powers'].items():
+            requested=number(power.get('forecast_before'),optional=True)
+            if requested is None:return
+            available=available_before(power,key)
+            values[key]=stored(min(requested,available))
+            powers.append({'power':key,'sets':values[key],'requested':stored(requested),'available':stored(available)})
+        total=stored(sum((Decimal(value) for value in values.values()),ZERO))
+        origin={**group['forecast_history_source'],'stock_constraint':'before-start-v1',
+                'stock_cap_applied':True,'repair_reason':reason,
+                'unconstrained_forecast':stored(sum((number(p['forecast_before']) for p in group['powers'].values()),ZERO)),
+                'available_before':{p['power']:p['available'] for p in powers}}
+        explanation='Новый расчёт недоступен: '+reason+' Прежний автоматический прогноз ограничен доступным товаром по каждой мощности; источник прогноза сохранён.'
+        row.update(error='',proposed=total,powers=powers,warnings=[explanation],explanation=explanation,repaired_existing=True,
+                   token=signing.dumps({'scenario':scenario.pk,'revision':scenario.revision,'gid':row['gid'],
+                     'fingerprint':fingerprint(group),'powers':values,'total':total,'source':origin},salt=SALT,compress=True))
+    except ValidationError:return
+
+
 @precise
 def preview(scenario,post):
     if post.get('method')=='plan_execution':
@@ -152,7 +176,9 @@ def preview(scenario,post):
                     'unconstrained_forecast':stored(sum(requested.values(),ZERO)),'available_before':{key:stored(value) for key,value in available.items()}}
             row.update(proposed=proposed,warnings=warnings,token=signing.dumps({'scenario':scenario.pk,'revision':scenario.revision,'gid':gid,
                 'fingerprint':fingerprint(group),'powers':values,'total':proposed,'source':origin},salt=SALT,compress=True))
-        except ValidationError as exc:row['error']=' '.join(exc.messages)
+        except ValidationError as exc:
+            row['error']=' '.join(exc.messages)
+            repair_existing_forecast(scenario,group,row,row['error'])
         rows.append(row)
     return {'rows':rows,'source':metadata}
 

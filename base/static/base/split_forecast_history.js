@@ -15,6 +15,7 @@
  function report(result,target){
   const box=document.createElement('div');box.setAttribute('role','status');
   const summary=document.createElement('p');summary.textContent='Сохранено прогнозов: '+result.count+'. Пропущено групп: '+(result.skipped?.length||0)+'.';box.append(summary);
+  if(result.repairs?.length){const note=document.createElement('p');note.textContent='Ограничены прежние автоматические прогнозы: '+result.repairs.map(row=>row.name+': '+row.reason).join(' ');box.append(note);}
   if(result.skipped?.length){const details=document.createElement('details'),caption=document.createElement('summary'),list=document.createElement('ul');caption.textContent='Пропущенные группы и причины';details.append(caption,list);result.skipped.forEach(row=>{const item=document.createElement('li');item.textContent=row.name+': '+row.reason;list.append(item);});box.append(details);}
   target.replaceChildren(box);
  }
