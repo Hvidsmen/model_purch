@@ -87,7 +87,7 @@
     }
     let previewTimer, previewSequence=0;
     const balanceStatus = plan.querySelector('[data-plan-balance-status]');
-    const format = value => value === null ? '—' : new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(Number(value));
+    const format = value => value === null ? '—' : new Intl.NumberFormat('ru-RU',{maximumFractionDigits:0}).format(Number(value));
     async function previewBalance() {
       const sequence=++previewSequence;
       if(busy || !plan.checkValidity())return;

@@ -37,6 +37,11 @@ def split_revenue(value):
 
 
 @register.filter
+def split_integer(value):
+    return fixed_number(value, 0)
+
+
+@register.filter
 def split_markup(value):
     return fixed_number(value, 2)
 
