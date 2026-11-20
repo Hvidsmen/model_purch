@@ -338,3 +338,5 @@
 .split-composition-table thead small{display:block}.split-composition-removal-dialog h2{font-size:22px;color:#243b60}
 
 .split-sales-export{position:relative}.split-sales-export>summary{list-style:none;cursor:pointer}.split-sales-export>summary::-webkit-details-marker{display:none}.split-sales-export nav{position:absolute;right:0;z-index:35;width:330px;max-width:85vw;background:#fff;border:1px solid #d6ccf5;border-radius:8px;box-shadow:0 8px 24px #25375522;padding:10px;display:flex;flex-direction:column;gap:4px}.split-sales-export nav a{padding:8px;border-radius:4px}.split-sales-export nav a:hover{background:#f1edff}.split-sales-export nav small{padding:8px;color:#64748b}
+
+[data-sales-check-excluded]{display:none!important}.split-sales-checks{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin-top:12px;font-size:12px}.split-sales-checks label{display:flex;align-items:center;gap:6px}.split-sales-checks>small{flex-basis:100%;color:#64748b}[data-sales-row-check]{display:block;white-space:normal;color:#85651b;margin-top:7px;font-size:11px}
