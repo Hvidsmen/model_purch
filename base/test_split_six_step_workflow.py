@@ -18,17 +18,22 @@ class SixStepWorkflowTests(TestCase):
             fields.update({'q_'+self.gid+'_'+cid:'600','markup_'+self.gid+'_'+cid:line['markup'],'fact_'+self.gid+'_'+cid:'0'})
         return fields
 
-    def test_navigation_has_six_independent_routes_without_substeps(self):
-        routes=[('composition',{}),('distribution',{'section':'months'}),('distribution',{'section':'powers'}),('stock',{'stock_step':'opening'}),('stock',{'stock_step':'targets'}),('plan',{})]
+    def test_navigation_has_seven_independent_routes_without_substeps(self):
+        routes=[('composition',{}),('distribution',{'section':'months'}),('distribution',{'section':'powers'}),('stock',{'stock_step':'opening'}),('stock',{'stock_step':'targets'}),('plan',{}),('checks',{})]
         for index,(tab,query) in enumerate(routes,1):
             response=self.client.get(self.url,{'tab':tab,**query})
             self.assertEqual(response.status_code,200)
             self.assertEqual(response.context['workflow_ux']['current']['number'],index)
-            self.assertEqual(len(response.context['workflow_ux']['stages']),6)
+            self.assertEqual(len(response.context['workflow_ux']['stages']),7)
             self.assertNotContains(response,'class="split-stock-steps"')
             self.assertNotContains(response,'aria-label="Распределение"')
+        self.assertContains(response,'name="action" value="approve"')
+        self.assertIsNone(response.context['workflow_ux']['next'])
+        response=self.client.get(self.url,{'tab':'plan'})
         self.assertContains(response,'name="buy_'+self.gid+'"')
-        self.assertContains(response,'Проверки перед утверждением')
+        self.assertNotContains(response,'Проверки перед утверждением')
+        self.assertNotContains(response,'name="action" value="approve"')
+        self.assertEqual(response.context['workflow_ux']['next']['key'],'checks')
         response=self.client.get(self.url,{'tab':'stock','stock_step':'supplies'})
         self.assertEqual(response.context['tab'],'plan')
 
@@ -76,7 +81,7 @@ class SixStepWorkflowBrowserTests(StaticLiveServerTestCase):
             context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
             page=context.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
             page.goto(self.live_server_url+self.url+'?tab=plan')
-            expect(page.locator('.split-workflow-step')).to_have_count(6)
+            expect(page.locator('.split-workflow-step')).to_have_count(7)
             expect(page.locator('.split-workflow-step[aria-current]')).to_contain_text('Продажи и закупки')
             page.locator('.split-sales-view > summary').click()
             page.locator('[data-split-metric-choice="incoming"]').check()
