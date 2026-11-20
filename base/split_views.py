@@ -139,14 +139,14 @@ def scenario(request, pk):
                 import json
                 result=preview_history(item,request.POST)
                 rows=[row for row in result['rows'] if not (request.POST.get('only_empty')=='1' and row['has_current'])]
-                errors=[row['name']+': '+row.get('error','Нет результата.') for row in rows if not row.get('token')]
-                if errors:raise ValidationError('Ничего не сохранено. '+'; '.join(errors))
-                tokens=[row['token'] for row in rows]
+                skipped=[{'gid':row['gid'],'name':row['name'],'reason':('Прогноз уже заполнен — сохранён без изменений.' if request.POST.get('only_empty')=='1' and row['has_current'] else row.get('error') or 'Нет результата расчёта.')}
+                         for row in result['rows'] if (request.POST.get('only_empty')=='1' and row['has_current']) or not row.get('token')]
+                tokens=[row['token'] for row in rows if row.get('token')]
                 if tokens:
                     post=request.POST.copy();post['tokens']=json.dumps(tokens)
                     state,count=apply_history(item,post)
                     persist(item,request.user,request.POST.get('revision'),state,'Автоматически рассчитан и сохранён прогноз по истории')
-                return JsonResponse({'ok':True,'count':len(tokens)})
+                return JsonResponse({'ok':True,'count':len(tokens),'skipped':skipped})
             if request.POST['action']=='preview_forecast_history':
                 return JsonResponse({'ok':True,**preview_history(item,request.POST)})
             state,count=apply_history(item,request.POST)
