@@ -62,7 +62,7 @@ def overview(scenario, section, filters):
             rows.append({'gid':gid,'cid':next(iter(group['channels']),''),'name':group['ref']['name'],
                          'channels':list(scenario.state['channels'].values()), 'quantity':sum(quantities.values(),Decimal(0)) if all(qty is not None for qty in quantities.values()) else None,
                          'status':powers, 'powers':[{'name':key,'share':power.get('share')} for key,power in group['powers'].items()],
-                         'source':group.get('distribution_sources',{}).get('powers'),
+                         'source':group.get('distribution_sources',{}).get('powers'),'cost_source':group.get('power_cost_source') or {},
                          'channel_ids':set(group['channels'])})
             row = rows[-1]
             source = row['source']

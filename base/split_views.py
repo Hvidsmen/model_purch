@@ -188,6 +188,13 @@ def scenario(request, pk):
             return JsonResponse({'ok': True, 'count': count})
         except ValidationError as exc:
             return JsonResponse({'ok': False, 'error': ' '.join(exc.messages)}, status=400)
+    if request.method == 'POST' and request.POST.get('action') == 'preview_power_stock_parameters':
+        try:
+            if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
+                raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            from .split_power_stock import preview as preview_stock_parameters
+            return JsonResponse({'ok':True,'rows':preview_stock_parameters(item,request.POST.get('rows',''),request.POST.get('only_empty','1'))})
+        except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     if request.method == 'POST' and request.POST.get('action') in ('preview_month_grid','save_month_grid','preview_power_grid','save_power_grid'):
         try:
             if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):

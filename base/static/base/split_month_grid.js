@@ -42,6 +42,7 @@
             statusKey:element.dataset.distributionStatus, error:element.querySelector('[data-row-error]').textContent};
         row.params = Array.from(element.querySelectorAll('[data-power-param]'));
         row.original.params = row.params.map(input => input.value);
+        row.stockToken='';row.original.stockSource=element.querySelector('[data-power-stock-source]')?.textContent||'';
         return row;
     });
     function validate(row) {
@@ -81,7 +82,7 @@
         row.valid = !error;
         row.element.querySelector('[data-row-sum]').textContent = result.sum === null ? '—' : format(result.sum, ',') + (row.unit.value === 'percent' ? '%' : '');
         row.element.querySelector('[data-row-unit]').textContent = row.unit.value === 'percent' ? 'Доли, %' : 'Компл.';
-        if (row.busy) { badge.textContent = 'Загрузка факта…'; badge.dataset.status = 'draft'; }
+        if (row.busy) { badge.textContent = row.stockBusy?'Загрузка DDP стока…':'Загрузка факта…'; badge.dataset.status = 'draft'; }
         else if (row.dirty) {
             badge.textContent = error ? 'Не сохранено · ошибка' : 'Не сохранено';
             badge.dataset.status = error ? 'invalid' : 'draft';
@@ -95,6 +96,7 @@
         if(modeSelect){modeSelect.value=row.mode;modeSelect.disabled=!draft||row.busy||submitting;}
         const recalculate=row.element.querySelector('[data-row-recalculate]');
         if(recalculate){recalculate.hidden=row.mode!=='fact';recalculate.disabled=!draft||row.busy||submitting;}
+        const stockButton=row.element.querySelector('[data-power-stock-row]');if(stockButton)stockButton.disabled=!draft||row.busy||submitting||bulkBusy;
         badge.title=badge.textContent;
         const info=row.element.querySelector('[data-row-info]');
         if(info && !row.busy && (row.requestError || row.dirty&&!row.valid))info.open=true;
@@ -169,6 +171,35 @@
             if (id === row.requestId) { row.busy = false; refresh(row); toolbar(); }
         }
     }
+    function powerParameters(row){
+        return Object.fromEntries([...row.element.querySelectorAll('[data-power-config]')].map(cell=>[cell.dataset.powerConfig,
+          Object.fromEntries([...cell.querySelectorAll('[data-power-param]')].map(input=>{
+            const field=input.dataset.powerParam;
+            return [field,['factor','cost'].includes(field)?format(parse(input.value,field==='cost'?'percent':'quantity'),'.'):input.value];
+          }))]));
+    }
+    async function stockParameters(selected){
+        if(!draft||!powers||submitting||bulkBusy||autoPending||rows.some(row=>row.busy)||!selected.length)return;
+        let payload;
+        try{payload=selected.map(row=>({gid:row.element.dataset.gid,parameters:powerParameters(row)}));}
+        catch(error){message.textContent=error.message;return;}
+        bulkBusy=true;selected.forEach(row=>{row.busy=true;row.stockBusy=true;row.requestError='';refresh(row);});toolbar();
+        const progress=window.SplitProgress?.start('DDP мощностей из остатков');
+        try{
+            const data=await request({action:'preview_power_stock_parameters',rows:JSON.stringify(payload),only_empty:form.querySelector('[data-power-stock-fill]').value});
+            selected.forEach(row=>{
+                const result=data.rows.find(item=>item.gid===row.element.dataset.gid);
+                if(!result)throw Error('Нет результата для группы.');
+                row.params.forEach(input=>{const key=input.closest('[data-power-config]').dataset.powerConfig;const value=result.parameters[key][input.dataset.powerParam];input.value=value===null?'':String(value);});
+                row.stockToken=result.token;row.dirty=true;
+                row.element.querySelector('[data-power-stock-source]').textContent=[result.source.label,...result.source.issues,'Не сохранено'].join(' · ');
+            });
+            progress?.finish('Параметры получены. Проверьте и сохраните изменения.');
+        }catch(error){selected.forEach(row=>row.requestError=error.message);progress?.fail(error.message);}
+        finally{bulkBusy=false;selected.forEach(row=>{row.busy=false;row.stockBusy=false;refresh(row);});toolbar();}
+    }
+    form.querySelector('[data-power-stock-all]')?.addEventListener('click',()=>stockParameters(form.querySelector('[data-grid-scope]').value==='selected'?chosen():rows.filter(visible)));
+    rows.forEach(row=>row.element.querySelector('[data-power-stock-row]')?.addEventListener('click',()=>stockParameters([row])));
     function visible(row) { return !row.element.hidden && !row.element.hasAttribute('data-reference-excluded') && !row.element.hasAttribute('data-view-excluded'); }
     function chosen() { return rows.filter(row => visible(row) && row.element.querySelector('[data-grid-select]')?.checked); }
     function bulkToolbar(busy) {
@@ -177,6 +208,7 @@
         count.textContent = 'Выбрано строк: ' + chosen().length;
         const selection=form.querySelector('[data-grid-selection-toolbar]');if(selection)selection.hidden=!chosen().length;
         form.querySelectorAll('[data-grid-select], [data-grid-select-all], [data-grid-select-none], [data-grid-bulk-mode]').forEach(control => { control.disabled = !draft || busy || submitting; });
+        const stockAll=form.querySelector('[data-power-stock-all]');if(stockAll)stockAll.disabled=!draft||busy||submitting||!rows.some(visible);
         form.querySelector('[data-grid-bulk-apply]').disabled = !draft || busy || submitting || !rows.some(visible);
     }
     form.querySelector('[data-grid-select-all]')?.addEventListener('click', () => {
@@ -280,7 +312,7 @@
         if (!changed.length || changed.some(row => !canSaveRow(row))) { toolbar(); return; }
         const payload = changed.map(function (row) {
             const item = {gid:row.element.dataset.gid,cid:row.element.dataset.cid,mode:row.mode,unit:row.unit.value,token:row.token,
-                values:Object.fromEntries(row.inputs.map(input => [input.dataset.month,format(parse(input.value,row.unit.value),'.')]))};
+                stock_token:row.stockToken,values:Object.fromEntries(row.inputs.map(input => [input.dataset.month,format(parse(input.value,row.unit.value),'.')]))};
             if (powers) item.parameters = Object.fromEntries(Array.from(row.element.querySelectorAll('[data-power-config]'), function (cell) {
                 return [cell.dataset.powerConfig,Object.fromEntries(Array.from(cell.querySelectorAll('[data-power-param]'), function (input) {
                     let value = input.value;
@@ -314,7 +346,8 @@
         rows.forEach(function (row) {
             if (row.controller) row.controller.abort();
             row.progress?.finish('Операция отменена.');
-            row.requestId++; row.busy = false; row.dirty = false; row.requestError = ''; row.token = '';
+            row.requestId++; row.busy = false; row.dirty = false; row.requestError = ''; row.token = '';row.stockToken='';
+            const source=row.element.querySelector('[data-power-stock-source]');if(source)source.textContent=row.original.stockSource;
             row.mode = row.original.mode; row.unit.value = row.original.unit;
             row.inputs.forEach((input,index) => { input.value = row.original.values[index]; });
             row.params.forEach((input,index) => { input.value = row.original.params[index]; });
