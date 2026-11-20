@@ -125,11 +125,14 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
-    if request.method=='POST' and request.POST.get('action') in ('preview_forecast_history','apply_forecast_history','calculate_save_forecast_history'):
+    if request.method=='POST' and request.POST.get('action') in ('preview_forecast_history','apply_forecast_history','calculate_save_forecast_history','forecast_plan_versions'):
         try:
             if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
                 raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
             from .split_forecast_history import preview as preview_history,apply as apply_history
+            if request.POST['action']=='forecast_plan_versions':
+                from .split_forecast_plan import versions
+                return JsonResponse({'ok':True,'versions':versions(item)})
             if request.POST['action']=='calculate_save_forecast_history':
                 import json
                 result=preview_history(item,request.POST)

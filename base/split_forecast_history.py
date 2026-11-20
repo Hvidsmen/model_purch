@@ -83,6 +83,10 @@ def has_forecast(scenario,group):
 
 @precise
 def preview(scenario,post):
+    if post.get('method')=='plan_execution':
+        from .split_forecast_plan import preview as plan_preview
+        return plan_preview(scenario,post)
+    if post.get('method','history')!='history':raise ValidationError('Выберите метод прогноза.')
     try:targets=json.loads(post.get('targets','[]'));year=int(post.get('year',''))
     except (ValueError,TypeError):raise ValidationError('Выберите группы и год факта.')
     if not isinstance(targets,list) or not targets or any(not isinstance(gid,str) or gid not in scenario.state['groups'] for gid in targets) or len(set(targets))!=len(targets):raise ValidationError('Выберите группы текущего сценария.')
