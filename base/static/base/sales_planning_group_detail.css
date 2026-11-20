@@ -30,3 +30,6 @@
 .group-link-dialog footer{display:flex;gap:10px;justify-content:flex-end;margin-top:14px}
 .planning-group-card [hidden]{display:none!important}
 @media(max-width:600px){.group-link-dialog{padding:12px}.group-link-filters{grid-template-columns:1fr 1fr}.group-link-filters label:first-child{grid-column:1/-1}.group-card-save{align-items:flex-start;flex-direction:column}}
+#group-link-calculation-help .admin-table{width:100%;min-width:760px;table-layout:fixed}
+#group-link-calculation-help .admin-table th,#group-link-calculation-help .admin-table td{white-space:normal;vertical-align:top;overflow-wrap:anywhere;line-height:1.5}
+#group-link-calculation-help h3{font-size:16px;margin:18px 0 8px}#group-link-calculation-help p,#group-link-calculation-help li{line-height:1.6}#group-link-calculation-help li{margin:6px 0}
