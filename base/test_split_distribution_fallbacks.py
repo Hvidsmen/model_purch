@@ -32,6 +32,8 @@ class DistributionFallbackTests(TestCase):
         with patch('base.split_distribution_history.load_basis',return_value=self.basis()) as source:
             values,basis = resolve_proposal(self.scenario,self.group_state,'Розница','months')
         self.assertEqual(basis['rule_key'],'planning_group_all_channels')
+        self.assertTrue(basis['channel_fallback'])
+        self.assertIn('сезонность по компании',basis['rule_detail'])
         self.assertEqual(sum(map(Decimal,values.values())),100)
         source.assert_called_once()
 
@@ -122,3 +124,60 @@ class DistributionFallbackTests(TestCase):
             load_basis(self.scenario,self.group_state,refresh=True,scope='product_group')
             self.assertNotIn('PlanningGroupOZPErp',cursor.execute.call_args.args[0])
             self.assertNotIn('p.BrandName',cursor.execute.call_args.args[0])
+
+    def test_zero_plan_preview_falls_back_to_company_and_saved_source_records_it(self):
+        import json
+        cid=str(self.channels[1].pk)
+        before=deepcopy(self.scenario.state['groups'][self.gid]['channels'])
+        with patch('base.split_distribution_history.load_basis',return_value=self.basis()) as source:
+            response=self.client.post(self.url,{'action':'preview_month_grid','revision':self.scenario.revision,'group':self.gid,'channel':cid})
+        self.assertEqual(response.status_code,200,response.content)
+        result=response.json();self.assertTrue(result['basis']['channel_fallback']);source.assert_called_once()
+        self.assertEqual(sum(map(Decimal,result['values'].values())),100)
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state['groups'][self.gid]['channels'],before)
+        response=self.client.post(self.url,{'action':'save_month_grid','revision':self.scenario.revision,'grid_payload':json.dumps([{'gid':self.gid,'cid':cid,'mode':'fact','unit':'percent','values':result['values'],'token':result['token']}])})
+        self.assertEqual(response.status_code,200,response.content)
+        self.scenario.refresh_from_db();group=self.scenario.state['groups'][self.gid]
+        self.assertEqual(group['channels'][cid]['input'],'0')
+        self.assertTrue(group['distribution_sources']['months:'+cid]['channel_fallback'])
+        self.assertEqual(group['channels'][str(self.channels[0].pk)],before[str(self.channels[0].pk)])
+
+    def test_empty_zero_plan_starts_history_lookup_but_explicit_manual_does_not(self):
+        response=self.client.get(self.url,{'tab':'distribution'})
+        self.assertTrue(all(row['auto_fact'] for row in response.context['distribution_overview']['rows']))
+        group=self.scenario.state['groups'][self.gid]
+        group['channels'][self.cid]['distribution_mode']='manual'
+        self.scenario.save(update_fields=['state'])
+        response=self.client.get(self.url,{'tab':'distribution'})
+        row=next(row for row in response.context['distribution_overview']['rows'] if row['cid']==self.cid)
+        self.assertFalse(row['auto_fact']);self.assertEqual(row['mode'],'manual')
+
+
+import os,importlib.util
+from unittest import skipUnless
+from django.contrib.staticfiles.testing import StaticLiveServerTestCase
+
+@skipUnless(os.environ.get('RUN_BROWSER_TESTS')=='1' and importlib.util.find_spec('playwright'),'Requires Chromium')
+class CompanySeasonalityBrowserTests(StaticLiveServerTestCase):
+    def setUp(self):test_split_distribution_history.DistributionHistoryTests.setUp(self)
+    def test_empty_zero_plan_gets_company_seasonality_and_saves(self):
+        from playwright.sync_api import sync_playwright,expect
+        basis=test_split_distribution_history.DistributionHistoryTests.basis(self)
+        cid=str(self.channels[1].pk)
+        with patch('base.split_distribution_history.load_basis',return_value=basis),sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1700,'height':1100})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=distribution')
+                row=page.locator('[data-grid-row][data-cid="'+cid+'"]')
+                expect(row.locator('[data-row-rule]')).to_contain_text('сезонность по компании')
+                expect(row.locator('[data-month="2027-01"]')).to_have_value('50,000000')
+                with page.expect_navigation():page.locator('[data-grid-save]').click()
+                expect(page.locator('[data-grid-row][data-cid="'+cid+'"] [data-row-rule]')).to_contain_text('сезонность по компании')
+                self.assertEqual(errors,[])
+            finally:context.close();browser.close()
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.state['groups'][self.gid]['channels'][cid]['input'],'0')
+        self.assertTrue(self.scenario.state['groups'][self.gid]['distribution_sources']['months:'+cid]['channel_fallback'])
