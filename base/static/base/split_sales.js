@@ -68,7 +68,7 @@
  }
  document.addEventListener('DOMContentLoaded',()=>{
   const target=document.querySelector('[data-sales-view-target]'),controls=document.querySelector('[data-table-view-controls]');if(target&&controls)target.append(controls);
-  const brand=document.querySelector('[data-sales-brand]');brand?.addEventListener('change',()=>{const link=document.createElement('a');link.href=brand.value;link.hidden=true;document.body.append(link);link.click();link.remove();});
+
   document.querySelector('[data-sales-history]')?.addEventListener('submit',event=>{
    if(document.querySelector('.split-unsaved-dock:not([hidden])')){event.preventDefault();window.SplitProgress?.start('Загрузка факта').fail('Сначала сохраните изменения плана.');}
    else window.SplitProgress?.start('Загрузка исторического факта');
