@@ -2,12 +2,12 @@
  const workspace=document.querySelector('.split-workspace');if(!workspace)return;
  const channelFilter=document.querySelector('[data-sales-channel-filter]');
  if(channelFilter){
-  const choices=[...channelFilter.querySelectorAll('[data-sales-channel-choice]')],cells=[...workspace.querySelectorAll('[data-sales-channel],[data-plan-channel]')];
+  const choices=[...channelFilter.querySelectorAll('[data-sales-channel-choice]')];
   const storage='split-sales-channels:'+location.pathname,known=new Set(choices.map(input=>input.dataset.salesChannelChoice));
   try{const saved=JSON.parse(sessionStorage.getItem(storage)||'null');if(saved&&Array.isArray(saved.selected)&&Array.isArray(saved.known)){choices.forEach(input=>{input.checked=!saved.known.includes(input.dataset.salesChannelChoice)||saved.selected.includes(input.dataset.salesChannelChoice);});}}catch{}
   function applyChannels(save=false){
    const selected=new Set(choices.filter(input=>input.checked).map(input=>input.dataset.salesChannelChoice));
-   cells.forEach(cell=>{const channel=cell.dataset.salesChannel||cell.dataset.planChannel;cell.toggleAttribute('data-sales-channel-filtered',known.has(channel)&&!selected.has(channel));});
+   workspace.querySelectorAll('[data-sales-channel],[data-plan-channel]').forEach(cell=>{const channel=cell.dataset.salesChannel||cell.dataset.planChannel;cell.toggleAttribute('data-sales-channel-filtered',known.has(channel)&&!selected.has(channel));});
    const caption=channelFilter.querySelector('[data-sales-channel-caption]');caption.textContent=selected.size===choices.length?'Все':selected.size?'Выбрано: '+selected.size:'Не выбраны';
    if(save){try{sessionStorage.setItem(storage,JSON.stringify({known:[...known],selected:[...selected]}));}catch{}}
    window.dispatchEvent(new Event('resize'));

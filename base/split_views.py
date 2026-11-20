@@ -372,6 +372,8 @@ def scenario(request, pk):
     all_plan_inventory = inventory_presentation(stock_overview(item, data)) if tab == 'plan' and display_item is not item else plan_inventory
     from .split_plan_hierarchy import presentation as hierarchy_presentation
     plan_hierarchy = hierarchy_presentation(display_item, plan_detail, display_data, historical, plan_inventory) if tab == 'plan' else []
+    from .split_plan_months import report as plan_months_report
+    plan_months=plan_months_report(item,list(display_item.state['groups']),plan_hierarchy) if tab=='plan' and sales_view=='groups' else None
     plan_lines = {}
     for line in data['lines']:
         plan_lines.setdefault(line['gid'], {})[line['cid']] = line
@@ -473,7 +475,7 @@ def scenario(request, pk):
         'history_total_colspan': 5 + (1 if historical['latest_year'] else 0),
         'matrix_colspan': 11 + len(item.state['channels']) + ((len(item.state['channels'])+1) if historical['latest_year'] else 0),
         'plan_inventory': plan_inventory,
-        'group_card_urls': group_card_urls, 'plan_hierarchy': plan_hierarchy, 'reference_filters': reference_filters,
+        'plan_months':plan_months,'group_card_urls': group_card_urls, 'plan_hierarchy': plan_hierarchy, 'reference_filters': reference_filters,
         'error': error, 'preview': preview, 'forecast_preview': forecast, 'post': request.POST,
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'stock_overview': inventory if tab == 'stock' else None,
