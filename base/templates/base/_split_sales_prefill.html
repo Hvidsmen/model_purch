@@ -4,12 +4,12 @@
 <h2>Заполнить план</h2>
 <label>Источник <select data-prefill-method><option value="history_forecast">Факт + прогноз предыдущего года</option><option value="erp">План ERP</option></select></label>
 <label>Год источника <input type="number" min="2000" max="9998" data-prefill-year></label>
-<label data-prefill-version-label hidden>Версия ERP <select data-prefill-version><option value="">Выберите версию</option></select><button type="button" data-prefill-versions>Обновить версии</button></label>
+<label data-prefill-version-label hidden>Версия ERP <select data-prefill-version><option value="">Выберите версию</option></select><button type="button" class="admin-button secondary" data-prefill-versions>Обновить версии</button></label>
 <p data-prefill-help>Для полного календарного плана: факт с 1 января прошлого года по дату стока + прогноз шага 4 до конца года. Прогноз распределяется по фактическим комплектам каналов. Наценка = фактическая выручка / себестоимость.</p>
 <div style="display:flex;gap:12px;flex-wrap:wrap"><label>Коэффициент количества × <input type="number" min="0" max="1000" step="0.000001" value="1" data-prefill-quantity></label><label>Коэффициент наценки × <input type="number" min="0.000001" max="1000" step="0.000001" value="1" data-prefill-markup></label><label>Заполнение <select data-prefill-fill><option value="append">Дозаписать нули и пустые</option><option value="replace">Перезаписать</option></select></label></div>
 <p>Например: 1,10 увеличит количество или коэффициент наценки на 10%. Объём задаётся на плановый период; в режиме годовой цели к вводу прибавляется сохранённый состоявшийся факт. Закреплённые поля сохраняются. DDP, закупки, доли месяцев и мощностей не заменяются; месячные количества масштабируются по сохранённым пропорциям.</p>
 <p>Каналы: {% for cid,ch in state.channels.items %}<label><input type="checkbox" data-prefill-channel value="{{ cid }}" checked> {{ ch.name }}</label> {% endfor %}</p>
-<p>Группы выбранных брендов: <button type="button" data-prefill-all>Выбрать все</button> <button type="button" data-prefill-none>Снять выбор</button></p>
+<div style="display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin:16px 0 12px"><span style="margin-right:auto">Группы выбранных брендов</span><button type="button" class="admin-button secondary" data-prefill-all>Выбрать все</button> <button type="button" class="admin-button secondary" data-prefill-none>Снять выбор</button></div>
 <div data-prefill-groups style="max-height:190px;overflow:auto;display:grid;gap:8px"></div>
 <p role="status" data-prefill-status></p><div data-prefill-results></div>
 <button type="button" class="admin-button" data-prefill-save>Рассчитать и сохранить</button> <button type="button" class="admin-button secondary" data-prefill-close>Закрыть</button>
