@@ -198,7 +198,6 @@
         }catch(error){selected.forEach(row=>row.requestError=error.message);progress?.fail(error.message);}
         finally{bulkBusy=false;selected.forEach(row=>{row.busy=false;row.stockBusy=false;refresh(row);});toolbar();}
     }
-    form.querySelector('[data-power-stock-all]')?.addEventListener('click',()=>stockParameters(form.querySelector('[data-grid-scope]').value==='selected'?chosen():rows.filter(visible)));
     rows.forEach(row=>row.element.querySelector('[data-power-stock-row]')?.addEventListener('click',()=>stockParameters([row])));
     function visible(row) { return !row.element.hidden && !row.element.hasAttribute('data-reference-excluded') && !row.element.hasAttribute('data-view-excluded'); }
     function chosen() { return rows.filter(row => visible(row) && row.element.querySelector('[data-grid-select]')?.checked); }
@@ -208,7 +207,6 @@
         count.textContent = 'Выбрано строк: ' + chosen().length;
         const selection=form.querySelector('[data-grid-selection-toolbar]');if(selection)selection.hidden=!chosen().length;
         form.querySelectorAll('[data-grid-select], [data-grid-select-all], [data-grid-select-none], [data-grid-bulk-mode]').forEach(control => { control.disabled = !draft || busy || submitting; });
-        const stockAll=form.querySelector('[data-power-stock-all]');if(stockAll)stockAll.disabled=!draft||busy||submitting||!rows.some(visible);
         form.querySelector('[data-grid-bulk-apply]').disabled = !draft || busy || submitting || !rows.some(visible);
     }
     form.querySelector('[data-grid-select-all]')?.addEventListener('click', () => {
@@ -220,11 +218,26 @@
     form.querySelectorAll('[data-grid-select]').forEach(control => control.addEventListener('change',()=>{const scope=form.querySelector('[data-grid-scope]');if(scope)scope.value=chosen().length?'selected':'all';if(chosen().length)form.querySelector('.split-distribution-bulk').open=true;toolbar();}));
     document.addEventListener('split-reference-filter-change', toolbar);
     document.addEventListener('split-table-visibility-change', toolbar);
+    const bulkMode=form.querySelector('[data-grid-bulk-mode]'),fillHelp=form.querySelector('[data-grid-fill-help]');
+    const originalFillHelp=fillHelp?.textContent||'';
+    function syncFillMethod(){
+        const stock=powers&&bulkMode?.value==='stock_ddp';
+        const options=form.querySelector('[data-power-stock-options]');if(options)options.hidden=!stock;
+        const empty=form.querySelector('[data-grid-share-empty]');if(empty)empty.hidden=stock;
+        if(fillHelp)fillHelp.textContent=stock?'Модели и стоимость берутся из DDP остатков на дату стока. Доли мощностей сохраняются. Область — показанные или выбранные строки; режим стоимости задаётся отдельно. Проверьте результат и сохраните черновик.':originalFillHelp;
+    }
+    bulkMode?.addEventListener('change',syncFillMethod);syncFillMethod();
     form.querySelector('[data-grid-bulk-apply]')?.addEventListener('click', async () => {
         if (!draft || submitting || bulkBusy || autoPending || rows.some(row => row.busy)) return;
         const scope=form.querySelector('[data-grid-scope]')?.value||'selected';
+        const mode=form.querySelector('[data-grid-bulk-mode]').value;
+        if(powers&&mode==='stock_ddp'){
+            const targets=scope==='selected'?chosen():rows.filter(visible);
+            if(!targets.length){form.querySelector('[data-grid-bulk-result]').textContent='Выберите строки для заполнения DDP из стока.';return;}
+            await stockParameters(targets);return;
+        }
         const onlyEmpty=form.querySelector('[data-grid-only-empty]')?.checked;
-        const selected=(scope==='selected'?chosen():rows.filter(row=>visible(row))).filter(row=>!onlyEmpty||row.inputs.every(input=>!input.value.trim())), mode = form.querySelector('[data-grid-bulk-mode]').value;
+        const selected=(scope==='selected'?chosen():rows.filter(row=>visible(row))).filter(row=>!onlyEmpty||row.inputs.every(input=>!input.value.trim()));
         if (!selected.length){form.querySelector('[data-grid-bulk-result]').textContent='Нет подходящих строк: заполненные и частичные значения сохранены. Для их замены снимите «Только незаполненные». Выбор не переносится на другие страницы.';return;}
         const progress=window.SplitProgress?.start('Массовое распределение',selected.length);
         let completed=0;
