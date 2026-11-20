@@ -2,19 +2,20 @@
 <button type="button" class="admin-button secondary" data-split-metric="ddp" data-ddp-open {% if scenario.status != 'draft' %}disabled{% endif %}>Заполнить DDP</button>
 <dialog id="split-ddp-dialog" aria-labelledby="split-ddp-title" style="max-width:1000px;width:90vw;max-height:85vh;overflow:auto">
 <h2 id="split-ddp-title">Заполнить DDP</h2>
-<p>Сначала выберите источник и группы, затем проверьте предложение. Надбавка к себестоимости задаётся отдельно от наценки продаж.</p>
+<p>Выберите источник и группы. Можно сразу рассчитать и сохранить; предпросмотр необязателен. Надбавка к себестоимости задаётся отдельно от наценки продаж.</p>
 <div class="split-filter-row">
-<label>Источник <select data-ddp-source><option value="fact">По факту за год + надбавка</option><option value="purchase"{% if not portal_can_purchases %} disabled{% endif %}>Из сценария модели закупок{% if not portal_can_purchases %} · нужен доступ к закупкам{% endif %}</option></select></label>
+<label>Источник <select data-ddp-source><option value="fact">По факту за год + надбавка</option><option value="stock">Из остатков · склады «Продажа»</option><option value="purchase"{% if not portal_can_purchases %} disabled{% endif %}>Из сценария модели закупок{% if not portal_can_purchases %} · нужен доступ к закупкам{% endif %}</option></select></label>
 <label data-ddp-fact>Год факта <input type="number" min="2000" max="9998" step="1" value="{{ ddp_default_year }}" data-ddp-year></label>
 <label data-ddp-fact>Надбавка, % <input type="number" min="0" max="10000" step="0.000001" value="0" data-ddp-surcharge></label>
 <label data-ddp-purchase hidden>Сценарий закупок <select data-ddp-purchase-id><option value="">Выберите сценарий</option>{% for purchase in ddp_purchase_scenarios %}<option value="{{ purchase.pk }}">{{ purchase.name }} · {{ purchase.date_start_plan|date:'Y' }}</option>{% endfor %}</select></label>
 </div>
+<p data-ddp-stock hidden>Остатки на {{ scenario.stock_date|date:'d.m.Y' }} включительно. Только склады с назначением «Продажа», без хранения и товара в пути. DDP блока = суммарная себестоимость в USD / остаток в штуках. DDP комплекта = внутренний + наружный блок; группа взвешивается по долям мощностей. При неизвестной стоимости или неположительном остатке DDP не подставляется.</p>
 <p data-ddp-purchase hidden>Берётся итоговый DDP с доставкой, пошлинами и прочими расходами. Сопоставьте каждую мощность с группой закупок либо выберите DDP всей группы без детализации. Поиск доступен в поле выбора.</p>
 <p>DDP по мощностям взвешивается по сохранённым долям плана. При применении предложения по мощностям обновятся соотношения их DDP; модели и доля стоимости внутреннего блока заполняются по факту. Для DDP всей группы соотношения сохранятся.</p>
 <div class="split-filter-row"><label><input type="checkbox" checked data-ddp-empty>Только пустые DDP</label><input type="search" placeholder="Поиск группы…" aria-label="Поиск группы для DDP" data-ddp-search><button type="button" class="admin-button secondary" data-ddp-all>Выбрать все показанные</button><button type="button" class="admin-button secondary" data-ddp-none>Снять выбор</button></div>
 <p data-ddp-count role="status"></p><div data-ddp-groups></div>
 <p data-ddp-status role="status" aria-live="polite"></p><progress data-ddp-progress hidden style="width:100%"></progress>
 <div data-ddp-preview></div>
-<div class="split-filter-row"><button type="button" class="admin-button secondary" data-ddp-preview-button>Предпросмотр</button><button type="button" class="admin-button" data-ddp-apply disabled>Вставить в план</button><button type="button" class="admin-button secondary" data-ddp-close>Закрыть</button></div>
-<p>Вставка не сохраняет сценарий. После проверки нажмите «Сохранить изменения» или Ctrl+S. Нет данных — поле останется без изменений.</p>
+<div class="split-filter-row"><button type="button" class="admin-button" data-ddp-save-button>Рассчитать и сохранить</button><button type="button" class="admin-button secondary" data-ddp-preview-button>Предпросмотр</button><button type="button" class="admin-button" data-ddp-apply disabled>Вставить в план</button><button type="button" class="admin-button secondary" data-ddp-close>Закрыть</button></div>
+<p>«Рассчитать и сохранить» сохранит также текущие изменения таблицы продаж. Вставка не сохраняет сценарий. После проверки нажмите «Сохранить изменения» или Ctrl+S. Нет данных — поле останется без изменений.</p>
 </dialog>
