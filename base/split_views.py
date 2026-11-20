@@ -366,7 +366,12 @@ def scenario(request, pk):
     from .split_brand_pages import scope as brand_scope
     display_item,brand_page=brand_scope(item,request.GET) if tab in ('composition','plan','stock','distribution') else (item,None)
     display_data=evaluate(display_item) if display_item is not item else data
-    historical = history_presentation(item if tab == 'plan' else display_item)
+    history_projection_requested=request.GET.get('history_forecast',request.COOKIES.get('split-history-forecast','1'))!='0'
+    history_projection={'active':False,'issues':[],'note':''}
+    if tab=='plan':
+        from .split_history_projection import presentation as projected_history
+        historical,history_projection=projected_history(item,history_projection_requested)
+    else:historical=history_presentation(display_item)
     from .split_matrix_totals import enrich_history, plan_totals, hide_empty_history_years
     hide_empty_history_years(historical)
     historical['latest_year'] = historical['years'][-1] if historical['snapshot'] and historical['years'] else None
@@ -478,14 +483,14 @@ def scenario(request, pk):
     from model_purch.models import ScenarioModel
     from django.utils import timezone
     from zoneinfo import ZoneInfo
-    return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab in ('plan','stock') and can_access(request.user,'purchases') else [],
+    response=render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab in ('plan','stock') and can_access(request.user,'purchases') else [],
         'stock_workspace':stock_workspace,'stock_all_workspace':stock_all_workspace,'stock_step':stock_step,'stock_workspace_data':stock_workspace_data,'stock_filters':stock_filters,
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
         'sales_view':sales_view,'sales_summary':sales_summary,'composition_rows':composition_rows, 'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
         'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
-        'history': historical,
+        'history': historical,'history_projection':history_projection,'history_projection_requested':history_projection_requested,
         'history_total': history_total, 'matrix_totals': matrix_totals, 'plan_lines': plan_lines, 'plan_detail': plan_detail,
         'history_by_group': {row['gid']: row for row in historical['groups']},
         'plan_channel_colspan': 1,
@@ -510,7 +515,6 @@ def scenario(request, pk):
         'brands': sorted({brand for group in item.state['groups'].values() for brand in group['ref']['brand'] if brand}),
         'forecast_sources':scenarios_for(request.user,SplitScenario.objects.filter(status='approved',start__lt=item.start)).order_by('-start'),
         'versions': versions, 'comparison': comparison, 'events': item.events.select_related('actor').order_by('-at')[:100]})
-
-
-
-
+    if request.method=='GET' and request.GET.get('history_forecast') in ('0','1'):
+        response.set_cookie('split-history-forecast',request.GET['history_forecast'],max_age=31536000,path='/sales-planning/',samesite='Lax')
+    return response

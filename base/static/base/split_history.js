@@ -1,4 +1,10 @@
 (function () {
+    document.addEventListener('change',function(event){
+        if(!event.target.matches('[data-history-forecast-choice]'))return;
+        const desired=event.target.checked;event.target.checked=event.target.defaultChecked;
+        const url=new URL(location.href);url.searchParams.set('history_forecast',desired?'1':'0');
+        const link=document.createElement('a');link.href=url.href;link.hidden=true;document.body.append(link);link.click();link.remove();
+    });
     function syncHistory(table) {
         const workspace = table.closest('.split-workspace');
         const selected = new Set(Array.from(workspace.querySelectorAll('[data-history-year-choice]:checked'), input => input.dataset.historyYearChoice));

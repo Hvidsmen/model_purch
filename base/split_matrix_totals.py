@@ -21,6 +21,7 @@ def hide_empty_history_years(history):
                if any(cell.get(field) not in (None, 0)
                       for cells in [year['annual'], *(month['cells'] for month in year['months'])]
                       for cell in cells for field in ('qty', 'revenue', 'cost'))}
+    if history.get('projection_year') is not None:visible.add(history['projection_year'])
     history['years'] = [year for year in history['years'] if year in visible]
     for group in history['groups']:
         group['years'] = [year for year in group['years'] if year['year'] in visible]
