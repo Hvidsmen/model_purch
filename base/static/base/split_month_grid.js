@@ -96,7 +96,6 @@
         if(modeSelect){modeSelect.value=row.mode;modeSelect.disabled=!draft||row.busy||submitting;}
         const recalculate=row.element.querySelector('[data-row-recalculate]');
         if(recalculate){recalculate.hidden=row.mode!=='fact';recalculate.disabled=!draft||row.busy||submitting;}
-        const stockButton=row.element.querySelector('[data-power-stock-row]');if(stockButton)stockButton.disabled=!draft||row.busy||submitting||bulkBusy;
         badge.title=badge.textContent;
         const info=row.element.querySelector('[data-row-info]');
         if(info && !row.busy && (row.requestError || row.dirty&&!row.valid))info.open=true;
@@ -198,7 +197,6 @@
         }catch(error){selected.forEach(row=>row.requestError=error.message);progress?.fail(error.message);}
         finally{bulkBusy=false;selected.forEach(row=>{row.busy=false;row.stockBusy=false;refresh(row);});toolbar();}
     }
-    rows.forEach(row=>row.element.querySelector('[data-power-stock-row]')?.addEventListener('click',()=>stockParameters([row])));
     function visible(row) { return !row.element.hidden && !row.element.hasAttribute('data-reference-excluded') && !row.element.hasAttribute('data-view-excluded'); }
     function chosen() { return rows.filter(row => visible(row) && row.element.querySelector('[data-grid-select]')?.checked); }
     function bulkToolbar(busy) {
