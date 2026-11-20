@@ -148,7 +148,7 @@ class PowerDefaultsBrowserTests(StaticLiveServerTestCase):
                 expect(first.locator('[data-power-param="outdoor"]')).to_have_value(str(self.models[1].pk))
                 expect(second.locator('[data-power-param="factor"]')).to_have_value('2,000000')
                 expect(second.locator('[data-power-param="cost"]')).to_have_value('20,000000')
-                page.get_by_role('button', name='Сохранить изменения', exact=True).click()
+                page.locator('[data-grid-save]').click()
                 expect(first.locator('[data-power-param="cost"]')).to_have_value('30')
             finally:
                 context.close()

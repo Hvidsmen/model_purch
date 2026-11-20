@@ -100,6 +100,15 @@ def apply_grid(scenario, raw, *, allow_incomplete=False):
                 if model is not None and not any(item['id'] == model and item['kind'] == kind for item in power['models']):
                     raise ValidationError('Выбранная модель не входит в снимок этой мощности.')
                 power[kind] = model
+        if row.get('stock_token'):
+            from .split_power_stock import apply_source
+            apply_source(scenario,group,gid,row['stock_token'])
+        elif group.get('power_cost_source') and parameters:
+            changed = any(any(number(power.get(field),optional=True)!=number(original['powers'][key].get(field),optional=True)
+                              for field in ('factor','indoor_cost_percent')) or
+                          any((power.get(kind) or None)!=(original['powers'][key].get(kind) or None) for kind in ('indoor','outdoor'))
+                          for key,power in group['powers'].items() if power['active'])
+            if changed:group['power_cost_source'] = {**group['power_cost_source'],'adjusted':True}
         group['power_distribution_mode'] = mode
         sources = group.setdefault('distribution_sources',{})
         if source: sources['powers'] = source
