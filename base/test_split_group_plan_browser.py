@@ -175,7 +175,7 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
                 expect(toggle).to_have_attribute('aria-expanded', 'true')
                 expect(page.locator('.split-stock-group-row [data-stock-plan-channel]').nth(0)).to_have_value('10')
                 expect(page.locator('.split-stock-group-row [data-stock-plan-channel]').nth(1)).to_have_value('20')
-                expect(page.locator('tfoot [data-stock-channel-column]')).to_have_text(['10', '20'])
+                expect(page.locator('[data-stock-summary] [data-stock-channel-column]')).to_have_text(['10', '20'])
                 page.get_by_role('button', name='Раскрыть группу G', exact=True).click()
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]')).to_have_text(['10', '20'])
                 expect(page.locator('.split-stock-power-row [data-stock-channel-column]').first).to_be_visible()
