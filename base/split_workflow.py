@@ -145,7 +145,7 @@ def changed_state(scenario, post, *, allow_empty=False):
     member_action, _, target = (action or '').partition(':')
     if member_action == 'remove_group':
         from .split_stock_protection import validate_removal
-        validate_removal(scenario.state, [target])
+        validate_removal(scenario, [target], post.get('confirmed_stock_removals','[]'))
     if member_action == 'group_plan':
         from .split_group_plan import distribute
         inputs = post.copy()
@@ -172,7 +172,7 @@ def changed_state(scenario, post, *, allow_empty=False):
             inventory['added'] = len(added)
             draft.state['inventory_selection'] = inventory
             composition = QueryDict('', mutable=True)
-            composition.update(action='composition', confirm='on')
+            composition.update(action='composition', confirm='on', confirmed_stock_removals=post.get('confirmed_stock_removals','[]'))
             composition.setlist('groups', gids)
             composition.setlist('channels', cids)
             return changed_state(draft, composition, allow_empty=True)
@@ -188,7 +188,7 @@ def changed_state(scenario, post, *, allow_empty=False):
         elif target not in values:
             values.append(target)
         composition = QueryDict('', mutable=True)
-        composition.update(action='composition', confirm='on')
+        composition.update(action='composition', confirm='on', confirmed_stock_removals=post.get('confirmed_stock_removals','[]'))
         composition.setlist('groups', gids)
         composition.setlist('channels', cids)
         return changed_state(draft, composition, allow_empty=True)
@@ -197,7 +197,7 @@ def changed_state(scenario, post, *, allow_empty=False):
         removed=set(post.getlist('removed_groups'))
         if not removed <= set(state['groups']):raise ValidationError('Группа уже отсутствует в плане. Обновите страницу.')
         composition=QueryDict('',mutable=True)
-        composition.update(action='composition',confirm='on',volume_mode=post.get('volume_mode',state.get('volume_mode',scenario.entry_mode)))
+        composition.update(action='composition',confirm='on',confirmed_stock_removals=post.get('confirmed_stock_removals','[]'),volume_mode=post.get('volume_mode',state.get('volume_mode',scenario.entry_mode)))
         composition.setlist('groups',sorted((set(state['groups'])-removed)|set(post.getlist('added_groups'))))
         composition.setlist('channels',post.getlist('channels'))
         draft=deepcopy(scenario);draft.state=changed_state(scenario,composition,allow_empty=True)
@@ -321,7 +321,7 @@ def changed_state(scenario, post, *, allow_empty=False):
         if ((not gids or not cids) and not allow_empty) or not gids <= set(allowed_groups) | set(state['groups']) or not cids <= set(allowed_channels) | set(state['channels']):
             raise ValidationError('Выберите допустимые группы и каналы. Состав не может быть пустым.')
         from .split_stock_protection import validate_removal
-        validate_removal(scenario.state, set(state['groups']) - gids)
+        validate_removal(scenario, set(state['groups']) - gids, post.get('confirmed_stock_removals','[]'))
         archived_groups = state.setdefault('archived_groups', {})
         for key in list(state['groups']):
             if key not in gids:
