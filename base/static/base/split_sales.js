@@ -20,6 +20,46 @@
   channelFilter.addEventListener('keydown',event=>{if(event.key==='Escape'){channelFilter.open=false;channelFilter.querySelector('summary').focus();}});
   applyChannels();
  }
+ const checkFilter=document.querySelector('[data-sales-check-filter]');
+ if(checkFilter){
+  const rows=[...document.querySelectorAll('[data-plan-group]')],counts=document.querySelector('[data-sales-check-count]');
+  const parse=input=>input&&input.value.trim()!==''&&Number.isFinite(Number(input.value))?Number(input.value):null;
+  function validate(){
+   const selected=new Set([...document.querySelectorAll('[data-sales-channel-choice]:checked')].map(input=>input.dataset.salesChannelChoice));
+   const totals={ddp:0,quantity:0,zero:0,markup:0,ready:0};let shown=0,scope=0;
+   rows.forEach(row=>{
+    const issues=new Set(),messages=[];
+    const ddp=row.querySelector('input[name^="ddp_"]');
+    if(parse(ddp)===null||parse(ddp)<=0){issues.add('ddp');messages.push('DDP не задан или ≤ 0');}
+    row.querySelectorAll('.split-plan-cell[data-sales-channel]').forEach(cell=>{
+     if(!selected.has(cell.dataset.salesChannel))return;
+     const quantity=cell.querySelector('input[name^="q_"]'),markup=cell.querySelector('input[name^="markup_"]');
+     const q=parse(quantity),m=parse(markup),name=quantity?.getAttribute('aria-label')||'';
+     if(q===null||q<0){issues.add('quantity');messages.push(name+': задайте количество ≥ 0');}
+     else if(q===0){issues.add('zero');messages.push(name+': план равен нулю');}
+     if(q>0&&(m===null||m<=0)){issues.add('markup');messages.push((markup?.getAttribute('aria-label')||'Наценка')+': задайте значение > 0');}
+    });
+    if(!issues.size)issues.add('ready');
+    let note=row.querySelector('[data-sales-row-check]');
+    if(!note){note=document.createElement('small');note.dataset.salesRowCheck='';row.querySelector('.split-matrix-group').append(note);}
+    note.textContent=messages.join(' · ')||'Проверки заполнения: без замечаний';
+    const visible=!row.hasAttribute('data-reference-excluded');
+    if(visible){scope++;issues.forEach(key=>totals[key]++);}
+    const matches=checkFilter.value==='all'||(checkFilter.value==='issues'?!issues.has('ready'):issues.has(checkFilter.value));
+    row.toggleAttribute('data-sales-check-excluded',!matches);
+    document.querySelectorAll('[data-plan-power-group]').forEach(power=>{if(power.dataset.planPowerGroup===row.dataset.planGroup)power.toggleAttribute('data-sales-check-excluded',!matches);});
+    if(visible&&matches)shown++;
+   });
+   counts.textContent='Показано '+shown+' из '+scope+' · DDP: '+totals.ddp+' · Количество: '+totals.quantity+' · Нулевой план: '+totals.zero+' · Наценка: '+totals.markup+' · Без замечаний: '+totals.ready;
+   window.dispatchEvent(new Event('resize'));
+  }
+  checkFilter.addEventListener('change',validate);
+  document.querySelector('#split-plan-inputs')?.addEventListener('input',validate);
+  document.addEventListener('split-reference-filter-change',validate);
+  document.querySelector('[data-sales-channel-filter]')?.addEventListener('change',validate);
+  document.querySelectorAll('[data-sales-channels-all],[data-sales-channels-none]').forEach(button=>button.addEventListener('click',validate));
+  validate();
+ }
  const dialog=document.querySelector('.split-sales-adjust-dialog');
  const revision=()=>document.querySelector('input[name=revision]')?.value||workspace.dataset.revision;
  const csrf=()=>document.querySelector('input[name=csrfmiddlewaretoken]')?.value;

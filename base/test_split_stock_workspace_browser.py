@@ -18,6 +18,40 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_sales_checks_filter_live_values_and_selected_channels(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page()
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=alpha')
+            row=page.locator('[data-plan-group]')
+            page.evaluate("""() => {const row=document.querySelector('[data-plan-group]');
+              row.querySelector('input[name^="ddp_"]').value='100';
+              row.querySelectorAll('input[name^="q_"]').forEach(input=>input.value='10');
+              row.querySelectorAll('input[name^="markup_"]').forEach(input=>input.value='1.5');
+              row.dispatchEvent(new Event('input',{bubbles:true}));} """)
+            filters=page.get_by_label('Фильтр по проверкам',exact=True)
+            filters.select_option('ready');expect(row).to_be_visible()
+            ddp=row.locator('input[type="number"][name^="ddp_"]');ddp.fill('')
+            expect(row).not_to_be_visible()
+            filters.select_option('ddp');expect(row).to_be_visible()
+            ddp.fill('100');expect(row).not_to_be_visible()
+            filters.select_option('all')
+            quantity=row.locator('input[name^="q_"]').first
+            quantity.fill('0');filters.select_option('zero');expect(row).to_be_visible()
+            filters.select_option('quantity');expect(row).not_to_be_visible()
+            filters.select_option('all');quantity.fill('')
+            filters.select_option('quantity');expect(row).to_be_visible()
+            filters.select_option('all');quantity.fill('10')
+            markup=row.locator('input[name^="markup_"]').first;markup.fill('0')
+            filters.select_option('markup');expect(row).to_be_visible()
+            page.locator('[data-sales-channel-filter] > summary').click()
+            page.locator('[data-sales-channel-choice]').first.uncheck()
+            expect(row).not_to_be_visible()
+            filters.select_option('ready');expect(row).to_be_visible()
+            browser.close()
+
     def test_tables_use_document_vertical_scroll_and_keep_horizontal_scroll(self):
         from playwright.sync_api import sync_playwright
         with sync_playwright() as driver:
