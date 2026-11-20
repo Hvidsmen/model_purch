@@ -11,6 +11,30 @@ class PlanPresentationTests(TestCase):
     setUp = fixtures.SplitCycleTests.setUp
     complete = fixtures.SplitCycleTests.complete
 
+    def test_zero_sales_without_prices_do_not_erase_financial_totals(self):
+        from .split_matrix_totals import plan_totals
+        self.complete()
+        group=next(iter(self.scenario.state['groups'].values()))
+        lines=list(group['channels'].values())
+        lines[1].update(input='0',markup=None)
+        data=evaluate(self.scenario)
+        zero=next(row for row in data['lines'] if row['input'] is lines[1])
+        self.assertEqual(zero['revenue'],0)
+        result=plan_totals(data,self.scenario.state)
+        self.assertGreater(result['total']['revenue'],0)
+        self.assertEqual(result['total']['revenue'],data['totals']['revenue'])
+        self.assertEqual(result['total']['markup'],Decimal('1.5'))
+        lines[0]['markup']=None
+        self.assertIsNone(plan_totals(evaluate(self.scenario),self.scenario.state)['total']['revenue'])
+        lines[0]['input']=None
+        self.assertIsNone(plan_totals(evaluate(self.scenario),self.scenario.state)['total']['revenue'])
+        for line in lines:line.update(input='0',markup=None)
+        group['ddp']=None
+        result=plan_totals(evaluate(self.scenario),self.scenario.state)
+        self.assertEqual(result['total']['cost'],0)
+        self.assertEqual(result['total']['revenue'],0)
+        self.assertIsNone(result['total']['markup'])
+
     def test_reference_uses_directory_manufacturer_not_group_name(self):
         self.group.name = 'G [Wrong factory]'
         self.models[0].sales_plan_group = 'RAC'

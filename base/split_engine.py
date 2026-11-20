@@ -108,14 +108,18 @@ def evaluate(scenario):
             prefix = name + ' · ' + state['channels'][cid]['name']
             try:
                 qty = quantity(scenario, line)
+                quantity_valid = True
             except ValidationError as exc:
                 errors.append(prefix + ': ' + ' '.join(exc.messages))
                 quantities_known = False
+                quantity_valid = False
                 qty = ZERO
             group_quantity += qty
             ddp, markup = number(group.get('ddp'), optional=True), number(line.get('markup'), optional=True)
             cost = qty * ddp if ddp is not None else None
             revenue = cost * markup if cost is not None and markup is not None else None
+            if quantity_valid and qty == ZERO:
+                cost = revenue = ZERO
             lines.append({'gid': gid, 'cid': cid, 'group': name, 'channel': state['channels'][cid]['name'],
                           'quantity': qty, 'cost': cost, 'revenue': revenue, 'input': line})
             totals['quantity'] += qty
