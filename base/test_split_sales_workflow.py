@@ -172,3 +172,26 @@ class SalesWorkflowBrowserTests(StaticLiveServerTestCase):
             finally:context.close();browser.close()
         self.scenario.refresh_from_db()
         self.assertEqual(Decimal(self.scenario.state['groups'][self.gid]['channels'][cid]['input']),37)
+
+    def test_brand_and_channel_dropdowns_are_not_clipped_by_toolbar(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1700,'height':1100})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page()
+            try:
+                for tab in ('composition','plan','distribution','stock'):
+                    page.goto(self.live_server_url+self.url+'?tab='+tab)
+                    for selector,choice in [('[data-brand-multiselect]','[data-brand-choice]')]+([('[data-sales-channel-filter]','[data-sales-channel-choice]')] if tab=='plan' else []):
+                        picker=page.locator(selector);summary=picker.locator('summary')
+                        summary.evaluate("node=>node.scrollIntoView({block:'start'})")
+                        summary.click()
+                        checkbox=picker.locator(choice).first;expect(checkbox).to_be_visible()
+                        self.assertTrue(checkbox.evaluate("node=>{const r=node.getBoundingClientRect();return node===document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)}"),tab+' '+selector+' is clipped')
+                        if tab=='plan':
+                            panel=page.locator('.split-sales-toolbar')
+                            self.assertEqual(panel.evaluate('node=>getComputedStyle(node).overflowY'),'visible')
+                            page.screenshot(path='/tmp/split-dropdown-'+('brands' if 'brand' in selector else 'channels')+'.png')
+                        summary.click()
+            finally:context.close();browser.close()
