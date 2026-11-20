@@ -18,6 +18,35 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_enter_does_not_save_but_shortcut_and_save_button_do(self):
+        from playwright.sync_api import sync_playwright,expect
+        from concurrent.futures import ThreadPoolExecutor
+        def saved_percent():
+            scenario=type(self.scenario).objects.get(pk=self.scenario.pk)
+            return next(g for g in scenario.state['groups'].values() if g['ref']['name']=='G').get('target_stock_percent')
+        def read_percent():
+            with ThreadPoolExecutor(max_workers=1) as executor:return executor.submit(saved_percent).result()
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page()
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page.goto(self.live_server_url+self.url+'?tab=stock&stock_step=targets&brand_page=alpha')
+            field=page.get_by_role('spinbutton',name='Целевой процент G',exact=True)
+            field.fill('17')
+            with page.expect_response(lambda r:r.request.method=='POST' and 'preview_stock_workspace' in (r.request.post_data or '')):
+                field.press('Enter')
+            expect(page.locator('[data-stock-save-status]')).to_contain_text('Изменено')
+            self.assertNotEqual(read_percent(),'17')
+            field.press('Control+s')
+            expect(page.locator('[data-stock-save-status]')).to_have_text('Изменения сохранены')
+            self.assertEqual(Decimal(read_percent()),17)
+            field.fill('18')
+            page.locator('[data-stock-save]').focus()
+            page.locator('[data-stock-save]').press('Enter')
+            expect(page.locator('[data-stock-save-status]')).to_have_text('Изменения сохранены')
+            self.assertEqual(Decimal(read_percent()),18)
+            browser.close()
+
     def test_opening_targets_proposal_and_single_save_with_brand_guard(self):
         from playwright.sync_api import sync_playwright,expect
         with sync_playwright() as driver:
