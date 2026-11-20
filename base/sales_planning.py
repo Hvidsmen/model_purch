@@ -69,9 +69,10 @@ def directory(request, kind):
         context = filtered_directory(kind, request.GET)
     except ValidationError as exc:
         return HttpResponseBadRequest(' '.join(exc.messages))
+    context['advanced_filter_count']=sum(bool(item['selected']) for item in context['filters'] if item['name']!='brand')
     context.update(kind=kind, title='Каналы продаж' if kind == 'channels' else 'Номенклатура',
                    error=error, load=SalesPlanningDirectoryLoad.objects.filter(directory=kind).first())
-    return render(request, 'base/sales_planning_channels.html' if kind=='channels' else 'base/sales_planning_directory.html', context)
+    return render(request, 'base/sales_planning_channels.html' if kind=='channels' else 'base/sales_planning_goods.html', context)
 
 
 
