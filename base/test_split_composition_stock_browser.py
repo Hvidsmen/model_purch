@@ -18,7 +18,7 @@ class CompositionStockBrowserTests(StaticLiveServerTestCase):
             page=context.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
             try:
                 page.goto(self.live_server_url+self.url+'?tab=composition&brand_page=_all_')
-                expect(page.locator('[data-composition-opening]').first).to_contain_text('200')
+                expect(page.locator('[data-composition-stock]').first).to_contain_text('200')
                 single=page.locator('[name=removed_groups][value="'+self.gid+'"]')
                 expect(single).to_be_enabled();single.check();single.uncheck()
                 search=page.get_by_role('searchbox',name='Поиск групп в плане',exact=True)

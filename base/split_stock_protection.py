@@ -2,7 +2,7 @@
 import json
 from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_datetime
-from .split_engine import number, ZERO
+from .split_engine import number, ZERO, precise
 
 
 def protected_groups(state):
@@ -24,19 +24,19 @@ def protected_groups(state):
     return protected
 
 
-def opening_stock(scenario, group):
-    from .split_opening import opening_balance
-    opening = opening_balance(scenario, group)
-    return {'quantity':opening['totals']['sets'],
-            'has_stock':any((row.get('opening_'+kind) or ZERO) > ZERO for row in opening['rows'] for kind in ('indoor','outdoor')),
-            'issues':opening['issues']}
+@precise
+def snapshot_stock(group):
+    """Physical sets at the stock snapshot date, before any future movements."""
+    pairs = [(number(power.get('stock_indoor'),optional=True),number(power.get('stock_outdoor'),optional=True))
+             for power in group['powers'].values()]
+    known = bool(pairs) and all(indoor is not None and outdoor is not None for indoor,outdoor in pairs)
+    return {'quantity':sum((min(indoor,outdoor) for indoor,outdoor in pairs),ZERO) if known else None,
+            'has_stock':any(value is not None and value > ZERO for pair in pairs for value in pair)}
 
 
 def removal_groups(scenario, gids=None):
     ids = set(scenario.state['groups']) if gids is None else set(gids)
-    evidence = protected_groups(scenario.state)
-    return {gid:group['ref']['name'] for gid,group in scenario.state['groups'].items() if gid in ids and
-            (gid in evidence or opening_stock(scenario,group)['has_stock'])}
+    return {gid:name for gid,name in protected_groups(scenario.state).items() if gid in ids}
 
 
 def validate_removal(scenario, gids, confirmation='[]'):

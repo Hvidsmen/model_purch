@@ -71,25 +71,47 @@ class StockProtectionTests(TestCase):
         self.assertEqual(self.scenario.state['groups'][self.gid]['powers'],before['powers'])
         self.assertEqual(self.scenario.state['groups'][self.gid]['channels'],before['channels'])
 
-    def test_initial_stock_is_common_to_channels_and_unknown_stays_unknown(self):
+    def test_snapshot_stock_is_common_to_channels_and_unknown_stays_unknown(self):
         from decimal import Decimal
         response=self.client.get(self.url,{'tab':'composition'})
-        self.assertEqual(response.context['composition_rows'][0]['opening_stock']['quantity'],Decimal(100))
+        self.assertEqual(response.context['composition_rows'][0]['stock_snapshot']['quantity'],Decimal(100))
         power=next(iter(self.group['powers'].values()));power['stock_outdoor']=None
         self.scenario.save(update_fields=['state'])
         response=self.client.get(self.url,{'tab':'composition'})
-        self.assertIsNone(response.context['composition_rows'][0]['opening_stock']['quantity'])
-        self.assertContains(response,'Начальный запас не рассчитан; наличие товара подтверждено')
+        self.assertIsNone(response.context['composition_rows'][0]['stock_snapshot']['quantity'])
+        self.assertContains(response,'Остатки на дату среза не заполнены; наличие товара подтверждено')
 
-    def test_future_opening_stock_also_requires_confirmation_and_wrong_ids_do_not_acknowledge(self):
-        from .split_stock_protection import validate_removal
-        self.scenario.stock_date=self.scenario.stock_date.replace(month=11,day=1)
-        self.group.update(forecast_mode='powers')
+    def test_snapshot_stock_ignores_forecast_and_future_receipts(self):
+        from datetime import date
+        from decimal import Decimal
+        self.scenario.stock_date=date(2026,11,6)
+        self.group['forecast_mode']='powers'
+        for power in self.group['powers'].values():
+            power.update(prior_indoor='200',prior_outdoor='200',forecast_before='500',incoming_indoor='900',incoming_outdoor='900')
+        self.scenario.save(update_fields=['state','stock_date'])
+        response=self.client.get(self.url,{'tab':'composition'})
+        self.assertEqual(response.context['composition_rows'][0]['stock_snapshot']['quantity'],Decimal(100))
+        self.assertContains(response,'Сток на<br>06.11.2026')
+        self.assertNotContains(response,'Сток на начало<br>01.01.2027')
+        # Missing forecast must not prevent reading the snapshot stock either.
+        for power in self.group['powers'].values():power['forecast_before']=None
+        self.scenario.save(update_fields=['state'])
+        response=self.client.get(self.url,{'tab':'composition'})
+        self.assertEqual(response.context['composition_rows'][0]['stock_snapshot']['quantity'],Decimal(100))
+
+    def test_future_receipts_without_current_stock_do_not_require_stock_confirmation(self):
+        from .split_stock_protection import validate_removal,snapshot_stock
+        self.group['forecast_mode']='powers'
         for power in self.group['powers'].values():
             power.update(stock_indoor='0',stock_outdoor='0',prior_indoor='10',prior_outdoor='10',forecast_before='0')
-        self.assertNotIn(self.gid,protected_groups(self.scenario.state))
+        self.assertEqual(snapshot_stock(self.group)['quantity'],0)
+        self.assertFalse(snapshot_stock(self.group)['has_stock'])
+        validate_removal(self.scenario,[self.gid])
+
+    def test_wrong_confirmation_ids_cannot_acknowledge_existing_stock(self):
+        from .split_stock_protection import validate_removal
+        import json
         for confirmation in ['[]','["other"]','true','bad']:
             with self.assertRaisesMessage(ValidationError,'Подтвердите исключение'):
                 validate_removal(self.scenario,[self.gid],confirmation)
-        import json
         validate_removal(self.scenario,[self.gid],json.dumps([self.gid]))
