@@ -127,6 +127,16 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
+    if request.method=='POST' and request.POST.get('action') in ('prefill_sales_plan','sales_prefill_versions'):
+        try:
+            if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
+                raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            from .split_sales_prefill import calculate as prefill_sales,versions as sales_versions
+            if request.POST['action']=='sales_prefill_versions':return JsonResponse({'ok':True,'versions':sales_versions(item,request.POST)})
+            state,result=prefill_sales(item,request.POST)
+            if result['count']:persist(item,request.user,request.POST.get('revision'),state,'Предзаполнены продажи и наценки · строк: '+str(result['count']))
+            return JsonResponse({'ok':True,**result})
+        except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     if request.method=='POST' and request.POST.get('action') in ('preview_forecast_history','apply_forecast_history','calculate_save_forecast_history','forecast_plan_versions'):
         try:
             if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
