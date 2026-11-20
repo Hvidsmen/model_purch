@@ -15,7 +15,7 @@ from .coefficient_iteration_calculation import RateBook,plan_rows,at_full_plan,b
 from .sales_plans import number
 from .motivation_exclusions import rules as dimension_rules
 
-SCENARIOS={**{f'actual_q{q}_2026':(2026,f'Москва + ТТ · {roman} квартал 2026 · фактическое выполнение') for q,roman in ((1,'I'),(2,'II'),(3,'III'))},
+SCENARIOS={**{f'actual_q{q}_2026':(2026,f'Москва и ТТ раздельно · {roman} квартал 2026 · фактическое выполнение') for q,roman in ((1,'I'),(2,'II'),(3,'III'))},
            'moscow_q4_2026':(2026,'Москва + ТТ · IV квартал 2026 · 100%'),
            'full_2027':(2027,'Все подразделения · 2027 · 100%'),
            'actual_2025':(2025,'Все подразделения · факт 2025 · новые ставки')}

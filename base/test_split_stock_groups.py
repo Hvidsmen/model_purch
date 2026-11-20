@@ -116,8 +116,8 @@ class StockGroupSelectionTests(TestCase):
         gid, cid = str(self.group.pk), str(self.channels[0].pk)
         other = SalesPlanningGroup.objects.get(name='Transit only')
         url = reverse('split_scenario', args=[self.scenario.pk])
-        response = self.client.get(url)
-        self.assertContains(response, 'value="add_onhand_groups">Добавить группы со стока')
+        response = self.client.get(url, {'tab': 'composition'})
+        self.assertContains(response, 'value="add_onhand_groups"')
         post = {'action': 'add_onhand_groups', 'revision': self.scenario.revision, 'with_lines': '1', 'ddp_' + gid: '100'}
         for key, line in self.scenario.state['groups'][gid]['channels'].items():
             post.update({'q_' + gid + '_' + key: line['input'], 'markup_' + gid + '_' + key: line['markup'], 'fact_' + gid + '_' + key: ''})

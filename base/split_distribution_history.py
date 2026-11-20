@@ -152,9 +152,9 @@ def resolve_proposal(scenario, group, channel_name, section, *, refresh=False):
         candidates.append(('planning_group',False,'planning_group_channel','Группа планирования + канал',group['ref']['name']+' · '+channel_name))
     candidates.append(('planning_group',True,'planning_group_all_channels','Группа планирования · все каналы',group['ref']['name']))
     brands = [str(value).strip() for value in group['ref'].get('brand',[]) if str(value).strip()]
-    if brands:
+    if brands and not getattr(scenario,'_sales_restricted',False):
         candidates.append(('product_brand',True,'product_group_brand','Товарная группа + бренд',PRODUCT_GROUP+' · '+', '.join(brands)+' · все каналы'))
-    candidates.append(('product_group',True,'product_group','Товарная группа',PRODUCT_GROUP+' · все каналы'))
+    if not getattr(scenario,'_sales_restricted',False):candidates.append(('product_group',True,'product_group','Товарная группа',PRODUCT_GROUP+' · все каналы'))
     loaded = {}
     for scope,all_channels,rule,label,detail in candidates:
         try:
@@ -168,6 +168,8 @@ def resolve_proposal(scenario, group, channel_name, section, *, refresh=False):
             return values,chosen
         except NoDistributionBase:
             continue
+    if getattr(scenario,'_sales_restricted',False):
+        raise ValidationError('Нет истории продаж для этой группы и канала или всех каналов группы. Общая база за пределами вашей ответственности не используется. Выберите равномерное распределение или задайте доли вручную.')
     raise ValidationError('Не найдена база распределения по группе и каналу, всем каналам группы, товарной группе с брендом и товарной группе. Задайте доли вручную.')
 
 

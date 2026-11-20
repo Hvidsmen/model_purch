@@ -12,12 +12,12 @@ FIELDS = [('planning_group', 'Группа планирования'), ('sales_p
           ('outdoor_block_type', 'INV / On-Off'), ('manufacturer', 'Производитель / завод')]
 
 
-def filtered_directory(kind, query):
+def filtered_directory(kind, query, *, goods=None):
     search = query.get('q', '').strip()
     status = query.get('status', 'active')
     if len(search) > 200 or status not in ('active', 'inactive', 'all'):
         raise ValidationError('Проверьте строку поиска (до 200 знаков) и статус активности.')
-    base = split_goods(include_inactive=True) if kind == 'goods' else SalesPlanningChannel.objects.all()
+    base = (split_goods(include_inactive=True) if goods is None else goods) if kind == 'goods' else SalesPlanningChannel.objects.all()
     rows = base
     if status != 'all':
         rows = rows.filter(is_active=status == 'active')

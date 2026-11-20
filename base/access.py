@@ -10,6 +10,7 @@ MOTIVATION_VIEWER = 'Смотрящий'
 FINANCIER = 'Финансист'
 ANALYST = 'Аналитик'
 MODELER = 'Моделятор'
+PLANNER = 'Планировщик'
 MOTIVATION_READONLY_ROLES = (MOTIVATION_VIEWER, FINANCIER)
 PERSONAL_ROLES = (POLITICIAN, SALES)
 DEPUTY_DIRECTOR = 'Зам. директора'
@@ -42,14 +43,15 @@ PROJECT_ROLES = {
     'purchases': (ADMIN, LOGISTICIAN, ANALYST),
     'dashboards': (ADMIN, ANALYST),
     'split_monitoring': (ADMIN, ANALYST),
+    'sales_planning': (ADMIN,PLANNER),
 }
-PROJECT_LABELS = {'motivation': 'Мотивация', 'purchases': 'Модель закупок', 'dashboards': 'Дашборды', 'split_monitoring': 'Мониторинг сплитов'}
+PROJECT_LABELS = {'motivation': 'Мотивация', 'purchases': 'Модель закупок', 'dashboards': 'Дашборды', 'split_monitoring': 'Мониторинг сплитов', 'sales_planning':'Модель планирования продаж'}
 
 
 def legacy_project_role(legacy, project):
     # Existing legacy analysts belong to dashboards. Procurement viewing is an
     # explicit new grant, not additional access for all existing analysts.
-    if project=='split_monitoring':return None  # Explicit grants for this separate data application.
+    if project in ('split_monitoring','sales_planning'):return None  # Explicit grants for this separate data application.
     if project=='purchases' and legacy==ANALYST:return None
     return legacy if legacy in PROJECT_ROLES[project] else None
 
@@ -94,8 +96,10 @@ def portal_access(request):
     from django.conf import settings
     motivation_role = role_for(request.user, 'motivation')
     purchases_role = role_for(request.user,'purchases')
-    active_project = 'motivation' if request.path.startswith('/admin_motivation') else 'purchases' if request.path.startswith('/model_purch/') else 'dashboards' if request.path.startswith('/dashboards/') else 'split_monitoring' if request.path.startswith(('/split-monitoring/','/card-api/')) else None
+    active_project = 'sales_planning' if request.path.startswith('/sales-planning/') else 'motivation' if request.path.startswith('/admin_motivation') else 'purchases' if request.path.startswith('/model_purch/') else 'dashboards' if request.path.startswith('/dashboards/') else 'split_monitoring' if request.path.startswith(('/split-monitoring/','/card-api/')) else None
     return {'portal_purchases_readonly': purchases_role==ANALYST, 'portal_can_edit_purchases': purchases_role in (ADMIN,LOGISTICIAN), 'portal_can_administer_dashboards': can_access(request.user, 'dashboards_admin'), 'portal_can_administer_motivation': can_access(request.user, 'motivation_admin'), 'ad_auth_enabled': settings.AD_AUTH_ENABLED, 'ad_short_names': settings.AD_SHORT_NAMES and settings.AD_AUTH_METHOD=='ldaps', 'ad_forest_discovery': settings.AD_AUTH_METHOD == 'windows' and settings.AD_FOREST_DISCOVERY, 'ad_netbios_domain': settings.AD_NETBIOS_DOMAIN, 'ad_upn_suffix': settings.AD_UPN_SUFFIX, 'ad_https_ready': request.is_secure(), 'ad_password_login_ready': request.is_secure() or not settings.AD_REQUIRE_HTTPS, 'windows_auth_enabled': settings.WINDOWS_AUTH_ENABLED, 'portal_is_admin': can_access(request.user, 'admin'),
+            'portal_can_manage_sales_planning':can_access(request.user,'sales_planning_admin'),
+            'portal_can_sales_planning':can_access(request.user,'sales_planning'),
             'portal_can_split_monitoring': can_access(request.user, 'split_monitoring'),
             'portal_can_dashboards': can_access(request.user, 'dashboards'),
             'portal_can_purchases': purchases_role is not None,

@@ -52,7 +52,7 @@ class DistributionOverviewTests(TestCase):
         line['months']['2027-01'] = '50'
         self.assertEqual(overview(self.scenario,'months',{})['rows'][0]['status']['key'],'invalid')
         line['input'] = '0'
-        self.assertEqual(overview(self.scenario,'months',{})['rows'][0]['status']['key'],'not_required')
+        self.assertEqual(overview(self.scenario,'months',{})['rows'][0]['status']['key'],'invalid')
 
     def test_month_quantities_must_equal_plan_and_annual_goal_uses_net_quantity(self):
         self.scenario.state['volume_mode'] = 'annual'

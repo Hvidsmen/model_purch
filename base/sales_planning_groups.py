@@ -8,6 +8,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
+from .sales_planning_access import require as require_planning,groups_for,goods_for
 from .access import can_access
 from .models import SalesPlanningGroup, SalesPlanningDirectoryLoad
 from .sales_planning_group_service import rebuild_groups, ungrouped_goods, group_summaries, group_goods, save_pair, block_kind, power_rows, save_unique_pairs
@@ -22,14 +23,15 @@ class GroupSettingsForm(forms.ModelForm):
         labels = {'related_groups': 'Связанные группы', 'replacement_groups': 'Замещающие группы'}
         widgets = {'notes': forms.Textarea(attrs={'rows': 2, 'placeholder': 'Краткое примечание к группе'})}
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, user=None, **kwargs):
         super().__init__(*args, **kwargs)
         selected = list(self.instance.related_groups.values_list('pk', flat=True)) + list(self.instance.replacement_groups.values_list('pk', flat=True))
         self.preserved_links = {}
         for field in ('related_groups', 'replacement_groups'):
             allowed = split_groups().filter(Q(is_active=True) | Q(pk__in=selected)).exclude(pk=self.instance.pk)
             self.fields[field].queryset = allowed
-            self.preserved_links[field] = list(getattr(self.instance, field).exclude(pk__in=allowed).values_list('pk', flat=True))
+            if user is not None:self.fields[field].queryset=groups_for(user,self.fields[field].queryset)
+            self.preserved_links[field] = list(getattr(self.instance, field).exclude(pk__in=self.fields[field].queryset).values_list('pk', flat=True))
             self.fields[field].help_text = 'Добавляйте группы через поиск и фильтры. Сохранённые неактивные связи сохраняются.'
 
     def save(self, commit=True):
@@ -44,10 +46,10 @@ class GroupSettingsForm(forms.ModelForm):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def groups(request):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
+    require_planning(request.user)
     error = ''
     if request.method == 'POST':
+        if not can_access(request.user,'sales_planning_admin'):raise PermissionDenied
         if request.POST.get('action') != 'rebuild':
             from django.http import HttpResponseBadRequest
             return HttpResponseBadRequest('Неизвестное действие.')
@@ -59,13 +61,13 @@ def groups(request):
             messages.success(request, f'Группы планирования обновлены: {count}. Ручные настройки сохранены.')
             return redirect('sales_planning_groups')
     search = request.GET.get('q', '').strip()[:255]
-    queryset = split_groups()
+    queryset = groups_for(request.user)
     if request.GET.get('inactive') != '1':
         queryset = queryset.filter(is_active=True)
     if search:
         queryset = queryset.filter(name__icontains=search)
     try:
-        queryset, filters, statuses, selected_filters = filter_groups(queryset, request.GET)
+        queryset, filters, statuses, selected_filters = filter_groups(queryset,request.GET,goods=goods_for(request.user))
     except ValidationError as exc:
         from django.http import HttpResponseBadRequest
         return HttpResponseBadRequest(' '.join(exc.messages))
@@ -74,7 +76,7 @@ def groups(request):
     for row in rows:
         row['pair_status_key']=statuses.get(row['group'].source_key,'pending')
         row['pair_status'] = dict(STATUSES)[row['pair_status_key']]
-    missing = ungrouped_goods()
+    missing = goods_for(request.user,ungrouped_goods())
     for field, label in ATTRIBUTES:
         if selected_filters[field]:
             missing = missing.filter(**{field + '__in': selected_filters[field]})
@@ -86,7 +88,7 @@ def groups(request):
         'missing_previous_url': page_link(request.GET, 'missing_page', missing_page.previous_page_number()) if missing_page.has_previous() else '',
         'missing_next_url': page_link(request.GET, 'missing_page', missing_page.next_page_number()) if missing_page.has_next() else '',
         'include_inactive': request.GET.get('inactive') == '1',
-        'group_count': split_groups().filter(is_active=True).count(),
+        'group_count':groups_for(request.user).filter(is_active=True).count(),
         'load': SalesPlanningDirectoryLoad.objects.filter(directory='groups').first(),
         'ungrouped_count': missing_page.paginator.count,
         'ungrouped_page': missing_page,
@@ -97,15 +99,14 @@ def groups(request):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def detail(request, pk):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
-    group = get_object_or_404(split_groups(), pk=pk)
+    require_planning(request.user)
+    group = get_object_or_404(groups_for(request.user),pk=pk)
     error = ''
-    form = GroupSettingsForm(instance=group)
+    form = GroupSettingsForm(instance=group,user=request.user)
     if request.method == 'POST':
         action = request.POST.get('action')
         if action == 'settings':
-            form = GroupSettingsForm(request.POST, instance=group)
+            form = GroupSettingsForm(request.POST,instance=group,user=request.user)
             if form.is_valid():
                 form.save()
                 messages.success(request, 'Настройки Split сохранены.')

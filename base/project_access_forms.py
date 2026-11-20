@@ -5,6 +5,13 @@ from .models import UserProjectAccess, GroupProjectAccess
 
 INHERIT = 'inherit'
 
+def planning_scope_field():
+    return forms.MultipleChoiceField(label='Группы планов продаж планировщика',required=False,choices=[],widget=forms.CheckboxSelectMultiple,help_text='Для роли «Планировщик» выберите группы планов продаж: RAC, VRF, PROF и другие значения номенклатуры. При наследовании действуют назначения групп доступа. Без назначенной ответственности доступ к данным закрыт.')
+
+def validate_planning_scope(form,data):
+    if data.get('sales_planning_role')=='Планировщик' and 'sales_planning_role' in form.data and not data.get('sales_plan_groups'):
+        form.add_error('sales_plan_groups','Выберите хотя бы одну группу планов продаж.')
+
 
 def project_field(project):
     return forms.ChoiceField(label=PROJECT_LABELS[project], required=False,
@@ -15,6 +22,14 @@ def initialize(form, owner, group=False):
     model = GroupProjectAccess if group else UserProjectAccess
     key = 'group' if group else 'user'
     saved = dict(model.objects.filter(**{key: owner}).values_list('project', 'role')) if owner and owner.pk else {}
+    if 'sales_plan_groups' in form.fields:
+        from .models import SalesPlanningGoods
+        grant=model.objects.filter(**{key:owner},project='sales_planning').first() if owner and owner.pk else None
+        chosen=grant.sales_plan_groups if grant and isinstance(grant.sales_plan_groups,list) else []
+        names={str(value).strip() for value in SalesPlanningGoods.objects.values_list('sales_plan_group',flat=True) if str(value or '').strip()}
+        names.update(value for value in chosen if isinstance(value,str) and value.strip())
+        form.fields['sales_plan_groups'].choices=[(value,value) for value in sorted(names)]
+        form.fields['sales_plan_groups'].initial=chosen
     for project in PROJECT_ROLES:
         field = project + '_role'
         form.fields[field].initial = saved.get(project, INHERIT)
@@ -61,7 +76,9 @@ def save_assignments(form, owner, group=False):
         if value == INHERIT:
             model.objects.filter(**filters).delete()
         else:
-            model.objects.update_or_create(**filters, defaults={'role': value})
+            defaults={'role':value}
+            if project=='sales_planning':defaults['sales_plan_groups']=form.cleaned_data.get('sales_plan_groups',[])
+            model.objects.update_or_create(**filters, defaults=defaults)
     getattr(owner, '_prefetched_objects_cache', {}).pop('project_access', None)
     if hasattr(owner, '_portal_role'):
         delattr(owner, '_portal_role')

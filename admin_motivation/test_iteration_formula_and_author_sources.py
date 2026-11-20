@@ -14,8 +14,9 @@ class SourceContractTests(SimpleTestCase):
         other=[*row[:-1],'Подразделение']
         with self.assertRaisesMessage(ValidationError,'разные формулы'):
             policy_formulas({'coefficients':[row,other]},rates)
-        # TT settings cannot override Moscow's merged calculation formula.
-        self.assertEqual(policy_formulas({'coefficients':[row,[TT,*other[1:]]]},rates),[tuple(row)])
+        # Different subdivisions keep their own approved formulas.
+        tt=[TT,*other[1:]]
+        self.assertEqual(policy_formulas({'coefficients':[row,tt]},rates),[tuple(row),tuple(tt)])
 
     def test_native_batch_uses_selected_private_formulas_and_defaults(self):
         from .services.coefficient_iteration_2025 import build_sql

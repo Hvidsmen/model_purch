@@ -22,6 +22,8 @@ class UserForm(PortalRoleFormMixin, forms.ModelForm):
     purchases_role = project_forms.project_field('purchases')
     dashboards_role = project_forms.project_field('dashboards')
     split_monitoring_role = project_forms.project_field('split_monitoring')
+    sales_planning_role = project_forms.project_field('sales_planning')
+    sales_plan_groups = project_forms.planning_scope_field()
     portal_role = PortalRoleFormMixin.portal_role
     report_subdivision = PortalRoleFormMixin.report_subdivision
     report_author = PortalRoleFormMixin.report_author

@@ -75,7 +75,7 @@
         const badge = row.element.querySelector('[data-row-status]');
         let result;
         try { result = validate(row); } catch (error) { result = {sum:null, error:error.message}; }
-        const error = row.element.dataset.quantity==='0'&&!row.dirty?'':row.requestError || result.error;
+        const error = row.requestError || result.error;
         const jump=row.element.querySelector('[data-row-jump]');if(jump){jump.hidden=!error;jump.textContent=error||'К ошибке';}
         try{const qty=parse(row.element.dataset.quantity,'quantity');const allocated=qty===null||result.sum===null?null:row.unit.value==='percent'?qty*result.sum/hundred:result.sum;row.element.querySelector('[data-row-allocated]').textContent=format(allocated,',')||'—';row.element.querySelector('[data-row-remaining]').textContent=qty===null||allocated===null?'—':format(qty-allocated,',');}catch{row.element.querySelector('[data-row-allocated]').textContent='—';row.element.querySelector('[data-row-remaining]').textContent='—';}
         row.valid = !error;
@@ -192,7 +192,7 @@
         if (!draft || submitting || bulkBusy || autoPending || rows.some(row => row.busy)) return;
         const scope=form.querySelector('[data-grid-scope]')?.value||'selected';
         const onlyEmpty=form.querySelector('[data-grid-only-empty]')?.checked;
-        const selected=(scope==='selected'?chosen():rows.filter(row=>visible(row)&&parse(row.element.dataset.quantity,'quantity')>0n)).filter(row=>!onlyEmpty||row.inputs.every(input=>!input.value.trim())), mode = form.querySelector('[data-grid-bulk-mode]').value;
+        const selected=(scope==='selected'?chosen():rows.filter(row=>visible(row))).filter(row=>!onlyEmpty||row.inputs.every(input=>!input.value.trim())), mode = form.querySelector('[data-grid-bulk-mode]').value;
         if (!selected.length){form.querySelector('[data-grid-bulk-result]').textContent='Нет подходящих строк: заполненные и частичные значения сохранены. Для их замены снимите «Только незаполненные». Выбор не переносится на другие страницы.';return;}
         const progress=window.SplitProgress?.start('Массовое распределение',selected.length);
         let completed=0;

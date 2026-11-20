@@ -4,7 +4,7 @@ from decimal import Decimal
 
 STAGES = [('composition', 'Состав плана', 'Выберите группы, каналы и способ задания объёма.'),
           ('plan', 'Продажи', 'Задайте объёмы продаж, DDP и наценки. Сравните результат с фактом.'),
-          ('distribution', 'Распределение', 'Настройте месяцы, мощности и пары моделей для групп с планом.'),
+          ('distribution', 'Распределение', 'Настройте месяцы для всех групп и каналов, мощности и пары моделей — для каждой группы.'),
           ('stock', 'Запасы и поставки', 'Проверьте обеспеченность плана товаром и добавьте новые поставки.'),
           ('checks', 'Проверка и утверждение', 'Исправьте ошибки, проверьте предупреждения и утвердите версию.')]
 
@@ -52,7 +52,7 @@ def presentation(scenario, result, tab):
         status = 'Не начат' if not has_composition else 'Требует внимания' if errors or warnings else 'Заполнен'
         if key == 'composition' and has_composition and not errors:
             status = 'Заполнен'
-        if key in ('distribution', 'stock') and not any(line.get('quantity') for line in result.get('lines', [])):
+        if key == 'stock' and not any(line.get('quantity') for line in result.get('lines', [])):
             status, detail = 'Не начат', 'Сначала задайте положительный план продаж'
         if key == 'plan' and has_composition:
             filled=sum(all(line.get('input') is not None for line in group['channels'].values()) and (gid in scenario.state.get('sales_reviewed_groups',[]) or any(Decimal(str(line.get('input') or 0))!=0 for line in group['channels'].values())) for gid,group in scenario.state['groups'].items())

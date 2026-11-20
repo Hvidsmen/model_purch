@@ -53,6 +53,10 @@ def create_scenario(actor, cleaned):
         entry['channels'] = {cid: empty_line(scenario) for cid in state['channels']}
         entry['forecast'] = {month: None for month in forecast_months(scenario)}
         state['groups'][str(group.pk)] = entry
+    from .sales_planning_access import scopes,check_scenario
+    allowed=scopes(actor)
+    if allowed is not None:state['sales_responsibility_groups']=sorted(allowed)
+    check_scenario(actor,scenario,state)
     scenario.state = state
     scenario.save()
     SplitScenarioEvent.objects.create(scenario=scenario, actor=actor, action='Создан сценарий', revision=1)
@@ -61,6 +65,9 @@ def create_scenario(actor, cleaned):
 
 @transaction.atomic
 def persist(scenario, actor, revision, state, action, *, approved=False):
+    from .sales_planning_access import check_scenario
+    check_scenario(actor,scenario)
+    check_scenario(actor,scenario,state)
     if scenario.status != 'draft':
         raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')
     fields = {'state': state, 'revision': scenario.revision + 1}
@@ -154,8 +161,9 @@ def changed_state(scenario, post, *, allow_empty=False):
         gids, cids = list(draft.state['groups']), list(draft.state['channels'])
         if member_action in ('add_stock_groups', 'add_onhand_groups'):
             from .split_stock_groups import groups_from_stock
-            inventory = deepcopy(groups_from_stock(scenario.stock_date) if member_action == 'add_stock_groups'
-                                 else groups_from_stock(scenario.stock_date, include_transit=False))
+            stock_scope={'allowed_group_ids':scenario._sales_allowed_group_ids} if hasattr(scenario,'_sales_allowed_group_ids') else {}
+            inventory = deepcopy(groups_from_stock(scenario.stock_date,**stock_scope) if member_action == 'add_stock_groups'
+                                 else groups_from_stock(scenario.stock_date, include_transit=False,**stock_scope))
             added = [row['id'] for row in inventory['groups'] if row['id'] not in gids]
             gids.extend(added)
             inventory['added'] = len(added)
@@ -362,6 +370,9 @@ def changed_state(scenario, post, *, allow_empty=False):
 
 @transaction.atomic
 def approve(scenario, actor, revision, acknowledge):
+    from .access import can_access
+    from django.core.exceptions import PermissionDenied
+    if not can_access(actor,'sales_planning_admin'):raise PermissionDenied
     result = evaluate(scenario)
     if result['errors']:
         raise ValidationError(result['errors'])
@@ -372,10 +383,13 @@ def approve(scenario, actor, revision, acknowledge):
 
 @transaction.atomic
 def correction(scenario, actor):
+    from .sales_planning_access import check_scenario
+    check_scenario(actor,scenario)
     if scenario.status != 'approved':
         raise ValidationError('Корректировка создаётся из утверждённой версии.')
     existing = SplitScenario.objects.filter(family=scenario.family, status='draft').first()
     if existing:
+        check_scenario(actor,existing)
         return existing
     version = SplitScenario.objects.filter(family=scenario.family).aggregate(value=Max('version'))['value'] + 1
     result = SplitScenario.objects.create(family=scenario.family, version=version, title=scenario.title, year=scenario.year,

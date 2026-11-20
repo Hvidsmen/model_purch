@@ -69,6 +69,7 @@ class PortalRoleFormMixin:
 
     def clean(self):
         data = super().clean()
+        project_forms.validate_planning_scope(self,data)
         if data.get('is_superuser') and data.get('portal_role') != ADMIN:
             self.add_error('portal_role', 'Суперпользователь должен иметь роль «Администратор». Для другой роли снимите признак суперпользователя.')
         selected_groups = data.get('groups', []) if 'groups' in self.fields else self.instance.groups.all() if self.instance.pk else []
@@ -112,6 +113,8 @@ class PortalUserChangeForm(PortalRoleFormMixin, UserChangeForm):
     purchases_role = project_forms.project_field('purchases')
     dashboards_role = project_forms.project_field('dashboards')
     split_monitoring_role = project_forms.project_field('split_monitoring')
+    sales_planning_role = project_forms.project_field('sales_planning')
+    sales_plan_groups = project_forms.planning_scope_field()
 
     username = PortalRoleFormMixin.username
     portal_role = PortalRoleFormMixin.portal_role
@@ -124,6 +127,8 @@ class PortalUserCreationForm(PortalRoleFormMixin, AdminUserCreationForm):
     purchases_role = project_forms.project_field('purchases')
     dashboards_role = project_forms.project_field('dashboards')
     split_monitoring_role = project_forms.project_field('split_monitoring')
+    sales_planning_role = project_forms.project_field('sales_planning')
+    sales_plan_groups = project_forms.planning_scope_field()
 
     username = PortalRoleFormMixin.username
     portal_role = PortalRoleFormMixin.portal_role
@@ -151,8 +156,8 @@ class PortalUserAdmin(UserAdmin):
         from .access import project_role_summary
         return ADMIN if role_for(obj) == ADMIN else project_role_summary(obj)
 
-    fieldsets = UserAdmin.fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'motivation_role', 'purchases_role', 'dashboards_role', 'split_monitoring_role', 'report_subdivision', 'report_author')}),)
-    add_fieldsets = UserAdmin.add_fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'motivation_role', 'purchases_role', 'dashboards_role', 'split_monitoring_role', 'report_subdivision', 'report_author')}),)
+    fieldsets = UserAdmin.fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'motivation_role', 'purchases_role', 'dashboards_role', 'split_monitoring_role', 'sales_planning_role','sales_plan_groups', 'report_subdivision', 'report_author')}),)
+    add_fieldsets = UserAdmin.add_fieldsets + (('Доступ к порталу', {'fields': ('portal_role', 'motivation_role', 'purchases_role', 'dashboards_role', 'split_monitoring_role', 'sales_planning_role','sales_plan_groups', 'report_subdivision', 'report_author')}),)
 
     class Media:
         js = ('base/admin_report_access.js',)

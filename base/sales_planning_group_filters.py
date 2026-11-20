@@ -12,7 +12,7 @@ ATTRIBUTES = [('brand', 'Бренд'), ('product_group', 'Товарная гр�
 STATUSES = [('ready', 'Настроены'), ('pending', 'Не настроены'), ('review', 'Требуют проверки')]
 
 
-def filter_groups(queryset, query):
+def filter_groups(queryset, query, *, goods=None):
     selected = {field: list(dict.fromkeys(value for value in query.getlist(field) if value))
                 for field, label in [*ATTRIBUTES, ('pair_status', '')]}
     if any(len(values) > 100 or any(len(value) > 1000 for value in values) for values in selected.values()):
@@ -22,7 +22,7 @@ def filter_groups(queryset, query):
     choices = {field: set() for field, label in ATTRIBUTES}
     state, matches = {}, set()
     fields = ['planning_group', 'block_type', *choices]
-    for row in split_goods().order_by().values(*fields).iterator():
+    for row in (split_goods() if goods is None else goods.filter(is_active=True)).order_by().values(*fields).iterator():
         for field in choices:
             if row[field].strip():
                 choices[field].add(row[field].strip())
