@@ -63,7 +63,7 @@
   const rows=removalRows.filter(row=>row.dataset.stockWarning==='1' && row.querySelector('[name=removed_groups]').checked);
   if(!rows.length)return [];
   const list=removalDialog.querySelector('[data-composition-removal-list]');list.replaceChildren();
-  rows.forEach(row=>{const item=document.createElement('li');item.textContent=row.dataset.groupName+' · сток на начало: '+row.querySelector('[data-composition-opening]').firstChild.textContent.trim()+' компл.';list.append(item);});
+  rows.forEach(row=>{const item=document.createElement('li');item.textContent=row.dataset.groupName+' · сток на '+removalDialog.dataset.compositionStockDate+': '+row.querySelector('[data-composition-stock]').firstChild.textContent.trim()+' компл.';list.append(item);});
   return new Promise(resolve=>{
    let confirmed=false;
    removalDialog.querySelector('[data-composition-removal-confirm]').onclick=()=>{confirmed=true;removalDialog.close();};

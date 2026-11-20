@@ -418,10 +418,10 @@ def scenario(request, pk):
     composition_refs=composition_references(display_item) if tab == 'composition' else {}
     composition_rows = [{'id':key,'group':value,'reference':composition_refs.get(key,{})} for key,value in display_item.state['groups'].items()] if tab == 'composition' else []
     if tab == 'composition':
-        from .split_stock_protection import opening_stock
+        from .split_stock_protection import snapshot_stock
         for row in composition_rows:
-            row['opening_stock'] = opening_stock(item,row['group'])
-            row['stock_warning'] = row['id'] in stock_locked_groups or row['opening_stock']['has_stock']
+            row['stock_snapshot'] = snapshot_stock(row['group'])
+            row['stock_warning'] = row['id'] in stock_locked_groups or row['stock_snapshot']['has_stock']
     reference_filters = None
     if tab == 'plan':
         reference_filters = {gid: detail['reference'] for gid, detail in plan_detail.items()}
