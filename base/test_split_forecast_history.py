@@ -156,3 +156,55 @@ class HistoricalForecastTests(TestCase):
         self.assertEqual(self.scenario.revision,revision+1)
         self.assertEqual(self.scenario.state['groups']['other'],other)
         self.assertEqual(self.scenario.state['groups'][self.gid]['forecast_before_total'],'14.300000')
+
+    def test_history_forecast_caps_each_power_and_keeps_unconstrained_source(self):
+        group=self.scenario.state['groups'][self.gid]
+        group['powers']['07'].update(stock_indoor='3',stock_outdoor='30',prior_indoor='2',prior_outdoor='0')
+        before=deepcopy(self.scenario.state);row=self.proposal()['rows'][0]
+        self.assertEqual([D(p['sets']) for p in row['powers']],[D(5),D('5.5')])
+        self.assertEqual(D(row['proposed']),D('10.5'))
+        self.assertTrue(any('ограничен' in warning for warning in row['warnings']))
+        state,_=apply(self.scenario,{'tokens':json.dumps([row['token']])})
+        source=state['groups'][self.gid]['forecast_history_source']
+        self.assertTrue(source['stock_cap_applied']);self.assertEqual(D(source['unconstrained_forecast']),D('14.3'))
+        self.assertEqual(source['stock_constraint'],'before-start-v1')
+        for power in state['groups'][self.gid]['powers'].values():
+            for kind in ('indoor','outdoor'):
+                self.assertGreaterEqual(D(power['stock_'+kind])+D(power['prior_'+kind])-D(power['forecast_before']),0)
+        self.assertEqual(self.scenario.state,before)
+
+    def test_zero_available_and_future_incoming_do_not_inflate_forecast(self):
+        for power in self.scenario.state['groups'][self.gid]['powers'].values():
+            power.update(stock_indoor='0',stock_outdoor='0',prior_indoor='0',prior_outdoor='0',incoming_indoor='999',incoming_outdoor='999')
+        row=self.proposal()['rows'][0]
+        self.assertEqual(D(row['proposed']),0)
+        self.assertTrue(all(D(p['sets'])==0 for p in row['powers']))
+        self.scenario.state['groups'][self.gid]['powers']['07']['stock_indoor']=None
+        row=self.proposal()['rows'][0];self.assertNotIn('token',row);self.assertIn('остатки',row['error'])
+
+    def test_direct_average_daily_save_is_capped_without_extra_confirmation(self):
+        group=self.scenario.state['groups'][self.gid]
+        for power in group['powers'].values():power.update(stock_indoor='0.2',stock_outdoor='30',prior_indoor='0.3',prior_outdoor='0')
+        self.scenario.save(update_fields=['state'])
+        with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])):
+            response=self.client.post(self.url,{'action':'calculate_save_forecast_history','revision':self.scenario.revision,**self.post,'year':'2026','adjustment':'0','only_empty':'0'})
+        self.assertEqual(response.status_code,200,response.content)
+        self.scenario.refresh_from_db()
+        self.assertEqual(D(self.scenario.state['groups'][self.gid]['forecast_before_total']),1)
+        self.assertTrue(all(D(power['forecast_before'])==D('.5') for power in self.scenario.state['groups'][self.gid]['powers'].values()))
+
+    def test_capped_history_cannot_save_negative_opening_after_inventory_reduction_or_use_old_preview(self):
+        from .split_workflow import persist
+        from .split_stock_workspace import candidate
+        from django.core import signing
+        from .split_forecast_history import SALT
+        row=self.proposal()['rows'][0]
+        state,_=apply(self.scenario,{'tokens':json.dumps([row['token']])})
+        state['groups'][self.gid]['powers']['07'].update(stock_indoor='0',prior_indoor='0')
+        with self.assertRaisesMessage(ValidationError,'прогноз превышает'):
+            persist(self.scenario,self.actor,self.scenario.revision,state,'Bad inventory')
+        with self.assertRaisesMessage(ValidationError,'прогноз превышает'):
+            candidate(self.scenario,json.dumps({self.gid:{'07:stock_indoor':'0','07:prior_indoor':'0'}}),forecasts=json.dumps([row['token']]))
+        old=signing.loads(row['token'],salt=SALT);old['source'].pop('stock_constraint')
+        with self.assertRaisesMessage(ValidationError,'устарел'):
+            apply(self.scenario,{'tokens':json.dumps([signing.dumps(old,salt=SALT)])})

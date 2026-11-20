@@ -1,4 +1,4 @@
-import importlib.util,os
+import importlib.util,os,re
 from decimal import Decimal
 from unittest import skipUnless
 from unittest.mock import patch
@@ -79,3 +79,24 @@ class ForecastHistoryBrowserTests(StaticLiveServerTestCase):
         self.scenario.refresh_from_db()
         self.assertEqual(resolve(self.scenario,self.scenario.state['groups'][self.gid])['total'],Decimal('2.306452'))
         self.assertIsNone(self.scenario.state['groups']['other']['forecast_before_total'])
+
+    def test_history_direct_save_caps_forecast_to_available_blocks(self):
+        from playwright.sync_api import sync_playwright,expect
+        for power in self.scenario.state['groups'][self.gid]['powers'].values():
+            power.update(stock_indoor='0.2',stock_outdoor='20',prior_indoor='0.3',prior_outdoor='0')
+        self.scenario.save(update_fields=['state'])
+        with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])),sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1600,'height':1100})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page()
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=stock')
+                page.locator('[data-forecast-history-open]').click()
+                with page.expect_navigation():page.locator('[data-forecast-history-save]').click()
+                expect(page.locator('[data-stock-field="forecast_group"]').first).to_have_value(re.compile(r'^1(?:\.0+)?$'))
+                expect(page.locator('[data-stock-group] [data-stock-result="opening"]').first).to_have_text('0')
+                expect(page.locator('[data-stock-group]').first).to_contain_text('ограничен доступным товаром')
+            finally:context.close();browser.close()
+        self.scenario.refresh_from_db()
+        self.assertTrue(self.scenario.state['groups'][self.gid]['forecast_history_source']['stock_cap_applied'])

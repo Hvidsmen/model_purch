@@ -165,9 +165,8 @@ def candidate(scenario, raw, tokens='[]', forecasts='[]', only_empty='1'):
                     group['forecast_workspace_source'] = {'kind':'manual','label':'Вручную по мощностям'}
                 elif group.get('inventory_source'): group['inventory_source']['manual_adjusted'] = True
             else: raise ValidationError('Неизвестное поле группы.')
-    if any((group.get('forecast_history_source') or {}).get('method')=='plan_execution' for group in state['groups'].values()):
-        from .split_forecast_plan import validate_state
-        validate_state(state)
+    from .split_forecast_plan import validate_state
+    validate_state(state)
     return state
 
 

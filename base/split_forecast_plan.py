@@ -148,8 +148,9 @@ def available_before(power,key):
 
 
 def validate_state(state):
-    for group in state['groups'].values():
-        if (group.get('forecast_history_source') or {}).get('method')!='plan_execution' or group.get('forecast_workspace_source') or group.get('forecast_mode')!='powers':continue
+    for group in state.get('groups',{}).values():
+        source=group.get('forecast_history_source') or {}
+        if not (source.get('method')=='plan_execution' or source.get('stock_constraint')=='before-start-v1') or group.get('forecast_workspace_source') or group.get('forecast_mode')!='powers':continue
         for key,power in group['powers'].items():
             value=number(power.get('forecast_before'),optional=True)
             if value is not None and value>available_before(power,key):
