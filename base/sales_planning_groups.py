@@ -72,14 +72,15 @@ def groups(request):
     page = Paginator(queryset, 25).get_page(request.GET.get('page'))
     rows = group_summaries(list(page))
     for row in rows:
-        row['pair_status'] = dict(STATUSES)[statuses.get(row['group'].source_key, 'pending')]
+        row['pair_status_key']=statuses.get(row['group'].source_key,'pending')
+        row['pair_status'] = dict(STATUSES)[row['pair_status_key']]
     missing = ungrouped_goods()
     for field, label in ATTRIBUTES:
         if selected_filters[field]:
             missing = missing.filter(**{field + '__in': selected_filters[field]})
     missing_page = Paginator(missing, 25).get_page(request.GET.get('missing_page'))
     return render(request, 'base/sales_planning_groups.html', {
-        'error': error, 'page': page, 'rows': rows, 'search': search, 'filters': filters,
+        'advanced_filter_count':sum(len(values) for key,values in selected_filters.items() if key not in ('brand','pair_status')),'error': error, 'page': page, 'rows': rows, 'search': search, 'filters': filters,
         'previous_url': page_link(request.GET, 'page', page.previous_page_number()) if page.has_previous() else '',
         'next_url': page_link(request.GET, 'page', page.next_page_number()) if page.has_next() else '',
         'missing_previous_url': page_link(request.GET, 'missing_page', missing_page.previous_page_number()) if missing_page.has_previous() else '',
