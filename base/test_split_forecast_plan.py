@@ -109,6 +109,46 @@ class ForecastPlanTests(TestCase):
         raw=json.dumps({self.gid:{'07:stock_indoor':'0','forecast_group':'0'}})
         self.assertEqual(candidate(self.scenario,raw,forecasts=json.dumps([row['token']]))['groups'][self.gid]['forecast_before_total'],'0')
 
+    def group_plan(self,past='130',future='50'):
+        name=self.scenario.state['groups'][self.gid]['ref']['name'].casefold()
+        return {(self.key,'pg_'+name):{'past':D(past),'future':D(future),'unknown':False,'past_seen':D(past)!=0,'future_seen':True}}
+
+    def test_group_pg_plan_uses_saved_shares_only_when_detail_is_missing(self):
+        self.plans=self.group_plan()
+        group=self.scenario.state['groups'][self.gid]
+        group['powers']['07']['share']='30';group['powers']['09']['share']='70'
+        row=self.proposal()['rows'][0]
+        self.assertIn('token',row,row.get('error'))
+        self.assertEqual([D(p['sets']) for p in row['powers']],[18,42])
+        self.assertIn('сохранённым долям',row['explanation'])
+        state,_=apply(self.scenario,{'tokens':json.dumps([row['token']])})
+        origin=state['groups'][self.gid]['forecast_history_source']
+        self.assertEqual(origin['power_share_fallback'],['past','future'])
+        self.assertEqual(origin['power_shares'],{'07':'30','09':'70'})
+        group['powers']['07']['stock_indoor']='5'
+        self.assertEqual([D(p['sets']) for p in self.proposal()['rows'][0]['powers']],[5,42])
+
+    def test_existing_erp_detail_has_priority_over_group_pg_totals(self):
+        self.plans.update(self.group_plan('999','999'))
+        row=self.proposal()['rows'][0]
+        self.assertEqual([D(p['sets']) for p in row['powers']],[24,36])
+        state,_=apply(self.scenario,{'tokens':json.dumps([row['token']])})
+        self.assertEqual(state['groups'][self.gid]['forecast_history_source']['power_share_fallback'],[])
+
+    def test_fallback_is_independent_for_past_and_remaining_plan_and_requires_valid_shares(self):
+        for entry in self.plans.values():entry.update(future=D(0),future_seen=False)
+        self.plans.update(self.group_plan('0','50'))
+        row=self.proposal()['rows'][0];self.assertEqual([D(p['sets']) for p in row['powers']],[30,30])
+        state,_=apply(self.scenario,{'tokens':json.dumps([row['token']])})
+        self.assertEqual(state['groups'][self.gid]['forecast_history_source']['power_share_fallback'],['future'])
+        self.scenario.state['groups'][self.gid]['powers']['07']['share']=None
+        row=self.proposal()['rows'][0];self.assertNotIn('token',row);self.assertIn('100%',row['error'])
+        self.plans={};self.assertNotIn('token',self.proposal()['rows'][0])
+
+    def test_unknown_sku_is_not_mistaken_for_a_group_total(self):
+        self.plans[(self.key,'unknown sku')]={'past':D(1),'future':D(1),'unknown':False,'future_seen':True}
+        row=self.proposal()['rows'][0];self.assertNotIn('token',row);self.assertIn('Нет сопоставления',row['error'])
+
     def test_legacy_null_forecast_source_does_not_block_save(self):
         from .split_workflow import persist
         state=deepcopy(self.scenario.state);state['groups'][self.gid]['forecast_history_source']=None
@@ -120,6 +160,8 @@ class ForecastPlanTests(TestCase):
 class ForecastPlanBrowserTests(StaticLiveServerTestCase):
     setUp=setup
     def test_choose_erp_version_preview_and_save_without_required_preview(self):
+        group=self.scenario.state['groups'][self.gid]
+        self.plans={(self.key,'pg_'+group['ref']['name'].casefold()):{'past':D(130),'future':D(50),'unknown':False,'past_seen':True,'future_seen':True}}
         from playwright.sync_api import sync_playwright,expect
         with patch('base.split_forecast_plan.versions',return_value=['План 2026 · учебная версия']),patch('base.split_forecast_plan.plan_source',return_value=self.plans),patch('base.split_forecast_plan.fact_source',return_value=(self.data,['Дилеры'])),sync_playwright() as driver:
             browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
@@ -136,6 +178,7 @@ class ForecastPlanBrowserTests(StaticLiveServerTestCase):
                 expect(dialog.locator('[data-forecast-history-year]')).not_to_be_visible()
                 dialog.locator('[data-forecast-history-preview]').click()
                 expect(dialog.locator('[data-forecast-history-results]')).to_contain_text('120%')
+                expect(dialog.locator('[data-forecast-history-results]')).to_contain_text('сохранённым долям')
                 expect(dialog.locator('[data-forecast-history-results]')).to_contain_text('60')
                 page.screenshot(path='/tmp/forecast-plan-execution.png')
                 with page.expect_navigation():dialog.locator('[data-forecast-history-save]').click()

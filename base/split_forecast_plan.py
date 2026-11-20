@@ -10,7 +10,7 @@ from model_purch.conns import connect_database
 from .sales_planning_scope import PRODUCT_GROUP
 from .sales_planning_group_service import group_key
 from .split_history import normalized
-from .split_engine import ZERO,STEP,number,stored,precise
+from .split_engine import ZERO,STEP,HUNDRED,allocate,number,stored,precise
 from .split_ddp import fingerprint
 from .split_preplan_forecast import resolve
 from .split_forecast_history import SALT,source as fact_source,has_forecast
@@ -28,7 +28,8 @@ PLAN_SQL='''WITH dates AS (
 SELECT m.PlanningGroupOZPErp,n.[Наименование],
  SUM(CAST(p.[Количество] AS decimal(28,12))*c.past_days/c.work_days),
  SUM(CAST(p.[Количество] AS decimal(28,12))*c.future_days/c.work_days),
- SUM(CASE WHEN p.[Количество] IS NULL THEN 1 ELSE 0 END),MAX(CASE WHEN c.future_days>0 THEN 1 ELSE 0 END)
+ SUM(CASE WHEN p.[Количество] IS NULL THEN 1 ELSE 0 END),MAX(CASE WHEN c.future_days>0 THEN 1 ELSE 0 END),
+ MAX(CASE WHEN c.past_days>0 THEN 1 ELSE 0 END)
  FROM DataWH.erp.[РегистрыНакопления.ПланыПродаж] p
  JOIN DataWH.erp.[Справочники.Номенклатура] n ON n.[Ссылка]=p.[НоменклатураСсылка]
  JOIN (SELECT DISTINCT ModelCode,PlanningGroupOZPErp FROM DataWH.dbo.ModelCodeERP WHERE GroupERP=?) m ON m.ModelCode=n.[Наименование]
@@ -81,16 +82,53 @@ def plan_source(scenario,version,elapsed_from):
     after_last=last.replace(day=1)+timedelta(days=32);after_last=after_last.replace(day=1)
     params=[elapsed_from,scenario.stock_date,first,last,PRODUCT_GROUP,version,elapsed_from.replace(day=1),after_last,*selected]
     rows=query(PLAN_SQL.replace('__CHANNELS__',','.join('?' for _ in selected)),params);result={}
-    for name,model,past,future,unknown,future_seen in rows:
-        entry=result.setdefault((group_key(str(name or '')),normalized(model)),{'past':ZERO,'future':ZERO,'unknown':False,'future_seen':False})
+    for record in rows:
+        name,model,past,future,unknown,future_seen=record[:6]
+        past_seen=bool(record[6]) if len(record)>6 else past is not None and Decimal(str(past))!=ZERO
+        entry=result.setdefault((group_key(str(name or '')),normalized(model)),{'past':ZERO,'future':ZERO,'unknown':False,'future_seen':False,'past_seen':False})
         try:values=[None if value is None else Decimal(str(value)) for value in (past,future)]
         except (ValueError,ArithmeticError):raise ValidationError('В регистре плана некорректное количество.')
         if any(value is not None and not value.is_finite() for value in values):raise ValidationError('В регистре плана некорректное количество.')
         entry['unknown'] |= bool(unknown) or any(value is None for value in values)
         entry['future_seen'] |= bool(future_seen)
+        entry['past_seen'] |= past_seen
         for field,value in zip(('past','future'),values):
             if value is not None:entry[field]+=value
     return result
+
+
+@precise
+def grouped_amounts(group,own_plan,own_fact,mapping):
+    """Prefer model detail; split recognized group-level PG rows only if detail is absent."""
+    totals={key:{kind:{'past':ZERO,'future':ZERO,'fact':ZERO} for kind in ('indoor','outdoor')} for key in group['powers']}
+    grouped={field:ZERO for field in ('past','future','fact')}
+    group_seen={field:False for field in grouped};detail_seen={field:False for field in grouped}
+    for records,fields in [(own_plan,('past','future')),(own_fact,('qty',))]:
+        for model,entry in records.items():
+            if entry['unknown']:raise ValidationError('Источник содержит неизвестное количество.')
+            aggregate=model.startswith('pg_') and group_key(model[3:])==group['ref']['source_key']
+            if model not in mapping and not aggregate:
+                if any(entry[field]!=ZERO for field in fields):raise ValidationError('Нет сопоставления модели с мощностью: '+model)
+                continue
+            for field in fields:
+                target='fact' if field=='qty' else field
+                seen=(entry.get(field+'_seen',entry[field]!=ZERO) if field in ('past','future') else True)
+                if aggregate and model not in mapping:
+                    grouped[target]+=entry[field];group_seen[target]|=seen
+                else:
+                    key,kind=mapping[model];totals[key][kind][target]+=entry[field];detail_seen[target]|=seen
+    by_power={key:{field:min(parts[kind][field] for kind in ('indoor','outdoor')) for field in grouped} for key,parts in totals.items()}
+    fallback=[field for field in grouped if group_seen[field] and not detail_seen[field]]
+    if fallback:
+        keys=list(group['powers'])
+        shares=[number(power.get('share'),optional=True) if power.get('active') else ZERO for power in group['powers'].values()]
+        if any(value is None or value>HUNDRED for value in shares) or sum(shares,ZERO)!=HUNDRED:
+            raise ValidationError('В ERP только общий объём группы: заполните доли активных мощностей на шаге 3, сумма должна быть 100%.')
+        for field in fallback:
+            if grouped[field]<ZERO:raise ValidationError('Общий план или факт группы отрицателен.')
+            for key,value in zip(keys,allocate(grouped[field],shares) if grouped[field] else [ZERO]*len(keys)):
+                by_power[key][field]=value
+    return totals,by_power,fallback
 
 
 def available_before(power,key):
@@ -150,16 +188,7 @@ def preview(scenario,post):
             own_fact={model:entry for (g,model),entry in facts.items() if g==group['ref']['source_key']}
             if not own_plan or not any(v['future_seen'] for v in own_plan.values()):raise ValidationError('Нет плана этой группы на оставшийся период в выбранной версии.')
             if not own_fact:raise ValidationError('Нет факта этой группы за период выполнения; отсутствие данных не заменяется нулём.')
-            totals={key:{kind:{'past':ZERO,'future':ZERO,'fact':ZERO} for kind in ('indoor','outdoor')} for key in group['powers']}
-            for records,fields in [(own_plan,('past','future')),(own_fact,('qty',))]:
-                for model,entry in records.items():
-                    if entry['unknown']:raise ValidationError('Источник содержит неизвестное количество.')
-                    if model not in mapping:
-                        if any(entry[f]!=ZERO for f in fields):raise ValidationError('Нет сопоставления модели с мощностью: '+model)
-                        continue
-                    key,kind=mapping[model]
-                    for field in fields:totals[key][kind]['fact' if field=='qty' else field]+=entry[field]
-            by_power={key:{field:min(parts[kind][field] for kind in ('indoor','outdoor')) for field in ('past','future','fact')} for key,parts in totals.items()}
+            totals,by_power,fallback=grouped_amounts(group,own_plan,own_fact,mapping)
             if any(v<0 for values in by_power.values() for v in values.values()):raise ValidationError('Отрицательный чистый факт или план: проверьте возвраты и регистр.')
             past=sum((v['past'] for v in by_power.values()),ZERO);actual=sum((v['fact'] for v in by_power.values()),ZERO)
             remaining=sum((v['future'] for v in by_power.values()),ZERO)
@@ -171,8 +200,9 @@ def preview(scenario,post):
             unlimited=sum(requested.values(),ZERO)
             limited=any(requested[key]>available[key] for key in by_power)
             pct=stored((ratio*100).quantize(STEP,rounding=ROUND_HALF_UP));proposed=stored(number(sum((Decimal(v) for v in values.values()),ZERO)))
-            origin={**metadata,'execution_percent':pct,'past_plan':stored(past),'past_fact':stored(actual),'remaining_plan':stored(remaining),'rule':'remaining-erp-plan-times-group-execution-stock-cap-v1','stock_cap_applied':limited,'unconstrained_forecast':stored(unlimited),'available_before':{key:stored(value) for key,value in available.items()}}
-            row.update(proposed=proposed,explanation='Выполнение '+shown(Decimal(pct))+'%: факт '+shown(actual)+' / план '+shown(past)+'; оставшийся план '+shown(remaining)+' компл. Прогноз по выполнению '+shown(unlimited)+'; обеспечено товаром '+shown(Decimal(proposed))+'.'+(' Ограничено остатками и поступлениями до начала плана.' if limited else ''),
+            origin={**metadata,'execution_percent':pct,'past_plan':stored(past),'past_fact':stored(actual),'remaining_plan':stored(remaining),'rule':'remaining-erp-plan-times-group-execution-stock-cap-v1','stock_cap_applied':limited,'unconstrained_forecast':stored(unlimited),'available_before':{key:stored(value) for key,value in available.items()},'power_share_fallback':fallback,'power_shares':{key:power.get('share') for key,power in group['powers'].items()} if fallback else {}}
+            fallback_note=(' Общий объём PG распределён по сохранённым долям мощностей шага 3 ('+', '.join({'past':'прошедший план','future':'оставшийся план','fact':'факт'}[field] for field in fallback)+').' if fallback else '')
+            row.update(proposed=proposed,explanation='Выполнение '+shown(Decimal(pct))+'%: факт '+shown(actual)+' / план '+shown(past)+'; оставшийся план '+shown(remaining)+' компл. Прогноз по выполнению '+shown(unlimited)+'; обеспечено товаром '+shown(Decimal(proposed))+'.'+(' Ограничено остатками и поступлениями до начала плана.' if limited else '')+fallback_note,
                 powers=[{'power':key,'sets':values[key],'requested':stored(requested[key]),'available':stored(available[key]),'indoor':stored(totals[key]['indoor']['fact']),'outdoor':stored(totals[key]['outdoor']['fact'])} for key in values],
                 token=signing.dumps({'scenario':scenario.pk,'revision':scenario.revision,'gid':gid,'fingerprint':fingerprint(group),'powers':values,'total':proposed,'source':origin},salt=SALT,compress=True))
         except (ValidationError,ArithmeticError) as exc:row['error']=' '.join(exc.messages) if isinstance(exc,ValidationError) else 'Расчёт вышел за допустимую точность. Проверьте базу выполнения.'
