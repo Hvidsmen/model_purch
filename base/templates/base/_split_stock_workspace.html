@@ -1,11 +1,7 @@
 {% load split_format l10n %}
 {{ stock_workspace_data|json_script:'split-stock-workspace-data' }}
 <section data-stock-workspace data-step="{{ stock_step }}" data-revision="{{ scenario.revision }}" data-approved="{% if scenario.status == 'approved' %}1{% else %}0{% endif %}">
-<nav class="split-stock-steps" aria-label="Работа с запасами">
-<a href="?tab=stock&amp;stock_step=opening"{% if stock_step == 'opening' %} aria-current="page"{% endif %}><b>1. Остаток на начало</b><small>{{ stock_workspace.counts.opening.ready }} из {{ stock_workspace.total }} готово</small></a>
-<a href="?tab=stock&amp;stock_step=targets"{% if stock_step == 'targets' %} aria-current="page"{% endif %}><b>Целевой запас</b><small>{{ stock_workspace.counts.targets.ready }} из {{ stock_workspace.total }} задано</small></a>
-<a href="?tab=stock&amp;stock_step=supplies"{% if stock_step == 'supplies' %} aria-current="page"{% endif %}><b>2. Спланировать поставки</b><small>{{ stock_workspace.counts.supplies.ready }} из {{ stock_workspace.total }} проверено</small></a>
-</nav>
+
 <div class="admin-panel split-stock-controls">
 {% include 'base/_split_brand_pages.html' %}
 <label>Поиск группы<input type="search" data-stock-search placeholder="Название группы"></label>
@@ -71,7 +67,7 @@
 </tbody></table></div>
 <div class="split-stock-save"><span role="status" data-stock-save-status>Изменения сохранены</span><button type="button" class="admin-button secondary" data-stock-reset disabled>Отменить изменения</button><button type="submit" class="admin-button" data-stock-save disabled>Сохранить изменения</button></div>
 </fieldset></form>
-<footer class="split-stock-footer"><small>Итоги относятся ко всему бренду и всем брендам, независимо от фильтров. Предварительные значения помечаются до сохранения. Пустое поле не считается нулём.</small>{% if stock_step == 'opening' %}<a class="admin-button secondary" href="?tab=stock&amp;stock_step=targets">К целевому запасу →</a><a href="?tab=stock&amp;stock_step=supplies">К поставкам →</a>{% else %}<a class="admin-button secondary" href="?tab=checks">Перейти к проверке плана →</a>{% endif %}</footer>
+
 {% if stock_step == 'opening' %}<details class="admin-panel"><summary>Перенести прогноз из утверждённого сценария</summary>{% include 'base/_split_forecast_import.html' %}</details>{% endif %}
 <dialog data-stock-proposal-dialog aria-labelledby="stock-proposal-title"><h2 id="stock-proposal-title">Предпросмотр</h2><p data-stock-proposal-explanation></p><div data-stock-purchase-options><label>Сценарий закупок<select data-stock-purchase><option value="">Выберите сценарий</option>{% for purchase in ddp_purchase_scenarios %}<option value="{{ purchase.pk }}">{{ purchase.name }} · {{ purchase.date_start_plan|date:'d.m.Y' }} — {{ purchase.date_end_plan|date:'d.m.Y' }}</option>{% endfor %}</select></label><label><input type="checkbox" data-stock-import-empty checked> Только незаполненные проценты</label></div><p>Область: показанные фильтрами группы текущего бренда. Можно сразу рассчитать и сохранить. Предпросмотр необязателен. При ошибке в расчёте запись не выполняется.</p><button type="button" class="admin-button" data-stock-proposal-save>Рассчитать и сохранить</button> <button type="button" class="admin-button secondary" data-stock-proposal-preview>Рассчитать предпросмотр</button><p role="status" data-stock-proposal-status></p><div data-stock-proposal-results></div><div class="split-stock-actions"><button type="button" class="admin-button" data-stock-proposal-confirm disabled>Подтвердить и внести в таблицу</button><button type="button" class="admin-button secondary" data-stock-proposal-close>Закрыть</button></div></dialog>
 </section>

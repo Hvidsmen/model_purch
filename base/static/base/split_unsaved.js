@@ -58,5 +58,5 @@
     event.preventDefault();event.stopImmediatePropagation();nextURL=url.href;error.textContent='';refresh();dialog.showModal();stay.focus();
   },true);
   window.addEventListener('beforeunload',event=>{if(!leaving&&dirty().length){event.preventDefault();event.returnValue='';}});
-  window.SplitUnsaved={register(controller){controllers.push(controller);refresh();},refresh,navigate,allow(){leaving=true;}};
+  window.SplitUnsaved={saveAndNavigate:saveAll,register(controller){controllers.push(controller);refresh();},refresh,navigate,allow(){leaving=true;}};
 })();

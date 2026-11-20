@@ -178,7 +178,7 @@ class StockWorkspaceTests(TestCase):
         for step in ('opening','targets','supplies'):
             response=self.client.get(self.url,{'tab':'stock','stock_step':step})
             self.assertEqual(response.status_code,200)
-            self.assertContains(response,'data-stock-workspace')
+            self.assertContains(response,'id="split-plan-inputs"' if step == 'supplies' else 'data-stock-workspace')
             self.assertNotContains(response,'>Сохранить поставки</button>')
             self.assertNotContains(response,'>Распределить план</button>')
         with patch('base.split_inventory.source_rows_many',return_value={self.gid:([],[])}) as source, patch('base.split_inventory.apply_inventory'):
