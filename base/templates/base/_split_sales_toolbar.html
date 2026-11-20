@@ -8,5 +8,5 @@
 {% include 'base/_split_metric_preferences.html' %}</details>
 {% include 'base/_split_ddp.html' %}
 <form method="post" data-sales-history>{% csrf_token %}<input type="hidden" name="revision" value="{{ scenario.revision }}"><button class="admin-button secondary" name="action" value="load_history"{% if scenario.status == 'approved' %} disabled{% endif %}>Загрузить факт</button></form><a href="?tab=composition">Изменить состав</a></div>
-<small>1. Заполните DDP → 2. Задайте план групп или каналов → 3. Проверьте итоги и сохраните → 4. Перейдите к распределению.</small>
+<small>Задайте продажи и DDP → рассчитайте или скорректируйте новые закупки → сохраните общий баланс → проверьте и утвердите план.</small>
 </div>

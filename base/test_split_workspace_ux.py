@@ -11,12 +11,12 @@ class WorkspaceUXTests(TestCase):
         fixtures.SplitCycleTests.complete(self)
         self.url=reverse('split_scenario',args=[self.scenario.pk])
 
-    def test_five_steps_and_composition_are_accessible(self):
+    def test_six_steps_and_composition_are_accessible(self):
         for tab in ['composition','plan','distribution','stock','checks','detail']:
             response=self.client.get(self.url,{'tab':tab})
             self.assertEqual(response.status_code,200)
             self.assertContains(response,'Этапы подготовки плана')
-            self.assertEqual(len(response.context['workflow_ux']['stages']),5)
+            self.assertEqual(len(response.context['workflow_ux']['stages']),6)
         response=self.client.get(self.url,{'tab':'composition'})
         self.assertContains(response,'Из стока')
 

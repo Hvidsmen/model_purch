@@ -31,7 +31,7 @@ def scenarios(request):
     form = ScenarioForm(request.POST if request.method == 'POST' else None)
     if request.method == 'POST' and form.is_valid():
         scenario = create_scenario(request.user, form.cleaned_data)
-        return redirect('split_scenario', pk=scenario.pk)
+        return redirect(reverse('split_scenario', args=[scenario.pk]) + '?tab=composition')
     return render(request, 'base/split_scenarios.html', {'form': form,
         'page': Paginator(scenarios_for(request.user,SplitScenario.objects.all()).select_related('created_by').defer('state'),25).get_page(request.GET.get('page'))})
 
@@ -54,6 +54,8 @@ def scenario(request, pk):
     if request.method=='POST' and request.POST.get('action')=='approve' and not can_access(request.user,'sales_planning_admin'):raise PermissionDenied('Утверждение доступно администратору планирования.')
     tab = request.GET.get('tab', 'composition' if not item.state['groups'] or not item.state['channels'] else 'plan')
     if tab not in ('composition', 'plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
+        tab = 'plan'
+    if tab == 'stock' and request.GET.get('stock_step') == 'supplies':
         tab = 'plan'
     if request.method=='POST' and request.POST.get('action') in ('composition_links_catalog','composition_edit'):
         try:
@@ -162,24 +164,16 @@ def scenario(request, pk):
             return JsonResponse({'ok':True,**result})
         except ValidationError as exc:
             return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
-    if request.method == 'POST' and request.POST.get('action') == 'save_plan_rows':
+    if request.method == 'POST' and request.POST.get('action') in ('save_plan_rows','preview_sales_balance'):
         try:
             if item.status != 'draft' or str(item.revision) != str(request.POST.get('revision')):
                 raise ValidationError('Расчёт изменён или утверждён. Обновите страницу.')
             from .split_plan_payload import unpack
             post = unpack(request.POST)
-            post['action'] = 'lines'
-            state = changed_state(item, post)
-            import json
-            try:
-                targets = json.loads(post.get('pending_group_plans', '[]'))
-            except (ValueError, TypeError):
-                raise ValidationError('Некорректный список итоговых планов.')
-            if not isinstance(targets, list) or any(not isinstance(gid, str) or gid not in state['groups'] for gid in targets) or len(set(targets)) != len(targets):
-                raise ValidationError('Некорректный список итоговых планов.')
-            from .split_group_plan import distribute
-            for gid in targets:
-                state = distribute(item, state, gid, post.get('group_plan_' + gid),post.get('group_plan_method_'+gid,'saved'))
+            from .split_sales_balance import candidate as sales_candidate, report as sales_balance_report
+            state = sales_candidate(item, post, request.POST.get('calculate_supplies') == '1')
+            if request.POST['action'] == 'preview_sales_balance':
+                return JsonResponse({'ok':True,'rows':sales_balance_report(item,state)})
             persist(item, request.user, request.POST.get('revision'), state, 'Сохранены продажи и новые поставки')
             return JsonResponse({'ok': True})
         except ValidationError as exc:
@@ -347,7 +341,7 @@ def scenario(request, pk):
     from .split_brand_summary import report as brand_report
     sales_summary=brand_report(item) if tab=='plan' and sales_view=='brands' else None
     from .split_workspace_ux import presentation as workflow_presentation
-    workflow_ux = workflow_presentation(item, data, tab)
+    workflow_ux = workflow_presentation(item, data, tab, distribution_section, request.GET.get('stock_step','opening'))
     from .split_history import presentation as history_presentation
     from .split_brand_pages import scope as brand_scope
     display_item,brand_page=brand_scope(item,request.GET) if tab in ('composition','plan','stock','distribution') else (item,None)
@@ -451,10 +445,6 @@ def scenario(request, pk):
         page_report=serialize(stock_workspace);stock_workspace_data['page_totals']=page_report['totals'];stock_workspace_data['page_counts']=page_report['counts']
         stock_workspace['loaded']=sum(bool(row['group'].get('inventory_source')) for row in stock_workspace['rows'])
         stock_workspace['forecast_filled']=sum(row['opening']['forecast_total'] is not None for row in stock_workspace['rows'])
-        stage=next((stage for stage in workflow_ux['stages'] if stage['key']=='stock'),None)
-        if stage is not None:
-            counts=stock_all_workspace['counts']['supplies'];stage['detail']=f"Проверено: {counts['ready']} из {stock_all_workspace['total']} групп"
-            stage['status']='Требует внимания' if counts['missing'] or counts['deficit'] else 'Заполнен'
         for row in stock_workspace['rows']:
             row['reference']=stock_references.get(row['id'],{})
         for name,label in (('sales_plan_group','Группа планов продаж'),('outdoor_type','Тип наружного блока'),('factory','Завод')):

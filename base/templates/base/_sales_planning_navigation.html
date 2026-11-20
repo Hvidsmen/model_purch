@@ -1,4 +1,4 @@
-{% load static %}<link rel="stylesheet" href="{% static 'base/split_table_scroll.css' %}?v=1"><script src="{% static 'base/split_table_scroll.js' %}?v=2" defer></script><link rel="stylesheet" href="{% static 'base/split_progress.css' %}?v=1"><script src="{% static 'base/split_progress.js' %}?v=1" defer></script><script src="{% static 'base/split_unsaved.js' %}?v=2" defer></script>
+{% load static %}<link rel="stylesheet" href="{% static 'base/split_table_scroll.css' %}?v=1"><script src="{% static 'base/split_table_scroll.js' %}?v=2" defer></script><link rel="stylesheet" href="{% static 'base/split_progress.css' %}?v=1"><script src="{% static 'base/split_progress.js' %}?v=1" defer></script><script src="{% static 'base/split_unsaved.js' %}?v=next3" defer></script>
 <nav class="portal-section-nav" aria-label="Модель планирования продаж">
 <a href="{% url 'sales_planning_split' %}"{% if active == 'split' or active == 'scenarios' %} aria-current="page"{% endif %}>Split</a>
 <a href="{% url 'sales_planning_channels' %}"{% if active == 'channels' %} aria-current="page"{% endif %}>Каналы продаж</a>

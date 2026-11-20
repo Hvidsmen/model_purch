@@ -70,7 +70,7 @@ def persist(scenario, actor, revision, state, action, *, approved=False):
     check_scenario(actor,scenario,state)
     if scenario.status != 'draft':
         raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')
-    if any((group.get('forecast_history_source') or {}).get('method')=='plan_execution' for group in state['groups'].values()):
+    if any((group.get('forecast_history_source') or {}).get('method')=='plan_execution' for group in state.get('groups',{}).values()):
         from .split_forecast_plan import validate_state
         validate_state(state)
     fields = {'state': state, 'revision': scenario.revision + 1}
@@ -219,7 +219,10 @@ def changed_state(scenario, post, *, allow_empty=False):
             if scope is not None and gid not in scope:continue
             group['ddp'] = decimal_input(post, 'ddp_' + gid)
             if 'buy_' + gid in post:
-                group['buy'] = decimal_input(post, 'buy_' + gid, optional=False)
+                value = decimal_input(post, 'buy_' + gid, optional=False)
+                if number(value) != number(group.get('buy', '0')):
+                    group['buy_source'] = {'kind':'manual','label':'Вручную'}
+                group['buy'] = value
             for cid, line in group['channels'].items():
                 suffix = gid + '_' + cid
                 line.update(input=decimal_input(post, 'q_' + suffix, optional=False), fact=decimal_input(post, 'fact_' + suffix),

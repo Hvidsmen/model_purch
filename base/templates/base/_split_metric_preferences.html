@@ -1,4 +1,4 @@
-<div class="split-metric-preferences" role="group" aria-label="Показатели таблицы" data-split-metric-preferences{% if tab == 'plan' %} data-default-off="incoming planned_incoming"{% endif %} data-storage-key="split-visible-metrics-v1-{{ request.user.pk }}">
+<div class="split-metric-preferences" role="group" aria-label="Показатели таблицы" data-split-metric-preferences{% if tab == 'plan' %} data-default-off="planned_incoming"{% endif %} data-storage-key="split-visible-metrics-v1-{{ request.user.pk }}">
 <div class="split-metric-choices"><strong class="split-metric-caption" title="Настройка действует на всех вкладках и видах в этом браузере. Скрытие не меняет данные, расчёт и Excel.">Показатели:</strong>
 <label><input type="checkbox" data-split-metric-choice="quantity" checked> Количество · шт./компл.</label>
 <label><input type="checkbox" data-split-metric-choice="markup" checked> Наценка</label>

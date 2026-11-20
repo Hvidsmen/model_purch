@@ -1,6 +1,12 @@
 (() => {
   const workspace = document.querySelector('.split-workspace');
   if (!workspace) return;
+  workspace.querySelector('[data-split-save-next]')?.addEventListener('click',event=>{
+    const url=new URL(event.currentTarget.dataset.splitSaveNext,location.href);
+    const brand=new URLSearchParams(location.search).get('brand_page');
+    if(brand)url.searchParams.set('brand_page',brand);
+    window.SplitUnsaved?.saveAndNavigate(url.href);
+  });
   // Preserve expansion and scroll without storing business inputs in the browser.
   const key = 'split-workspace-position-' + location.pathname + '-' + new URLSearchParams(location.search).get('tab');
   try {
@@ -61,23 +67,51 @@
     });
     plan.addEventListener('submit', event => {
       const action=event.submitter?.value||'';
-      if((action==='lines'||action.startsWith('group_plan:')) && window.SplitUnsaved){event.preventDefault();savePlan(null,action.startsWith('group_plan:')?action.slice('group_plan:'.length):'').catch(()=>{});}
+      if((action==='lines'||action==='calculate_supplies'||action.startsWith('group_plan:')) && window.SplitUnsaved){event.preventDefault();savePlan(null,action.startsWith('group_plan:')?action.slice('group_plan:'.length):'',action==='calculate_supplies').catch(()=>{});}
       else{submitted=true;window.SplitUnsaved?.allow();}
     });
     let busy=false;
-    async function savePlan(next=null,forceGroup=''){
+    async function savePlan(next=null,forceGroup='',calculate=false){
         if(busy||!plan.reportValidity())return;
         const fields=new FormData(plan);
         const payload=new URLSearchParams({action:'save_plan_rows',revision:fields.get('revision'),csrfmiddlewaretoken:fields.get('csrfmiddlewaretoken'),plan_payload:JSON.stringify([...fields])});
         const targets=inputs.filter(input=>input.type==='number'&&input.name.startsWith('group_plan_')&&input.value!==original.get(input)).map(input=>input.name.slice('group_plan_'.length));
         if(forceGroup)targets.push(forceGroup);
         payload.set('pending_group_plans',JSON.stringify([...new Set(targets)]));
+        if(calculate)payload.set('calculate_supplies','1');
         const progress=window.SplitProgress?.start('Сохранение изменений плана');busy=true;window.SplitUnsaved.refresh();
         try{
           const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:payload});await readSaveResponse(response);
           progress?.finish('Изменения сохранены');submitted=true;remember();window.SplitUnsaved.navigate(next);
         }catch(error){progress?.fail(error.message);throw error;}finally{busy=false;window.SplitUnsaved.refresh();}
     }
+    let previewTimer, previewSequence=0;
+    const balanceStatus = plan.querySelector('[data-plan-balance-status]');
+    const format = value => value === null ? '—' : new Intl.NumberFormat('ru-RU',{maximumFractionDigits:2}).format(Number(value));
+    async function previewBalance() {
+      const sequence=++previewSequence;
+      if(busy || !plan.checkValidity())return;
+      const fields=new FormData(plan);
+      const targets=inputs.filter(input=>input.type==='number' && input.name.startsWith('group_plan_') && input.value!==original.get(input)).map(input=>input.name.slice(11));
+      const payload=new URLSearchParams({action:'preview_sales_balance',revision:fields.get('revision'),csrfmiddlewaretoken:fields.get('csrfmiddlewaretoken'),plan_payload:JSON.stringify([...fields]),pending_group_plans:JSON.stringify(targets)});
+      try {
+        const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:payload});
+        const data=await readSaveResponse(response);
+        if(sequence!==previewSequence)return;
+        Object.entries(data.rows).forEach(([gid,row])=>{
+          const tr=plan.querySelector('[data-plan-group="'+CSS.escape(gid)+'"]');if(!tr)return;
+          const cell=tr.querySelector('[data-plan-inventory="closing"]');
+          if(cell){cell.firstChild.textContent=format(row.closing);const changedSales=[...tr.querySelectorAll('input[name^="q_"],input[name^="group_plan_"]')].some(input=>input.value!==original.get(input));
+            const needsReview=changedSales && tr.querySelector('[data-buy-source="calculated"]');
+            cell.querySelector('[data-plan-balance-note]').textContent='Цель: '+format(row.target)+' · '+row.status+(needsReview?' · Продажи изменены: проверьте расчёт закупок.':'');}
+        });
+        if(balanceStatus)balanceStatus.textContent=dirty ? 'Предварительный баланс по текущему вводу. Изменения не сохранены; итоги и месяцы обновятся после сохранения.' : '';
+      }catch(error){if(sequence===previewSequence && balanceStatus)balanceStatus.textContent=error.message;}
+    }
+    function scheduleBalance(){++previewSequence;clearTimeout(previewTimer);previewTimer=setTimeout(previewBalance,450);}
+    plan.addEventListener('input',scheduleBalance);plan.addEventListener('change',scheduleBalance);
+    cancel.addEventListener('click',scheduleBalance);
+    previewBalance();
     window.SplitUnsaved?.register({dirty:()=>dirty&&!submitted,busy:()=>busy,canSave:()=>plan.checkValidity(),save:savePlan,discard(){original.forEach((value,input)=>{if(input.type==='checkbox')input.checked=value;else input.value=value;});update();}});
     update();
   }
