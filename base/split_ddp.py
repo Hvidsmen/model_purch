@@ -149,6 +149,12 @@ def preview(scenario,post):
     try:targets=json.loads(post.get('targets','[]'));mapping=json.loads(post.get('mapping','{}'))
     except (ValueError,TypeError):raise ValidationError('Некорректный выбор групп.')
     if not isinstance(targets,list) or not targets or len(targets)!=len(set(map(str,targets))) or any(not isinstance(gid,str) or gid not in scenario.state['groups'] for gid in targets) or not isinstance(mapping,dict):raise ValidationError('Выберите группы текущего сценария.')
+    mode=post.get('fill_mode','replace')
+    if mode not in ('append','replace'):raise ValidationError('Выберите режим заполнения DDP.')
+    try:current_values=json.loads(post.get('current_values','{}'))
+    except (ValueError,TypeError):raise ValidationError('Некорректные текущие DDP.')
+    if not isinstance(current_values,dict) or any(key not in targets for key in current_values):raise ValidationError('Некорректные текущие DDP.')
+    for value in current_values.values():number(value,optional=True)
     source=post.get('source');base={};purchase_goods={};markup=ZERO
     if source=='fact':
         try:year=int(post.get('year',''))
@@ -168,7 +174,11 @@ def preview(scenario,post):
         group=scenario.state['groups'][gid]
         row={'gid':gid,'name':group['ref']['name'],'current':group.get('ddp'),'proposed':None,'powers':[],'error':''}
         try:
+            current=number(current_values.get(gid,group.get('ddp')),optional=True)
+            if mode=='append' and current is not None and current!=ZERO:
+                row.update(skipped=True,error='Заполненный DDP сохранён без изменений.');rows.append(row);continue
             parameters={};prices={};details=[];origin=dict(metadata)
+            origin['fill_mode']=mode
             selected=mapping.get(gid,{})
             if source=='purchase' and isinstance(selected,str):
                 good=purchase_goods.get(selected)
