@@ -181,6 +181,21 @@ def changed_state(scenario, post, *, allow_empty=False):
         composition.setlist('groups', gids)
         composition.setlist('channels', cids)
         return changed_state(draft, composition, allow_empty=True)
+    if action == 'composition_edit':
+        from django.http import QueryDict
+        removed=set(post.getlist('removed_groups'))
+        if not removed <= set(state['groups']):raise ValidationError('Группа уже отсутствует в плане. Обновите страницу.')
+        composition=QueryDict('',mutable=True)
+        composition.update(action='composition',confirm='on',volume_mode=post.get('volume_mode',state.get('volume_mode',scenario.entry_mode)))
+        composition.setlist('groups',sorted((set(state['groups'])-removed)|set(post.getlist('added_groups'))))
+        composition.setlist('channels',post.getlist('channels'))
+        draft=deepcopy(scenario);draft.state=changed_state(scenario,composition,allow_empty=True)
+        operation=post.get('composition_operation','save')
+        if operation not in ('save','add_onhand_groups','add_stock_groups'):raise ValidationError('Неизвестное действие состава.')
+        if operation!='save':
+            inputs=QueryDict('',mutable=True);inputs['action']=operation
+            return changed_state(draft,inputs,allow_empty=True)
+        return draft.state
     if action == 'lines':
         scope=None
         if 'plan_group_ids' in post:
