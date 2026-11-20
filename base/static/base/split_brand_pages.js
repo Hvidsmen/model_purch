@@ -25,3 +25,19 @@
   }
  });
 })();
+
+(() => {
+ const picker=document.querySelector('[data-distribution-channel-picker]');if(!picker)return;
+ const choices=[...picker.querySelectorAll('[name=filter_channel]')],caption=picker.querySelector('[data-distribution-channel-caption]');
+ function update(){const count=choices.filter(input=>input.checked).length;caption.textContent=count===choices.length?'Все':count?'Выбрано: '+count:'Не выбраны';}
+ choices.forEach(input=>input.addEventListener('change',update));
+ picker.querySelector('[data-distribution-channels-all]').onclick=()=>{choices.forEach(input=>input.checked=true);update();};
+ picker.querySelector('[data-distribution-channels-none]').onclick=()=>{choices.forEach(input=>input.checked=false);update();};
+ picker.querySelector('[data-distribution-channel-search]').oninput=event=>choices.forEach(input=>input.closest('label').hidden=!input.closest('label').textContent.toLocaleLowerCase('ru').includes(event.target.value.trim().toLocaleLowerCase('ru')));
+ document.addEventListener('click',event=>{if(!picker.contains(event.target))picker.open=false;});
+ picker.addEventListener('keydown',event=>{if(event.key==='Escape'){picker.open=false;picker.querySelector('summary').focus();}});
+ picker.closest('form').addEventListener('submit',event=>{
+  event.preventDefault();const link=document.createElement('a');link.href=location.pathname+'?'+new URLSearchParams(new FormData(picker.closest('form')));link.hidden=true;document.body.append(link);link.click();link.remove();
+ });
+ update();
+})();
