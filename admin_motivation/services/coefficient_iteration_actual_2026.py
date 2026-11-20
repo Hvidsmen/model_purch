@@ -93,8 +93,9 @@ def calculate(cursor,plans,rates,settings,formulas,progress):
     details,historical=read_details(private,settings['payout_threshold'])
     directors,director_details=directors_2025(private,selected,adapter,actual_settings,formulas)
     rows.extend(directors);details.extend(director_details)
+    source['skipped_director_subdivisions']=sorted({r['branch_name'] for r in selected if not list(adapter.directors_for(r['branch_name'],2025))})
     source.update({'source':'Москва и Термотрейд раздельно: фактическое выполнение I–III кварталов 2026; годовая часть только начислена. Доли авторов плана — по факту I–III кварталов.',
-                   'rule':'iteration-actual-2026-q1-q3-v6-separate-branches','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical})
+                   'rule':'iteration-actual-2026-q1-q3-v7-skip-unassigned-directors','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical})
     return rows,details,source
 
 

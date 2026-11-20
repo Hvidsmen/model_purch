@@ -137,7 +137,7 @@ def workbook(run):
         else:meta.append([f'RUB {year}','В этом запуске RUB не сохранён; нужен новый расчёт.'])
         source=result.get('source') or {}
         if isinstance(source,dict):
-            for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub','rule','from','through','author_source','named_authors','missing_author_rows','source_table','author_field','loaded_at'):
+            for field in ('source','prepared_run_id','completed_at','currency_rule','usd_rub','rule','from','through','author_source','named_authors','missing_author_rows','source_table','author_field','loaded_at','skipped_director_subdivisions'):
                 if source.get(field) is not None:meta.append([f'Источник {year}: {field}',str(source[field])])
         for currency,key in (('USD','plan_fact_summary'),('RUB','plan_fact_summary_rub')):
             if currency=='RUB' and result.get(key) is None:continue

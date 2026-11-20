@@ -107,6 +107,33 @@ class ActualQuarterTests(SimpleTestCase):
         updates=next(call.args[1] for call in cursor.executemany.call_args_list if call.args[0].startswith('UPDATE #iteration_actual_subdivisions'))
         self.assertEqual(set(updates),{(MOSCOW,MOSCOW),(TT,TT)})
 
+    def test_unassigned_tt_director_does_not_block_policy_sales_or_moscow_directors(self):
+        rates=RateBook(*fixture.inputs());cursor=Mock()
+        plans=[fixture.row(sub,2026,1) for sub in (MOSCOW,TT)]
+        policy=[empty_row('actual_2025',2025,sub,kind,'Автор' if kind=='Политики' else '')
+                for sub in (MOSCOW,TT) for kind in ('Политики','Продажи')]
+        cursor.fetchall.return_value=[(sub,1,'1. RAC','Бытовые кондиционеры','DAIKIN','O1',D(100),D(0)) for sub in (MOSCOW,TT)]
+        snapshot={'coefficients':[],'directors':[],'corrections':[],'aliases':{},'default':'Подразделение(Глобально)'}
+        with patch('admin_motivation.services.coefficient_iteration_2025.read_2025',return_value=(deepcopy(policy),{})), \
+             patch('admin_motivation.services.coefficient_iteration_2025.read_details',return_value=([],[])):
+            rows,details,source=calculate(cursor,plans,rates,{'payout_threshold':'.8','quarter_share':'80','year_share':'20'},snapshot,Mock())
+        self.assertEqual([row for row in rows if row['kind']!='Директора'],policy)
+        directors=[row for row in rows if row['kind']=='Директора']
+        self.assertEqual(len(directors),2)
+        self.assertEqual({row['branch'] for row in directors},{MOSCOW})
+        self.assertEqual({row['employee_id'] for row in directors},{1,2})
+        self.assertEqual(source['skipped_director_subdivisions'],[TT])
+        self.assertTrue(all(row['branch']==MOSCOW for row in details))
+
+    def test_missing_directors_do_not_hide_invalid_configuration_of_assigned_directors(self):
+        from .services.coefficient_iteration_runner import validate_directors_2025
+        from django.core.exceptions import ValidationError
+        rates=Rates(RateBook(*fixture.inputs()))
+        cell=next(cell for cell in rates.cells if cell[:2]==('directors_0_0','Директора'))
+        del rates.cells[cell]
+        with self.assertRaisesMessage(ValidationError,'одинаковые товарные ключи'):
+            validate_directors_2025([fixture.row(TT,2026),fixture.row(MOSCOW,2026)],rates,{})
+
     def test_actual_workbook_has_three_distinct_quarter_sheets_and_real_payments(self):
         results={}
         for q in (1,2,3):
