@@ -22,7 +22,7 @@ def set_period_quantity(scenario, state, line, previous, value):
 
 
 @precise
-def distribute(scenario, state, gid, target):
+def distribute(scenario, state, gid, target, method='saved'):
     if gid not in state['groups']:
         raise ValidationError('Группа отсутствует в плане. Обновите страницу.')
     target = number(target)
@@ -31,7 +31,8 @@ def distribute(scenario, state, gid, target):
     fixed = sum((quantity(scenario, line) for line in group['channels'].values()
                  if line['lock_qty']), ZERO)
     free = [(cid, line) for cid, line in group['channels'].items() if not line['lock_qty']]
-    weights = [quantity(scenario, previous[cid]) for cid, _ in free]
+    if method not in ('saved','equal'):raise ValidationError('Выберите способ распределения каналов.')
+    weights = [number(1) if method=='equal' else quantity(scenario, previous[cid]) for cid, _ in free]
     if target < fixed or (not free and target != fixed):
         raise ValidationError('Общий план несовместим с закреплёнными объёмами каналов.')
     if target > fixed and not sum(weights, ZERO):

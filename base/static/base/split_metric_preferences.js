@@ -2,7 +2,7 @@
  const panel=document.querySelector('[data-split-metric-preferences]');if(!panel)return;
  const workspace=panel.closest('.split-workspace'),choices=[...panel.querySelectorAll('[data-split-metric-choice]')];
  const key=panel.dataset.storageKey,off=new Set();
- try{const stored=JSON.parse(localStorage.getItem(key)||'[]');if(Array.isArray(stored))for(const name of stored)if(choices.some(c=>c.dataset.splitMetricChoice===name))off.add(name);}catch{}
+ try{const stored=JSON.parse(localStorage.getItem(key)||JSON.stringify((panel.dataset.defaultOff||'').split(' ').filter(Boolean)));if(Array.isArray(stored))for(const name of stored)if(choices.some(c=>c.dataset.splitMetricChoice===name))off.add(name);}catch{}
  function apply(announce=false,notify=false){
   workspace.toggleAttribute('data-split-metrics-compact',off.size>0);
   choices.forEach(c=>{c.checked=!off.has(c.dataset.splitMetricChoice);});

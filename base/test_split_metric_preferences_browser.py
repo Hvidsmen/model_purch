@@ -18,6 +18,7 @@ class MetricPreferencesBrowserTests(StaticLiveServerTestCase):
             page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
             try:
                 page.goto(self.live_server_url+self.url+'?tab=plan')
+                if page.locator('.split-sales-view').count():page.locator('.split-sales-view > summary').click()
                 page.locator('[data-split-metric-preferences] summary').click()
                 ddp=page.get_by_label('DDP G',exact=True);value=ddp.input_value()
                 original=page.locator('#split-plan-inputs').evaluate('(f)=>Array.from(new FormData(f).entries())')
@@ -39,6 +40,7 @@ class MetricPreferencesBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('[data-stock-band-heading="stock"]')).not_to_be_visible()
                 expect(page.locator('[data-stock-band-heading="prior"]')).not_to_be_visible()
                 expect(page.locator('[data-stock-band-heading="incoming"]')).not_to_be_visible()
+                if page.locator('.split-sales-view').count():page.locator('.split-sales-view > summary').click()
                 page.locator('[data-split-metric-preferences] summary').click()
                 page.locator('[data-split-metrics-reset]').click()
                 expect(page.locator('[data-stock-band-heading="stock"]')).to_be_visible()
@@ -68,6 +70,7 @@ class MetricPreferencesBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('thead [data-history-year-column]').first).to_be_visible()
                 table=page.locator('.split-plan-matrix');row=page.locator('[data-plan-group]').first
                 before={'width':table.bounding_box()['width'],'height':row.bounding_box()['height']}
+                if page.locator('.split-sales-view').count():page.locator('.split-sales-view > summary').click()
                 page.locator('[data-split-metric-preferences] summary').click()
                 for metric in ['revenue','markup','ddp','stock','incoming','planned_incoming']:
                     page.locator('[data-split-metric-choice="'+metric+'"]').uncheck()

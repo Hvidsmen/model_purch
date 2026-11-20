@@ -20,7 +20,7 @@ class BrandPagesBrowserTests(StaticLiveServerTestCase):
                 page.goto(self.live_server_url+self.url+'?tab=plan')
                 expect(page.locator('[data-plan-group]')).to_have_count(1)
                 page.get_by_label('DDP G',exact=True).fill('123')
-                page.locator('[data-brand-pages] a').filter(has_text='Beta (1)').click()
+                page.locator('[data-sales-brand]').select_option(label='Beta (1)',force=True)
                 expect(page.locator('.split-unsaved-dialog')).to_be_visible()
                 with page.expect_navigation():page.get_by_role('button',name='Сохранить и перейти',exact=True).click()
                 expect(page.locator('[data-brand-pages]')).to_have_attribute('data-brand-pages','beta')

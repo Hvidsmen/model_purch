@@ -30,7 +30,7 @@ def preview(scenario, gid, cid=''):
 
 
 @precise
-def apply_grid(scenario, raw):
+def apply_grid(scenario, raw, *, allow_incomplete=False):
     if len(raw) > 2_000_000:
         raise ValidationError('Слишком большой блок распределения.')
     try:
@@ -55,8 +55,9 @@ def apply_grid(scenario, raw):
         values = row.get('values')
         if not keys or not isinstance(values,dict) or set(values) != set(keys):
             raise ValidationError('Передайте доли всех активных мощностей группы.')
-        parsed = {key:number(values[key]) for key in keys}
-        if any(value > HUNDRED for value in parsed.values()) or sum(parsed.values()) != HUNDRED:
+        partial=allow_incomplete and mode=='manual'
+        parsed = {key:number(values[key],optional=partial) for key in keys}
+        if any(value is not None and value>HUNDRED for value in parsed.values()) or not partial and sum(parsed.values()) != HUNDRED:
             raise ValidationError(original['ref']['name']+': сумма долей мощностей должна быть ровно 100%.')
         source = None
         defaults = {}
@@ -91,7 +92,7 @@ def apply_grid(scenario, raw):
                 raise ValidationError('Некорректные параметры мощности.')
             params = {**defaults.get(key, {}), **params}
             factor,cost = number(params.get('factor'),optional=True),number(params.get('cost'),optional=True)
-            if factor is not None and factor <= 0 or cost is not None and cost > HUNDRED:
+            if factor is not None and factor <= 0 and not allow_incomplete or cost is not None and cost > HUNDRED:
                 raise ValidationError('Соотношение DDP должно быть положительным, доля стоимости — от 0 до 100%.')
             power['factor'],power['indoor_cost_percent'] = stored(factor),stored(cost)
             for kind in ('indoor','outdoor'):

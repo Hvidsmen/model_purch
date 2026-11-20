@@ -5,12 +5,21 @@ from urllib.parse import urlencode
 from .split_plan_presentation import references
 
 
-def scope(scenario,params):
+def brand_name(value):
+    name=str(value or '').strip() or 'Без бренда'
+    return 'Прочее' if len({part.strip().casefold() for part in name.split(',') if part.strip()})>1 else name
+
+
+def buckets(scenario):
     refs=references(scenario);brands={}
     for gid in scenario.state['groups']:
-        name=str(refs.get(gid,{}).get('brand') or '').strip() or 'Без бренда'
-        if len({part.strip().casefold() for part in name.split(',') if part.strip()})>1:name='Прочее'
+        name=brand_name(refs.get(gid,{}).get('brand'))
         key=name.casefold();entry=brands.setdefault(key,{'key':key,'name':name,'gids':[]});entry['gids'].append(gid)
+    return brands
+
+
+def scope(scenario,params):
+    brands=buckets(scenario)
     ordered=sorted(brands.values(),key=lambda row:row['name'].casefold())
     if len(ordered)<2:return scenario,None
     selected=params.get('brand_page','')

@@ -18,7 +18,7 @@ class WorkspaceUXTests(TestCase):
             self.assertContains(response,'Этапы подготовки плана')
             self.assertEqual(len(response.context['workflow_ux']['stages']),5)
         response=self.client.get(self.url,{'tab':'composition'})
-        self.assertContains(response,'Добавить группы со стока')
+        self.assertContains(response,'Из стока')
 
     def stock_row(self,gid,buy):
         group=self.scenario.state['groups'][gid]

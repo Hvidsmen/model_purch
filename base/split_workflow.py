@@ -141,7 +141,7 @@ def changed_state(scenario, post, *, allow_empty=False):
         inputs = post.copy()
         inputs['action'] = 'lines'
         state = changed_state(scenario, inputs)
-        return distribute(scenario, state, target, post.get('group_plan_' + target))
+        return distribute(scenario, state, target, post.get('group_plan_' + target),post.get('group_plan_method_'+target,'saved'))
     if member_action in ('add_group', 'remove_group', 'add_channel', 'remove_channel', 'add_stock_groups', 'add_onhand_groups'):
         if scenario.status != 'draft':
             raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')
@@ -214,6 +214,7 @@ def changed_state(scenario, post, *, allow_empty=False):
                 line.update(input=decimal_input(post, 'q_' + suffix, optional=False), fact=decimal_input(post, 'fact_' + suffix),
                     markup=decimal_input(post, 'markup_' + suffix), lock_qty=post.get('lockq_' + suffix) == 'on',
                     lock_markup=post.get('lockm_' + suffix) == 'on')
+        state['sales_reviewed_groups']=sorted(set(state.get('sales_reviewed_groups',[]))|{gid for gid in state['groups'] if scope is None or gid in scope})
         from .split_ddp import apply_pending
         apply_pending(scenario,state,post)
     elif action in ('distribution', 'distribution_months', 'distribution_powers', 'equal_months', 'equal_powers'):

@@ -60,15 +60,18 @@
       original.forEach((value,input) => { if (input.type === 'checkbox') input.checked=value; else input.value=value; }); update();
     });
     plan.addEventListener('submit', event => {
-      if(event.submitter?.value==='lines' && window.SplitUnsaved){event.preventDefault();savePlan().catch(()=>{});}
+      const action=event.submitter?.value||'';
+      if((action==='lines'||action.startsWith('group_plan:')) && window.SplitUnsaved){event.preventDefault();savePlan(null,action.startsWith('group_plan:')?action.slice('group_plan:'.length):'').catch(()=>{});}
       else{submitted=true;window.SplitUnsaved?.allow();}
     });
     let busy=false;
-    async function savePlan(next=null){
+    async function savePlan(next=null,forceGroup=''){
         if(busy||!plan.reportValidity())return;
         const fields=new FormData(plan);
         const payload=new URLSearchParams({action:'save_plan_rows',revision:fields.get('revision'),csrfmiddlewaretoken:fields.get('csrfmiddlewaretoken'),plan_payload:JSON.stringify([...fields])});
-        payload.set('pending_group_plans',JSON.stringify(inputs.filter(input=>input.name.startsWith('group_plan_') && input.value!==original.get(input)).map(input=>input.name.slice('group_plan_'.length))));
+        const targets=inputs.filter(input=>input.type==='number'&&input.name.startsWith('group_plan_')&&input.value!==original.get(input)).map(input=>input.name.slice('group_plan_'.length));
+        if(forceGroup)targets.push(forceGroup);
+        payload.set('pending_group_plans',JSON.stringify([...new Set(targets)]));
         const progress=window.SplitProgress?.start('Сохранение изменений плана');busy=true;window.SplitUnsaved.refresh();
         try{
           const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:payload});await readSaveResponse(response);

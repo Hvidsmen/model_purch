@@ -1,5 +1,6 @@
 """Read-only workflow guidance, based on the existing validation result."""
 from urllib.parse import urlencode
+from decimal import Decimal
 
 STAGES = [('composition', 'Состав плана', 'Выберите группы, каналы и способ задания объёма.'),
           ('plan', 'Продажи', 'Задайте объёмы продаж, DDP и наценки. Сравните результат с фактом.'),
@@ -53,6 +54,16 @@ def presentation(scenario, result, tab):
             status = 'Заполнен'
         if key in ('distribution', 'stock') and not any(line.get('quantity') for line in result.get('lines', [])):
             status, detail = 'Не начат', 'Сначала задайте положительный план продаж'
+        if key == 'plan' and has_composition:
+            filled=sum(all(line.get('input') is not None for line in group['channels'].values()) and (gid in scenario.state.get('sales_reviewed_groups',[]) or any(Decimal(str(line.get('input') or 0))!=0 for line in group['channels'].values())) for gid,group in scenario.state['groups'].items())
+            positive=sum(any(line.get('quantity') for line in result.get('lines',[]) if line['gid']==gid) for gid in scenario.state['groups'])
+            detail=f"План задан: {filled} из {len(scenario.state['groups'])} групп · с продажами: {positive}"
+            status='Требует внимания' if errors or warnings else 'Не завершён' if filled<len(scenario.state['groups']) else 'План задан'
+        if key == 'distribution' and has_composition:
+            from .split_distribution_overview import overview
+            month_ready=overview(scenario,'months',{});power_ready=overview(scenario,'powers',{})
+            detail=f"Месяцы: {month_ready['counts']['ready']} из {month_ready['required_total']} · мощности: {power_ready['counts']['ready']} из {power_ready['required_total']}"
+            if any(report['counts']['ready']<report['required_total'] for report in (month_ready,power_ready)):status='Не завершён'
         if key == 'checks' and scenario.status == 'approved':
             status = 'Утверждён'
         stages.append({'key':key,'title':title,'description':description,'number':index,'status':status,'detail':detail,'current':tab==key})

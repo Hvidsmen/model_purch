@@ -54,11 +54,22 @@ def scenario(request, pk):
     tab = request.GET.get('tab', 'composition' if not item.state['groups'] or not item.state['channels'] else 'plan')
     if tab not in ('composition', 'plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
         tab = 'plan'
+    sales_view='brands' if request.GET.get('sales_view')=='brands' else 'groups'
+    if request.method=='POST' and request.POST.get('action') in ('brand_preview','brand_apply'):
+        try:
+            if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            from .split_brand_summary import preview as brand_preview,apply as brand_apply
+            if request.POST['action']=='brand_preview':return JsonResponse({'ok':True,**brand_preview(item,request.POST)})
+            state=brand_apply(item,request.POST)
+            persist(item,request.user,request.POST.get('revision'),state,'Подтверждена корректировка итога бренда')
+            return JsonResponse({'ok':True})
+        except ValidationError as exc:return JsonResponse({'error':' '.join(exc.messages)},status=400)
     distribution_section = request.GET.get('section', 'months')
     if distribution_section not in ('months','powers'):
         distribution_section = 'months'
     distribution_edit = request.GET.get('edit') == '1' or request.method == 'POST'
     distribution_filters = {key:request.GET.get('filter_'+key,'').strip() for key in ('group','channel','status','q')}
+    distribution_filters['positive_only']=request.GET.get('show_zero')!='1' and distribution_filters['status']!='not_required'
     gid = request.POST.get('group') or request.GET.get('group') or next(iter(item.state['groups']), '')
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
@@ -101,7 +112,7 @@ def scenario(request, pk):
                 raise ValidationError('Некорректный список итоговых планов.')
             from .split_group_plan import distribute
             for gid in targets:
-                state = distribute(item, state, gid, post.get('group_plan_' + gid))
+                state = distribute(item, state, gid, post.get('group_plan_' + gid),post.get('group_plan_method_'+gid,'saved'))
             persist(item, request.user, request.POST.get('revision'), state, 'Сохранены продажи и новые поставки')
             return JsonResponse({'ok': True})
         except ValidationError as exc:
@@ -127,7 +138,7 @@ def scenario(request, pk):
                 from .split_month_grid import preview as grid_preview, apply_grid
             if request.POST['action'].startswith('preview_'):
                 return JsonResponse({'ok':True,**grid_preview(item,gid,cid)})
-            state,count = apply_grid(item,request.POST.get('grid_payload',''))
+            state,count = apply_grid(item,request.POST.get('grid_payload',''),allow_incomplete=request.POST.get('save_draft')=='1')
             persist(item,request.user,request.POST.get('revision'),state,('Мощности' if power_grid else 'Месяцы')+f' в таблице · сохранено строк: {count}')
             return JsonResponse({'ok':True,'revision':item.revision})
         except ValidationError as exc:
@@ -265,6 +276,8 @@ def scenario(request, pk):
     from .split_stock_protection import protected_groups
     stock_locked_groups = protected_groups(item.state)
     data = evaluate(item)
+    from .split_brand_summary import report as brand_report
+    sales_summary=brand_report(item) if tab=='plan' and sales_view=='brands' else None
     from .split_workspace_ux import presentation as workflow_presentation
     workflow_ux = workflow_presentation(item, data, tab)
     from .split_history import presentation as history_presentation
@@ -325,8 +338,10 @@ def scenario(request, pk):
             'outdoor_options': [model for model in power['models'] if model['kind'] == 'outdoor']})
     comparison = None
     distribution_overview = None
+    distribution_steps = {}
     if tab == 'distribution':
         from .split_distribution_overview import overview
+        distribution_steps={key:overview(display_item,key,{}) for key in ('months','powers')}
         distribution_overview = overview(display_item,distribution_section,distribution_filters)
         from .split_plan_presentation import references
         distribution_references = references(display_item)
@@ -359,7 +374,7 @@ def scenario(request, pk):
     from zoneinfo import ZoneInfo
     return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' else [],
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
-        'composition_rows':composition_rows, 'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
+        'sales_view':sales_view,'sales_summary':sales_summary,'composition_rows':composition_rows, 'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
         'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
@@ -376,7 +391,7 @@ def scenario(request, pk):
         'gid': gid, 'cid': cid, 'group': group, 'months': months, 'powers': powers,
         'stock_overview': inventory if tab == 'stock' else None,
         'inventory_focus':request.GET.get('expand','') if request.method == 'GET' else '',
-        'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
+        'distribution_steps':distribution_steps,'distribution_section':distribution_section, 'distribution_basis':distribution_basis,
         'distribution_overview':distribution_overview,'distribution_edit':distribution_edit,'distribution_filters':distribution_filters,
         'basis_token':basis_token, 'distribution_warning':distribution_warning,
         'monthly_results': [monthly[key] for key in sorted(monthly)],

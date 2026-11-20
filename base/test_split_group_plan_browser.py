@@ -208,7 +208,7 @@ class SplitGroupPlanBrowserTests(StaticLiveServerTestCase):
                 total = page.get_by_label('Общий план G', exact=True)
                 expect(total).to_have_value('30')
                 total.fill('90.000003')
-                page.get_by_role('button', name='Распределить', exact=True).click()
+                page.get_by_role('button', name='Распределить по каналам', exact=True).click()
                 expect(page.locator('[name="q_' + gid + '_' + cids[0] + '"]')).to_have_value('30.000001')
                 expect(page.locator('[name="q_' + gid + '_' + cids[1] + '"]')).to_have_value('60.000002')
                 expect(total).to_have_value('90.000003')
