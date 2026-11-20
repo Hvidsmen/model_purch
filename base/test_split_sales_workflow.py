@@ -181,8 +181,8 @@ class SalesWorkflowBrowserTests(StaticLiveServerTestCase):
             context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
             page=context.new_page()
             try:
-                for tab in ('composition','plan','distribution','stock'):
-                    page.goto(self.live_server_url+self.url+'?tab='+tab)
+                for tab,step in [('composition',''),('plan',''),('distribution',''),('stock','opening'),('stock','targets'),('stock','supplies')]:
+                    page.goto(self.live_server_url+self.url+'?tab='+tab+'&stock_step='+step)
                     for selector,choice in [('[data-brand-multiselect]','[data-brand-choice]')]+([('[data-sales-channel-filter]','[data-sales-channel-choice]')] if tab=='plan' else []):
                         picker=page.locator(selector);summary=picker.locator('summary')
                         summary.evaluate("node=>node.scrollIntoView({block:'start'})")
@@ -193,5 +193,9 @@ class SalesWorkflowBrowserTests(StaticLiveServerTestCase):
                             panel=page.locator('.split-sales-toolbar')
                             self.assertEqual(panel.evaluate('node=>getComputedStyle(node).overflowY'),'visible')
                             page.screenshot(path='/tmp/split-dropdown-'+('brands' if 'brand' in selector else 'channels')+'.png')
+                        if tab=='stock':
+                            self.assertEqual(page.locator('.split-stock-controls').evaluate('node=>getComputedStyle(node).overflowY'),'visible')
+                            self.assertEqual(checkbox.evaluate('node=>getComputedStyle(node).minHeight'),'0px')
+                            page.screenshot(path='/tmp/stock-brands-'+step+'.png')
                         summary.click()
             finally:context.close();browser.close()
