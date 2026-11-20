@@ -94,7 +94,6 @@ class PlanInventoryBrowserTests(StaticLiveServerTestCase):
                 page = context.new_page()
                 page.goto(self.live_server_url + self.url)
                 page.locator('.split-sales-view > summary').click()
-                page.locator('[data-split-metric-preferences] summary').click()
                 page.locator('[data-split-metrics-reset]').click()
                 row = page.locator('[data-plan-group]')
                 facts = row.locator('[data-history-year-column="2026"]:not([data-history-month-column])')

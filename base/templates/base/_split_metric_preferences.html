@@ -1,6 +1,5 @@
-<details class="split-metric-preferences" data-split-metric-preferences{% if tab == 'plan' %} data-default-off="incoming planned_incoming"{% endif %} data-storage-key="split-visible-metrics-v1-{{ request.user.pk }}">
-<summary>Показатели таблиц</summary>
-<div class="split-metric-choices">
+<div class="split-metric-preferences" role="group" aria-label="Показатели таблицы" data-split-metric-preferences{% if tab == 'plan' %} data-default-off="incoming planned_incoming"{% endif %} data-storage-key="split-visible-metrics-v1-{{ request.user.pk }}">
+<div class="split-metric-choices"><strong class="split-metric-caption" title="Настройка действует на всех вкладках и видах в этом браузере. Скрытие не меняет данные, расчёт и Excel.">Показатели:</strong>
 <label><input type="checkbox" data-split-metric-choice="quantity" checked> Количество · шт./компл.</label>
 <label><input type="checkbox" data-split-metric-choice="markup" checked> Наценка</label>
 <label><input type="checkbox" data-split-metric-choice="revenue" checked> Выручка</label>
@@ -9,6 +8,6 @@
 <label><input type="checkbox" data-split-metric-choice="incoming" checked> Поступления и новые поставки</label>
 <label><input type="checkbox" data-split-metric-choice="planned_incoming" checked> Ожидаемые поступления в периоде</label>
 <button type="button" class="admin-button secondary" data-split-metrics-reset>Показать все</button>
-</div><small>Настройка действует на всех вкладках и видах в этом браузере. Скрытие не меняет данные, расчёт и Excel.</small>
+</div>
 <span class="split-metric-status" role="status" aria-live="polite" data-split-metrics-status></span>
-</details>
+</div>
