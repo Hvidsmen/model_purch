@@ -115,6 +115,7 @@ class PowerStockBrowserTests(StaticLiveServerTestCase):
                 page.goto(self.live_server_url+self.url+'?tab=distribution&section=powers')
                 row=page.locator('[data-grid-row]');shares=row.locator('[data-month]').evaluate_all('(items)=>items.map(item=>item.value)')
                 expect(page.locator('[data-power-stock-all]')).to_have_count(0)
+                expect(page.locator('[data-power-stock-row]')).to_have_count(0)
                 page.locator('.split-distribution-bulk > summary').click()
                 expect(page.locator('[data-power-stock-fill]')).not_to_be_visible()
                 page.locator('[data-grid-bulk-mode]').select_option('stock_ddp')
