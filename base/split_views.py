@@ -228,7 +228,7 @@ def scenario(request, pk):
                 persist(item, request.user, request.POST.get('revision'), state,
                     {'group_plan': 'Общий план группы распределён по сохранённым пропорциям каналов', 'lines': 'Объёмы, наценки и DDP', 'distribution': 'Месяцы, мощности и модели', 'distribution_months':'Распределение по месяцам', 'distribution_powers':'Распределение по мощностям', 'stock': 'Остатки, поступления, прогноз и план продаж',
                      'equal_months': 'Равномерные доли месяцев вручную', 'equal_powers': 'Равномерные доли мощностей вручную',
-                     'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам',
+                     'refresh': 'Обновлён снимок состава', 'composition': 'Изменён состав групп и каналов', 'composition_edit': 'Изменён состав групп и каналов', 'bulk': 'Массовая корректировка бренда', 'sources': 'Примечания к источникам',
                      'add_group': 'Добавлена группа в план', 'remove_group': 'Группа исключена из плана',
                      'add_channel': 'Добавлен канал в план', 'remove_channel': 'Канал исключён из плана',
                      'add_onhand_groups': 'Добавлены группы со стока',
@@ -241,8 +241,10 @@ def scenario(request, pk):
                     messages.success(request, f"{scope_label} на {item.stock_date:%d.%m.%Y}: найдено групп {len(state['inventory_selection']['groups'])}, добавлено {state['inventory_selection']['added']}. Плановые значения не перезаписаны.")
                 else:
                     messages.success(request, 'Изменения сохранены.' if action != 'approve' else 'План утверждён. Редактирование заблокировано.')
+                if action == 'composition_edit' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+                    return JsonResponse({'ok':True,'revision':item.revision})
                 target=return_to(pk,tab,gid,cid,distribution_section)
-                if request.GET.get('brand_page') and tab in ('plan','stock','distribution'):
+                if request.GET.get('brand_page') and tab in ('composition','plan','stock','distribution'):
                     from urllib.parse import urlencode
                     target+='&'+urlencode({'brand_page':request.GET['brand_page']})
                 return redirect(target)
@@ -250,6 +252,8 @@ def scenario(request, pk):
             error = ' '.join(exc.messages)
         except IntegrityError:
             error = 'Версия уже создана в другой вкладке. Обновите страницу.'
+    if request.method == 'POST' and request.POST.get('action') == 'composition_edit' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return JsonResponse({'error':error or 'Не удалось сохранить состав.'},status=400)
     if request.GET.get('export'):
         try:
             if request.GET['export'] == 'xlsx':
@@ -265,7 +269,7 @@ def scenario(request, pk):
     workflow_ux = workflow_presentation(item, data, tab)
     from .split_history import presentation as history_presentation
     from .split_brand_pages import scope as brand_scope
-    display_item,brand_page=brand_scope(item,request.GET) if tab in ('plan','stock','distribution') else (item,None)
+    display_item,brand_page=brand_scope(item,request.GET) if tab in ('composition','plan','stock','distribution') else (item,None)
     display_data=evaluate(display_item) if display_item is not item else data
     historical = history_presentation(item if tab == 'plan' else display_item)
     from .split_matrix_totals import enrich_history, plan_totals, hide_empty_history_years
@@ -328,6 +332,9 @@ def scenario(request, pk):
         distribution_references = references(display_item)
         for row in distribution_overview['rows']:
             row['reference'] = distribution_references[row['gid']]
+    from .split_plan_presentation import references as composition_references
+    composition_refs=composition_references(display_item) if tab == 'composition' else {}
+    composition_rows = [{'id':key,'group':value,'reference':composition_refs.get(key,{})} for key,value in display_item.state['groups'].items()] if tab == 'composition' else []
     reference_filters = None
     if tab == 'plan':
         reference_filters = {gid: detail['reference'] for gid, detail in plan_detail.items()}
@@ -352,7 +359,7 @@ def scenario(request, pk):
     from zoneinfo import ZoneInfo
     return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' else [],
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
-        'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
+        'composition_rows':composition_rows, 'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
         'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],
         'entry_mode': item.state.get('volume_mode', item.entry_mode),
