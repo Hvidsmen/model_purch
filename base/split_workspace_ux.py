@@ -8,17 +8,18 @@ STAGES = [
     ('powers', 'Мощности и модели', 'Задайте доли мощностей и пары моделей.'),
     ('opening', 'Начальный запас', 'Загрузите остатки и поступления, рассчитайте прогноз до начала плана.'),
     ('targets', 'Стоковая политика', 'Задайте целевой запас в процентах от плана.'),
-    ('plan', 'Продажи и закупки', 'Сбалансируйте продажи, новые закупки и остаток на конец. Проверьте и утвердите план.'),
+    ('plan', 'Продажи и закупки', 'Сбалансируйте продажи, новые закупки и остаток на конец.'),
+    ('checks', 'Проверка и утверждение', 'Проверьте ошибки и предупреждения, затем утвердите план.'),
 ]
 ROUTES = {'composition': '?tab=composition', 'months': '?tab=distribution&section=months',
           'powers': '?tab=distribution&section=powers', 'opening': '?tab=stock&stock_step=opening',
-          'targets': '?tab=stock&stock_step=targets', 'plan': '?tab=plan'}
+          'targets': '?tab=stock&stock_step=targets', 'plan': '?tab=plan', 'checks': '?tab=checks'}
 
 
 def stage_key(tab, section='months', stock_step='opening'):
     if tab == 'distribution': return 'powers' if section == 'powers' else 'months'
     if tab == 'stock': return 'targets' if stock_step == 'targets' else 'plan' if stock_step == 'supplies' else 'opening'
-    return 'plan' if tab == 'checks' else tab
+    return tab
 
 
 def destination(message):
@@ -74,6 +75,10 @@ def presentation(scenario, result, tab, section='months', stock_step='opening'):
             counts = stock['counts'][key]
             ready = counts['ready']
             detail = f"Готово: {ready} из {total} групп"
+        elif key == 'checks':
+            total = 1
+            ready = int(not result['errors'])
+            detail = f"Ошибок: {len(result['errors'])} · предупреждений: {len(result['warnings'])}"
         else:
             ready = sum(all(line.get('input') is not None for line in group['channels'].values()) and
                         (gid in scenario.state.get('sales_reviewed_groups',[]) or any(Decimal(str(line.get('input') or 0)) != 0 for line in group['channels'].values()))
@@ -83,7 +88,9 @@ def presentation(scenario, result, tab, section='months', stock_step='opening'):
         status = 'Не начат' if not has_composition or not ready else 'Заполнено частично' if ready < total else 'Готов'
         if errors or warnings: status = 'Требует внимания'
         if key == 'plan' and (result['errors'] or stock['counts']['supplies']['ready'] < total): status = 'Требует внимания' if ready else 'Не начат'
-        if key == 'plan' and scenario.status == 'approved': status = 'Утверждён'
+        if key == 'checks':
+            status = 'Требует внимания' if result['errors'] or result['warnings'] else 'Готов к утверждению'
+            if scenario.status == 'approved': status = 'Утверждён'
         stages.append({'key':key,'url':ROUTES[key],'title':title,'description':description,'number':index,
                        'status':status,'detail':detail,'current':current_key==key})
     current = next((stage for stage in stages if stage['key']==current_key), None)
