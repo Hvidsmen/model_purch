@@ -18,6 +18,33 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_closing_stock_expands_receipts_and_preserves_opening_expansion(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page()
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=alpha')
+            page.locator('.split-sales-view > summary').click()
+            page.locator('[data-split-metric-choice="incoming"]').check()
+            page.locator('[data-split-metric-choice="planned_incoming"]').check()
+            closing=page.locator('[data-plan-closing-toggle]')
+            expect(closing).to_have_attribute('aria-expanded','false')
+            receipts=page.locator('[data-plan-group] [data-plan-inventory="existing"]')
+            purchases=page.locator('[data-plan-group] [data-plan-inventory="new"]')
+            expect(receipts).not_to_be_visible();expect(purchases).not_to_be_visible()
+            band=page.locator('[data-history-band="all"]');initial=int(band.get_attribute('colspan'))
+            closing.click()
+            expect(receipts).to_be_visible();expect(purchases).to_be_visible()
+            expect(band).to_have_attribute('colspan',str(initial+2))
+            page.locator('[data-plan-opening-toggle]').click()
+            expect(band).to_have_attribute('colspan',str(initial+5))
+            closing.focus();closing.press('Enter')
+            expect(receipts).not_to_be_visible();expect(purchases).not_to_be_visible()
+            expect(band).to_have_attribute('colspan',str(initial+3))
+            expect(page.locator('[data-plan-opening-toggle]')).to_have_attribute('aria-expanded','true')
+            browser.close()
+
     def test_sales_checks_filter_live_values_and_selected_channels(self):
         from playwright.sync_api import sync_playwright,expect
         with sync_playwright() as driver:

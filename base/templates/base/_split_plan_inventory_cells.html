@@ -4,7 +4,7 @@
 <td class="split-matrix-total" data-split-metric="incoming" data-plan-opening-component hidden>{{ balance.prior|split_number }}</td>
 <td class="split-matrix-total" data-plan-opening-component hidden>{{ balance.forecast|split_number }}</td>
 {% else %}
-<td class="split-matrix-total" data-split-metric="planned_incoming" data-plan-inventory="existing">{{ balance.existing|split_number }}</td>
-<td class="split-matrix-total" data-split-metric="incoming" data-plan-inventory="new">{% if supply_gid %}<input type="number" name="buy_{{ supply_gid }}" data-buy-source="{{ supply_group.buy_source.kind }}" aria-label="Новые поставки {{ supply_group.ref.name }}" title="Сохраняется вместе с продажами" min="0" step="0.000001" value="{{ supply_group.buy|unlocalize }}" required>{% else %}{{ balance.new|split_number }}{% endif %}</td>
+<td class="split-matrix-total" data-split-metric="planned_incoming" data-plan-inventory="existing" data-plan-closing-component hidden>{{ balance.existing|split_number }}</td>
+<td class="split-matrix-total" data-split-metric="incoming" data-plan-inventory="new" data-plan-closing-component hidden>{% if supply_gid %}<input type="number" name="buy_{{ supply_gid }}" data-buy-source="{{ supply_group.buy_source.kind }}" aria-label="Новые поставки {{ supply_group.ref.name }}" title="Сохраняется вместе с продажами" min="0" step="0.000001" value="{{ supply_group.buy|unlocalize }}" required>{% else %}{{ balance.new|split_number }}{% endif %}</td>
 <td class="split-matrix-total" data-split-metric="stock" data-plan-inventory="closing">{{ balance.closing|split_integer }}{% if supply_gid %}<small class="split-plan-balance-note" data-plan-balance-note></small>{% endif %}</td>
 {% endif %}

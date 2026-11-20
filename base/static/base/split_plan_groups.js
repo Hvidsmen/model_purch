@@ -49,7 +49,7 @@
     });
   });
   table.addEventListener('keydown', event => {
-    if (!event.target.matches('[data-plan-group-toggle], [data-plan-opening-toggle], [data-plan-subtotal-toggle]') || !['Enter', ' '].includes(event.key)) return;
+    if (!event.target.matches('[data-plan-group-toggle], [data-plan-opening-toggle], [data-plan-closing-toggle], [data-plan-subtotal-toggle]') || !['Enter', ' '].includes(event.key)) return;
     event.preventDefault();
     event.target.click();
   });
@@ -60,6 +60,18 @@
       setNode(node, !nodeExpanded(node)); syncTree(); saveTree();
       return;
     }
+    const closing = event.target.closest('[data-plan-closing-toggle]');
+    if (closing && table.contains(closing)) {
+      const expanded = closing.getAttribute('aria-expanded') !== 'true';
+      closing.setAttribute('aria-expanded', String(expanded));
+      closing.querySelector('[data-plan-closing-arrow]').textContent = expanded ? '▾' : '▸';
+      table.querySelectorAll('[data-plan-closing-component]').forEach(cell => { cell.hidden = !expanded; });
+      const band=table.querySelector('[data-history-band="all"]');
+      band.dataset.historyBaseSpan=String(3+(expanded?2:0)+(table.querySelector('[data-plan-opening-toggle]')?.getAttribute('aria-expanded')==='true'?3:0));
+      band.colSpan += expanded ? 2 : -2;
+      table.querySelectorAll('[data-plan-empty]').forEach(cell=>{cell.colSpan+=expanded?2:-2;});
+      return;
+    }
     const opening = event.target.closest('[data-plan-opening-toggle]');
     if (opening && table.contains(opening)) {
       const expanded = opening.getAttribute('aria-expanded') !== 'true';
@@ -67,7 +79,7 @@
       opening.querySelector('[data-plan-opening-arrow]').textContent = expanded ? '▾' : '▸';
       table.querySelectorAll('[data-plan-opening-component]').forEach(cell => { cell.hidden = !expanded; });
       const band = table.querySelector('[data-history-band="all"]');
-      band.dataset.historyBaseSpan = expanded ? '8' : '5';
+      band.dataset.historyBaseSpan = String(3+(expanded?3:0)+(table.querySelector('[data-plan-closing-toggle]')?.getAttribute('aria-expanded')==='true'?2:0));
       band.colSpan += expanded ? 3 : -3;
       table.querySelectorAll('[data-plan-empty]').forEach(cell => { cell.colSpan += expanded ? 3 : -3; });
       return;
