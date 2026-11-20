@@ -66,7 +66,7 @@ def scenario(request, pk):
             if request.headers.get('X-Requested-With')=='XMLHttpRequest':return JsonResponse({'ok':True})
             return redirect(request.get_full_path())
         except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
-    if request.method=='POST' and request.POST.get('action') in ('preview_stock_workspace','save_stock_workspace','propose_stock_workspace','load_stock_workspace_inventory'):
+    if request.method=='POST' and request.POST.get('action') in ('preview_stock_workspace','save_stock_workspace','propose_stock_workspace','calculate_save_stock_workspace','load_stock_workspace_inventory'):
         try:
             if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
                 raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
@@ -80,6 +80,16 @@ def scenario(request, pk):
                 for gid,group in groups.items():apply_inventory(item,group,sources[gid])
                 persist(item,request.user,request.POST.get('revision'),state,'Обновлены остатки и поступления · групп: '+str(len(ids)))
                 return JsonResponse({'ok':True})
+            if request.POST['action']=='calculate_save_stock_workspace':
+                import json
+                rows=propose(item,request.POST,request.user)
+                errors=[row['name']+': '+row.get('error','Нет результата.') for row in rows if not row.get('token') and not row.get('skipped')]
+                if errors:raise ValidationError('Ничего не сохранено. '+'; '.join(errors))
+                tokens=[row['token'] for row in rows if row.get('token')]
+                if tokens:
+                    state=candidate(item,'{}',json.dumps(tokens))
+                    persist(item,request.user,request.POST.get('revision'),state,'Автоматически рассчитаны и сохранены '+('целевые проценты из закупок' if request.POST.get('kind')=='purchase' else 'новые поставки'))
+                return JsonResponse({'ok':True,'count':len(tokens)})
             if request.POST['action']=='propose_stock_workspace':
                 return JsonResponse({'ok':True,'rows':propose(item,request.POST,request.user)})
             state=candidate(item,request.POST.get('changes','{}'),request.POST.get('proposal_tokens','[]'),request.POST.get('forecast_tokens','[]'),request.POST.get('forecast_only_empty','1'))
@@ -112,11 +122,23 @@ def scenario(request, pk):
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
         return HttpResponseBadRequest('Выберите группу и канал сценария.')
-    if request.method=='POST' and request.POST.get('action') in ('preview_forecast_history','apply_forecast_history'):
+    if request.method=='POST' and request.POST.get('action') in ('preview_forecast_history','apply_forecast_history','calculate_save_forecast_history'):
         try:
             if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
                 raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
             from .split_forecast_history import preview as preview_history,apply as apply_history
+            if request.POST['action']=='calculate_save_forecast_history':
+                import json
+                result=preview_history(item,request.POST)
+                rows=[row for row in result['rows'] if not (request.POST.get('only_empty')=='1' and row['has_current'])]
+                errors=[row['name']+': '+row.get('error','Нет результата.') for row in rows if not row.get('token')]
+                if errors:raise ValidationError('Ничего не сохранено. '+'; '.join(errors))
+                tokens=[row['token'] for row in rows]
+                if tokens:
+                    post=request.POST.copy();post['tokens']=json.dumps(tokens)
+                    state,count=apply_history(item,post)
+                    persist(item,request.user,request.POST.get('revision'),state,'Автоматически рассчитан и сохранён прогноз по истории')
+                return JsonResponse({'ok':True,'count':len(tokens)})
             if request.POST['action']=='preview_forecast_history':
                 return JsonResponse({'ok':True,**preview_history(item,request.POST)})
             state,count=apply_history(item,request.POST)

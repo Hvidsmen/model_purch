@@ -228,7 +228,7 @@ def propose(scenario, post, user):
         try:
             if kind == 'purchase':
                 if post.get('only_empty','1') == '1' and row['target_percent'] is not None:
-                    raise ValidationError('Сохранённый процент оставлен без изменений.')
+                    item.update(skipped=True,error='Сохранённый процент оставлен без изменений.');result.append(item);continue
                 values = records.get(group['ref']['source_key'],set())
                 if not values: raise ValidationError('Группа не найдена в сценарии закупок.')
                 parsed = {percent((Decimal(value)*HUNDRED).quantize(STEP)) for value in values}

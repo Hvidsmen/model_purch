@@ -201,3 +201,37 @@ class StockWorkspaceInventoryTests(TestCase):
         response=self.client.post(self.url,{'action':'save_stock_workspace','revision':self.scenario.revision,'changes':json.dumps({self.gid:{'month:2026-11':'2','month:2026-12':'3'}})})
         self.assertEqual(response.status_code,200,response.content)
         self.assertEqual(self.client.get(self.url).status_code,200)
+
+
+
+class StockWorkspaceDirectSaveTests(TestCase):
+    setUp=StockWorkspaceTests.setUp
+    post=StockWorkspaceTests.post
+
+    def test_calculate_and_save_without_preview_preserves_revision_and_other_inputs(self):
+        before=deepcopy(self.scenario.state)
+        response=self.post('calculate_save_stock_workspace',kind='supplies',groups=json.dumps([self.gid]))
+        self.assertEqual(response.status_code,200,response.content);self.assertEqual(response.json()['count'],1)
+        self.scenario.refresh_from_db();group=self.scenario.state['groups'][self.gid]
+        self.assertEqual(D(group['buy']),650);self.assertEqual(group['channels'],before['groups'][self.gid]['channels'])
+        self.assertEqual(self.post('calculate_save_stock_workspace',kind='supplies',groups=json.dumps([self.gid]),revision=0).status_code,400)
+
+    def test_calculate_and_save_is_atomic_when_one_group_cannot_be_calculated(self):
+        second=deepcopy(self.group_state);second['target_stock_percent']=None
+        self.scenario.state['groups']['bad']=second;self.scenario.save(update_fields=['state'])
+        before=deepcopy(self.scenario.state)
+        response=self.post('calculate_save_stock_workspace',kind='supplies',groups=json.dumps([self.gid,'bad']))
+        self.assertEqual(response.status_code,400,response.content)
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,before)
+
+    def test_import_directly_skips_existing_zero_percent_and_saves_missing_only(self):
+        from model_purch.models import PGGoods,ScenarioModel
+        purchase=ScenarioModel.objects.create(name='Direct source',date_start_plan=date(2027,1,1),date_end_plan=date(2027,12,31))
+        self.group_state['target_stock_percent']='0';self.scenario.save(update_fields=['state'])
+        with patch.object(PGGoods.objects,'filter') as query:
+            query.return_value.values_list.return_value=[('G',D('.15'))]
+            response=self.post('calculate_save_stock_workspace',kind='purchase',groups=json.dumps([self.gid]),purchase=str(purchase.pk),only_empty='1')
+            self.assertEqual(response.status_code,200,response.content);self.assertEqual(response.json()['count'],0)
+            response=self.post('calculate_save_stock_workspace',kind='purchase',groups=json.dumps([self.gid]),purchase=str(purchase.pk),only_empty='0')
+            self.assertEqual(response.status_code,200,response.content)
+        self.scenario.refresh_from_db();self.assertEqual(D(self.scenario.state['groups'][self.gid]['target_stock_percent']),15)

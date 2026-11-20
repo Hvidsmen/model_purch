@@ -97,6 +97,7 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
             page.on('request',lambda req:requests.append(req.post_data or '') if req.method=='POST' else None)
             page.goto(self.live_server_url+self.url+'?tab=stock&stock_step=opening&brand_page=alpha')
             page.locator('[data-forecast-history-open]').click()
+            page.locator('[data-forecast-history-year]').fill('2025')
             page.locator('[data-forecast-history-preview]').click()
             expect(page.locator('[data-forecast-history-results]')).to_contain_text('G')
             page.locator('[data-forecast-history-apply]').click()
@@ -112,3 +113,24 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
         self.scenario.refresh_from_db()
         self.assertEqual(self.scenario.state['groups'][self.gid]['forecast_mode'],'powers')
         self.assertIsNone(self.scenario.state['groups']['other']['forecast_before_total'])
+
+    def test_automatic_percent_and_supplies_save_without_preview(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1700,'height':1100})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=stock&stock_step=targets&brand_page=alpha')
+                page.locator('[data-stock-bulk-percent]').fill('15')
+                with page.expect_navigation():page.locator('[data-stock-save-percent]').click()
+                expect(page.locator('[data-stock-field=target_stock_percent]').first).to_have_value('15')
+                page.get_by_role('link',name='2. Спланировать поставки',exact=False).click()
+                page.locator('[data-stock-proposal=supplies]').click()
+                with page.expect_navigation():page.locator('[data-stock-proposal-save]').click()
+                expect(page.get_by_role('spinbutton',name='Новые поставки G',exact=True)).to_have_value('1150.000000')
+                expect(page.locator('[data-stock-save-status]')).to_have_text('Изменения сохранены')
+                self.assertEqual(errors,[])
+            finally:context.close();browser.close()
+        self.scenario.refresh_from_db();self.assertEqual(Decimal(self.scenario.state['groups'][self.gid]['buy']),1150)

@@ -126,3 +126,15 @@ class HistoricalForecastTests(TestCase):
         with patch('base.split_forecast_history.timezone.localdate',return_value=date(2026,10,1)):
             self.assertEqual(period(self.scenario,2026)[2:],(date(2026,1,1),date(2026,10,1)))
         with self.assertRaises(ValidationError):period(self.scenario,2027)
+
+    def test_direct_calculation_saves_without_preview_and_is_atomic_on_missing_history(self):
+        with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])):
+            response=self.client.post(self.url,{'action':'calculate_save_forecast_history','revision':self.scenario.revision,**self.post,'year':'2026','only_empty':'1'})
+        self.assertEqual(response.status_code,200,response.content)
+        self.scenario.refresh_from_db()
+        self.assertEqual(self.scenario.state['groups'][self.gid]['forecast_history_source']['method'],'average_daily')
+        before=deepcopy(self.scenario.state)
+        with patch('base.split_forecast_history.source',return_value=({},['Дилеры'])):
+            response=self.client.post(self.url,{'action':'calculate_save_forecast_history','revision':self.scenario.revision,**self.post,'year':'2026','only_empty':'0'})
+        self.assertEqual(response.status_code,400,response.content)
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,before)
