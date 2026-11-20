@@ -18,7 +18,7 @@
 <div data-forecast-history-groups style="max-height:190px;overflow:auto;display:grid;gap:5px"></div>
 <p><button type="button" class="admin-button" data-forecast-history-save>Рассчитать и сохранить</button> <button type="button" class="admin-button secondary" data-forecast-history-preview>Рассчитать предпросмотр</button> <button type="button" class="admin-button secondary" data-forecast-history-close>Закрыть</button></p>
 <p role="status" aria-live="polite" data-forecast-history-status></p><progress hidden style="width:100%" aria-label="Расчёт прогноза выполняется" data-forecast-history-progress></progress>
-<div data-forecast-history-results style="overflow:auto"></div>
-<button type="button" class="admin-button" data-forecast-history-apply disabled>Применить и сохранить выбранные</button>
+<p>«Рассчитать и сохранить» сразу сохраняет рассчитанные группы. Группы с ошибками пропускаются; их список и причины будут показаны после операции. Предпросмотр необязателен.</p><div data-forecast-history-results style="overflow:auto"></div>
+<button type="button" class="admin-button" data-forecast-history-apply hidden disabled>Сохранить выбранные</button>
 </dialog>
 {% endif %}
