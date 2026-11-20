@@ -26,3 +26,9 @@ body:has([data-stock-workspace]) .split-unsaved-dock{display:none!important}
 [data-stock-workspace] .split-stock-group-row>td,[data-stock-workspace] .split-stock-group-row>th{font-weight:normal;background:#fff!important;border-top:1px solid #ebe7f4}
 .split-workspace:has([data-stock-workspace])>.split-totals{margin:14px 0}.split-workspace:has([data-stock-workspace]) .split-stage-intro{margin:10px 0}.split-workspace:has([data-stock-workspace]) .split-stage-intro h2{margin:8px 0;font-size:20px}
 [data-stock-workspace] .split-stock-workspace-scroll{max-height:66vh}.split-stock-steps a{padding:10px 14px}.split-stock-data{padding:16px!important}.split-stock-data p{font-size:13px}.split-stock-controls{padding:14px!important}
+
+/* Keep toolbar menus outside the panel; only inventory tables scroll. */
+.split-workspace .split-stock-controls{overflow:visible}
+.split-stock-controls .split-brand-multiselect{padding-bottom:0}
+.split-stock-controls .split-brand-popup>label{display:flex;align-items:center;gap:8px}
+.split-stock-controls .split-brand-popup input[type=checkbox]{min-height:0;width:auto;padding:0}
