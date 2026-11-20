@@ -141,3 +141,34 @@ class SalesWorkflowBrowserTests(StaticLiveServerTestCase):
                 for cid in self.scenario.state['channels']:
                     expect(page.locator('[name="q_'+self.gid+'_'+cid+'"]')).to_have_value('20.000000')
             finally:context.close();browser.close()
+
+    def test_channel_multiselect_hides_columns_and_preserves_saved_inputs(self):
+        from playwright.sync_api import sync_playwright,expect
+        cid=next(iter(self.scenario.state['channels']))
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1700,'height':1100})
+            try:
+                context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+                page=context.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                field=page.locator('[name="q_'+self.gid+'_'+cid+'"]');field.fill('37')
+                picker=page.locator('[data-sales-channel-filter]');picker.locator('summary').click()
+                picker.locator('[data-sales-channel-choice="'+cid+'"]').uncheck()
+                expect(field).not_to_be_visible()
+                expect(page.locator('[data-plan-channel="'+cid+'"]').first).not_to_be_visible()
+                self.assertEqual(page.locator('[data-sales-channel="'+cid+'"]:visible').count(),0)
+                picker.locator('summary').click()
+                with page.expect_navigation():page.keyboard.press('Control+s')
+                expect(page.locator('[name="q_'+self.gid+'_'+cid+'"]')).to_have_value('37')
+                expect(page.locator('[name="q_'+self.gid+'_'+cid+'"]')).not_to_be_visible()
+                picker=page.locator('[data-sales-channel-filter]');picker.locator('summary').click()
+                picker.locator('[data-sales-channels-all]').click()
+                expect(page.locator('[name="q_'+self.gid+'_'+cid+'"]')).to_be_visible()
+                picker.locator('[data-sales-channels-none]').click()
+                self.assertEqual(page.locator('[data-plan-channel]:visible').count(),0)
+                expect(page.locator('.split-plan-matrix')).to_be_visible()
+                self.assertEqual(errors,[])
+            finally:context.close();browser.close()
+        self.scenario.refresh_from_db()
+        self.assertEqual(Decimal(self.scenario.state['groups'][self.gid]['channels'][cid]['input']),37)

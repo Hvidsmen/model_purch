@@ -1,5 +1,25 @@
 (() => {
  const workspace=document.querySelector('.split-workspace');if(!workspace)return;
+ const channelFilter=document.querySelector('[data-sales-channel-filter]');
+ if(channelFilter){
+  const choices=[...channelFilter.querySelectorAll('[data-sales-channel-choice]')],cells=[...workspace.querySelectorAll('[data-sales-channel],[data-plan-channel]')];
+  const storage='split-sales-channels:'+location.pathname,known=new Set(choices.map(input=>input.dataset.salesChannelChoice));
+  try{const saved=JSON.parse(sessionStorage.getItem(storage)||'null');if(saved&&Array.isArray(saved.selected)&&Array.isArray(saved.known)){choices.forEach(input=>{input.checked=!saved.known.includes(input.dataset.salesChannelChoice)||saved.selected.includes(input.dataset.salesChannelChoice);});}}catch{}
+  function applyChannels(save=false){
+   const selected=new Set(choices.filter(input=>input.checked).map(input=>input.dataset.salesChannelChoice));
+   cells.forEach(cell=>{const channel=cell.dataset.salesChannel||cell.dataset.planChannel;cell.toggleAttribute('data-sales-channel-filtered',known.has(channel)&&!selected.has(channel));});
+   const caption=channelFilter.querySelector('[data-sales-channel-caption]');caption.textContent=selected.size===choices.length?'Все':selected.size?'Выбрано: '+selected.size:'Не выбраны';
+   if(save){try{sessionStorage.setItem(storage,JSON.stringify({known:[...known],selected:[...selected]}));}catch{}}
+   window.dispatchEvent(new Event('resize'));
+  }
+  choices.forEach(input=>input.addEventListener('change',()=>applyChannels(true)));
+  channelFilter.querySelector('[data-sales-channels-all]').addEventListener('click',()=>{choices.forEach(input=>input.checked=true);applyChannels(true);});
+  channelFilter.querySelector('[data-sales-channels-none]').addEventListener('click',()=>{choices.forEach(input=>input.checked=false);applyChannels(true);});
+  channelFilter.querySelector('[data-sales-channel-search]').addEventListener('input',event=>{const text=event.target.value.trim().toLocaleLowerCase('ru');choices.forEach(input=>input.closest('label').hidden=!input.closest('label').textContent.toLocaleLowerCase('ru').includes(text));});
+  document.addEventListener('click',event=>{if(!channelFilter.contains(event.target))channelFilter.open=false;});
+  channelFilter.addEventListener('keydown',event=>{if(event.key==='Escape'){channelFilter.open=false;channelFilter.querySelector('summary').focus();}});
+  applyChannels();
+ }
  const dialog=document.querySelector('.split-sales-adjust-dialog');
  const revision=()=>document.querySelector('input[name=revision]')?.value||workspace.dataset.revision;
  const csrf=()=>document.querySelector('input[name=csrfmiddlewaretoken]')?.value;
