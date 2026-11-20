@@ -67,7 +67,7 @@ class DdpBrowserTests(StaticLiveServerTestCase):
                 page.get_by_role('button',name='Заполнить DDP',exact=True).click()
                 dialog=page.locator('#split-ddp-dialog')
                 expect(dialog.locator('[data-ddp-count]')).to_have_text('Выбрано групп: 0')
-                dialog.locator('[data-ddp-empty]').uncheck()
+                dialog.locator('[data-ddp-fill-mode]').select_option('replace')
                 dialog.locator('[data-ddp-source]').select_option('purchase')
                 expect(dialog.locator('[data-ddp-status]')).to_contain_text('Выберите группы')
                 dialog.locator('[data-ddp-purchase-id]').select_option(str(purchase.pk))
@@ -103,3 +103,31 @@ class DdpBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(errors,[])
             finally:context.close();browser.close()
         self.scenario.refresh_from_db();self.assertEqual(self.scenario.state['groups'][self.gid]['ddp_source']['warehouse_purpose'],'Продажа')
+
+    def test_append_mode_fills_zero_and_blank_and_preserves_filled_group(self):
+        from copy import deepcopy
+        from playwright.sync_api import sync_playwright,expect
+        group=self.scenario.state['groups'][self.gid];group['ddp']='0'
+        self.scenario.state['groups']['filled']=deepcopy(group);self.scenario.state['groups']['filled']['ddp']='245'
+        self.scenario.state['groups']['blank']=deepcopy(group);self.scenario.state['groups']['blank']['ddp']=None
+        self.scenario.save(update_fields=['state'])
+        with patch('base.split_ddp.stock',return_value=(self.costs,{'source':'Stock','stock_date':str(self.scenario.stock_date)})),sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1700,'height':1100})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page()
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                page.get_by_role('button',name='Заполнить DDP',exact=True).click()
+                dialog=page.locator('#split-ddp-dialog');dialog.locator('[data-ddp-source]').select_option('stock')
+                expect(dialog.locator('[data-ddp-fill-mode]')).to_have_value('append')
+                expect(dialog.locator('[data-ddp-count]')).to_have_text('Выбрано групп: 2')
+                dialog.locator('[data-ddp-fill-mode]').select_option('replace')
+                expect(dialog.locator('[data-ddp-count]')).to_have_text('Выбрано групп: 3')
+                dialog.locator('[data-ddp-fill-mode]').select_option('append')
+                with page.expect_navigation():dialog.get_by_role('button',name='Рассчитать и сохранить',exact=True).click()
+                expect(page.locator('[name="ddp_'+self.gid+'"]').first).to_have_value('150.000000')
+                expect(page.locator('[name=ddp_blank]')).to_have_value('150.000000')
+                expect(page.locator('[name=ddp_filled]')).to_have_value('245')
+            finally:context.close();browser.close()
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state['groups']['filled']['ddp'],'245')

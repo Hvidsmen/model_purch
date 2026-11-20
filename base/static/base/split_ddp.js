@@ -7,7 +7,7 @@
   const element=(tag,text)=>{const el=document.createElement(tag);if(text!==undefined)el.textContent=text;return el;};
   const input=gid=>form.elements.namedItem('ddp_'+gid);
   const shown=gid=>{const row=[...form.querySelectorAll('[data-plan-group]')].find(row=>row.dataset.planGroup===gid);return row&&!row.hasAttribute('data-reference-excluded');};
-  const eligible=gid=>shown(gid)&&(!find('empty').checked||input(gid)?.value==='');
+  const eligible=gid=>shown(gid)&&(find('fill-mode').value==='replace'||input(gid)?.value.trim()===''||Number(input(gid)?.value.replace(',','.'))===0);
   function selected(){return [...groups.querySelectorAll('[data-ddp-target]:checked')].filter(el=>!el.closest('article').hidden&&eligible(el.value)).map(el=>el.value);}
   function invalidate(){proposals=[];apply.disabled=true;find('preview').replaceChildren();count();}
   function count(){find('count').textContent='Выбрано групп: '+selected().length;}
@@ -53,7 +53,7 @@
   document.querySelector('[data-ddp-open]').addEventListener('click',()=>{groups.replaceChildren();dialog.showModal();sources();});
   source.addEventListener('change',sources);purchase.addEventListener('change',load);
   find('search').addEventListener('input',()=>{filter();invalidate();});
-  find('empty').addEventListener('change',()=>{filter();invalidate();});
+  find('fill-mode').addEventListener('change',()=>{groups.querySelectorAll('[data-ddp-target]').forEach(control=>control.checked=eligible(control.value));filter();invalidate();});
   groups.addEventListener('change',invalidate);groups.addEventListener('input',invalidate);
   for(const name of ['year','surcharge'])find(name).addEventListener('input',invalidate);
   find('all').addEventListener('click',()=>{groups.querySelectorAll('[data-ddp-target]').forEach(el=>{if(!el.closest('article').hidden)el.checked=true;});invalidate();});
@@ -71,10 +71,10 @@
     });
     invalidate();setBusy(true);status.textContent='Рассчитываем DDP · групп: '+targets.length+'…';
     try{
-      const data=await request('preview_ddp',{targets:JSON.stringify(targets),mapping:JSON.stringify(mapping),source:source.value,purchase:purchase.value,year:find('year').value,surcharge:find('surcharge').value});
+      const data=await request('preview_ddp',{targets:JSON.stringify(targets),mapping:JSON.stringify(mapping),source:source.value,purchase:purchase.value,year:find('year').value,surcharge:find('surcharge').value,fill_mode:find('fill-mode').value,current_values:JSON.stringify(Object.fromEntries(targets.map(gid=>[gid,input(gid).value])))});
       if(saveDirect){
-        const errors=data.rows.filter(row=>!row.token||row.error);if(errors.length)throw Error('Ничего не сохранено. '+errors.map(row=>row.name+': '+row.error).join('; '));
-        proposals=data.rows;insert(true);return;
+        const errors=data.rows.filter(row=>(!row.token||row.error)&&!row.skipped);if(errors.length)throw Error('Ничего не сохранено. '+errors.map(row=>row.name+': '+row.error).join('; '));
+        proposals=data.rows.filter(row=>row.token);if(!proposals.length){status.textContent='Нет нулевых или пустых DDP для дозаполнения.';return;}insert(true);return;
       }
       const table=element('table');table.className='admin-table';const heading=element('tr');['Группа','Текущий DDP, USD','Предложение, USD','Источник / пояснение'].forEach(text=>heading.append(element('th',text)));const thead=element('thead');thead.append(heading);table.append(thead);const tbody=element('tbody');
       for(const row of data.rows){

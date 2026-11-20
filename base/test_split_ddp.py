@@ -148,3 +148,21 @@ class DdpTests(TestCase):
         with patch('base.split_ddp.stock',return_value=(costs,metadata)):
             row=preview(self.scenario,{'targets':json.dumps([self.gid]),'source':'stock'})['rows'][0]
         self.assertNotIn('token',row);self.assertTrue(row['error'])
+
+    def test_fill_modes_append_zeros_and_blanks_but_preserve_positive_ddp(self):
+        for current,skipped in [(None,False),('0',False),('0.000000',False),('120',True)]:
+            self.scenario.state['groups'][self.gid]['ddp']=current
+            with patch('base.split_ddp.stock',return_value=(self.costs,{'source':'Stock'})):
+                row=preview(self.scenario,{'targets':json.dumps([self.gid]),'source':'stock','fill_mode':'append'})['rows'][0]
+            self.assertEqual(bool(row.get('skipped')),skipped)
+            if not skipped:self.assertEqual(row['proposed'],'150.000000')
+        with patch('base.split_ddp.stock',return_value=(self.costs,{'source':'Stock'})):
+            row=preview(self.scenario,{'targets':json.dumps([self.gid]),'source':'stock','fill_mode':'replace'})['rows'][0]
+        self.assertEqual(row['proposed'],'150.000000');self.assertEqual(row['source']['fill_mode'],'replace')
+
+    def test_append_uses_current_unsaved_zero_and_rejects_unknown_mode(self):
+        self.scenario.state['groups'][self.gid]['ddp']='120'
+        with patch('base.split_ddp.stock',return_value=(self.costs,{'source':'Stock'})):
+            row=preview(self.scenario,{'targets':json.dumps([self.gid]),'source':'stock','fill_mode':'append','current_values':json.dumps({self.gid:'0'})})['rows'][0]
+        self.assertEqual(row['proposed'],'150.000000')
+        with self.assertRaises(ValidationError):preview(self.scenario,{'targets':json.dumps([self.gid]),'source':'stock','fill_mode':'invalid'})
