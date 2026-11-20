@@ -17,13 +17,14 @@ class BrandPageTests(TestCase):
     setUp=setup_brands
 
     def test_one_brand_is_rendered_per_page_on_all_large_tables(self):
-        for tab in ('plan','stock','distribution'):
+        for tab in ('composition','plan','stock','distribution'):
             for brand,gid in [('alpha',self.gid),('beta','other')]:
                 response=self.client.get(self.url,{'tab':tab,'brand_page':brand})
                 self.assertEqual(response.status_code,200)
                 self.assertEqual(set(response.context['state']['groups']),{gid})
                 self.assertEqual(response.context['brand_page']['total'],2)
                 self.assertContains(response,'Страницы по брендам')
+                self.assertContains(response,'data-sales-brand')
                 if tab=='plan':
                     self.assertContains(response,'data-plan-group="'+gid+'"')
                     self.assertContains(response,'name="plan_group_ids"')
