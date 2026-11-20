@@ -75,7 +75,7 @@ def validate_directors_2025(plans,rates,snapshot):
     # The native fact uses the uploaded sales classification. Require the same
     # classification matrix before reusing it for directors (no lost dimensions).
     for sub in {r['branch'] for r in plans}:
-        if not list(rates.directors_for(sub,2025)):raise ValidationError('Не назначен директор: '+sub)
+        if not list(rates.directors_for(sub,2025)):continue  # No recipient: skip directors only.
         sales_scope=rates.rate_scope(sub,'Продажи')
         sales_keys={cell[2:] for cell in rates.cells if cell[:2]==(sales_scope,'Продажи')}
         for token,_ in rates.directors_for(sub,2025):
@@ -124,7 +124,7 @@ def directors_2025(cursor,plans,rates,settings,snapshot):
     active={r['branch'] for r in plans if r['eligible_kinds']['Директора']} | {r['branch'] for r in facts}
     for sub in sorted(active):
         actors=list(rates.directors_for(sub,2025))
-        if not actors:raise ValidationError('Для подразделения не назначен директор в итерации: '+sub)
+        if not actors:continue  # Keep policy/sales results even without a director.
         for token,recipient in actors:
             source_id=rates.sources[token]['employee']
             row,items=director_result('actual_2025',2025,False,False,
@@ -248,6 +248,7 @@ def execute(run,progress,connector=None):
                         source['historical_formulas']=historical_formulas
                         directors,details=directors_2025(cursor,plans[year],rates,settings,inputs['formulas'])
                         rows.extend(directors);details=[*policy_details,*details]
+                        source['skipped_director_subdivisions']=sorted({r['branch'] for r in motivation_plan_rows(plans[year],rates) if not list(rates.directors_for(r['branch'],2025))})
                     finally:
                         if connection is not None:connection.close()
                 from .coefficient_iteration_export_summary import summarize_plan_facts
