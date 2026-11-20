@@ -55,6 +55,17 @@ def scenario(request, pk):
     tab = request.GET.get('tab', 'composition' if not item.state['groups'] or not item.state['channels'] else 'plan')
     if tab not in ('composition', 'plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
         tab = 'plan'
+    if request.method=='POST' and request.POST.get('action') in ('composition_links_catalog','composition_edit'):
+        try:
+            if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
+                raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            from .split_composition_links import catalog,save as save_composition
+            if request.POST['action']=='composition_links_catalog':
+                return JsonResponse({'ok':True,**catalog(item,request.user,request.POST.get('link_group',''))})
+            save_composition(item,request.user,request.POST)
+            if request.headers.get('X-Requested-With')=='XMLHttpRequest':return JsonResponse({'ok':True})
+            return redirect(request.get_full_path())
+        except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     if request.method=='POST' and request.POST.get('action') in ('preview_stock_workspace','save_stock_workspace','propose_stock_workspace','load_stock_workspace_inventory'):
         try:
             if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
