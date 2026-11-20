@@ -120,3 +120,16 @@ class BrandPageTests(TestCase):
         self.assertEqual(response.context['matrix_totals']['total']['qty'],60)
         self.assertEqual(response.context['all_matrix_totals']['total']['qty'],90)
         self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,before)
+
+    def test_multiple_brands_scope_all_tabs_and_keep_full_scenario(self):
+        third=deepcopy(self.scenario.state['groups']['other']);third['ref']['details']['brand']='Gamma'
+        self.scenario.state['groups']['third']=third;self.scenario.save(update_fields=['state'])
+        for tab in ('composition','plan','stock','distribution'):
+            response=self.client.get(self.url,{'tab':tab,'brand_page':json.dumps(['alpha','beta'])})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(set(response.context['state']['groups']),{self.gid,'other'})
+            pager=response.context['brand_page']
+            self.assertEqual(pager['count'],2)
+            self.assertEqual({p['key'] for p in pager['pages'] if p['selected']},{'alpha','beta'})
+            self.assertIsNone(pager['previous']);self.assertIsNone(pager['next'])
+        self.scenario.refresh_from_db();self.assertEqual(len(self.scenario.state['groups']),3)
