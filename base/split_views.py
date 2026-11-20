@@ -148,9 +148,9 @@ def scenario(request, pk):
             if request.POST['action']=='calculate_save_forecast_history':
                 import json
                 result=preview_history(item,request.POST)
-                rows=[row for row in result['rows'] if not (request.POST.get('only_empty')=='1' and row['has_current'])]
-                skipped=[{'gid':row['gid'],'name':row['name'],'reason':('Прогноз уже заполнен — сохранён без изменений.' if request.POST.get('only_empty')=='1' and row['has_current'] else row.get('error') or 'Нет результата расчёта.')}
-                         for row in result['rows'] if (request.POST.get('only_empty')=='1' and row['has_current']) or not row.get('token')]
+                rows=[row for row in result['rows'] if not (request.POST.get('only_empty')=='1' and row['has_current'] and not row.get('needs_stock_repair'))]
+                skipped=[{'gid':row['gid'],'name':row['name'],'reason':('Прогноз уже заполнен — сохранён без изменений.' if request.POST.get('only_empty')=='1' and row['has_current'] and not row.get('needs_stock_repair') else row.get('error') or 'Нет результата расчёта.')}
+                         for row in result['rows'] if (request.POST.get('only_empty')=='1' and row['has_current'] and not row.get('needs_stock_repair')) or not row.get('token')]
                 tokens=[row['token'] for row in rows if row.get('token')]
                 if tokens:
                     post=request.POST.copy();post['tokens']=json.dumps(tokens)

@@ -13,7 +13,7 @@ from .split_history import normalized
 from .split_engine import ZERO,STEP,HUNDRED,allocate,number,stored,precise
 from .split_ddp import fingerprint
 from .split_preplan_forecast import resolve
-from .split_forecast_history import SALT,source as fact_source,has_forecast
+from .split_forecast_history import SALT,source as fact_source,has_forecast,needs_stock_repair
 
 PLAN_SQL='''WITH dates AS (
  SELECT CAST(? AS date) AS elapsed_from,CAST(? AS date) AS cutoff,
@@ -176,7 +176,7 @@ def preview(scenario,post):
     rows=[]
     for gid in targets:
         group=scenario.state['groups'][gid];current=resolve(scenario,group)['total']
-        row={'gid':gid,'name':group['ref']['name'],'current':None if current is None else stored(current),'has_current':has_forecast(scenario,group),'proposed':None,'powers':[],'error':''}
+        row={'gid':gid,'name':group['ref']['name'],'current':None if current is None else stored(current),'has_current':has_forecast(scenario,group),'needs_stock_repair':needs_stock_repair(scenario,group),'proposed':None,'powers':[],'error':''}
         try:
             mapping={}
             for key,power in group['powers'].items():
