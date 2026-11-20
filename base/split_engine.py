@@ -1,7 +1,7 @@
 """Decimal-only Split calculations. No source connections and no implicit forecasts."""
 from calendar import monthrange
 from datetime import date, timedelta
-from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP, localcontext
+from decimal import Decimal, InvalidOperation, ROUND_DOWN, ROUND_HALF_UP, ROUND_CEILING, localcontext
 from functools import wraps
 
 from django.core.exceptions import ValidationError
@@ -84,6 +84,12 @@ def quantity(scenario, line):
             raise ValidationError('Годовая цель меньше состоявшегося факта.')
         value -= actual
     return value
+
+
+@precise
+def target_stock(group, planned):
+    percent=number(group.get('target_stock_percent'),optional=True,maximum=Decimal(1000))
+    return None if planned is None or percent is None else (planned*percent/HUNDRED).quantize(STEP,rounding=ROUND_CEILING)
 
 
 @precise
@@ -199,6 +205,11 @@ def evaluate(scenario):
             errors.extend(name + ': ' + message for message in exc.messages)
             totals['closing'] = None
             continue
+        try:
+            reserve=target_stock(group,group_quantity)
+            reserve_by_power=dict(zip(pkeys,allocate(reserve,shares))) if reserve and valid_shares else dict.fromkeys(pkeys,ZERO)
+        except ValidationError as exc:
+            errors.extend(name+': '+message for message in exc.messages);totals['closing']=None;continue
         for key, sold, predicted, bought in zip(pkeys, sales, forecasts, buys):
             power = powers[key]
             if not number(power.get('share'), optional=True) and group.get('forecast_mode')!='powers' and not direct_inventory:
@@ -225,6 +236,8 @@ def evaluate(scenario):
                           'indoor': balances[0], 'outdoor': balances[1], 'closing': closing})
             if closing < 0:
                 warnings.append(name + ' · ' + key + ': дефицит на конец периода ' + str(closing) + ' комплектов.')
+            if reserve is not None and ZERO<=closing<reserve_by_power[key]:
+                warnings.append(name+' · '+key+': остаток ниже целевого запаса: '+str(closing)+' из '+str(reserve_by_power[key])+' комплектов.')
     if not totals['quantity']:
         errors.append('План пуст: задайте положительный объём хотя бы для одной группы и канала.')
     return {'lines': lines, 'shipments': shipments, 'stock': stock, 'totals': totals,
