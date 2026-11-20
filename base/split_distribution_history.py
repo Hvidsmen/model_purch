@@ -163,6 +163,9 @@ def resolve_proposal(scenario, group, channel_name, section, *, refresh=False):
             basis = loaded[scope]
             values = proposal(scenario,group,channel_name,basis,section,all_channels=all_channels)
             chosen = {**basis,'rule_key':rule,'rule_label':label,'rule_detail':detail}
+            if section == 'months' and all_channels:
+                chosen['channel_fallback']=True
+                chosen['rule_detail']=detail+' · сезонность по компании, все каналы (в выбранном канале нет базы)'
             if section == 'powers' and scope != 'planning_group':
                 chosen['power_scope'] = 'Только сопоставленные мощности планируемой группы: '+', '.join(values)
             return values,chosen
