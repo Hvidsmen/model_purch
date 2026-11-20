@@ -18,6 +18,29 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_tables_use_document_vertical_scroll_and_keep_horizontal_scroll(self):
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page(viewport={'width':1100,'height':700})
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            for query in ('tab=composition','tab=distribution&section=months','tab=distribution&section=powers','tab=stock&stock_step=opening','tab=stock&stock_step=targets','tab=plan'):
+                page.goto(self.live_server_url+self.url+'?'+query)
+                page.wait_for_selector('.split-table-viewport')
+                result=page.evaluate("""() => {
+                  const viewport=document.querySelector('.split-table-viewport');
+                  const table=viewport.querySelector('table'),body=table.tBodies[0];
+                  const sample=body.rows[0];
+                  for(let i=0;i<50;i++)body.append(sample.cloneNode(true));
+                  table.style.minWidth='2000px';
+                  const wrappers=[...document.querySelectorAll('.split-table-viewport,.split-stock-workspace-scroll,.split-stock-table-scroll')];
+                  viewport.scrollLeft=100;
+                  return {nested:wrappers.some(el=>el.scrollHeight>el.clientHeight+1),
+                    horizontal:viewport.scrollLeft>0,page:document.documentElement.scrollHeight>innerHeight};
+                }""")
+                self.assertEqual(result,{'nested':False,'horizontal':True,'page':True},query)
+            browser.close()
+
     def test_enter_does_not_save_but_shortcut_and_save_button_do(self):
         from playwright.sync_api import sync_playwright,expect
         from concurrent.futures import ThreadPoolExecutor
