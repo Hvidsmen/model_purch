@@ -1,5 +1,13 @@
 (() => {
   if(window.SplitUnsaved)return;
+  // Text entry must never trigger a form's implicit submit. Keep Enter on buttons accessible.
+  document.addEventListener('keydown',event=>{
+    if(event.key!=='Enter'||event.isComposing||event.keyCode===229)return;
+    const input=event.target;
+    if(!(input instanceof HTMLInputElement)||!input.closest('.split-workspace'))return;
+    if(['button','submit','reset','checkbox','radio','file','image','range','color'].includes(input.type))return;
+    event.preventDefault();
+  },true);
   const controllers=[];let leaving=false,nextURL='',saving=false;
   const dock=document.createElement('div');dock.className='split-unsaved-dock';dock.hidden=true;
   const status=document.createElement('span');status.setAttribute('role','status');
