@@ -156,7 +156,8 @@ def scenario(request, pk):
                     post=request.POST.copy();post['tokens']=json.dumps(tokens)
                     state,count=apply_history(item,post)
                     persist(item,request.user,request.POST.get('revision'),state,'Автоматически рассчитан и сохранён прогноз по истории')
-                return JsonResponse({'ok':True,'count':len(tokens),'skipped':skipped})
+                return JsonResponse({'ok':True,'count':len(tokens),'skipped':skipped,
+                    'repairs':[{'name':row['name'],'reason':row['explanation']} for row in rows if row.get('token') and row.get('repaired_existing')]})
             if request.POST['action']=='preview_forecast_history':
                 return JsonResponse({'ok':True,**preview_history(item,request.POST)})
             state,count=apply_history(item,request.POST)

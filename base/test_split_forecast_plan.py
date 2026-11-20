@@ -120,6 +120,26 @@ class ForecastPlanTests(TestCase):
         self.scenario.refresh_from_db()
         self.assertEqual([D(p['forecast_before']) for p in self.scenario.state['groups'][self.gid]['powers'].values()],[24,36])
 
+    def test_missing_erp_plan_repairs_previous_history_without_relabelling_it_as_erp(self):
+        from .split_opening import opening_balance
+        group=self.scenario.state['groups'][self.gid]
+        group.update(forecast_mode='powers',forecast_history_source={'method':'average_daily','source':'DataWH.dbo.Sales.Quantity'})
+        group['powers']['07'].update(stock_indoor='0',stock_outdoor='0',forecast_before='0.354839')
+        group['powers']['09'].update(stock_indoor='10',stock_outdoor='0',forecast_before='1.419354')
+        self.scenario.save(update_fields=['state'])
+        self.plans={}
+        row=self.proposal()['rows'][0]
+        self.assertIn('token',row,row.get('error'))
+        self.assertIn('Прежний автоматический прогноз',row['explanation'])
+        state,count=apply(self.scenario,{'tokens':json.dumps([row['token']]),'only_empty':'1'})
+        self.assertEqual(count,1)
+        repaired=state['groups'][self.gid]
+        self.assertFalse(opening_balance(self.scenario,repaired)['deficit'])
+        self.assertEqual(repaired['forecast_history_source']['method'],'average_daily')
+        self.assertIn('Нет плана',repaired['forecast_history_source']['repair_reason'])
+        group['forecast_workspace_source']={'kind':'manual'}
+        self.assertNotIn('token',self.proposal()['rows'][0])
+
     def group_plan(self,past='130',future='50'):
         name=self.scenario.state['groups'][self.gid]['ref']['name'].casefold()
         return {(self.key,'pg_'+name):{'past':D(past),'future':D(future),'unknown':False,'past_seen':D(past)!=0,'future_seen':True}}

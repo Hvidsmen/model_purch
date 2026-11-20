@@ -13,7 +13,7 @@ from .split_history import normalized
 from .split_engine import ZERO,STEP,HUNDRED,allocate,number,stored,precise
 from .split_ddp import fingerprint
 from .split_preplan_forecast import resolve
-from .split_forecast_history import SALT,source as fact_source,has_forecast,needs_stock_repair
+from .split_forecast_history import SALT,source as fact_source,has_forecast,needs_stock_repair,repair_existing_forecast
 
 PLAN_SQL='''WITH dates AS (
  SELECT CAST(? AS date) AS elapsed_from,CAST(? AS date) AS cutoff,
@@ -206,6 +206,8 @@ def preview(scenario,post):
             row.update(proposed=proposed,explanation='Выполнение '+shown(Decimal(pct))+'%: факт '+shown(actual)+' / план '+shown(past)+'; оставшийся план '+shown(remaining)+' компл. Прогноз по выполнению '+shown(unlimited)+'; обеспечено товаром '+shown(Decimal(proposed))+'.'+(' Ограничено остатками и поступлениями до начала плана.' if limited else '')+fallback_note,
                 powers=[{'power':key,'sets':values[key],'requested':stored(requested[key]),'available':stored(available[key]),'indoor':stored(totals[key]['indoor']['fact']),'outdoor':stored(totals[key]['outdoor']['fact'])} for key in values],
                 token=signing.dumps({'scenario':scenario.pk,'revision':scenario.revision,'gid':gid,'fingerprint':fingerprint(group),'powers':values,'total':proposed,'source':origin},salt=SALT,compress=True))
-        except (ValidationError,ArithmeticError) as exc:row['error']=' '.join(exc.messages) if isinstance(exc,ValidationError) else 'Расчёт вышел за допустимую точность. Проверьте базу выполнения.'
+        except (ValidationError,ArithmeticError) as exc:
+            row['error']=' '.join(exc.messages) if isinstance(exc,ValidationError) else 'Расчёт вышел за допустимую точность. Проверьте базу выполнения.'
+            repair_existing_forecast(scenario,group,row,row['error'])
         rows.append(row)
     return {'rows':rows,'source':metadata}
