@@ -134,3 +134,26 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 self.assertEqual(errors,[])
             finally:context.close();browser.close()
         self.scenario.refresh_from_db();self.assertEqual(Decimal(self.scenario.state['groups'][self.gid]['buy']),1150)
+
+    def test_power_detail_shows_kit_counts_and_updates_them_when_blocks_change(self):
+        from datetime import date
+        self.scenario.stock_date=date(2026,11,6)
+        self.scenario.save(update_fields=['stock_date'])
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1440,'height':1050})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page()
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=stock&stock_step=opening&brand_page=alpha')
+                page.locator('[data-stock-toggle]').first.click()
+                power=page.locator('[data-stock-child] [data-stock-power="07"]').first
+                expect(power.locator('[data-stock-power-result="stock"]')).to_have_text('0')
+                power.locator('[data-stock-field="07:stock_indoor"]').fill('315')
+                power.locator('[data-stock-field="07:stock_outdoor"]').fill('42')
+                expect(power.locator('[data-stock-power-result="stock"]')).to_have_text('42')
+                power.locator('[data-stock-field="07:prior_indoor"]').fill('3')
+                power.locator('[data-stock-field="07:prior_outdoor"]').fill('2')
+                expect(power.locator('[data-stock-power-result="prior"]')).to_have_text('2')
+            finally:context.close();browser.close()
