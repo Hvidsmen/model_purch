@@ -71,7 +71,7 @@ def directory(request, kind):
         return HttpResponseBadRequest(' '.join(exc.messages))
     context.update(kind=kind, title='Каналы продаж' if kind == 'channels' else 'Номенклатура',
                    error=error, load=SalesPlanningDirectoryLoad.objects.filter(directory=kind).first())
-    return render(request, 'base/sales_planning_directory.html', context)
+    return render(request, 'base/sales_planning_channels.html' if kind=='channels' else 'base/sales_planning_directory.html', context)
 
 
 
