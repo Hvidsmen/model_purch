@@ -81,6 +81,18 @@ def has_forecast(scenario,group):
     return any(value is not None and str(value).strip()!='' for value in values)
 
 
+def needs_stock_repair(scenario,group):
+    """Only unsafe automatic forecasts may bypass the fill-empty protection."""
+    origin=group.get('forecast_history_source') or {}
+    if group.get('forecast_workspace_source') or group.get('forecast_mode')!='powers':return False
+    if origin.get('method') not in ('plan_execution','average_daily','same_calendar_dates') and origin.get('source')!='DataWH.dbo.Sales.Quantity':return False
+    from .split_forecast_plan import available_before
+    try:
+        return any(number(power.get('forecast_before'),optional=True) is not None and
+                   number(power['forecast_before'])>available_before(power,key) for key,power in group['powers'].items())
+    except ValidationError:return False
+
+
 @precise
 def preview(scenario,post):
     if post.get('method')=='plan_execution':
@@ -106,7 +118,7 @@ def preview(scenario,post):
     rows=[]
     for gid in targets:
         group=scenario.state['groups'][gid];current=resolve(scenario,group)['total']
-        row={'gid':gid,'name':group['ref']['name'],'current':None if current is None else stored(current),'has_current':has_forecast(scenario,group),'proposed':None,'powers':[],'error':''}
+        row={'gid':gid,'name':group['ref']['name'],'current':None if current is None else stored(current),'has_current':has_forecast(scenario,group),'needs_stock_repair':needs_stock_repair(scenario,group),'proposed':None,'powers':[],'error':''}
         try:
             model_map={}
             for key,power in group['powers'].items():
@@ -158,7 +170,7 @@ def apply(scenario,post):
         if proposal.get('source',{}).get('method') in ('average_daily','same_calendar_dates') and not proposal['source'].get('stock_constraint'):
             raise ValidationError('Расчёт прогноза по истории устарел: пересчитайте с учётом остатков и поступлений.')
         seen.add(gid)
-        if only_empty and has_forecast(scenario,group):raise ValidationError('У выбранной группы уже задан прогноз. Повторите предпросмотр или отключите «Только пустые».')
+        if only_empty and has_forecast(scenario,group) and not needs_stock_repair(scenario,group):raise ValidationError('У выбранной группы уже задан прогноз. Повторите предпросмотр или отключите «Только пустые».')
         group['forecast_mode']='powers';group['forecast_before_total']=proposal['total']
         for key,value in proposal['powers'].items():group['powers'][key]['forecast_before']=value
         group['forecast_history_source']=proposal['source']

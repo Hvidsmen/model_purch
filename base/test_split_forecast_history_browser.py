@@ -82,7 +82,10 @@ class ForecastHistoryBrowserTests(StaticLiveServerTestCase):
 
     def test_history_direct_save_caps_forecast_to_available_blocks(self):
         from playwright.sync_api import sync_playwright,expect
-        for power in self.scenario.state['groups'][self.gid]['powers'].values():
+        group=self.scenario.state['groups'][self.gid]
+        group.update(forecast_mode='powers',forecast_history_source={'method':'average_daily'})
+        for power in group['powers'].values():
+            power['forecast_before']='200'
             power.update(stock_indoor='0.2',stock_outdoor='20',prior_indoor='0.3',prior_outdoor='0')
         self.scenario.save(update_fields=['state'])
         with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])),sync_playwright() as driver:

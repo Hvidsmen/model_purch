@@ -109,6 +109,17 @@ class ForecastPlanTests(TestCase):
         raw=json.dumps({self.gid:{'07:stock_indoor':'0','forecast_group':'0'}})
         self.assertEqual(candidate(self.scenario,raw,forecasts=json.dumps([row['token']]))['groups'][self.gid]['forecast_before_total'],'0')
 
+    def test_only_empty_recalculates_unsafe_automatic_erp_forecast(self):
+        group=self.scenario.state['groups'][self.gid]
+        group.update(forecast_mode='powers',forecast_history_source={'method':'plan_execution'})
+        for power in group['powers'].values():power['forecast_before']='200'
+        self.scenario.save(update_fields=['state'])
+        with patch('base.split_forecast_plan.plan_source',return_value=self.plans),patch('base.split_forecast_plan.fact_source',return_value=(self.data,['Дилеры'])):
+            response=self.client.post(self.url,{'action':'calculate_save_forecast_history','revision':self.scenario.revision,'only_empty':'1',**self.post})
+        self.assertEqual(response.status_code,200,response.content);self.assertEqual(response.json()['count'],1)
+        self.scenario.refresh_from_db()
+        self.assertEqual([D(p['forecast_before']) for p in self.scenario.state['groups'][self.gid]['powers'].values()],[24,36])
+
     def group_plan(self,past='130',future='50'):
         name=self.scenario.state['groups'][self.gid]['ref']['name'].casefold()
         return {(self.key,'pg_'+name):{'past':D(past),'future':D(future),'unknown':False,'past_seen':D(past)!=0,'future_seen':True}}

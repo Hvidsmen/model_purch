@@ -4,7 +4,7 @@
  let proposals=[],busy=false;
  const number=value=>value==null?'—':Number(value).toLocaleString('ru-RU',{maximumFractionDigits:6});
  const clear=()=>{proposals=[];find('results').replaceChildren();find('apply').disabled=true;find('apply').hidden=true;};
- function setBusy(value){busy=value;find('progress').hidden=!value;dialog.querySelectorAll('button,input,select').forEach(el=>{el.disabled=value;});if(!value)find('results').querySelectorAll('input').forEach(input=>{const row=proposals.find(p=>p.token===input.dataset.forecastToken);input.disabled=!row?.token||(find('empty').checked&&row.has_current);});find('apply').disabled=value||!proposals.some(row=>row.token&&(!find('empty').checked||!row.has_current));}
+ function setBusy(value){busy=value;find('progress').hidden=!value;dialog.querySelectorAll('button,input,select').forEach(el=>{el.disabled=value;});if(!value)find('results').querySelectorAll('input').forEach(input=>{const row=proposals.find(p=>p.token===input.dataset.forecastToken);input.disabled=!row?.token||(find('empty').checked&&row.has_current&&!row.needs_stock_repair);});find('apply').disabled=value||!proposals.some(row=>row.token&&(!find('empty').checked||!row.has_current||row.needs_stock_repair));}
  async function request(action,data){
   const csrf=document.querySelector('[name=csrfmiddlewaretoken]')?.value;
   const response=await fetch(location.href,{method:'POST',credentials:'same-origin',body:new URLSearchParams({action,revision:dialog.dataset.revision,csrfmiddlewaretoken:csrf,...data})});
@@ -74,12 +74,12 @@
    const table=document.createElement('table');table.className='admin-table';const head=table.createTHead().insertRow();
    for(const title of ['Применить','Группа','Текущий прогноз, компл.','Предложено, компл.','По мощностям / пояснение']){const cell=document.createElement('th');cell.textContent=title;head.append(cell);}
    const body=table.createTBody();for(const row of proposals){
-    const tr=body.insertRow(),select=document.createElement('input');select.type='checkbox';select.dataset.forecastToken=row.token||'';select.disabled=!row.token||(find('empty').checked&&row.has_current);select.checked=!select.disabled;
+    const tr=body.insertRow(),select=document.createElement('input');select.type='checkbox';select.dataset.forecastToken=row.token||'';select.disabled=!row.token||(find('empty').checked&&row.has_current&&!row.needs_stock_repair);select.checked=!select.disabled;
     tr.insertCell().append(select);tr.insertCell().textContent=row.name;tr.insertCell().textContent=number(row.current);tr.insertCell().textContent=number(row.proposed);
-    tr.insertCell().textContent=row.error||(find('empty').checked&&row.has_current?'Есть введённые значения — пропущен.':(row.explanation?row.explanation+'; ':'')+row.powers.map(p=>p.power+': '+number(p.sets)+' компл. (внутр. '+number(p.indoor)+', наруж. '+number(p.outdoor)+')').join('; ')+(row.warnings?.length?' · '+row.warnings.join('; '):''));
-   }find('results').append(table);find('apply').hidden=!proposals.some(row=>row.token&&(!find('empty').checked||!row.has_current));progress?.finish('Предпросмотр готов');
+    tr.insertCell().textContent=row.error||(find('empty').checked&&row.has_current&&!row.needs_stock_repair?'Есть введённые значения — пропущен.':(row.needs_stock_repair?'Исправление ранее сохранённого автоматического прогноза с дефицитом; ':'')+(row.explanation?row.explanation+'; ':'')+row.powers.map(p=>p.power+': '+number(p.sets)+' компл. (внутр. '+number(p.indoor)+', наруж. '+number(p.outdoor)+')').join('; ')+(row.warnings?.length?' · '+row.warnings.join('; '):''));
+   }find('results').append(table);find('apply').hidden=!proposals.some(row=>row.token&&(!find('empty').checked||!row.has_current||row.needs_stock_repair));progress?.finish('Предпросмотр готов');
   }catch(error){status.textContent=error.message;progress?.fail(error.message);}finally{
-   setBusy(false);find('results').querySelectorAll('input').forEach(input=>{const row=proposals.find(p=>p.token===input.dataset.forecastToken);input.disabled=!row?.token||(find('empty').checked&&row.has_current);});
+   setBusy(false);find('results').querySelectorAll('input').forEach(input=>{const row=proposals.find(p=>p.token===input.dataset.forecastToken);input.disabled=!row?.token||(find('empty').checked&&row.has_current&&!row.needs_stock_repair);});
   }
  });
  find('apply').addEventListener('click',async()=>{
@@ -89,7 +89,7 @@
   setBusy(true);status.textContent='Сохраняем выбранные прогнозы…';const progress=window.SplitProgress?.start('Сохранение прогноза');
   try{
    const result=await request('apply_forecast_history',{tokens:JSON.stringify(tokens),only_empty:find('empty').checked?'1':'0'});
-   result.skipped=proposals.filter(row=>!row.token||(find('empty').checked&&row.has_current)).map(row=>({gid:row.gid,name:row.name,reason:row.error||'Прогноз уже заполнен — сохранён без изменений.'}));
+   result.skipped=proposals.filter(row=>!row.token||(find('empty').checked&&row.has_current&&!row.needs_stock_repair)).map(row=>({gid:row.gid,name:row.name,reason:row.error||'Прогноз уже заполнен — сохранён без изменений.'}));
    progress?.finish('Прогноз сохранён · групп: '+result.count);saved(result);}
   catch(error){status.textContent=error.message;progress?.fail(error.message);setBusy(false);}
  });

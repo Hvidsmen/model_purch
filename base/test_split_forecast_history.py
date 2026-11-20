@@ -208,3 +208,40 @@ class HistoricalForecastTests(TestCase):
         old=signing.loads(row['token'],salt=SALT);old['source'].pop('stock_constraint')
         with self.assertRaisesMessage(ValidationError,'устарел'):
             apply(self.scenario,{'tokens':json.dumps([signing.dumps(old,salt=SALT)])})
+
+    def test_only_empty_repairs_unsafe_automatic_forecast_per_power_but_keeps_manual_and_safe_values(self):
+        group=self.scenario.state['groups'][self.gid]
+        group.update(forecast_mode='powers',forecast_history_source={'method':'average_daily'})
+        group['powers']['07'].update(stock_indoor='81',stock_outdoor='81',prior_indoor='0',prior_outdoor='0',forecast_before='231.709677')
+        group['powers']['09'].update(stock_indoor='68',stock_outdoor='67',prior_indoor='0',prior_outdoor='0',forecast_before='486.661290')
+        for entry in self.data.values():entry['qty']=D(1000)
+        self.scenario.save(update_fields=['state'])
+        before=deepcopy(self.scenario.state)
+        group['forecast_workspace_source']={'kind':'manual','label':'Вручную'}
+        self.scenario.save(update_fields=['state'])
+        payload={'action':'calculate_save_forecast_history','revision':self.scenario.revision,**self.post,'only_empty':'1'}
+        with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])):
+            response=self.client.post(self.url,payload)
+        self.assertEqual(response.status_code,200,response.content);self.assertEqual(response.json()['count'],0)
+        group.pop('forecast_workspace_source');self.scenario.save(update_fields=['state'])
+        with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])):
+            response=self.client.post(self.url,payload)
+        self.assertEqual(response.status_code,200,response.content);self.assertEqual(response.json()['count'],1)
+        self.scenario.refresh_from_db();group=self.scenario.state['groups'][self.gid]
+        self.assertEqual([D(p['forecast_before']) for p in group['powers'].values()],[81,67])
+        self.assertEqual([D(p['stock_outdoor'])-D(p['forecast_before']) for p in group['powers'].values()],[0,0])
+        saved=deepcopy(self.scenario.state)
+        with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])):
+            response=self.client.post(self.url,{**payload,'revision':self.scenario.revision})
+        self.assertEqual(response.json()['count'],0)
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,saved)
+
+    def test_preview_selected_unsafe_automatic_forecast_can_be_applied_with_only_empty(self):
+        group=self.scenario.state['groups'][self.gid]
+        group.update(forecast_mode='powers',forecast_history_source={'source':'DataWH.dbo.Sales.Quantity'})
+        for power in group['powers'].values():power['forecast_before']='200'
+        row=self.proposal()['rows'][0]
+        self.assertTrue(row['needs_stock_repair'])
+        state,count=apply(self.scenario,{'tokens':json.dumps([row['token']]),'only_empty':'1'})
+        self.assertEqual(count,1)
+        self.assertTrue(all(D(p['forecast_before'])<=D(p['stock_indoor']) for p in state['groups'][self.gid]['powers'].values()))
