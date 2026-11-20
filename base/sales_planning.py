@@ -79,13 +79,7 @@ def directory(request, kind):
 
 @login_required
 @never_cache
-@require_GET
+@require_http_methods(['GET','POST'])
 def split(request):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
-    loads = {entry.directory: entry for entry in SalesPlanningDirectoryLoad.objects.all()}
-    return render(request, 'base/sales_planning_split.html', {
-        'directory_statuses': [{'label': label, 'load': loads.get(key), 'count': split_goods().count() if key == 'goods' else loads[key].row_count if key in loads else 0}
-                               for key, label in [('channels', 'Каналы продаж'), ('goods', 'Номенклатура')]],
-    })
-
+    from .split_views import scenarios
+    return scenarios(request)

@@ -33,7 +33,7 @@ def scenarios(request):
         scenario = create_scenario(request.user, form.cleaned_data)
         return redirect('split_scenario', pk=scenario.pk)
     return render(request, 'base/split_scenarios.html', {'form': form,
-        'page': Paginator(SplitScenario.objects.select_related('created_by'), 25).get_page(request.GET.get('page'))})
+        'page': Paginator(SplitScenario.objects.select_related('created_by').defer('state'), 25).get_page(request.GET.get('page'))})
 
 
 def return_to(pk, tab, gid='', cid='', section='months'):

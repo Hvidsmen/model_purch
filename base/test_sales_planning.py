@@ -45,7 +45,9 @@ class SalesPlanningTests(TestCase):
         self.client.force_login(User.objects.create_superuser('split-menu-admin'))
         with patch('base.sales_planning.load_channels') as channels, patch('base.sales_planning.load_goods') as goods:
             overview = self.client.get(reverse('sales_planning_split'))
-            self.assertContains(overview, 'Открыть справочники')
+            self.assertContains(overview, 'Сценарии планирования Split')
+            self.assertNotContains(overview, 'Справочники для планирования')
+            self.assertNotContains(overview, '>Сценарии плана</a>')
             self.assertNotContains(overview, 'name="action"')
             self.assertContains(overview, 'href="' + reverse('sales_planning_split') + '" aria-current="page"')
             directories = self.client.get(reverse('sales_planning_directories'))
@@ -54,7 +56,7 @@ class SalesPlanningTests(TestCase):
             self.assertContains(self.client.get(reverse('sales_planning_channels')), 'href="' + reverse('sales_planning_channels') + '" aria-current="page"')
             self.assertNotContains(directories, 'name="action"')
             self.assertContains(self.client.get(reverse('sales_planning_goods')), 'name="action" value="load_goods"')
-            self.assertEqual(self.client.post(reverse('sales_planning_split')).status_code, 405)
+            self.assertEqual(self.client.post(reverse('sales_planning_split')).status_code, 200)
             channels.assert_not_called()
             goods.assert_not_called()
 
