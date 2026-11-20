@@ -23,12 +23,13 @@ def normalized(value):
     return str(value or '').strip().casefold()
 
 
-def load_history(scenario):
+def load_history(scenario, *, cutoff=None, include_projection=True):
     if scenario.start.year < 4:
         raise ValidationError('Для этого периода нет трёх предыдущих календарных лет.')
     start, end = date(scenario.start.year-3, 1, 1), date(scenario.start.year, 1, 1)
     today = timezone.localdate(timezone=ZoneInfo('Europe/Moscow'))
     effective_end = min(end, today + timedelta(days=1))
+    if cutoff is not None:effective_end=min(effective_end,cutoff+timedelta(days=1))
     if effective_end <= start:
         raise ValidationError('Исторический период ещё не наступил.')
     connection = cursor = None
@@ -64,12 +65,15 @@ def load_history(scenario):
             records[identity] = values
         else:
             records[identity] = [a+b if a is not None and b is not None else None for a,b in zip(records[identity],values)]
-    return {'loaded_at':timezone.now().isoformat(), 'through':str(effective_end-timedelta(days=1)),
+    snapshot = {'loaded_at':timezone.now().isoformat(), 'through':str(effective_end-timedelta(days=1)),
         'first_year':start.year, 'last_year':end.year-1, 'groups':sorted(selected_groups), 'channels':sorted(selected_channels),
         'source':'DataWH.dbo.Sales', 'quantity_basis':'Quantity, штуки исходного источника (не пересчёт в комплекты)',
         'rows':[{'group':key,'channel':channel,'year':year,'month':month,
                  **dict(zip(('qty','revenue','cost'),[None if value is None else str(value) for value in values]))}
                 for (key,channel,year,month),values in records.items()]}
+    if include_projection and scenario.stock_date.year==scenario.start.year-1 and scenario.stock_date<effective_end-timedelta(days=1):
+        snapshot['projection_snapshot']=load_history(scenario,cutoff=scenario.stock_date,include_projection=False)
+    return snapshot
 
 
 def presentation(scenario):
