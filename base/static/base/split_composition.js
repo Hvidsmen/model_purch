@@ -39,7 +39,10 @@
   const list=form.querySelector('[data-composition-list="'+input.dataset.compositionSearch+'"]');
   [...list.children].forEach(row=>row.hidden=!row.textContent.toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
  }));
- function update(){form.querySelector('[data-composition-add-count]').textContent='Выбрано групп: '+form.querySelectorAll('[name=added_groups]:checked').length;window.SplitUnsaved?.refresh();}
+ const channelsPicker=form.querySelector('.split-composition-channels');
+ document.addEventListener('click',event=>{if(!channelsPicker.contains(event.target))channelsPicker.open=false;});
+ channelsPicker.addEventListener('keydown',event=>{if(event.key==='Escape'){channelsPicker.open=false;channelsPicker.querySelector('summary').focus();}});
+ function update(){form.querySelector('[data-composition-channel-count]').textContent=form.querySelectorAll('[name=channels]:checked').length;form.querySelector('[data-composition-add-count]').textContent='Выбрано групп: '+form.querySelectorAll('[name=added_groups]:checked').length;window.SplitUnsaved?.refresh();}
  form.addEventListener('change',update);
  async function save(url,operation='save'){
   if(busy)return;busy=true;window.SplitUnsaved?.refresh();const progress=window.SplitProgress?.start('Сохранение состава плана');
