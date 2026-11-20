@@ -24,12 +24,15 @@ from django.conf import settings
 from base import split_monitoring_update_views
 from django.conf.urls.static import static
 
+from base import split_planner_guide
+
 urlpatterns = ([
                    path('split-monitoring/', split_monitoring_views.application, name='split_monitoring_index'),
                    path('split-monitoring/updates/', split_monitoring_update_views.updates, name='split_monitoring_updates'),
                    path('split-monitoring/<path:path>', split_monitoring_views.application, name='split_monitoring_asset'),
                    path('card-api/<path:path>', split_monitoring_views.api, name='split_monitoring_api'),
                    path('sales-planning/', sales_planning.index, name='sales_planning_index'),
+                   path('sales-planning/guide/', split_planner_guide.guide, name='split_planner_guide'),
                    path('sales-planning/split/', sales_planning.split, name='sales_planning_split'),
                    path('sales-planning/scenarios/', split_views.scenarios, name='split_scenarios'),
                    path('sales-planning/scenarios/<int:pk>/', split_views.scenario, name='split_scenario'),
