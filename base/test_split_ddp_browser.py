@@ -81,3 +81,25 @@ class DdpBrowserTests(StaticLiveServerTestCase):
                 with page.expect_navigation():page.keyboard.press('Control+s')
             finally:context.close();browser.close()
         self.scenario.refresh_from_db();self.assertEqual(self.scenario.state['groups'][self.gid]['ddp_source']['basis'],'group')
+
+    def test_stock_source_shows_cutoff_and_saves_weighted_pair_cost(self):
+        from playwright.sync_api import sync_playwright,expect
+        metadata={'source':'DDP из остатков','stock_date':str(self.scenario.stock_date),'through':str(self.scenario.stock_date),'warehouse_purpose':'Продажа'}
+        with patch('base.split_ddp.stock',return_value=(self.costs,metadata)),sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1700,'height':1100})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=plan')
+                page.get_by_role('button',name='Заполнить DDP',exact=True).click()
+                dialog=page.locator('#split-ddp-dialog');dialog.locator('[data-ddp-source]').select_option('stock')
+                expect(dialog.locator('[data-ddp-count]')).to_have_text('Выбрано групп: 1')
+                expect(dialog.locator('[data-ddp-year]')).not_to_be_visible()
+                expect(dialog.locator('[data-ddp-stock]')).to_contain_text('Продажа')
+                with page.expect_navigation():dialog.get_by_role('button',name='Рассчитать и сохранить',exact=True).click()
+                expect(page.get_by_label('DDP G',exact=True)).to_have_value('150.000000')
+                expect(page.locator('[data-plan-group] small').filter(has_text='DDP: остатки')).to_be_visible()
+                self.assertEqual(errors,[])
+            finally:context.close();browser.close()
+        self.scenario.refresh_from_db();self.assertEqual(self.scenario.state['groups'][self.gid]['ddp_source']['warehouse_purpose'],'Продажа')

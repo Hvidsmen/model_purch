@@ -49,7 +49,7 @@
     catch(error){status.textContent=error.message;groups.replaceChildren();}
     finally{setBusy(false);}
   }
-  function sources(){dialog.querySelectorAll('[data-ddp-fact]').forEach(el=>el.hidden=source.value!=='fact');dialog.querySelectorAll('[data-ddp-purchase]').forEach(el=>el.hidden=source.value!=='purchase');load();}
+  function sources(){dialog.querySelectorAll('[data-ddp-stock]').forEach(el=>el.hidden=source.value!=='stock');dialog.querySelectorAll('[data-ddp-fact]').forEach(el=>el.hidden=source.value!=='fact');dialog.querySelectorAll('[data-ddp-purchase]').forEach(el=>el.hidden=source.value!=='purchase');load();}
   document.querySelector('[data-ddp-open]').addEventListener('click',()=>{groups.replaceChildren();dialog.showModal();sources();});
   source.addEventListener('change',sources);purchase.addEventListener('change',load);
   find('search').addEventListener('input',()=>{filter();invalidate();});
@@ -59,7 +59,8 @@
   find('all').addEventListener('click',()=>{groups.querySelectorAll('[data-ddp-target]').forEach(el=>{if(!el.closest('article').hidden)el.checked=true;});invalidate();});
   find('none').addEventListener('click',()=>{groups.querySelectorAll('[data-ddp-target]').forEach(el=>el.checked=false);invalidate();});
   find('close').addEventListener('click',()=>dialog.close());dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
-  find('preview-button').addEventListener('click',async()=>{
+  async function calculate(saveDirect=false){
+    if(busy)return;
     const targets=selected();if(!targets.length){status.textContent='Выберите хотя бы одну группу.';return;}
     if(source.value==='fact'&&(!find('year').reportValidity()||!find('surcharge').reportValidity()))return;
     const goodsByLabel=new Map((catalog.goods||[]).map(g=>[g.name+' · #'+g.id+' · '+(g.ddp??'нет DDP')+' USD',g.id]));
@@ -71,18 +72,26 @@
     invalidate();setBusy(true);status.textContent='Рассчитываем DDP · групп: '+targets.length+'…';
     try{
       const data=await request('preview_ddp',{targets:JSON.stringify(targets),mapping:JSON.stringify(mapping),source:source.value,purchase:purchase.value,year:find('year').value,surcharge:find('surcharge').value});
+      if(saveDirect){
+        const errors=data.rows.filter(row=>!row.token||row.error);if(errors.length)throw Error('Ничего не сохранено. '+errors.map(row=>row.name+': '+row.error).join('; '));
+        proposals=data.rows;insert(true);return;
+      }
       const table=element('table');table.className='admin-table';const heading=element('tr');['Группа','Текущий DDP, USD','Предложение, USD','Источник / пояснение'].forEach(text=>heading.append(element('th',text)));const thead=element('thead');thead.append(heading);table.append(thead);const tbody=element('tbody');
       for(const row of data.rows){
         const tr=element('tr');tr.append(element('td',row.name),element('td',input(row.gid)?.value||'—'),element('td',row.proposed??'—'));
-        const description=row.error||[row.source.source,row.source.year?'Год '+row.source.year+', по '+row.source.through+'; надбавка '+row.source.surcharge_percent+'%':row.source.purchase_title,row.source.note||'',row.powers.map(p=>p.power+': '+p.ddp+' USD ('+p.share+'%)').join('; ')].filter(Boolean).join(' · ');
+        const description=row.error||[row.source.source,row.source.year?'Год '+row.source.year+', по '+row.source.through+'; надбавка '+row.source.surcharge_percent+'%':row.source.purchase_title,row.source.stock_date?'Остатки на '+row.source.stock_date+' · склады «Продажа»':'',row.source.note||'',row.powers.map(p=>p.power+': '+p.ddp+' USD ('+p.share+'%)').join('; ')].filter(Boolean).join(' · ');
         tr.append(element('td',description));tbody.append(tr);
       }
       table.append(tbody);find('preview').append(table);proposals=data.rows.filter(row=>row.token&&!row.error);
       status.textContent='Готово к вставке: '+proposals.length+'. Без данных: '+(data.rows.length-proposals.length)+'. Годовой факт берётся только за выбранный год, до доступной даты.';
     }catch(error){status.textContent=error.message;}finally{setBusy(false);}
-  });
-  apply.addEventListener('click',()=>{
+  }
+  find('preview-button').addEventListener('click',()=>calculate(false));
+  find('save-button').addEventListener('click',()=>calculate(true));
+  function insert(saveDirect=false){
     let count=0;for(const row of proposals){if(!eligible(row.gid))continue;const field=input(row.gid),token=form.elements.namedItem('ddp_proposal_'+row.gid);if(!field||!token)continue;field.value=row.proposed;token.value=row.token;field.dispatchEvent(new Event('input',{bubbles:true}));count++;}
     dialog.close();window.SplitProgress?.start('DDP').finish('Вставлено групп: '+count+'. Сохраните изменения.');proposals=[];apply.disabled=true;
-  });
+    if(saveDirect&&count)form.requestSubmit(form.querySelector('[name="action"][value="lines"]'));
+  }
+  apply.addEventListener('click',()=>insert(false));
 })();

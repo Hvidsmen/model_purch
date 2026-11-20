@@ -116,3 +116,35 @@ class DdpTests(TestCase):
         self.scenario.refresh_from_db();self.assertEqual(self.scenario.state,state)
         self.assertEqual(self.client.post(self.url,{'action':'preview_ddp','revision':0}).status_code,400)
         self.assertEqual(self.client.post(self.url,{'action':'ddp_catalog','revision':self.scenario.revision,'purchase':'bad'}).status_code,400)
+
+    def test_stock_valuation_uses_sale_warehouses_cutoff_and_closes_resources(self):
+        from .split_ddp import stock,STOCK_SQL
+        connection,cursor=Mock(),Mock()
+        cursor.fetchall.return_value=[('G','IN',10,300,0),('G','IN',-2,-60,0),('G','OUT',10,700,0)]
+        with patch('base.split_ddp.connect_database',return_value=(connection,cursor)):
+            costs,metadata=stock(self.scenario)
+        self.assertEqual(cursor.execute.call_args.args,(STOCK_SQL,'Бытовые кондиционеры',self.scenario.stock_date))
+        self.assertIn("=N'продажа'",STOCK_SQL);self.assertIn('NOT EXISTS',STOCK_SQL)
+        self.assertIn('INNER JOIN DataWH.erp.[Справочник.Склады]',STOCK_SQL)
+        self.assertIn('r.[ДопРасходыUSD]+r.[СуммаUSD]',STOCK_SQL)
+        self.assertEqual(costs[(self.group.source_key,'in')]['qty'],8)
+        self.assertEqual(costs[(self.group.source_key,'in')]['cost'],240)
+        self.assertEqual(metadata['through'],str(self.scenario.stock_date))
+        cursor.close.assert_called_once();connection.close.assert_called_once()
+
+    def test_stock_pair_ddp_is_weighted_and_saved_with_source_without_changing_inventory(self):
+        from .split_ddp import stock
+        before=deepcopy(self.scenario.state)
+        metadata={'source':'DDP из остатков','stock_date':str(self.scenario.stock_date),'warehouse_purpose':'Продажа'}
+        with patch('base.split_ddp.stock',return_value=(self.costs,metadata)):
+            row=preview(self.scenario,{'targets':json.dumps([self.gid]),'source':'stock','surcharge':'999'})['rows'][0]
+        self.assertEqual(row['proposed'],'150.000000')
+        state=changed_state(self.scenario,self.lines(row));group=state['groups'][self.gid]
+        self.assertEqual(group['ddp_source']['stock_date'],str(self.scenario.stock_date))
+        self.assertEqual(group['channels'],before['groups'][self.gid]['channels'])
+        for key,power in group['powers'].items():
+            self.assertEqual(power['stock_indoor'],before['groups'][self.gid]['powers'][key]['stock_indoor'])
+        costs=deepcopy(self.costs);costs[(self.group.source_key,'in')]['qty']=0
+        with patch('base.split_ddp.stock',return_value=(costs,metadata)):
+            row=preview(self.scenario,{'targets':json.dumps([self.gid]),'source':'stock'})['rows'][0]
+        self.assertNotIn('token',row);self.assertTrue(row['error'])

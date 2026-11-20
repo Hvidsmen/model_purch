@@ -22,6 +22,51 @@ SQL='''SELECT p.PlanningGroupOZPErp,p.ModelCode,SUM(s.Quantity),SUM(s.AmountExwA
  GROUP BY p.PlanningGroupOZPErp,p.ModelCode'''
 
 
+STOCK_SQL="""SELECT m.PlanningGroupOZPErp,n.[Наименование],
+ SUM(CASE WHEN r.[ВидДвижения]=0 THEN 1 ELSE -1 END*r.[Количество]),
+ SUM(CASE WHEN r.[ВидДвижения]=0 THEN 1 ELSE -1 END*(r.[ДопРасходыUSD]+r.[СуммаUSD])),
+ SUM(CASE WHEN r.[Количество] IS NULL OR r.[ДопРасходыUSD] IS NULL OR r.[СуммаUSD] IS NULL THEN 1 ELSE 0 END)
+ FROM DataWH.erp.[РегистрыНакопления.Даичи_ПервичнаяСебестоимость] r
+ INNER JOIN DataWH.erp.[Справочник.Склады] store ON store.[Ссылка]=r.[МестоХраненияСсылка]
+ INNER JOIN DataWH.erp.[Справочники.Номенклатура] n ON n.[Ссылка]=r.[НоменклатураСсылка]
+ INNER JOIN (SELECT DISTINCT ModelCode,PlanningGroupOZPErp FROM DataWH.dbo.ModelCodeERP WHERE GroupERP=?) m
+ ON m.ModelCode=n.[Наименование]
+ WHERE CAST(r.[Период] AS date)<=?
+ AND LOWER(LTRIM(RTRIM(store.[даичи_НазначениеСклада])))=N'продажа'
+ AND NOT EXISTS (SELECT 1 FROM DataWH.erp.[Справочники.ДоговорыКонтрагентов] d
+ WHERE d.[Ссылка]=r.[МестоХраненияСсылка] AND d.[ТипДоговора]=N'СХранителем')
+ GROUP BY m.PlanningGroupOZPErp,n.[Наименование]"""
+
+
+def stock(scenario):
+    connection=cursor=None
+    try:
+        connection,cursor=connect_database('vm-dwh','DataWH');connection.timeout=120
+        cursor.execute(STOCK_SQL,PRODUCT_GROUP,scenario.stock_date)
+        rows=cursor.fetchall()
+    except Exception:
+        logging.getLogger(__name__).exception('DDP stock source failed')
+        raise ValidationError('Не удалось получить DDP из остатков. План не изменён.')
+    finally:
+        try:
+            if cursor is not None:cursor.close()
+        finally:
+            if connection is not None:connection.close()
+    result={}
+    for group,model,qty,cost,unknown in rows:
+        entry=result.setdefault((group_key(group),normalized(model)),{'qty':ZERO,'cost':ZERO,'unknown':False})
+        try:
+            values=[None if value is None else Decimal(str(value)) for value in (qty,cost)]
+            if any(value is not None and not value.is_finite() for value in values):raise ValueError
+        except (ValueError,ArithmeticError):raise ValidationError('В остатках некорректная себестоимость или количество. План не изменён.')
+        entry['unknown'] |= bool(unknown) or any(value is None for value in values)
+        for field,value in zip(('qty','cost'),values):
+            if value is not None:entry[field]+=value
+    return result,{'source':'DDP из остатков: (ДопРасходыUSD + СуммаUSD) / количество; сумма стоимости внутреннего и наружного блоков',
+                   'stock_date':str(scenario.stock_date),'through':str(scenario.stock_date),'warehouse_purpose':'Продажа',
+                   'loaded_at':timezone.now().isoformat()}
+
+
 def rounded(value):
     if not value.is_finite() or value<=0 or value>Decimal('999999999999'):raise ValidationError('Стоимость выходит за допустимый диапазон.')
     try:value=value.quantize(STEP,rounding=ROUND_HALF_UP)
@@ -110,6 +155,8 @@ def preview(scenario,post):
         except (ValueError,TypeError):raise ValidationError('Выберите год факта.')
         markup=number(post.get('surcharge','0'),maximum=Decimal(10000))
         base,metadata=fact(year);metadata['surcharge_percent']=stored(markup)
+    elif source=='stock':
+        base,metadata=stock(scenario)
     elif source=='purchase':
         purchase=ScenarioModel.objects.filter(pk=post.get('purchase') if str(post.get('purchase','')).isdecimal() else 0).first()
         if not purchase:raise ValidationError('Выберите действующий сценарий закупок.')
@@ -130,7 +177,7 @@ def preview(scenario,post):
                 origin.update(goods_id=good.pk,goods_group=good.planning_group,basis='group',note='DDP группы без детализации по мощностям; текущие соотношения мощностей сохранятся.')
             else:
                 for key,(power,share) in weighted_powers(group).items():
-                    if source=='fact':
+                    if source in ('fact','stock'):
                         unit={};params={}
                         for kind in ('indoor','outdoor'):
                             candidates=[m for m in power['models'] if m['kind']==kind]
