@@ -29,6 +29,17 @@
  find('none').addEventListener('click',()=>{clear();groups().forEach(label=>{label.querySelector('input').checked=false;});});
  for(const name of ['year','adjustment','empty'])find(name).addEventListener('change',clear);
  find('close').addEventListener('click',()=>dialog.close());dialog.addEventListener('cancel',event=>{if(busy)event.preventDefault();});
+ find('save').addEventListener('click',async()=>{
+  if(busy)return;
+  const targets=groups().filter(label=>!label.hidden&&label.querySelector('input').checked).map(label=>label.querySelector('input').value);
+  if(!targets.length){status.textContent='Выберите группы.';return;}
+  clear();setBusy(true);status.textContent='Расчёт и сохранение…';
+  try{
+   const result=await request('calculate_save_forecast_history',{targets:JSON.stringify(targets),year:find('year').value,adjustment:find('adjustment').value,only_empty:find('empty').checked?'1':'0'});
+   if(!result.count){status.textContent='Нет новых прогнозов для сохранения.';return;}
+   window.SplitUnsaved?window.SplitUnsaved.navigate(location.href):location.reload();
+  }catch(error){status.textContent=error.message;}finally{setBusy(false);}
+ });
  find('preview').addEventListener('click',async()=>{
   const targets=groups().filter(label=>!label.hidden&&label.querySelector('input').checked).map(label=>label.querySelector('input').value);
   if(!targets.length){status.textContent='Выберите группы.';return;}

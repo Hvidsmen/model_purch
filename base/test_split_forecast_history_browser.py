@@ -39,3 +39,20 @@ class ForecastHistoryBrowserTests(StaticLiveServerTestCase):
             finally:context.close();browser.close()
         self.scenario.refresh_from_db()
         self.assertEqual(resolve(self.scenario,self.scenario.state['groups'][self.gid])['total'],Decimal('14.3'))
+
+    def test_calculate_and_save_skips_preview_and_common_save(self):
+        from playwright.sync_api import sync_playwright,expect
+        with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])),sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            context=browser.new_context(viewport={'width':1600,'height':1100})
+            context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page=context.new_page()
+            try:
+                page.goto(self.live_server_url+self.url+'?tab=stock')
+                page.get_by_role('button',name='Рассчитать прогноз по истории',exact=True).click()
+                with page.expect_navigation():page.locator('[data-forecast-history-save]').click()
+                expect(page.locator('[data-stock-field="forecast_group"]').first).to_have_value('2.306452')
+                expect(page.locator('[data-stock-save-status]')).to_have_text('Изменения сохранены')
+            finally:context.close();browser.close()
+        self.scenario.refresh_from_db()
+        self.assertEqual(resolve(self.scenario,self.scenario.state['groups'][self.gid])['total'],Decimal('2.306452'))

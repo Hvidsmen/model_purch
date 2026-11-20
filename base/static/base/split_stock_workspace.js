@@ -135,6 +135,11 @@
     const control=find('bulk-percent');if(!control.value||!control.reportValidity()){note('Введите процент от 0 до 1000.',true);return;}
     rows.filter(row=>!row.hidden).forEach(row=>{const input=inputFor(row.dataset.stockGroup,'target_stock_percent');if(!find('bulk-empty').checked||!input.value){input.value=control.value;edit(input);}});
   });
+  find('save-percent')?.addEventListener('click',async()=>{
+    if(busy||readOnly)return;
+    const control=find('bulk-percent');if(!control.value||!control.reportValidity()){note('Введите процент от 0 до 1000.',true);return;}
+    find('set-percent').click();try{await saveAll();}catch{}
+  });
   find('load')?.addEventListener('click',async()=>{
     if(dirty()){note('Сначала сохраните или отмените изменения таблицы.',true);return;}
     const ids=find('load-scope').value==='all'?Object.keys(report.rows):pageIds;
@@ -165,6 +170,16 @@
         for(const value of [item.name,numeric(item.old),item.token?numeric(item.value):'—',proposalKind==='supplies'&&item.token?numeric(item.target)+' / '+numeric(item.closing):'—',item.error||item.warning||'']){const cell=document.createElement('td');cell.textContent=value;row.append(cell);}output.append(row);});
       find('proposal-results').append(output);confirm.disabled=!proposals.some(row=>row.token);proposalStatus.textContent='Проверьте изменения. Без подтверждения таблица не меняется.';
     }catch(error){proposalStatus.textContent=error.message;}finally{proposalBusy=false;find('proposal-preview').disabled=false;}
+  });
+  find('proposal-save').addEventListener('click',async()=>{
+    if(proposalBusy||busy||readOnly)return;proposalBusy=true;
+    dialog.querySelectorAll('button,input,select').forEach(control=>control.disabled=true);proposalStatus.textContent='Расчёт и сохранение…';
+    try{
+      const result=await request('calculate_save_stock_workspace',{kind:proposalKind,groups:JSON.stringify(rows.filter(row=>!row.hidden).map(row=>row.dataset.stockGroup)),purchase:find('purchase').value,only_empty:find('import-empty').checked?'1':'0'});
+      if(!result.count){proposalStatus.textContent='Нет новых значений для сохранения.';return;}
+      submitted=true;remember();window.SplitUnsaved?window.SplitUnsaved.navigate(location.href):location.reload();
+    }catch(error){proposalStatus.textContent=error.message;}
+    finally{proposalBusy=false;dialog.querySelectorAll('button,input,select').forEach(control=>control.disabled=false);confirm.disabled=!proposals.some(row=>row.token);}
   });
   confirm.addEventListener('click',()=>{
     const selected=[...dialog.querySelectorAll('[data-stock-proposal-index]:checked')].map(input=>proposals[Number(input.dataset.stockProposalIndex)]).filter(row=>row.token);
