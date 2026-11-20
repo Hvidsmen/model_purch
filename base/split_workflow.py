@@ -70,9 +70,8 @@ def persist(scenario, actor, revision, state, action, *, approved=False):
     check_scenario(actor,scenario,state)
     if scenario.status != 'draft':
         raise ValidationError('Утверждённая версия неизменяема. Создайте корректировку.')
-    if any((group.get('forecast_history_source') or {}).get('method')=='plan_execution' for group in state.get('groups',{}).values()):
-        from .split_forecast_plan import validate_state
-        validate_state(state)
+    from .split_forecast_plan import validate_state
+    validate_state(state)
     fields = {'state': state, 'revision': scenario.revision + 1}
     if approved:
         fields.update(status='approved', approved_at=timezone.now())

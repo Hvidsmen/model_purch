@@ -124,17 +124,22 @@ def preview(scenario,post):
                     if entry['qty']!=0:raise ValidationError('Нет сопоставления модели с мощностью: '+model)
                     continue
                 key,kind=model_map[model];totals[key][kind]+=entry['qty']
-            values={};warnings=[]
+            from .split_forecast_plan import available_before
+            values={};warnings=[];requested={};available={}
             for key,counts in totals.items():
                 net=min(counts.values())
                 if net<0:warnings.append(key+': чистый факт отрицательный; прогноз принят равным 0')
                 value=(max(ZERO,net)*multiplier*(1+adjustment/100)).quantize(STEP,rounding=ROUND_HALF_UP)
-                number(value);values[key]=stored(value)
-                row['powers'].append({'power':key,'indoor':stored(counts['indoor']),'outdoor':stored(counts['outdoor']),'sets':stored(value)})
+                number(value);requested[key]=value;available[key]=available_before(group['powers'][key],key)
+                limited=min(value,available[key]);values[key]=stored(number(limited))
+                if limited<value:warnings.append(key+': прогноз ограничен остатком и поступлениями до начала: '+stored(value)+' → '+stored(limited)+' компл.')
+                row['powers'].append({'power':key,'indoor':stored(counts['indoor']),'outdoor':stored(counts['outdoor']),'sets':stored(limited),'requested':stored(value),'available':stored(available[key])})
             if not values:raise ValidationError('В группе нет мощностей для прогноза.')
             proposed=stored(number(sum((Decimal(v) for v in values.values()),ZERO)))
+            origin={**metadata,'stock_constraint':'before-start-v1','stock_cap_applied':any(requested[key]>available[key] for key in requested),
+                    'unconstrained_forecast':stored(sum(requested.values(),ZERO)),'available_before':{key:stored(value) for key,value in available.items()}}
             row.update(proposed=proposed,warnings=warnings,token=signing.dumps({'scenario':scenario.pk,'revision':scenario.revision,'gid':gid,
-                'fingerprint':fingerprint(group),'powers':values,'total':proposed,'source':metadata},salt=SALT,compress=True))
+                'fingerprint':fingerprint(group),'powers':values,'total':proposed,'source':origin},salt=SALT,compress=True))
         except ValidationError as exc:row['error']=' '.join(exc.messages)
         rows.append(row)
     return {'rows':rows,'source':metadata}
@@ -150,10 +155,14 @@ def apply(scenario,post):
         except (signing.BadSignature,TypeError):raise ValidationError('Предпросмотр прогноза устарел. Рассчитайте его заново.')
         gid=proposal.get('gid');group=state['groups'].get(gid)
         if not group or gid in seen or proposal.get('scenario')!=scenario.pk or proposal.get('revision')!=scenario.revision or proposal.get('fingerprint')!=fingerprint(group):raise ValidationError('Сценарий или состав группы изменился. Повторите предпросмотр.')
+        if proposal.get('source',{}).get('method') in ('average_daily','same_calendar_dates') and not proposal['source'].get('stock_constraint'):
+            raise ValidationError('Расчёт прогноза по истории устарел: пересчитайте с учётом остатков и поступлений.')
         seen.add(gid)
         if only_empty and has_forecast(scenario,group):raise ValidationError('У выбранной группы уже задан прогноз. Повторите предпросмотр или отключите «Только пустые».')
         group['forecast_mode']='powers';group['forecast_before_total']=proposal['total']
         for key,value in proposal['powers'].items():group['powers'][key]['forecast_before']=value
         group['forecast_history_source']=proposal['source']
         group.pop('forecast_workspace_source',None)
+    from .split_forecast_plan import validate_state
+    validate_state(state)
     return state,len(seen)

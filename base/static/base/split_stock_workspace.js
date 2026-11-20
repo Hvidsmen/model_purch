@@ -44,7 +44,7 @@
         if(input&&manual[gid]?.[field]===undefined){input.value=p.forecast??'';input.dataset.stockDerived='1';}
       });
       const forecast=inputFor(gid,'forecast_group');if(forecast&&manual[gid]?.forecast_group===undefined){forecast.value=values.forecast??'';forecast.dataset.stockDerived='1';}
-      if(forecast?.nextElementSibling){const source=values.forecast_source;forecast.nextElementSibling.textContent=source?.label||(source?.from?'По истории '+source.from+' — '+source.through:values.forecast!==null?'Сохранённый прогноз':'Не задан');}
+      if(forecast?.nextElementSibling){const source=values.forecast_source;forecast.nextElementSibling.textContent=(source?.label||(source?.from?'По истории '+source.from+' — '+source.through:values.forecast!==null?'Сохранённый прогноз':'Не задан'))+(source?.stock_cap_applied?' · ограничен доступным товаром':'');}
     });
     root.querySelectorAll('[data-stock-summary]').forEach(row=>{
       const totals=row.dataset.stockSummary==='all'?data.totals:(data.page_totals||data.totals),counts=row.dataset.stockSummary==='all'?data.counts:(data.page_counts||data.counts);
