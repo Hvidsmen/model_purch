@@ -1,7 +1,7 @@
 <style>[data-sales-prefill-dialog] [hidden]{display:none!important}[data-sales-prefill-dialog] label{display:inline-flex;gap:5px;align-items:center;flex-wrap:wrap;margin:6px 10px 6px 0}[data-sales-prefill-dialog] input[type=number]{max-width:140px}</style>
-<button type="button" class="admin-button secondary" data-sales-prefill-open{% if scenario.status != 'draft' %} disabled{% endif %}>Предзаполнить продажи</button>
-<dialog data-sales-prefill-dialog data-revision="{{ scenario.revision }}" data-default-year="{{ scenario.start.year|add:'-1' }}" aria-label="Предзаполнить план продаж" style="width:min(850px,92vw);max-height:85vh;overflow:auto;border:1px solid #d6ccf5;border-radius:12px;padding:24px">
-<h2>Предзаполнить количество и наценку</h2>
+<button type="button" class="admin-button secondary" data-sales-prefill-open{% if scenario.status != 'draft' %} disabled{% endif %}>Заполнить план</button>
+<dialog data-sales-prefill-dialog data-revision="{{ scenario.revision }}" data-default-year="{{ scenario.start.year|add:'-1' }}" aria-label="Заполнить план" style="width:min(850px,92vw);max-height:85vh;overflow:auto;border:1px solid #d6ccf5;border-radius:12px;padding:24px">
+<h2>Заполнить план</h2>
 <label>Источник <select data-prefill-method><option value="history_forecast">Факт + прогноз предыдущего года</option><option value="erp">План ERP</option></select></label>
 <label>Год источника <input type="number" min="2000" max="9998" data-prefill-year></label>
 <label data-prefill-version-label hidden>Версия ERP <select data-prefill-version><option value="">Выберите версию</option></select><button type="button" data-prefill-versions>Обновить версии</button></label>
