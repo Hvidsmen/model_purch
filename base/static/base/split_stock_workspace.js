@@ -146,7 +146,7 @@
     const area=find('load-scope').value==='all'?'всего сценария':'текущего бренда';
     if(!window.confirm('Обновить остатки и поступления '+area+'? Прогнозы и новые поставки сохранятся.'))return;
     busy=true;window.SplitUnsaved?.refresh();const progress=window.SplitProgress?.start('Обновление данных · '+area);
-    try{await request('load_stock_workspace_inventory',{groups:JSON.stringify(ids)});submitted=true;remember();progress?.finish('Данные обновлены');location.reload();}
+    try{await request('load_stock_workspace_inventory',{groups:JSON.stringify(ids)});submitted=true;remember();progress?.finish('Данные обновлены');window.SplitUnsaved.navigate(location.href);}
     catch(error){note(error.message,true);progress?.fail(error.message);}finally{busy=false;updateSave();}
   });
   const dialog=find('proposal-dialog'),proposalStatus=find('proposal-status'),confirm=find('proposal-confirm');let proposalKind='',proposals=[],proposalBusy=false;

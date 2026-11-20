@@ -18,6 +18,104 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_live_save_keeps_document_filters_and_allows_repeated_saves(self):
+        group=next(iter(self.scenario.state['groups'].values()))
+        channel=next(iter(self.scenario.state['channels'].values()))
+        self.scenario.state['history']={'through':'2026-11-06','loaded_at':'test','first_year':2024,'last_year':2026,
+            'groups':[group['ref']['source_key']],'channels':[channel['name'].casefold()],
+            'rows':[{'group':group['ref']['source_key'],'channel':channel['name'].casefold(),'year':year,'month':1,'qty':'10','cost':'100','revenue':'150'} for year in (2024,2025)]}
+        self.scenario.save(update_fields=['state'])
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page();errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page.goto(self.live_server_url+self.url+'?tab=stock&stock_step=targets&brand_page=alpha')
+            page.evaluate('window.liveSaveSentinel=123')
+            for value in ('17','18'):
+                page.get_by_role('spinbutton',name='Целевой процент G',exact=True).fill(value)
+                page.get_by_role('spinbutton',name='Целевой процент G',exact=True).press('Control+s')
+                expect(page.locator('[data-stock-save-status]')).to_have_text('Изменения сохранены')
+                expect(page.get_by_role('spinbutton',name='Целевой процент G',exact=True)).to_have_value(value)
+                self.assertEqual(page.evaluate('window.liveSaveSentinel'),123)
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=alpha')
+            page.evaluate('window.liveSaveSentinel=456')
+            page.locator('.split-sales-view > summary').click()
+            page.locator('[data-split-metric-choice="incoming"]').check()
+            page.locator('[data-history-year-choice]').first.check()
+            page.locator('[data-sales-check-filter]').select_option('all')
+            page.locator('[data-plan-opening-toggle]').click()
+            ddp=page.get_by_role('spinbutton',name='DDP G',exact=True)
+            ddp.fill('123')
+            ddp.press('Control+s')
+            expect(page.locator('.split-plan-save-panel')).to_contain_text('Изменения сохранены')
+            expect(page.locator('[data-split-metric-choice="incoming"]')).to_be_checked()
+            expect(page.locator('[data-history-year-choice]').first).to_be_checked()
+            expect(page.locator('.split-sales-view')).to_have_attribute('open','')
+            expect(page.locator('[data-plan-opening-toggle]')).to_have_attribute('aria-expanded','true')
+            expect(page.get_by_role('spinbutton',name='DDP G',exact=True)).to_have_value('123')
+            self.assertEqual(page.evaluate('window.liveSaveSentinel'),456)
+            self.assertEqual(errors,[])
+            browser.close()
+
+    def test_live_distribution_selection_and_composition_survive_saving(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page();page.set_default_timeout(10000)
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            for section in ('months','powers'):
+                page.goto(self.live_server_url+self.url+'?tab=distribution&section='+section+'&brand_page=alpha')
+                page.evaluate('window.liveSaveSentinel=789')
+                row=page.locator('[data-grid-row]').first
+                row.locator('[data-grid-select]').check()
+                field=row.locator('[data-month]').first
+                field.fill('25');field.press('Control+s')
+                expect(page.locator('[data-grid-message]')).to_contain_text('Показаны сохранённые значения')
+                expect(page.locator('[data-grid-select]').first).to_be_checked()
+                self.assertEqual(page.evaluate('window.liveSaveSentinel'),789)
+                field=page.locator('[data-grid-row]').first.locator('[data-month]').first
+                field.fill('26');field.press('Control+s')
+                expect(page.locator('[data-grid-message]')).to_contain_text('Показаны сохранённые значения')
+            page.goto(self.live_server_url+self.url+'?tab=composition&brand_page=alpha')
+            page.evaluate('window.liveSaveSentinel=999')
+            page.get_by_label('Способ задания объёма',exact=True).select_option('annual')
+            page.get_by_label('Способ задания объёма',exact=True).press('Control+s')
+            expect(page.locator('.split-unsaved-dock')).not_to_be_visible()
+            expect(page.get_by_label('Способ задания объёма',exact=True)).to_have_value('annual')
+            self.assertEqual(page.evaluate('window.liveSaveSentinel'),999)
+            browser.close()
+
+    def test_live_save_refresh_failure_can_retry_and_plain_forms_do_not_navigate(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page();page.set_default_timeout(10000)
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            url=self.live_server_url+self.url+'?tab=stock&stock_step=targets&brand_page=alpha'
+            page.goto(url);page.evaluate('window.liveSaveSentinel=101')
+            def abort_get(route):
+                if route.request.method=='GET':route.abort()
+                else:route.continue_()
+            page.route(url,abort_get)
+            field=page.get_by_role('spinbutton',name='Целевой процент G',exact=True)
+            field.fill('19');field.press('Control+s')
+            expect(page.locator('[data-live-save-error]')).to_contain_text('Сохранение выполнено')
+            self.assertTrue(page.locator('.split-workspace').evaluate('el=>el.inert'))
+            page.unroute(url,abort_get)
+            page.get_by_role('button',name='Обновить расчёты',exact=True).click()
+            expect(page.locator('[data-live-save-error]')).to_have_count(0)
+            expect(page.get_by_role('spinbutton',name='Целевой процент G',exact=True)).to_have_value('19')
+            self.assertEqual(page.evaluate('window.liveSaveSentinel'),101)
+            page.goto(self.live_server_url+self.url+'?tab=sources')
+            page.evaluate('window.liveSaveSentinel=202')
+            page.locator('[name=source_notes]').fill('Проверка сохранения без навигации')
+            page.get_by_role('button',name='Сохранить примечания',exact=True).click()
+            expect(page.locator('.split-workspace')).not_to_have_attribute('inert','')
+            expect(page.locator('[name=source_notes]')).to_have_value('Проверка сохранения без навигации')
+            self.assertEqual(page.evaluate('window.liveSaveSentinel'),202)
+            browser.close()
+
     def test_closing_stock_expands_receipts_and_preserves_opening_expansion(self):
         from playwright.sync_api import sync_playwright,expect
         with sync_playwright() as driver:

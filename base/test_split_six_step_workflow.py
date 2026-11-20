@@ -85,6 +85,7 @@ class SixStepWorkflowBrowserTests(StaticLiveServerTestCase):
             expect(page.locator('.split-workflow-step[aria-current]')).to_contain_text('Продажи и закупки')
             page.locator('.split-sales-view > summary').click()
             page.locator('[data-split-metric-choice="incoming"]').check()
+            page.locator('[data-plan-closing-toggle]').click()
             cid=next(iter(self.scenario.state['channels']))
             page.locator('[name="q_'+self.gid+'_'+cid+'"]').fill('700')
             page.get_by_label('Новые поставки G',exact=True).fill('100')
