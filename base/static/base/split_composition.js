@@ -42,12 +42,43 @@
  const channelsPicker=form.querySelector('.split-composition-channels');
  document.addEventListener('click',event=>{if(!channelsPicker.contains(event.target))channelsPicker.open=false;});
  channelsPicker.addEventListener('keydown',event=>{if(event.key==='Escape'){channelsPicker.open=false;channelsPicker.querySelector('summary').focus();}});
- function update(){form.querySelector('[data-composition-channel-count]').textContent=form.querySelectorAll('[name=channels]:checked').length;form.querySelector('[data-composition-add-count]').textContent='Выбрано групп: '+form.querySelectorAll('[name=added_groups]:checked').length;window.SplitUnsaved?.refresh();}
+ function update(){refreshRemovals();form.querySelector('[data-composition-channel-count]').textContent=form.querySelectorAll('[name=channels]:checked').length;form.querySelector('[data-composition-add-count]').textContent='Выбрано групп: '+form.querySelectorAll('[name=added_groups]:checked').length;window.SplitUnsaved?.refresh();}
  form.addEventListener('change',update);
+ const removalDialog=document.querySelector('.split-composition-removal-dialog');
+ const removeAll=form.querySelector('[data-composition-remove-all]');
+ const removalRows=[...form.querySelectorAll('[data-composition-group]')];
+ function refreshRemovals(){
+  const visible=removalRows.filter(row=>!row.hidden);
+  const marked=removalRows.filter(row=>row.querySelector('[name=removed_groups]').checked);
+  removalRows.forEach(row=>row.toggleAttribute('data-composition-excluded',row.querySelector('[name=removed_groups]').checked));
+  removeAll.checked=visible.length>0 && visible.every(row=>row.querySelector('[name=removed_groups]').checked);
+  removeAll.indeterminate=visible.some(row=>row.querySelector('[name=removed_groups]').checked) && !removeAll.checked;
+  removeAll.disabled=!visible.length || !!form.querySelector('fieldset:disabled');
+  form.querySelector('[data-composition-removal-count]').textContent='Исключено: '+marked.length+' групп · с остатками: '+marked.filter(row=>row.dataset.stockWarning==='1').length;
+ }
+ removeAll.addEventListener('change',()=>{const checked=removeAll.checked;removalRows.filter(row=>!row.hidden).forEach(row=>row.querySelector('[name=removed_groups]').checked=checked);update();});
+ form.querySelector('[data-composition-search="rows"]').addEventListener('input',refreshRemovals);
+ form.addEventListener('reset',()=>setTimeout(refreshRemovals,0));
+ async function confirmRemovals(){
+  const rows=removalRows.filter(row=>row.dataset.stockWarning==='1' && row.querySelector('[name=removed_groups]').checked);
+  if(!rows.length)return [];
+  const list=removalDialog.querySelector('[data-composition-removal-list]');list.replaceChildren();
+  rows.forEach(row=>{const item=document.createElement('li');item.textContent=row.dataset.groupName+' · сток на начало: '+row.querySelector('[data-composition-opening]').firstChild.textContent.trim()+' компл.';list.append(item);});
+  return new Promise(resolve=>{
+   let confirmed=false;
+   removalDialog.querySelector('[data-composition-removal-confirm]').onclick=()=>{confirmed=true;removalDialog.close();};
+   removalDialog.querySelector('[data-composition-removal-cancel]').onclick=()=>removalDialog.close();
+   removalDialog.addEventListener('close',()=>resolve(confirmed?rows.map(row=>row.dataset.compositionGroup):null),{once:true});
+   removalDialog.showModal();removalDialog.querySelector('[data-composition-removal-cancel]').focus();
+  });
+ }
  async function save(url,operation='save'){
-  if(busy)return;busy=true;window.SplitUnsaved?.refresh();const progress=window.SplitProgress?.start('Сохранение состава плана');
+  if(busy)return;busy=true;window.SplitUnsaved?.refresh();let progress;
   try{
-   const data=new FormData(form);data.set('composition_operation',operation);
+   const confirmed=await confirmRemovals();
+   if(confirmed===null)throw new Error('Исключение отменено. Изменения не сохранены.');
+   progress=window.SplitProgress?.start('Сохранение состава плана');
+   const data=new FormData(form);data.set('composition_operation',operation);data.set('confirmed_stock_removals',JSON.stringify(confirmed));
    const response=await fetch(location.href,{method:'POST',body:data,headers:{'X-Requested-With':'XMLHttpRequest'}});
    const text=await response.text();let result;try{result=JSON.parse(text);}catch{throw new Error('Сервер не вернул результат сохранения. Проверьте соединение и вход в портал.');}
    if(!response.ok||!result.ok)throw new Error(result.error||'Не удалось сохранить состав.');

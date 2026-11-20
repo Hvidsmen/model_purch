@@ -1,4 +1,5 @@
-"""Groups with known stock must remain in scenario composition."""
+"""Require explicit acknowledgement before archiving groups with stock."""
+import json
 from django.core.exceptions import ValidationError
 from django.utils.dateparse import parse_datetime
 from .split_engine import number, ZERO
@@ -23,8 +24,26 @@ def protected_groups(state):
     return protected
 
 
-def validate_removal(state, gids):
-    locked = protected_groups(state)
-    blocked = [name for gid, name in locked.items() if gid in gids]
-    if blocked:
-        raise ValidationError('Нельзя удалить группы, по которым есть остатки на стоке: ' + ', '.join(sorted(blocked)) + '.')
+def opening_stock(scenario, group):
+    from .split_opening import opening_balance
+    opening = opening_balance(scenario, group)
+    return {'quantity':opening['totals']['sets'],
+            'has_stock':any((row.get('opening_'+kind) or ZERO) > ZERO for row in opening['rows'] for kind in ('indoor','outdoor')),
+            'issues':opening['issues']}
+
+
+def removal_groups(scenario, gids=None):
+    ids = set(scenario.state['groups']) if gids is None else set(gids)
+    evidence = protected_groups(scenario.state)
+    return {gid:group['ref']['name'] for gid,group in scenario.state['groups'].items() if gid in ids and
+            (gid in evidence or opening_stock(scenario,group)['has_stock'])}
+
+
+def validate_removal(scenario, gids, confirmation='[]'):
+    required = removal_groups(scenario,gids)
+    if not required: return
+    try: acknowledged = json.loads(confirmation)
+    except (ValueError,TypeError): acknowledged = None
+    if not isinstance(acknowledged,list) or any(not isinstance(gid,str) for gid in acknowledged) or not set(required) <= set(acknowledged):
+        raise ValidationError('Вы исключаете группы с остатками: ' + ', '.join(sorted(required.values())) +
+                              '. Подтвердите исключение перед сохранением. Данные групп будут сохранены в архиве черновика.')
