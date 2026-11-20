@@ -71,7 +71,10 @@ class MetricPreferencesBrowserTests(StaticLiveServerTestCase):
                 table=page.locator('.split-plan-matrix');row=page.locator('[data-plan-group]').first
                 before={'width':table.bounding_box()['width'],'height':row.bounding_box()['height']}
                 if page.locator('.split-sales-view').count():page.locator('.split-sales-view > summary').click()
-                page.locator('[data-split-metric-preferences] summary').click()
+                panel=page.locator('[data-split-metric-preferences]');expect(panel).to_be_visible()
+                self.assertEqual(panel.evaluate('node=>node.tagName'),'DIV')
+                title=panel.locator('.split-metric-caption').bounding_box();choice=panel.locator('label').first.bounding_box()
+                self.assertLess(abs(title['y']+title['height']/2-choice['y']-choice['height']/2),10)
                 for metric in ['revenue','markup','ddp','stock','incoming','planned_incoming']:
                     page.locator('[data-split-metric-choice="'+metric+'"]').uncheck()
                 page.wait_for_function("document.querySelector('.split-plan-matrix').getBoundingClientRect().width < "+str(before['width']-50))
