@@ -17,8 +17,47 @@ class HistoricalFactTests(TestCase):
 
     def source(self, rows):
         connection,cursor=Mock(),Mock()
-        cursor.fetchall.return_value=rows
+        cursor.fetchall.return_value=[(*row[:5],None if row[5] is None else Decimal(str(row[5]))/2,None if row[6] is None else Decimal(str(row[6]))/2,model) for row in rows for model in ('IN','OUT')]
         return connection,cursor
+
+    def test_kits_are_paired_per_power_channel_and_month_and_blocks_remain_in_details(self):
+        group=next(iter(self.scenario.state['groups'].values()))
+        group['powers']['09']=deepcopy(group['powers']['07'])
+        group['powers']['09']['models']=[{**model,'name':model['name']+'09'} for model in group['powers']['09']['models']]
+        rows=[('G','Дилеры',2025,1,q,20,10,model) for model,q in [('IN',10),('OUT',4),('IN09',1),('OUT09',8)]]
+        rows += [('G','Дилеры',2025,2,-2,-5,-3,model) for model in ('IN','OUT')]
+        connection,cursor=Mock(),Mock();cursor.fetchall.return_value=rows
+        with patch('base.split_history.connect_database',return_value=(connection,cursor)):
+            snapshot=load_history(self.scenario)
+        self.scenario.state['history']=snapshot
+        year=next(year for year in presentation(self.scenario)['groups'][0]['years'] if year['year']==2025)
+        self.assertEqual(year['months'][0]['cells'][0]['qty'],5) # min(10,4) + min(1,8), not min(11,12).
+        self.assertEqual(year['months'][1]['cells'][0]['qty'],-2)
+        self.assertEqual(year['annual'][0]['qty'],3)
+        self.assertEqual(year['annual'][0]['revenue'],70)
+        self.assertEqual(year['annual'][0]['cost'],34)
+        self.assertEqual(sum(Decimal(row['qty']) for row in snapshot['model_rows']),19)
+        self.assertEqual(snapshot['quantity_unit'],'sets-v1')
+        self.assertIn('p.ModelCode',cursor.execute.call_args.args[0])
+        self.scenario.save(update_fields=['state'])
+        response=self.client.get(reverse('split_scenario',args=[self.scenario.pk]),{'tab':'detail','group':next(iter(self.scenario.state['groups'])),'channel':next(iter(self.scenario.state['channels']))})
+        self.assertEqual(response.status_code,200)
+        self.assertContains(response,'Факт по моделям · штуки блоков')
+        self.assertContains(response,'IN09')
+        snapshot.pop('quantity_unit')
+        old=deepcopy(snapshot)
+        view=presentation(self.scenario)
+        self.assertIsNone(next(year for year in view['groups'][0]['years'] if year['year']==2025)['annual'][0]['qty'])
+        self.assertIn('Загрузить факт',view['quantity_note'])
+        self.assertEqual(snapshot,old)
+
+    def test_unmapped_or_unknown_model_quantity_does_not_invent_kits(self):
+        for model,qty in [('UNKNOWN',10),('IN',None)]:
+            connection,cursor=Mock(),Mock();cursor.fetchall.return_value=[('G','Дилеры',2025,1,qty,20,10,model)]
+            with patch('base.split_history.connect_database',return_value=(connection,cursor)):
+                snapshot=load_history(self.scenario)
+            self.assertIsNone(snapshot['rows'][0]['qty'])
+            self.assertEqual(Decimal(snapshot['rows'][0]['revenue']),20)
 
     def test_three_previous_calendar_years_formula_and_weighted_markup(self):
         connection,cursor=self.source([('G','Дилеры',2025,1,10,200,100),('g ','дилеры',2025,2,30,300,100)])

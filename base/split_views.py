@@ -509,6 +509,7 @@ def scenario(request, pk):
         'basis_token':basis_token, 'distribution_warning':distribution_warning,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
         'detail_page': Paginator(detail_rows, 100).get_page(request.GET.get('page')),
+        'history_model_page':Paginator([row for row in (item.state.get('history') or {}).get('model_rows',[]) if row['group']==group['ref'].get('source_key') and row['channel']==str(item.state['channels'].get(cid,{}).get('name','')).strip().casefold()],100).get_page(request.GET.get('fact_page')) if tab=='detail' else None,
         'composition_groups': {**{str(group.pk): {'name': group.name} for group in groups_for(request.user).filter(is_active=True)},
                                **{key: {'name': group['ref']['name']} for key, group in item.state['groups'].items()}},
         'composition_channels': {**{str(channel.pk): {'name': channel.name} for channel in SalesPlanningChannel.objects.filter(is_active=True)}, **item.state['channels']},

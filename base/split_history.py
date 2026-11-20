@@ -10,13 +10,13 @@ from .sales_planning_scope import PRODUCT_GROUP
 from .sales_planning_group_service import group_key
 
 HISTORY_SQL = '''SELECT p.PlanningGroupOZPErp, sub.Chanel,
- YEAR(s.DateInvoice), MONTH(s.DateInvoice), SUM(s.Quantity),
- SUM(s.Price - s.AmountUSDIt_ITW), SUM(s.AmountExwAEUSD)
+ YEAR(s.DateInvoice), MONTH(s.DateInvoice), CASE WHEN COUNT(s.Quantity)=COUNT(*) THEN SUM(s.Quantity) ELSE NULL END,
+ SUM(s.Price - s.AmountUSDIt_ITW), SUM(s.AmountExwAEUSD), p.ModelCode
 FROM DataWH.dbo.Sales s
 INNER JOIN DataWH.dbo.Product p ON p.ProductCode = s.ProductCode
 INNER JOIN DataWH.dbo.Subdivisions sub ON sub.SubdivisionKey = s.Subdivision
 WHERE s.DateInvoice >= ? AND s.DateInvoice < ? AND p.GroupERP = ?
-GROUP BY p.PlanningGroupOZPErp, sub.Chanel, YEAR(s.DateInvoice), MONTH(s.DateInvoice)'''
+GROUP BY p.PlanningGroupOZPErp, sub.Chanel, YEAR(s.DateInvoice), MONTH(s.DateInvoice), p.ModelCode'''
 
 
 def normalized(value):
@@ -48,8 +48,20 @@ def load_history(scenario, *, cutoff=None, include_projection=True):
             if connection is not None: connection.close()
     selected_groups = {group['ref']['source_key'] for group in scenario.state['groups'].values()}
     selected_channels = {normalized(channel['name']) for channel in scenario.state['channels'].values()}
-    records = {}
-    for name, channel, year, month, qty, revenue, cost in rows:
+    records = {};blocks={};details=[];invalid=set()
+    mappings={}
+    for group in scenario.state['groups'].values():
+        mapping={}
+        for power_key,power in group['powers'].items():
+            for model in power['models']:
+                if model['kind'] not in ('indoor','outdoor'):continue
+                name=normalized(model['name']);pair=(power_key,model['kind'])
+                if name in mapping and mapping[name]!=pair:mapping[name]=None
+                else:mapping[name]=pair
+        mappings[group['ref']['source_key']]=mapping
+    for raw in rows:
+        if len(raw)!=8:raise ValidationError('Источник факта не вернул модели для расчёта комплектов. Обновите загрузку.')
+        name, channel, year, month, qty, revenue, cost, model_name=raw
         key, channel = group_key(str(name or '')), normalized(channel)
         if key not in selected_groups or channel not in selected_channels:
             continue
@@ -61,13 +73,26 @@ def load_history(scenario, *, cutoff=None, include_projection=True):
         except (ValueError, TypeError, InvalidOperation):
             raise ValidationError('Источник вернул некорректные исторические показатели. Данные не изменены.')
         identity = (key,channel,year,month)
+        pair=mappings[key].get(normalized(model_name))
+        details.append({'group':key,'channel':channel,'year':year,'month':month,'model':str(model_name or ''),
+                        'power':pair[0] if pair else '', 'kind':pair[1] if pair else '',
+                        'qty':None if values[0] is None else str(values[0])})
+        if pair:
+            totals=blocks.setdefault(identity,{}).setdefault(pair[0],{'indoor':Decimal(0),'outdoor':Decimal(0)})
+            if values[0] is None:invalid.add(identity)
+            else:totals[pair[1]]+=values[0]
+        elif values[0] is None or values[0]!=0:invalid.add(identity)
         if identity not in records:
             records[identity] = values
         else:
             records[identity] = [a+b if a is not None and b is not None else None for a,b in zip(records[identity],values)]
+    for identity,values in records.items():
+        values[0]=None if identity in invalid else sum((min(pair['indoor'],pair['outdoor']) for pair in blocks.get(identity,{}).values()),Decimal(0))
     snapshot = {'loaded_at':timezone.now().isoformat(), 'through':str(effective_end-timedelta(days=1)),
         'first_year':start.year, 'last_year':end.year-1, 'groups':sorted(selected_groups), 'channels':sorted(selected_channels),
-        'source':'DataWH.dbo.Sales', 'quantity_basis':'Quantity, штуки исходного источника (не пересчёт в комплекты)',
+        'source':'DataWH.dbo.Sales', 'quantity_unit':'sets-v1',
+        'quantity_basis':'Комплекты: минимум чистых продаж внутренних и наружных блоков по мощности, каналу и месяцу; затем сумма.',
+        'model_rows':details,
         'rows':[{'group':key,'channel':channel,'year':year,'month':month,
                  **dict(zip(('qty','revenue','cost'),[None if value is None else str(value) for value in values]))}
                 for (key,channel,year,month),values in records.items()]}
@@ -81,6 +106,7 @@ def presentation(scenario):
     years = list(range(max(1,scenario.start.year-3),scenario.start.year))
     data = {(row['group'],row['channel'],row['year'],row['month']):row for row in snapshot['rows']} if snapshot else {}
     through = date.fromisoformat(snapshot['through']) if snapshot else None
+    legacy = bool(snapshot and snapshot.get('quantity_unit')!='sets-v1')
     result = []
     for gid, group in scenario.state['groups'].items():
         periods = []
@@ -94,6 +120,8 @@ def presentation(scenario):
                     row = data.get((key,channel,year,month))
                     cell = {field:Decimal(row[field]) if row and row[field] is not None else None if row or not covered else Decimal(0)
                             for field in ('qty','revenue','cost')}
+                    if legacy:
+                        cell['qty']=None
                     cell.update(cid=cid, channel=ch['name'], markup=cell['revenue']/cell['cost'] if cell['revenue'] is not None and cell['cost'] else None)
                     cells.append(cell)
                 monthly.append({'month':f'{year}-{month:02}', 'cells':cells})
@@ -105,4 +133,4 @@ def presentation(scenario):
                 annual.append(cell)
             periods.append({'year':year,'annual':annual,'months':monthly})
         result.append({'gid':gid,'name':group['ref']['name'],'years':periods})
-    return {'snapshot':snapshot,'groups':result,'years':years}
+    return {'snapshot':snapshot,'groups':result,'years':years,'quantity_needs_reload':legacy,'quantity_note':('Факт сохранён в штуках без моделей. Для расчёта комплектов '+('создайте корректировку и загрузите факт.' if scenario.status=='approved' else 'нажмите «Загрузить факт».') if legacy else 'Количество факта — комплекты по мощностям. Несопоставленные модели или неизвестное количество не заменяются нулём.')}

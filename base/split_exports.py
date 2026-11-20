@@ -35,8 +35,8 @@ def workbook(scenario):
     if scenario.state.get('history'):
         from .split_history import presentation
         history = book.create_sheet('Исторический факт')
-        history.append(['Факт по дату', scenario.state['history']['through'], 'Количество: Quantity, шт.'])
-        history.append(['Группа','Год','Период','Канал','Шт.','Выручка USD','DDP USD','Наценка ×'])
+        history.append(['Факт по дату', scenario.state['history']['through'], 'Количество: комплекты по мощностям'])
+        history.append(['Группа','Год','Период','Канал','Компл.','Выручка USD','DDP USD','Наценка ×'])
         for group in presentation(scenario)['groups']:
             for year in group['years']:
                 for cell in year['annual']:

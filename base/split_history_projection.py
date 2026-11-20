@@ -27,7 +27,7 @@ def presentation(scenario,enabled=True):
         return history,info
     draft=deepcopy(scenario);draft.state['history']=aligned
     history=raw_history(draft);history['projection_year']=year;info['active']=True
-    info['note']='Факт по '+scenario.stock_date.strftime('%d.%m.%Y')+' + прогноз шага 4 до конца года. Количество — штуки: один комплект = два блока. Прогноз по каналам — пропорционально фактическим штукам; деньги — по средней себестоимости и выручке факта. Прогноз группы/мощностей по месяцам — пропорционально календарным дням.'
+    info['note']='Факт по '+scenario.stock_date.strftime('%d.%m.%Y')+' + прогноз шага 4 до конца года. Количество — комплекты. Прогноз по каналам — пропорционально фактическим комплектам; деньги — по средней себестоимости и выручке факта. Прогноз группы/мощностей по месяцам — пропорционально календарным дням.'
     first=scenario.stock_date+timedelta(days=1);last=date(year,12,31)
     for group_row in history['groups']:
         group=scenario.state['groups'][group_row['gid']]
@@ -36,7 +36,7 @@ def presentation(scenario,enabled=True):
         try:
             forecast=resolve(scenario,group)
             if forecast['issues'] or forecast['total'] is None:raise ValidationError('Нужен заполненный прогноз шага 4. '+' '.join(forecast['issues']))
-            total=forecast['total']*2
+            total=forecast['total']
             weights=[max(cell['qty'],ZERO) if cell['qty'] is not None else None for cell in original]
             if any(value is None for value in weights):raise ValidationError('Не хватает факта по каналам для распределения прогноза.')
             if total and not sum(weights,ZERO):raise ValidationError('Нет положительного факта для распределения прогноза между каналами.')
@@ -45,7 +45,7 @@ def presentation(scenario,enabled=True):
                 start=max(first,date(year,month,1));end=date(year,month,monthrange(year,month)[1])
                 monthly.append(max(0,(end-start).days+1))
             if group.get('forecast_mode','monthly')=='monthly' and first<=last:
-                quantities=[number(group.get('forecast',{}).get(f'{year}-{month:02}'))*2 if days else ZERO for month,days in enumerate(monthly,1)]
+                quantities=[number(group.get('forecast',{}).get(f'{year}-{month:02}')) if days else ZERO for month,days in enumerate(monthly,1)]
             else:quantities=allocate(total,list(map(Decimal,monthly))) if total else [ZERO]*12
             for index,month in enumerate(annual['months']):
                 extra=allocate(quantities[index],weights) if quantities[index] else [ZERO]*len(weights)

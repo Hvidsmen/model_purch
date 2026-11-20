@@ -18,7 +18,7 @@ def setup(test):
     group=test.scenario.state['groups'][test.gid];group.update(forecast_mode='group',forecast_before_total='30')
     channels=list(test.scenario.state['channels'].values())
     def snap(through,multiplier):
-        return {'through':through,'loaded_at':'test','first_year':2024,'last_year':2026,'groups':[group['ref']['source_key']],
+        return {'quantity_unit':'sets-v1','through':through,'loaded_at':'test','first_year':2024,'last_year':2026,'groups':[group['ref']['source_key']],
                 'channels':[ch['name'].casefold() for ch in channels],
                 'rows':[{'group':group['ref']['source_key'],'channel':ch['name'].casefold(),'year':2026,'month':11,
                          'qty':str(20*index*multiplier),'cost':str(100*index*multiplier),'revenue':str(150*index*multiplier)} for index,ch in enumerate(channels,1)]}
@@ -29,15 +29,15 @@ def setup(test):
 class HistoryProjectionTests(TestCase):
     setUp=setup
     def year(self,history):return next(year for year in history['groups'][0]['years'] if year['year']==2026)
-    def test_projection_uses_aligned_fact_plus_two_blocks_per_forecast_kit_without_double_count(self):
+    def test_projection_uses_aligned_fact_and_forecast_in_kits_without_double_count(self):
         before=deepcopy(self.scenario.state);history,info=presentation(self.scenario)
         self.assertTrue(info['active']);year=self.year(history)
-        self.assertEqual(sum(cell['qty'] for cell in year['annual']),120) # 60 actual + 30 kits * 2.
-        self.assertAlmostEqual(year['annual'][0]['qty'],D(40),places=5)
-        self.assertEqual(sum(month['cells'][0]['qty']+month['cells'][1]['qty'] for month in year['months']),120)
-        self.assertEqual(sum(cell['cost'] for cell in year['annual']),600)
+        self.assertEqual(sum(cell['qty'] for cell in year['annual']),90) # 60 actual kits + 30 forecast kits.
+        self.assertAlmostEqual(year['annual'][0]['qty'],D(30),places=5)
+        self.assertEqual(sum(month['cells'][0]['qty']+month['cells'][1]['qty'] for month in year['months']),90)
+        self.assertEqual(sum(cell['cost'] for cell in year['annual']),450)
         self.assertTrue(all(abs(cell['markup']-D('1.5'))<D('.000001') for cell in year['annual']))
-        total=enrich_history(history)['years'][-1]['total'];self.assertEqual(total['qty'],120)
+        total=enrich_history(history)['years'][-1]['total'];self.assertEqual(total['qty'],90)
         raw,off=presentation(self.scenario,False)
         self.assertEqual(sum(cell['qty'] for cell in self.year(raw)['annual']),90)
         self.assertFalse(off['active']);self.assertEqual(self.scenario.state,before)
@@ -45,7 +45,7 @@ class HistoryProjectionTests(TestCase):
         group=self.scenario.state['groups'][self.gid];group.update(forecast_mode='monthly',forecast={'2026-11':'0','2026-12':'30'})
         year=self.year(presentation(self.scenario)[0])
         self.assertEqual(sum(cell['qty'] for cell in year['months'][10]['cells']),60)
-        self.assertEqual(sum(cell['qty'] for cell in year['months'][11]['cells']),60)
+        self.assertEqual(sum(cell['qty'] for cell in year['months'][11]['cells']),30)
     def test_missing_forecast_is_unknown_and_missing_cutoff_requests_reload(self):
         self.scenario.state['groups'][self.gid]['forecast_before_total']=None
         history,info=presentation(self.scenario);self.assertEqual(len(info['issues']),1)
@@ -54,7 +54,7 @@ class HistoryProjectionTests(TestCase):
         history,info=presentation(self.scenario);self.assertFalse(info['active']);self.assertIn('Загрузить факт',info['note'])
         self.assertEqual(sum(cell['qty'] for cell in self.year(history)['annual']),90)
     def test_explicit_fact_load_saves_two_distinct_cutoffs(self):
-        connection,cursor=Mock(),Mock();cursor.fetchall.side_effect=[[('G','Дилеры',2026,11,30,300,200)],[('G','Дилеры',2026,11,20,200,100)]]
+        connection,cursor=Mock(),Mock();cursor.fetchall.side_effect=[[('G','Дилеры',2026,11,30,150,100,'IN'),('G','Дилеры',2026,11,30,150,100,'OUT')],[('G','Дилеры',2026,11,20,100,50,'IN'),('G','Дилеры',2026,11,20,100,50,'OUT')]]
         with patch('base.split_history.connect_database',return_value=(connection,cursor)),patch('base.split_history.timezone.localdate',return_value=date(2026,11,20)):
             snapshot=load_history(self.scenario)
         self.assertEqual(snapshot['through'],'2026-11-20')
