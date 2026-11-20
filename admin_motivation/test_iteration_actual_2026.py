@@ -47,12 +47,33 @@ class ActualQuarterTests(SimpleTestCase):
         self.assertIn("r.Rule_=N'prepared-sales-since-2025-v1'",sql)
         self.assertEqual(sql_2026("WHERE [Год]=2025 AND Date_<'20260101'"),"WHERE [Год]=2026 AND Date_<'20270101'")
 
-    def test_merged_rates_use_moscow_and_current_director_recipients(self):
+    def test_separate_branches_keep_rates_and_current_director_assignments(self):
         raw=RateBook(*fixture.inputs());rates=Rates(raw)
-        self.assertEqual(rates.name_for_key(TT),MERGED)
-        self.assertEqual(rates.rate_scope(MERGED,'Политики'),raw.rate_scope(MOSCOW,'Политики'))
-        self.assertEqual(list(rates.directors_for(MERGED,2025)),list(raw.directors_for(MERGED,2026)))
-        self.assertEqual({r['subdivision'] for r in rates.coefficients_2025([MERGED])},{MERGED})
+        self.assertEqual(rates.name_for_key(TT),TT)
+        self.assertEqual(rates.name_for_key(MOSCOW),MOSCOW)
+        self.assertEqual(rates.rate_scope(TT,'Политики'),raw.rate_scope(MOSCOW,'Политики'))
+        self.assertEqual(list(rates.directors_for(MOSCOW,2025)),list(raw.directors_for(MOSCOW,2026)))
+        self.assertEqual({r['subdivision'] for r in rates.coefficients_2025([MOSCOW,TT])},{MOSCOW,TT})
+
+    def test_each_branch_uses_its_current_directors_without_other_branch_recipients(self):
+        data=deepcopy(fixture.inputs())
+        data[1]['directors_0_0']['subdivisions']=[2]
+        rates=Rates(RateBook(*data))
+        self.assertEqual([person for _,person in rates.directors_for(TT,2025)],[1])
+        self.assertEqual([person for _,person in rates.directors_for(MOSCOW,2025)],[2])
+
+    def test_same_author_and_classification_keep_distinct_branch_payments_and_execution(self):
+        from .services.coefficient_iteration_export_summary import summarize_plan_facts
+        moscow=self.sample();moscow['branch']=MOSCOW
+        tt=deepcopy(moscow);tt['branch']=TT;tt['quarters'][0]=D(0)
+        details=[{'branch':sub,'kind':'Политики','period':'1 квартал',
+                  'department_plan':D(100),'department_fact':fact}
+                 for sub,fact in ((MOSCOW,D(120)),(TT,D(60)))]
+        rows,details=quarter_result([moscow,tt],details,1)
+        self.assertEqual({row['branch']:row['total'] for row in rows},{MOSCOW:D(8),TT:D(0)})
+        bases=summarize_plan_facts(details,2026)
+        self.assertEqual({row['branch']:row['execution'] for row in bases},{MOSCOW:D('1.2'),TT:D('.6')})
+        self.assertEqual(moscow['employee'],tt['employee'])
 
     def test_actual_bases_preserve_native_execution_windows(self):
         from .services.coefficient_iteration_export_summary import summarize_plan_facts
@@ -63,7 +84,7 @@ class ActualQuarterTests(SimpleTestCase):
         self.assertEqual(bases[0]['execution'],D('.7'))
         self.assertEqual(bases[0]['plan'],D(100))
 
-    def test_native_reader_limits_plan_and_merges_before_evaluating_gates(self):
+    def test_native_reader_keeps_branches_separate_before_evaluating_gates(self):
         rates=RateBook(*fixture.inputs());cursor=Mock()
         plans=[fixture.row(sub,2026,month) for sub in (MOSCOW,TT) for month in (1,6,9,10)]
         with patch('admin_motivation.services.coefficient_iteration_2025.read_2025',return_value=([self.sample()],{})) as read, \
@@ -72,7 +93,7 @@ class ActualQuarterTests(SimpleTestCase):
             rows,details,source=calculate(cursor,plans,rates,{'payout_threshold':'.8'},{'coefficients':[]},Mock())
         selected=read.call_args.args[1]
         self.assertEqual(len(selected),6)
-        self.assertEqual({row['branch_name'] for row in selected},{MERGED})
+        self.assertEqual({row['branch_name'] for row in selected},{MOSCOW,TT})
         self.assertTrue(all(row['date'].month<=9 for row in selected))
         ddl=cursor.execute.call_args_list[0].args
         self.assertEqual(len(ddl),1)
@@ -82,6 +103,9 @@ class ActualQuarterTests(SimpleTestCase):
         self.assertIn('INSERT INTO #iteration_actual_subdivisions',query[0])
         self.assertEqual(set(query[1:]),{MOSCOW,TT})
         self.assertEqual(source['through'],'2026-09-30')
+        self.assertFalse(any(call.args[0].startswith('UPDATE #iteration_actual_subdivisions SET SubdivisionName=?') for call in cursor.execute.call_args_list))
+        updates=next(call.args[1] for call in cursor.executemany.call_args_list if call.args[0].startswith('UPDATE #iteration_actual_subdivisions'))
+        self.assertEqual(set(updates),{(MOSCOW,MOSCOW),(TT,TT)})
 
     def test_actual_workbook_has_three_distinct_quarter_sheets_and_real_payments(self):
         results={}

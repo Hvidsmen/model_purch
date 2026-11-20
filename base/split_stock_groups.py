@@ -35,7 +35,7 @@ GROUP BY n.Даичи_ГруппаПланирования, sg.Номенкла�
 HAVING SUM(COALESCE(sg.ВНаличии, 0)) > 0"""
 
 
-def groups_from_stock(day, *, include_transit=True):
+def groups_from_stock(day, *, include_transit=True,allowed_group_ids=None):
     connection = cursor = None
     try:
         connection, cursor = connect_database('vm-dwh', 'DataWH')
@@ -59,6 +59,7 @@ def groups_from_stock(day, *, include_transit=True):
             if connection is not None:
                 connection.close()
     available = {group.source_key: group for group in split_groups().filter(is_active=True)}
+    if allowed_group_ids is not None:available={key:group for key,group in available.items() if str(group.pk) in allowed_group_ids}
     found, missing = {}, set()
     for name, stock, transit in rows:
         try:
@@ -69,6 +70,7 @@ def groups_from_stock(day, *, include_transit=True):
             raise ValidationError('Источник вернул некорректные количества. Состав плана не изменён.')
         if stock <= 0 and (not include_transit or transit <= 0):
             continue
+        if allowed_group_ids is not None and group_key(str(name or '').strip() or UNGROUPED_NAME) not in available:continue
         name = str(name or '').strip()
         if not name:
             name = UNGROUPED_NAME

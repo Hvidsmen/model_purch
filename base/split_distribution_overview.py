@@ -57,7 +57,7 @@ def overview(scenario, section, filters):
                 quantities[cid] = None
         sales_required = any(qty is None or qty > 0 for qty in quantities.values())
         stock_present = any(power.get('stock_indoor') is not None or power.get('stock_outdoor') is not None for power in group['powers'].values())
-        powers = power_status(group,sales_required,models_required=sales_required)
+        powers = power_status(group,True,models_required=True)
         if section == 'powers':
             rows.append({'gid':gid,'cid':next(iter(group['channels']),''),'name':group['ref']['name'],
                          'channels':list(scenario.state['channels'].values()), 'quantity':sum(quantities.values(),Decimal(0)) if all(qty is not None for qty in quantities.values()) else None,
@@ -81,11 +81,9 @@ def overview(scenario, section, filters):
             qty = quantities[cid]
             by_quantity = line.get('allocation') == 'quantity'
             values = [line.get('month_quantities',{}).get(month) if by_quantity else line['months'].get(month) for month in months]
-            status = values_status(values,qty if by_quantity else HUNDRED,required=qty is None or qty > 0,percentage=not by_quantity)
+            status = values_status(values,qty if by_quantity else HUNDRED,required=True,percentage=not by_quantity)
             if qty is None:
                 status = {**status,'key':'invalid','label':'Ошибка','reason':'Сначала исправьте объём плана или факт для годовой цели'}
-            elif qty == 0:
-                status = {**status,'key':'not_required','label':'Без плана','reason':'Нет объёма по каналу'}
             rows.append({'gid':gid,'cid':cid,'name':group['ref']['name'],'channel':scenario.state['channels'][cid]['name'],
                          'channel_ids':{cid}, 'quantity':qty,'status':status,'power_status':powers,
                          'by_quantity':by_quantity,'months':values,'month_cells':list(zip(months,values))})
@@ -112,4 +110,4 @@ def overview(scenario, section, filters):
         if filters.get('q') and filters['q'].casefold() not in row['name'].casefold():
             continue
         filtered.append(row)
-    return {'rows':filtered,'counts':counts,'total':len(rows),'shown':len(filtered),'months':months,'power_columns':power_columns,'required_total':sum(row['quantity'] is None or row['quantity']>0 for row in rows)}
+    return {'rows':filtered,'counts':counts,'total':len(rows),'shown':len(filtered),'months':months,'power_columns':power_columns,'required_total':len(rows),'zero_total':sum(row['quantity']==0 for row in rows)}

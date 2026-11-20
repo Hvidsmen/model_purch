@@ -2,7 +2,7 @@
 from copy import deepcopy
 import re
 from django.core.exceptions import ValidationError
-from .coefficient_iteration_calculation import MOSCOW,TT,MERGED,ZERO,key
+from .coefficient_iteration_calculation import MOSCOW,TT,ZERO,key
 
 
 def sql_2026(sql):
@@ -27,12 +27,12 @@ def policy_formulas(snapshot,rates):
     rows={};identities={}
     for sub,kind,p,g,b,formula in snapshot['coefficients']:
         kind=kind_name(kind)
-        if rates.role(rates.name_for_key(str(sub)))!=MOSCOW or kind not in ('Политики','Продажи'):continue
-        identity=(kind,*key((p,g,b)))
+        if rates.role(rates.name_for_key(str(sub))) not in (MOSCOW,TT) or kind not in ('Политики','Продажи'):continue
+        identity=(rates.role(rates.name_for_key(str(sub))),kind,*key((p,g,b)))
         if identity in identities and identities[identity]!=formula:
             raise ValidationError('В выбранной версии разные формулы одного товарного ключа: '+' · '.join(identity)+'. Исправьте формулы по сегментам.')
         identities[identity]=formula
-        rows[(str(sub),*identity)]=(str(sub),kind,p,g,b,formula)
+        rows[(str(sub),*identity[1:])]=(str(sub),kind,p,g,b,formula)
     return list(rows.values())
 
 
@@ -46,15 +46,9 @@ class Cursor:
 class Rates:
     def __init__(self,rates):self.rates=rates
     def __getattr__(self,name):return getattr(self.rates,name)
-    def name_for_key(self,value):
-        name=self.rates.name_for_key(value)
-        return MERGED if self.rates.role(name) in (MOSCOW,TT) else name
-    def rate_scope(self,scope,kind):return self.rates.rate_scope(MOSCOW if scope==MERGED else scope,kind)
-    def classification(self,scope,kind,dimensions):return self.rates.classification(MOSCOW if scope==MERGED else scope,kind,dimensions)
+    def name_for_key(self,value):return self.rates.name_for_key(value)
     def directors_for(self,sub,year):return self.rates.directors_for(sub,2026)
-    def coefficients_2025(self,branches,**kwargs):
-        records=self.rates.coefficients_2025([MOSCOW],**kwargs)
-        return [{**record,'subdivision':MERGED} for record in records]
+    def coefficients_2025(self,branches,**kwargs):return self.rates.coefficients_2025(branches,**kwargs)
 
 
 def calculate(cursor,plans,rates,settings,formulas,progress):
@@ -85,11 +79,12 @@ def calculate(cursor,plans,rates,settings,formulas,progress):
     cursor.execute("INSERT INTO #iteration_actual_defaults VALUES ('20260101',?)",formulas.get('default') or None)
     cursor.execute('''INSERT INTO #iteration_actual_subdivisions(SubdivisionKey,SubdivisionName,Chanel)
  SELECT CONVERT(nvarchar(255),SubdivisionKey),SubdivisionName,Chanel FROM dbo.Subdivisions WHERE SubdivisionName IN ('''+','.join('?' for _ in names)+')',*names)
-    moscow=[name for name in names if rates.role(name)==MOSCOW]
-    cursor.execute('INSERT INTO #iteration_actual_formula_keys(SubdivisionKey) SELECT SubdivisionKey FROM #iteration_actual_subdivisions WHERE SubdivisionName IN ('+','.join('?' for _ in moscow)+')',*moscow)
-    cursor.execute('UPDATE #iteration_actual_subdivisions SET SubdivisionName=?',MERGED)
+    cursor.execute('INSERT INTO #iteration_actual_formula_keys(SubdivisionKey) SELECT SubdivisionKey FROM #iteration_actual_subdivisions')
+    # Keep physical keys for fact/plan joins and normalize each branch separately.
+    cursor.executemany('UPDATE #iteration_actual_subdivisions SET SubdivisionName=? WHERE SubdivisionName=?',
+                       [(rates.role(name),name) for name in names])
     private=Cursor(cursor);adapter=Rates(rates)
-    selected=[{**row,'branch_name':MERGED} for row in selected]
+    selected=[{**row,'branch_name':rates.role(row.get('branch_name') or rates.name_for_key(row['branch']))} for row in selected]
     # USD is the calculation base for 2026. The runner freezes the configured
     # USD/RUB conversion, consistently with the existing 2026 scenario.
     actual_settings={**settings,'currency_rule':''}
@@ -98,8 +93,8 @@ def calculate(cursor,plans,rates,settings,formulas,progress):
     details,historical=read_details(private,settings['payout_threshold'])
     directors,director_details=directors_2025(private,selected,adapter,actual_settings,formulas)
     rows.extend(directors);details.extend(director_details)
-    source.update({'source':'Москва + Термотрейд: фактическое выполнение I–III кварталов 2026; годовая часть только начислена. Доли авторов плана — по факту I–III кварталов.',
-                   'rule':'iteration-actual-2026-q1-q3-v5-versioned-formulas-unified-prepared-author','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical})
+    source.update({'source':'Москва и Термотрейд раздельно: фактическое выполнение I–III кварталов 2026; годовая часть только начислена. Доли авторов плана — по факту I–III кварталов.',
+                   'rule':'iteration-actual-2026-q1-q3-v6-separate-branches','from':'2026-01-01','through':'2026-09-30','historical_formulas':historical})
     return rows,details,source
 
 

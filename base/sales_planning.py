@@ -11,13 +11,13 @@ from .models import SalesPlanningDirectoryLoad
 from .sales_planning_source import load_channels, load_goods
 from .sales_planning_scope import split_goods
 from .access import can_access
+from .sales_planning_access import require as require_planning,goods_for
 
 
 @login_required
 @require_GET
 def index(request):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
+    require_planning(request.user)
     return redirect('sales_planning_split')
 
 
@@ -25,9 +25,9 @@ def index(request):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def directories(request):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
+    require_planning(request.user)
     if request.method == 'POST':
+        if not can_access(request.user,'sales_planning_admin'):raise PermissionDenied
         kind = {'load_channels': 'channels', 'load_goods': 'goods'}.get(request.POST.get('action'))
         if not kind:
             from django.http import HttpResponseBadRequest
@@ -40,8 +40,7 @@ def directories(request):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def directory(request, kind):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
+    require_planning(request.user)
     from django.http import HttpResponseBadRequest
     from django.urls import reverse
     from .sales_planning_directory_filters import filtered_directory
@@ -49,6 +48,7 @@ def directory(request, kind):
         return HttpResponseBadRequest('Неизвестный справочник.')
     error = ''
     if request.method == 'POST':
+        if not can_access(request.user,'sales_planning_admin'):raise PermissionDenied
         action = 'load_' + kind
         if request.POST.get('action') != action:
             return HttpResponseBadRequest('Неизвестное действие для этого справочника.')
@@ -66,7 +66,7 @@ def directory(request, kind):
             url = reverse('sales_planning_' + kind)
             return redirect(url + ('?' + query.urlencode() if query else ''))
     try:
-        context = filtered_directory(kind, request.GET)
+        context = filtered_directory(kind,request.GET,goods=goods_for(request.user) if kind=='goods' else None)
     except ValidationError as exc:
         return HttpResponseBadRequest(' '.join(exc.messages))
     context['advanced_filter_count']=sum(bool(item['selected']) for item in context['filters'] if item['name']!='brand')

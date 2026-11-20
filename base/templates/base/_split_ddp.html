@@ -4,7 +4,7 @@
 <h2 id="split-ddp-title">Заполнить DDP</h2>
 <p>Сначала выберите источник и группы, затем проверьте предложение. Надбавка к себестоимости задаётся отдельно от наценки продаж.</p>
 <div class="split-filter-row">
-<label>Источник <select data-ddp-source><option value="fact">По факту за год + надбавка</option><option value="purchase">Из сценария модели закупок</option></select></label>
+<label>Источник <select data-ddp-source><option value="fact">По факту за год + надбавка</option><option value="purchase"{% if not portal_can_purchases %} disabled{% endif %}>Из сценария модели закупок{% if not portal_can_purchases %} · нужен доступ к закупкам{% endif %}</option></select></label>
 <label data-ddp-fact>Год факта <input type="number" min="2000" max="9998" step="1" value="{{ ddp_default_year }}" data-ddp-year></label>
 <label data-ddp-fact>Надбавка, % <input type="number" min="0" max="10000" step="0.000001" value="0" data-ddp-surcharge></label>
 <label data-ddp-purchase hidden>Сценарий закупок <select data-ddp-purchase-id><option value="">Выберите сценарий</option>{% for purchase in ddp_purchase_scenarios %}<option value="{{ purchase.pk }}">{{ purchase.name }} · {{ purchase.date_start_plan|date:'Y' }}</option>{% endfor %}</select></label>

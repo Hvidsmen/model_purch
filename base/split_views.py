@@ -13,6 +13,7 @@ from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_http_methods
 
 from .access import can_access
+from .sales_planning_access import require as require_planning,check_scenario,scenarios_for,groups_for
 from .models import SplitScenario, SalesPlanningChannel
 from .sales_planning_scope import split_groups
 from .split_forms import ScenarioForm
@@ -26,14 +27,13 @@ from . import split_exports
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def scenarios(request):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
+    require_planning(request.user)
     form = ScenarioForm(request.POST if request.method == 'POST' else None)
     if request.method == 'POST' and form.is_valid():
         scenario = create_scenario(request.user, form.cleaned_data)
         return redirect('split_scenario', pk=scenario.pk)
     return render(request, 'base/split_scenarios.html', {'form': form,
-        'page': Paginator(SplitScenario.objects.select_related('created_by').defer('state'), 25).get_page(request.GET.get('page'))})
+        'page': Paginator(scenarios_for(request.user,SplitScenario.objects.all()).select_related('created_by').defer('state'),25).get_page(request.GET.get('page'))})
 
 
 def return_to(pk, tab, gid='', cid='', section='months'):
@@ -48,9 +48,10 @@ def return_to(pk, tab, gid='', cid='', section='months'):
 @never_cache
 @require_http_methods(['GET', 'POST'])
 def scenario(request, pk):
-    if not can_access(request.user, 'admin'):
-        raise PermissionDenied
+    require_planning(request.user)
     item = get_object_or_404(SplitScenario, pk=pk)
+    check_scenario(request.user,item)
+    if request.method=='POST' and request.POST.get('action')=='approve' and not can_access(request.user,'sales_planning_admin'):raise PermissionDenied('Утверждение доступно администратору планирования.')
     tab = request.GET.get('tab', 'composition' if not item.state['groups'] or not item.state['channels'] else 'plan')
     if tab not in ('composition', 'plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
         tab = 'plan'
@@ -69,7 +70,7 @@ def scenario(request, pk):
         distribution_section = 'months'
     distribution_edit = request.GET.get('edit') == '1' or request.method == 'POST'
     distribution_filters = {key:request.GET.get('filter_'+key,'').strip() for key in ('group','channel','status','q')}
-    distribution_filters['positive_only']=request.GET.get('show_zero')!='1' and distribution_filters['status']!='not_required'
+    distribution_filters['positive_only']=request.GET.get('positive_only')=='1'
     gid = request.POST.get('group') or request.GET.get('group') or next(iter(item.state['groups']), '')
     cid = request.POST.get('channel') or request.GET.get('channel') or next(iter(item.state['channels']), '')
     if (gid and gid not in item.state['groups']) or (cid and cid not in item.state['channels']):
@@ -90,6 +91,7 @@ def scenario(request, pk):
         try:
             if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):
                 raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            if not can_access(request.user,'purchases') and (request.POST.get('purchase') or request.POST.get('source')=='purchase'):raise PermissionDenied
             from .split_ddp import catalog,preview
             result=catalog(item,request.POST.get('purchase')) if request.POST['action']=='ddp_catalog' else preview(item,request.POST)
             return JsonResponse({'ok':True,**result})
@@ -192,6 +194,7 @@ def scenario(request, pk):
                 preview = evaluate(candidate)
             elif action in ('forecast_preview', 'forecast_apply'):
                 source = get_object_or_404(SplitScenario, pk=request.POST.get('source') if request.POST.get('source', '').isdecimal() else 0, status='approved')
+                check_scenario(request.user,source)
                 try:
                     start, end = date.fromisoformat(request.POST.get('from', '')), date.fromisoformat(request.POST.get('to', ''))
                 except ValueError:
@@ -361,7 +364,7 @@ def scenario(request, pk):
     card_ids = dict(split_groups().filter(source_key__in=card_keys).values_list('source_key', 'pk'))
     group_card_urls = {gid: reverse('sales_planning_group_detail', args=[card_ids[group['ref']['source_key']]])
                        for gid, group in item.state['groups'].items() if group['ref']['source_key'] in card_ids}
-    versions = SplitScenario.objects.filter(family=item.family).order_by('-version')
+    versions = scenarios_for(request.user,SplitScenario.objects.filter(family=item.family)).order_by('-version')
     compare_id = request.GET.get('compare') or (str(item.parent_id) if item.parent_id else '')
     if compare_id:
         reference = get_object_or_404(versions, pk=compare_id if compare_id.isdecimal() else 0)
@@ -372,7 +375,7 @@ def scenario(request, pk):
     from model_purch.models import ScenarioModel
     from django.utils import timezone
     from zoneinfo import ZoneInfo
-    return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' else [],
+    return render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab=='plan' and can_access(request.user,'purchases') else [],
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
         'sales_view':sales_view,'sales_summary':sales_summary,'composition_rows':composition_rows, 'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
         'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,
@@ -396,12 +399,12 @@ def scenario(request, pk):
         'basis_token':basis_token, 'distribution_warning':distribution_warning,
         'monthly_results': [monthly[key] for key in sorted(monthly)],
         'detail_page': Paginator(detail_rows, 100).get_page(request.GET.get('page')),
-        'composition_groups': {**{str(group.pk): {'name': group.name} for group in split_groups().filter(is_active=True)},
+        'composition_groups': {**{str(group.pk): {'name': group.name} for group in groups_for(request.user).filter(is_active=True)},
                                **{key: {'name': group['ref']['name']} for key, group in item.state['groups'].items()}},
         'composition_channels': {**{str(channel.pk): {'name': channel.name} for channel in SalesPlanningChannel.objects.filter(is_active=True)}, **item.state['channels']},
         'forecasts': [{'key': month, 'value': group['forecast'].get(month)} for month in forecast_months(item)],
         'brands': sorted({brand for group in item.state['groups'].values() for brand in group['ref']['brand'] if brand}),
-        'forecast_sources': SplitScenario.objects.filter(status='approved', start__lt=item.start).order_by('-start'),
+        'forecast_sources':scenarios_for(request.user,SplitScenario.objects.filter(status='approved',start__lt=item.start)).order_by('-start'),
         'versions': versions, 'comparison': comparison, 'events': item.events.select_related('actor').order_by('-at')[:100]})
 
 

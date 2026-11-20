@@ -128,6 +128,7 @@ class UserProjectAccess(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='project_access')
     project = models.CharField(max_length=20)
     role = models.CharField(max_length=40, blank=True)
+    sales_plan_groups = models.JSONField(default=list, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['user', 'project'], name='unique_user_project_access')]
@@ -137,6 +138,7 @@ class GroupProjectAccess(models.Model):
     group = models.ForeignKey('auth.Group', on_delete=models.CASCADE, related_name='project_access')
     project = models.CharField(max_length=20)
     role = models.CharField(max_length=40, blank=True)
+    sales_plan_groups = models.JSONField(default=list, blank=True)
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['group', 'project'], name='unique_group_project_access')]

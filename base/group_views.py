@@ -24,6 +24,8 @@ class ReportGroupForm(forms.Form):
     purchases_role = project_forms.project_field('purchases')
     dashboards_role = project_forms.project_field('dashboards')
     split_monitoring_role = project_forms.project_field('split_monitoring')
+    sales_planning_role = project_forms.project_field('sales_planning')
+    sales_plan_groups = project_forms.planning_scope_field()
     portal_role = forms.ChoiceField(label='Роль в портале', required=False, choices=[('', 'Выберите роль')] + [(role, role) for role in ROLES])
     employee_type = forms.ModelChoiceField(label='Вид работника', queryset=TypeCoeff.objects.exclude(type_coeff_name='').order_by('type_coeff_name'), empty_label='Выберите вид работника', required=False, widget=forms.HiddenInput)
     subdivisions = forms.ModelMultipleChoiceField(label='Подразделения', queryset=Subdivision.objects.order_by('subdivision_key'), required=False, widget=forms.CheckboxSelectMultiple)
@@ -65,6 +67,7 @@ class ReportGroupForm(forms.Form):
 
     def clean(self):
         data = super().clean()
+        project_forms.validate_planning_scope(self,data)
         selected = data.get('motivation_role') if 'motivation_role' in self.data else project_forms.INHERIT
         role = data.get('portal_role') if selected == project_forms.INHERIT else selected
         if role in REPORT_ROLES and not data.get('subdivisions'):
@@ -139,6 +142,7 @@ def groups(request):
     catalog = list(Group.objects.exclude(name__in=ROLES).select_related('portal_scope__employee_type').prefetch_related('project_access', 'user_set', 'portal_scope__subdivisions__merged_into').order_by('name'))
     catalog = [row for row in catalog if not project or project in group_roles(row)]
     for row in catalog:
+        row.planning_sales_groups=sorted({value for grant in row.project_access.all() if grant.project=='sales_planning' and grant.role=='Планировщик' for value in grant.sales_plan_groups})
         scope = getattr(row, 'portal_scope', None)
         from .access import PROJECT_ROLES, PROJECT_LABELS, legacy_project_role
         overrides = {grant.project: grant.role for grant in row.project_access.all()}
