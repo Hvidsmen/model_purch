@@ -1,6 +1,11 @@
 .split-table-top-scroll{overflow-x:auto;overflow-y:hidden;height:20px;max-width:100%;background:#faf9ff;border:0;border-top:1px solid #ded9ef;border-radius:5px 5px 0 0}
 .split-table-top-scroll>div{height:1px}.split-table-top-scroll[hidden]{display:none!important}
 @media(min-width:701px){
-.split-table-viewport{overflow:auto;max-height:70vh;position:relative;isolation:isolate}
+.split-table-viewport{overflow-x:auto;max-height:none;position:relative;isolation:isolate}
 .split-table-viewport thead{position:sticky;top:0;z-index:10;background:#f6f7fb;box-shadow:0 1px 0 #d8ddeb}
+}
+
+/* Tables grow with the page: only the document owns vertical scrolling. */
+#portal-main :is(.split-table-viewport,.split-stock-workspace-scroll,.split-stock-table-scroll){
+  height:auto!important;max-height:none!important;overflow-x:auto;overflow-y:hidden;
 }
