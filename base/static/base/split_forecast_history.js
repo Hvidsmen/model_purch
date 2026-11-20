@@ -35,7 +35,7 @@
   clear();setBusy(true);status.textContent='Получаем историю и рассчитываем прогноз…';const progress=window.SplitProgress?.start('Расчёт прогноза по истории');
   try{
    const result=await request('preview_forecast_history',{targets:JSON.stringify(targets),year:find('year').value,adjustment:find('adjustment').value});proposals=result.rows;
-   status.textContent='Факт: '+result.source.from+' — '+result.source.through+'. Каналы: '+result.source.channels.join(', ')+'. Проверьте предложения.';
+   status.textContent='Факт: '+result.source.from+' — '+result.source.through+'. '+(result.source.calculation||'')+'. Каналы: '+result.source.channels.join(', ')+'. Проверьте предложения.';
    const table=document.createElement('table');table.className='admin-table';const head=table.createTHead().insertRow();
    for(const title of ['Применить','Группа','Текущий прогноз, компл.','Предложено, компл.','По мощностям / пояснение']){const cell=document.createElement('th');cell.textContent=title;head.append(cell);}
    const body=table.createTBody();for(const row of proposals){

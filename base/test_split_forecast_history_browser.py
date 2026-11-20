@@ -21,7 +21,7 @@ class ForecastHistoryBrowserTests(StaticLiveServerTestCase):
                 page.goto(self.live_server_url+self.url+'?tab=stock')
                 page.get_by_role('button',name='Рассчитать прогноз по истории',exact=True).click()
                 dialog=page.locator('#split-forecast-history')
-                expect(dialog).to_be_visible();expect(dialog.locator('[data-forecast-history-year]')).to_have_value('2025')
+                expect(dialog).to_be_visible();expect(dialog.locator('[data-forecast-history-year]')).to_have_value('2026');dialog.locator('[data-forecast-history-year]').fill('2025')
                 dialog.locator('[data-forecast-history-adjustment]').fill('10')
                 with patch('base.split_forecast_history.source',return_value=(self.data,['Дилеры'])):
                     dialog.locator('[data-forecast-history-preview]').click()

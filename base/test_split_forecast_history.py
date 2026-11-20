@@ -110,3 +110,19 @@ class HistoricalForecastTests(TestCase):
         self.scenario.refresh_from_db();self.assertEqual(self.scenario.revision,revision+1)
         self.assertEqual(resolve(self.scenario,self.scenario.state['groups'][self.gid])['total'],D('14.3'))
         self.assertEqual(self.client.post(self.url,post).status_code,400)
+
+    def test_incomplete_stock_year_uses_daily_sales_and_records_actual_period(self):
+        result=self.proposal(year='2026',adjustment='0')
+        self.assertEqual((result['source']['from'],result['source']['through']),('2026-01-01','2026-11-06'))
+        self.assertEqual(result['source']['method'],'average_daily')
+        self.assertEqual(result['source']['fact_days'],310);self.assertEqual(result['source']['target_days'],55)
+        row=result['rows'][0]
+        self.assertEqual([D(p['sets']) for p in row['powers']],[D('1.419355'),D('0.887097')])
+        state,count=apply(self.scenario,{'tokens':json.dumps([row['token']]),'only_empty':'1'})
+        self.assertEqual(state['groups'][self.gid]['forecast_history_source']['method'],'average_daily')
+        self.assertEqual(state['groups'][self.gid]['forecast_before_total'],'2.306452')
+
+    def test_incomplete_year_never_reads_future_dates_and_rejects_future_year(self):
+        with patch('base.split_forecast_history.timezone.localdate',return_value=date(2026,10,1)):
+            self.assertEqual(period(self.scenario,2026)[2:],(date(2026,1,1),date(2026,10,1)))
+        with self.assertRaises(ValidationError):period(self.scenario,2027)
