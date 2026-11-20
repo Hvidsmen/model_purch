@@ -1,6 +1,6 @@
 {% extends 'base/portal_shell.html' %}{% load static report_format split_format tz l10n %}
 {% block title %}{{ scenario.title }} · v{{ scenario.version }} · Split{% endblock %}
-{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=dropdown-overflow5">{% if tab == 'stock' %}<link rel="stylesheet" href="{% static 'base/split_stock_workspace.css' %}?v=1">{% endif %}{% endblock %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'base/split_workspace.css' %}?v=composition-row6">{% if tab == 'stock' %}<link rel="stylesheet" href="{% static 'base/split_stock_workspace.css' %}?v=1">{% endif %}{% endblock %}
 {% block project_name %}Модель планирования продаж{% endblock %}
 {% block module_navigation %}{% include 'base/_sales_planning_navigation.html' with active='scenarios' %}{% endblock %}
 {% block content %}{% timezone "Europe/Moscow" %}<section class="portal-welcome split-workspace">
@@ -10,7 +10,7 @@
 {% endif %}
 {% include 'base/_split_workspace_navigation.html' %}
 
-{% if tab != 'plan' and tab != 'distribution' and tab != 'stock' %}{% include 'base/_split_brand_pages.html' %}{% endif %}
+{% if tab != 'plan' and tab != 'distribution' and tab != 'stock' and tab != 'composition' %}{% include 'base/_split_brand_pages.html' %}{% endif %}
 {% if reference_filters != None and tab != 'plan' and tab != 'distribution' and tab != 'stock' %}{% include 'base/_split_reference_filters.html' %}{% endif %}
 {% if needs_composition %}<p role="status">Сценарий создан. Выберите группы и каналы на этапе «Состав плана», чтобы начать планирование.</p>{% endif %}
 {% if tab == 'composition' %}
@@ -61,4 +61,4 @@
 
 
 
-{% block module_js %}{{ block.super }}<script src="{% static 'base/split_sales.js' %}?v=brands3" defer></script><script src="{% static 'base/split_composition.js' %}?v=links2" defer></script><script src="{% static 'base/split_brand_pages.js' %}?v=3" defer></script><script src="{% static 'base/split_forecast_history.js' %}?v=stock-staging2" defer></script><script src="{% static 'base/split_metric_preferences.js' %}?v=4" defer></script><script src="{% static 'base/split_ddp.js' %}?v=1" defer></script><script src="{% static 'base/split_reference_filters.js' %}?v=sales1" defer></script><script src="{% static 'base/split_plan_groups.js' %}?v=5" defer></script>{% if tab != 'stock' %}<script src="{% static 'base/split_stock_table.js' %}?v=metrics1" defer></script>{% endif %}<script src="{% static 'base/split_history.js' %}?v=3" defer></script><script src="{% static 'base/split_month_grid.js' %}?v=workflow10" defer></script><script src="{% static 'base/split_table_views.js' %}?v=sales1" defer></script><script src="{% static 'base/split_workspace_ux.js' %}?v=stock-workflow2" defer></script>{% if tab == 'stock' %}<script src="{% static 'base/split_stock_workspace.js' %}?v=1" defer></script>{% endif %}{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'base/split_sales.js' %}?v=brands3" defer></script><script src="{% static 'base/split_composition.js' %}?v=row3" defer></script><script src="{% static 'base/split_brand_pages.js' %}?v=3" defer></script><script src="{% static 'base/split_forecast_history.js' %}?v=stock-staging2" defer></script><script src="{% static 'base/split_metric_preferences.js' %}?v=4" defer></script><script src="{% static 'base/split_ddp.js' %}?v=1" defer></script><script src="{% static 'base/split_reference_filters.js' %}?v=sales1" defer></script><script src="{% static 'base/split_plan_groups.js' %}?v=5" defer></script>{% if tab != 'stock' %}<script src="{% static 'base/split_stock_table.js' %}?v=metrics1" defer></script>{% endif %}<script src="{% static 'base/split_history.js' %}?v=3" defer></script><script src="{% static 'base/split_month_grid.js' %}?v=workflow10" defer></script><script src="{% static 'base/split_table_views.js' %}?v=sales1" defer></script><script src="{% static 'base/split_workspace_ux.js' %}?v=stock-workflow2" defer></script>{% if tab == 'stock' %}<script src="{% static 'base/split_stock_workspace.js' %}?v=1" defer></script>{% endif %}{% endblock %}
