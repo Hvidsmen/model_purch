@@ -76,10 +76,12 @@
  document.addEventListener('submit',async event=>{
   const form=event.target;
   if(event.defaultPrevented||!form.closest('.split-workspace')||form.method.toLowerCase()!=='post')return;
-  event.preventDefault();const root=form.closest('.split-workspace');root.inert=true;
+  event.preventDefault();const root=form.closest('.split-workspace');
+  if(form.hasAttribute('data-copy-scenario-form')&&document.querySelector('.split-unsaved-dock:not([hidden])')){window.SplitProgress?.start('Копирование').fail('Сначала сохраните текущие правки.');return;}
+  root.inert=true;
   const progress=window.SplitProgress?.start('Сохранение');
   try{
-   const response=await fetch(form.action||location.href,{method:'POST',credentials:'same-origin',body:new FormData(form,event.submitter)});
+   const response=await fetch(form.getAttribute('action')||location.href,{method:'POST',credentials:'same-origin',body:new FormData(form,event.submitter)});
    const text=await response.text();
    if(!response.ok)throw Error('Сервер отклонил сохранение (HTTP '+response.status+').');
    if((response.headers.get('Content-Type')||'').includes('application/json')){const result=JSON.parse(text);if(!result.ok)throw Error(result.error||'Сохранение отклонено.');}
