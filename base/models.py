@@ -73,6 +73,7 @@ class SplitScenario(models.Model):
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name='+')
     created_at = models.DateTimeField(auto_now_add=True)
     approved_at = models.DateTimeField(null=True, blank=True)
+    archived_at = models.DateTimeField(null=True, blank=True, db_index=True)
 
     class Meta:
         ordering = ['-created_at', '-pk']
