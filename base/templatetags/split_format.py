@@ -10,6 +10,11 @@ def fact_number(value):
 
 
 @register.filter
+def fact_integer(value):
+    return '' if value == 0 else fixed_number(value, 0)
+
+
+@register.filter
 def fact_cash(value):
     return '' if value == 0 else split_revenue(value)
 

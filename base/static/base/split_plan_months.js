@@ -1,10 +1,10 @@
 (() => {
  const table=document.querySelector('.split-plan-matrix'),source=document.getElementById('split-plan-months-data');if(!table||!source)return;
  const data=JSON.parse(source.textContent);if(!data)return;
- const format=value=>value==null?'—':Number(value).toLocaleString('ru-RU',{maximumFractionDigits:6});
+ const format=(value,places=6)=>value==null?'—':Number(value).toLocaleString('ru-RU',{maximumFractionDigits:places});
  function metrics(cell,values){
   for(const [key,label,metric] of [['qty','Компл.','quantity'],['revenue','Выручка, $','revenue'],['markup','Наценка ×','markup']]){
-   const block=document.createElement('div');block.dataset.splitMetric=metric;block.className='split-plan-metric';const small=document.createElement('small');small.textContent=label;const value=document.createElement('span');value.textContent=format(values?.[key]);block.append(small,value);cell.append(block);
+   const block=document.createElement('div');block.dataset.splitMetric=metric;block.className='split-plan-metric';const small=document.createElement('small');small.textContent=label;const value=document.createElement('span');value.textContent=format(values?.[key],key==='qty'?0:6);block.append(small,value);cell.append(block);
   }
  }
  function valuesFor(row){
