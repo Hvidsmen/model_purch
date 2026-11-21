@@ -43,7 +43,7 @@
     let note=row.querySelector('[data-sales-row-check]');
     if(!note){note=document.createElement('small');note.dataset.salesRowCheck='';row.querySelector('.split-matrix-group').append(note);}
     note.textContent=messages.join(' · ')||'Проверки заполнения: без замечаний';
-    const visible=!row.hasAttribute('data-reference-excluded');
+    const visible=!row.hasAttribute('data-reference-excluded')&&!row.hasAttribute('data-group-picker-excluded');
     if(visible){scope++;issues.forEach(key=>totals[key]++);}
     const matches=checkFilter.value==='all'||(checkFilter.value==='issues'?!issues.has('ready'):issues.has(checkFilter.value));
     row.toggleAttribute('data-sales-check-excluded',!matches);
@@ -56,6 +56,7 @@
   checkFilter.addEventListener('change',validate);
   document.querySelector('#split-plan-inputs')?.addEventListener('input',validate);
   document.addEventListener('split-reference-filter-change',validate);
+  document.addEventListener('split-group-selection-change',validate);
   document.querySelector('[data-sales-channel-filter]')?.addEventListener('change',validate);
   document.querySelectorAll('[data-sales-channels-all],[data-sales-channels-none]').forEach(button=>button.addEventListener('click',validate));
   validate();
