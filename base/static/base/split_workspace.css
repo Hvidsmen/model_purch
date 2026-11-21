@@ -344,3 +344,11 @@
 [data-group-picker-excluded]{display:none!important}.split-group-picker{position:relative;min-width:170px;max-width:320px;font-size:12px}.split-group-picker>summary{cursor:pointer;padding:8px;border:1px solid #d6ccf5;border-radius:6px;background:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.split-group-picker-popup{position:absolute;z-index:70;top:calc(100% + 5px);left:0;width:min(440px,80vw);box-sizing:border-box;padding:12px;border:1px solid #d6ccf5;border-radius:9px;background:#fff;box-shadow:0 8px 24px #26334b24}.split-group-picker-popup>input{width:100%;box-sizing:border-box;margin-bottom:8px}.split-group-picker-actions{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}.split-group-picker-actions .admin-button{font-size:11px;min-height:28px;padding:4px 7px}.split-group-picker-list{max-height:260px;overflow:auto}.split-group-picker-list label{display:flex!important;align-items:center;gap:7px;padding:6px;margin:0;white-space:normal}.split-group-picker-list input{width:auto!important;flex-shrink:0}.split-group-picker-list [hidden]{display:none!important}.split-group-picker-popup>small{display:block;color:#64748b;margin-top:7px}
 
 .split-workspace .admin-panel:has([data-group-picker]){overflow:visible}
+
+/* Numeric bands must reserve space for the entire label and value. */
+.split-workspace .split-plan-matrix .split-history-metrics{grid-template-columns:minmax(max-content,1fr);min-width:max-content}
+.split-workspace .split-plan-matrix .split-history-metrics>span{display:grid;grid-template-columns:max-content minmax(max-content,1fr);align-items:baseline;column-gap:12px;min-width:max-content}
+.split-workspace .split-plan-matrix .split-history-metrics>span>strong{min-width:max-content;text-align:right;white-space:nowrap}
+.split-workspace .split-plan-matrix .split-history-metrics>span>small:first-child{white-space:nowrap}
+.split-workspace .split-plan-matrix .split-history-metrics>span>small:not(:first-child){grid-column:1/-1;white-space:normal;max-width:300px}
+.split-workspace .split-plan-matrix .split-plan-group-total .split-history-metrics>[data-split-metric="quantity"]{display:none}

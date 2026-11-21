@@ -18,6 +18,32 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_financial_values_stay_inside_cells_with_open_stock_columns(self):
+        from playwright.sync_api import sync_playwright
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page(viewport={'width':1200,'height':900})
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=alpha')
+            page.locator('.split-sales-view > summary').click()
+            page.locator('[data-split-metric-choice="stock"]').check()
+            page.locator('[data-split-metric-choice="revenue"]').check()
+            page.locator('[data-split-metric-choice="ddp"]').uncheck()
+            page.locator('[data-plan-opening-toggle]').click()
+            for width in (1200,800):
+                page.set_viewport_size({'width':width,'height':900})
+                result=page.evaluate("""() => {
+                  const metrics=document.querySelector('[data-plan-summary="all"] .split-history-metrics');
+                  const revenue=metrics.querySelector('[data-split-metric="revenue"]');
+                  revenue.closest('td').classList.add('split-fact-column');
+                  revenue.querySelector('strong').textContent='31 600 460 999';
+                  const label=revenue.querySelector('small').getBoundingClientRect(),value=revenue.querySelector('strong').getBoundingClientRect(),cell=revenue.closest('td').getBoundingClientRect();
+                  return {separate:label.right+5<=value.left,inside:value.right<=cell.right-3};
+                }""")
+                self.assertEqual(result,{'separate':True,'inside':True})
+            page.screenshot(path='/tmp/sales-numeric-width.png',full_page=False)
+            browser.close()
+
     def test_group_picker_multiple_search_brand_scope_and_all_steps(self):
         from playwright.sync_api import sync_playwright,expect
         with sync_playwright() as driver:
