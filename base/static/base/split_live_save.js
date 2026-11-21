@@ -77,7 +77,7 @@
   const form=event.target;
   if(event.defaultPrevented||!form.closest('.split-workspace')||form.method.toLowerCase()!=='post')return;
   event.preventDefault();const root=form.closest('.split-workspace');
-  if(form.hasAttribute('data-copy-scenario-form')&&document.querySelector('.split-unsaved-dock:not([hidden])')){window.SplitProgress?.start('Копирование').fail('Сначала сохраните текущие правки.');return;}
+  if((form.hasAttribute('data-copy-scenario-form')||form.hasAttribute('data-archive-scenario-form'))&&document.querySelector('.split-unsaved-dock:not([hidden])')){window.SplitProgress?.start(form.hasAttribute('data-archive-scenario-form')?'Архив':'Копирование').fail('Сначала сохраните текущие правки.');return;}
   root.inert=true;
   const progress=window.SplitProgress?.start('Сохранение');
   try{

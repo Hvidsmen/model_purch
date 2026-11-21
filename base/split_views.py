@@ -28,6 +28,18 @@ from . import split_exports
 @require_http_methods(['GET', 'POST'])
 def scenarios(request):
     require_planning(request.user)
+    archive_view=request.GET.get('archived')=='1'
+    if request.method=='POST' and request.POST.get('action') in ('archive_scenario','restore_scenario'):
+        try:
+            try:archive_id=int(request.POST.get('scenario_id',''))
+            except (ValueError,TypeError):raise ValidationError('Выберите сценарий.')
+            selected=get_object_or_404(scenarios_for(request.user,SplitScenario.objects.all()),pk=archive_id)
+            from .split_archive import set_archived
+            archived=request.POST['action']=='archive_scenario'
+            set_archived(selected,request.user,request.POST.get('revision'),archived)
+            messages.success(request,'Сценарий помещён в архив.' if archived else 'Сценарий восстановлен из архива.')
+        except ValidationError as exc:messages.error(request,' '.join(exc.messages))
+        return redirect(reverse('sales_planning_split')+('?archived=1' if archive_view else ''))
     form = ScenarioForm(request.POST if request.method == 'POST' else None,actor=request.user)
     if request.method == 'POST' and form.is_valid():
         from django.db import transaction
@@ -39,8 +51,8 @@ def scenarios(request):
                 persist(scenario,request.user,scenario.revision,state,'Создан на основе сценария '+str(form.cleaned_data['copy_source'].pk))
                 if result['notes']:messages.warning(request,'Перенос выполнен. Требуют внимания: '+'; '.join(result['notes']))
         return redirect(reverse('split_scenario', args=[scenario.pk]) + '?tab=composition')
-    return render(request, 'base/split_scenarios.html', {'form': form,
-        'page': Paginator(scenarios_for(request.user,SplitScenario.objects.all()).select_related('created_by').defer('state'),25).get_page(request.GET.get('page'))})
+    return render(request, 'base/split_scenarios.html', {'form': form,'archive_view':archive_view,
+        'page': Paginator(scenarios_for(request.user,SplitScenario.objects.filter(archived_at__isnull=not archive_view)).select_related('created_by').defer('state'),25).get_page(request.GET.get('page'))})
 
 
 def return_to(pk, tab, gid='', cid='', section='months'):
@@ -58,6 +70,12 @@ def scenario(request, pk):
     require_planning(request.user)
     item = get_object_or_404(SplitScenario, pk=pk)
     check_scenario(request.user,item)
+    if request.method=='POST' and request.POST.get('action') in ('archive_scenario','restore_scenario'):
+        try:
+            from .split_archive import set_archived
+            set_archived(item,request.user,request.POST.get('revision'),request.POST['action']=='archive_scenario')
+            return JsonResponse({'ok':True})
+        except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     if request.method=='POST' and request.POST.get('action')=='copy_scenario_step':
         try:
             if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
