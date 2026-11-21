@@ -28,9 +28,16 @@ from . import split_exports
 @require_http_methods(['GET', 'POST'])
 def scenarios(request):
     require_planning(request.user)
-    form = ScenarioForm(request.POST if request.method == 'POST' else None)
+    form = ScenarioForm(request.POST if request.method == 'POST' else None,actor=request.user)
     if request.method == 'POST' and form.is_valid():
-        scenario = create_scenario(request.user, form.cleaned_data)
+        from django.db import transaction
+        with transaction.atomic():
+            scenario = create_scenario(request.user, form.cleaned_data)
+            if form.cleaned_data.get('copy_source'):
+                from .split_scenario_copy import candidate as copy_candidate
+                state,result=copy_candidate(scenario,form.cleaned_data['copy_source'],request.user,'all','replace')
+                persist(scenario,request.user,scenario.revision,state,'Создан на основе сценария '+str(form.cleaned_data['copy_source'].pk))
+                if result['notes']:messages.warning(request,'Перенос выполнен. Требуют внимания: '+'; '.join(result['notes']))
         return redirect(reverse('split_scenario', args=[scenario.pk]) + '?tab=composition')
     return render(request, 'base/split_scenarios.html', {'form': form,
         'page': Paginator(scenarios_for(request.user,SplitScenario.objects.all()).select_related('created_by').defer('state'),25).get_page(request.GET.get('page'))})
@@ -51,6 +58,19 @@ def scenario(request, pk):
     require_planning(request.user)
     item = get_object_or_404(SplitScenario, pk=pk)
     check_scenario(request.user,item)
+    if request.method=='POST' and request.POST.get('action')=='copy_scenario_step':
+        try:
+            if item.status!='draft' or str(item.revision)!=str(request.POST.get('revision')):raise ValidationError('Сценарий изменён или утверждён. Обновите страницу.')
+            try:source_id=int(request.POST.get('copy_source',''))
+            except (ValueError,TypeError):raise ValidationError('Выберите сценарий-источник.')
+            source=get_object_or_404(scenarios_for(request.user,SplitScenario.objects.all()),pk=source_id)
+            from .split_scenario_copy import candidate as copy_candidate
+            state,result=copy_candidate(item,source,request.user,request.POST.get('copy_stage'),request.POST.get('copy_fill','append'))
+            persist(item,request.user,request.POST.get('revision'),state,'Скопирован шаг '+request.POST.get('copy_stage','')+' из сценария '+str(source.pk))
+            messages.success(request,'Перенесено значений: '+str(result['count']))
+            if result['notes']:messages.warning(request,'Требуют внимания: '+'; '.join(result['notes']))
+            return JsonResponse({'ok':True,**result})
+        except ValidationError as exc:return JsonResponse({'ok':False,'error':' '.join(exc.messages)},status=400)
     if request.method=='POST' and request.POST.get('action')=='approve' and not can_access(request.user,'sales_planning_admin'):raise PermissionDenied('Утверждение доступно администратору планирования.')
     tab = request.GET.get('tab', 'composition' if not item.state['groups'] or not item.state['channels'] else 'plan')
     if tab not in ('composition', 'plan', 'distribution', 'stock', 'sources', 'checks', 'versions', 'detail'):
@@ -487,6 +507,7 @@ def scenario(request, pk):
     response=render(request, 'base/split_scenario.html', {'ddp_purchase_scenarios':ScenarioModel.objects.order_by('-date_start_plan','-pk') if tab in ('plan','stock') and can_access(request.user,'purchases') else [],
         'stock_workspace':stock_workspace,'stock_all_workspace':stock_all_workspace,'stock_step':stock_step,'stock_workspace_data':stock_workspace_data,'stock_filters':stock_filters,
         'ddp_default_year':min(item.start.year-1,timezone.localdate(timezone=ZoneInfo('Europe/Moscow')).year),
+        'copy_scenarios':scenarios_for(request.user,SplitScenario.objects.filter(start__lte=item.start).exclude(pk=item.pk)).only('pk','title','version','stock_date','start').order_by('-pk'),
         'sales_view':sales_view,'sales_summary':sales_summary,'composition_rows':composition_rows, 'all_matrix_totals': all_matrix_totals, 'all_plan_inventory': all_plan_inventory, 'all_history_total': all_history_total,
         'stock_locked_groups': stock_locked_groups, 'workflow_ux': workflow_ux, 'scenario': item, 'state': display_item.state, 'brand_page':brand_page,'data': data, 'tab': tab,
         'needs_composition': not item.state['groups'] or not item.state['channels'],

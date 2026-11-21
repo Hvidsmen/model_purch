@@ -14,11 +14,11 @@ class ScenarioDatesFormTests(SimpleTestCase):
 
     def test_creation_has_exactly_four_required_fields_and_does_not_need_directories(self):
         form = ScenarioForm(self.values())
-        self.assertEqual(set(form.fields), {'title', 'start', 'end', 'stock_date'})
-        self.assertTrue(all(field.required for field in form.fields.values()))
+        self.assertEqual({name for name,field in form.fields.items() if field.required}, {'title', 'start', 'end', 'stock_date'})
+        self.assertFalse(form.fields['copy_source'].required)
         self.assertTrue(form.is_valid(), form.errors)
         self.assertEqual(form.cleaned_data['end'], date(2028, 2, 10))
-        for field in form.fields:
+        for field in [name for name,item in form.fields.items() if item.required]:
             values = self.values()
             values.pop(field)
             self.assertFalse(ScenarioForm(values).is_valid())

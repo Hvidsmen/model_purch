@@ -9,6 +9,7 @@
 {% if tab == 'stock' %}<div class="split-totals"><article><span>План продаж · все бренды · компл.</span><strong>{{ stock_all_workspace.totals.planned|split_integer }}</strong></article><article><span>Остаток на конец · все бренды · компл.</span><strong>{{ stock_all_workspace.totals.closing|split_integer }}</strong>{% if stock_all_workspace.counts.supplies.missing %}<small>Нужны данные у {{ stock_all_workspace.counts.supplies.missing }} групп</small>{% endif %}</article></div>{% else %}<div class="split-totals"><article data-split-metric="quantity"><span>Комплекты · все каналы</span><strong>{{ data.totals.quantity|split_integer }}</strong></article><article data-split-metric="revenue"><span>Выручка · USD</span><strong>{{ data.totals.revenue|split_revenue }}</strong></article><article data-split-metric="ddp"><span>Себестоимость DDP · USD</span><strong>{{ data.totals.cost|report_cash }}</strong></article><article data-split-metric="stock"><span>Комплекты на конец</span><strong>{{ data.totals.closing|split_integer }}</strong></article></div>
 {% endif %}
 {% include 'base/_split_workspace_navigation.html' %}
+{% include 'base/_split_scenario_copy.html' %}
 
 {% if tab != 'plan' and tab != 'distribution' and tab != 'stock' and tab != 'composition' %}{% include 'base/_split_brand_pages.html' %}{% endif %}
 {% if reference_filters != None and tab != 'plan' and tab != 'distribution' and tab != 'stock' %}{% include 'base/_split_reference_filters.html' %}{% endif %}
