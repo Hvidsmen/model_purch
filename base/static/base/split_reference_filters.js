@@ -60,7 +60,7 @@
     const selected = Object.fromEntries(controls.map(control => [control.dataset.referenceFilter, selectedValues(control)]));
     const query=document.querySelector('[data-sales-search]')?.value.trim().toLocaleLowerCase()||'';
     const names=new Map([...document.querySelectorAll('[data-plan-group]')].map(row=>[row.dataset.planGroup,row.textContent.toLocaleLowerCase()]));
-    const matches = new Set(Object.entries(references).filter(([gid,ref]) => (!query||(names.get(gid)||'').includes(query))&&controls.every(control => !selectedValues(control).length || tokens(ref[control.dataset.referenceFilter]).some(value => selectedValues(control).includes(value)))).map(([gid]) => gid));
+    const matches = new Set(Object.entries(references).filter(([gid,ref]) => (window.SplitGroupPicker?.matches(gid)??true)&&(!query||(names.get(gid)||'').includes(query))&&controls.every(control => !selectedValues(control).length || tokens(ref[control.dataset.referenceFilter]).some(value => selectedValues(control).includes(value)))).map(([gid]) => gid));
     const count=document.querySelector('[data-sales-filter-count]');if(count)count.textContent=Object.values(selected).flat().length||'';
     const nodes = new Map([...document.querySelectorAll('[data-plan-node]')].map(row => [row.dataset.planNode, row]));
     const visibleNodes = new Set();
@@ -78,6 +78,7 @@
     try { sessionStorage.setItem(storage, JSON.stringify(selected)); } catch (_) {}
     document.dispatchEvent(new Event('split-reference-filter-change'));
   }
+  document.addEventListener('split-group-selection-change',apply);
   controls.forEach(control => control.addEventListener('change', () => {widgets.get(control).sync();apply();}));
   panel.querySelector('[data-reference-reset]').addEventListener('click', () => { controls.forEach(control => {[...control.options].forEach(option => {option.selected=false;});const widget=widgets.get(control);widget.search.value='';widget.filter();widget.sync();}); apply(); });
   document.querySelector('[data-sales-search]')?.addEventListener('input',apply);

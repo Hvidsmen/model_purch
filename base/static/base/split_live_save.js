@@ -23,14 +23,14 @@
   const parts=[];
   while(el&&el!==root){
    if(el.id){parts.unshift('#'+CSS.escape(el.id));break;}
-   const identity=['data-history-year-choice','data-split-metric-choice','data-sales-channel-choice','data-reference-filter','data-plan-group','data-distribution-row','data-stock-group','data-composition-group'].find(key=>el.hasAttribute(key));
+   const identity=['data-group-choice','data-history-year-choice','data-split-metric-choice','data-sales-channel-choice','data-reference-filter','data-plan-group','data-distribution-row','data-stock-group','data-composition-group'].find(key=>el.hasAttribute(key));
    if(identity&&el.getAttribute(identity)){parts.unshift('['+identity+'="'+CSS.escape(el.getAttribute(identity))+'"]');break;}
    parts.unshift(el.tagName.toLowerCase()+':nth-of-type('+([...el.parentElement.children].filter(other=>other.tagName===el.tagName).indexOf(el)+1)+')');el=el.parentElement;
   }
   return parts.join(' > ');
  }
  function capture(root){
-  const controls=[...root.querySelectorAll('input[type=checkbox]:not([name]),[data-sales-search],[data-sales-check-filter],[data-stock-search],[data-stock-state],[data-reference-filter],[data-grid-search],[data-grid-channel],[data-month-unit],[data-composition-search]')]
+  const controls=[...root.querySelectorAll('input[type=checkbox]:not([name]),[data-sales-search],[data-sales-check-filter],[data-stock-search],[data-stock-state],[data-reference-filter],[data-grid-search],[data-grid-channel],[data-month-unit],[data-composition-search],[data-group-picker-search]')]
    .filter(el=>!el.closest('dialog')&&!el.hasAttribute('data-history-forecast-choice'))
    .map(el=>({selector:path(el,root),checked:el.type==='checkbox'?el.checked:null,value:el.value,selected:el.multiple?[...el.selectedOptions].map(o=>o.value):null}));
   return {controls,details:[...root.querySelectorAll('details')].map(el=>({selector:path(el,root),open:el.open})),

@@ -1,6 +1,6 @@
 <div class="split-sales-toolbar admin-panel">
 {% include 'base/_split_brand_pages.html' %}
-<div class="split-sales-controls"><label>Поиск группы <input type="search" data-sales-search placeholder="Название группы"></label>
+<div class="split-sales-controls">{% include 'base/_split_group_picker.html' %}<input type="hidden" data-sales-search value="">
 <details class="split-sales-channel-filter" data-sales-channel-filter><summary>Каналы · <span data-sales-channel-caption>Все</span></summary><div class="split-sales-channel-popup"><input type="search" data-sales-channel-search aria-label="Поиск канала" placeholder="Найти канал"><div><button type="button" data-sales-channels-all>Выбрать все</button><button type="button" data-sales-channels-none>Снять все</button></div>{% for channel_id,channel in state.channels.items %}<label><input type="checkbox" data-sales-channel-choice="{{ channel_id }}" checked><span>{{ channel.name }}</span></label>{% empty %}<small>Добавьте каналы на этапе «Состав плана».</small>{% endfor %}<small>Фильтр меняет показ столбцов. Итоги «Все каналы» включают все каналы.</small></div></details>
 <details class="split-sales-filters"><summary>Фильтры <span data-sales-filter-count></span></summary>{% include 'base/_split_reference_filters.html' %}</details>
 <details class="split-sales-view"><summary>Вид</summary><div data-sales-view-target></div>

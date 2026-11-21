@@ -4,7 +4,7 @@
 
 <div class="admin-panel split-stock-controls">
 {% include 'base/_split_brand_pages.html' %}
-<label>Поиск группы<input type="search" data-stock-search placeholder="Название группы"></label>
+{% include 'base/_split_group_picker.html' %}<input type="hidden" data-stock-search value="">
 <label>Состояние<select data-stock-state><option value="">Все</option><option value="missing">Не хватает данных</option><option value="deficit">Дефицит</option><option value="ready">Готово</option></select></label>
 <details><summary>Фильтры</summary><div class="split-stock-filter-fields">{% for filter in stock_filters %}<label>{{ filter.label }}<select data-stock-filter="{{ filter.name }}"><option value="">Все</option>{% for choice in filter.choices %}<option>{{ choice }}</option>{% endfor %}</select></label>{% endfor %}<button type="button" class="admin-button secondary" data-stock-filter-reset>Сбросить фильтры</button></div></details>
 <details><summary>Вид</summary><div class="split-stock-filter-fields"><label><input type="checkbox" data-stock-characteristics> Характеристики</label><label><input type="checkbox" data-stock-nested> Вложенная таблица по заводу</label>{% if stock_step == 'supplies' %}<label><input type="checkbox" data-stock-extra-choice> Целевой запас</label>{% endif %}<small>По умолчанию — комплекты. Внутренние и наружные блоки раскрываются внутри группы.</small></div></details>

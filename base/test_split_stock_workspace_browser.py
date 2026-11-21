@@ -18,6 +18,43 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_group_picker_multiple_search_brand_scope_and_all_steps(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page();page.set_default_timeout(10000)
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=%5B%22alpha%22,%22beta%22%5D')
+            expect(page.locator('[data-group-choice]')).to_have_count(2)
+            page.locator('[data-group-picker] > summary').click()
+            page.locator('[data-group-choice]').nth(1).uncheck()
+            page.locator('[data-group-picker] > summary').click()
+            page.get_by_role('spinbutton',name='DDP G',exact=True).fill('123')
+            page.get_by_role('spinbutton',name='DDP G',exact=True).press('Control+s')
+            expect(page.locator('.split-plan-save-panel')).to_contain_text('Изменения сохранены')
+            expect(page.locator('[data-group-choice]:checked')).to_have_count(1)
+            for query in ('tab=plan','tab=distribution&section=months','tab=distribution&section=powers','tab=stock&stock_step=opening','tab=stock&stock_step=targets','tab=composition'):
+                page.goto(self.live_server_url+self.url+'?'+query+'&brand_page=_all_')
+                picker=page.locator('[data-group-picker]');picker.locator('summary').click()
+                self.assertGreaterEqual(picker.locator('[data-group-choice]').count(),2)
+                picker.locator('[data-group-picker-none]').click()
+                expect(picker.locator('[data-group-picker-caption]')).to_have_text('Не выбраны')
+                picker.locator('[data-group-choice]').first.check()
+                selected=picker.locator('[data-group-choice]').first.get_attribute('data-group-choice')
+                self.assertEqual(page.locator('[data-group-picker-excluded][data-plan-group],[data-group-picker-excluded][data-grid-row],[data-group-picker-excluded][data-stock-group],[data-group-picker-excluded][data-composition-group]').count()>0,True)
+                picker.locator('[data-group-picker-search]').fill('zzzz-not-a-group')
+                expect(picker.locator('[data-group-picker-empty]')).to_be_visible()
+                picker.locator('[data-group-picker-search]').fill('')
+                picker.locator('[data-group-choice]').nth(1).check()
+                self.assertEqual(picker.locator('[data-group-choice]:checked').count(),2)
+                picker.locator('[data-group-picker-all]').click()
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=alpha')
+            expect(page.locator('[data-group-choice]')).to_have_count(1)
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=beta')
+            expect(page.locator('[data-group-choice]')).to_have_count(1)
+            expect(page.locator('[data-group-choice]')).to_be_checked()
+            browser.close()
+
     def test_live_save_keeps_document_filters_and_allows_repeated_saves(self):
         group=next(iter(self.scenario.state['groups'].values()))
         channel=next(iter(self.scenario.state['channels'].values()))

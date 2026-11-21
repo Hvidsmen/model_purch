@@ -112,12 +112,13 @@
     const query=find('search').value.trim().toLocaleLowerCase('ru'),state=find('state').value;
     const filters=[...root.querySelectorAll('[data-stock-filter]')];let count=0;
     rows.forEach(row=>{
-      const matches=(!query||row.dataset.name.toLocaleLowerCase('ru').includes(query))&&(!state||row.dataset.stockState===state)&&filters.every(control=>!control.value||(control.dataset.stockFilter==='factory'?row.dataset.factory:control.dataset.stockFilter==='outdoor_type'?row.dataset.outdoorType:row.dataset.salesPlanGroup)===control.value);
+      const matches=(window.SplitGroupPicker?.matches(row.dataset.stockGroup)??true)&&(!query||row.dataset.name.toLocaleLowerCase('ru').includes(query))&&(!state||row.dataset.stockState===state)&&filters.every(control=>!control.value||(control.dataset.stockFilter==='factory'?row.dataset.factory:control.dataset.stockFilter==='outdoor_type'?row.dataset.outdoorType:row.dataset.salesPlanGroup)===control.value);
       row.hidden=!matches;row.toggleAttribute('data-reference-excluded',!matches);childFor(row.dataset.stockGroup).hidden=!matches||row.querySelector('[data-stock-toggle]').getAttribute('aria-expanded')!=='true';if(matches)count++;
     });
     nestedHeaders.forEach(({node,members})=>node.hidden=!root.hasAttribute('data-stock-nested-mode')||!members.some(row=>!row.hidden));
     find('visible').textContent='Показано '+count+' из '+rows.length+' групп';root.querySelectorAll('[data-stock-status]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.stockStatus===state)));
   }
+  document.addEventListener('split-group-selection-change',filter);
   find('search').addEventListener('input',filter);find('state').addEventListener('change',filter);root.querySelectorAll('[data-stock-filter]').forEach(input=>input.addEventListener('change',filter));
   root.querySelectorAll('[data-stock-status]').forEach(button=>button.addEventListener('click',()=>{find('state').value=button.dataset.stockStatus;filter();}));
   find('filter-reset').addEventListener('click',()=>{find('search').value='';find('state').value='';root.querySelectorAll('[data-stock-filter]').forEach(input=>input.value='');filter();});

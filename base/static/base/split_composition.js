@@ -37,7 +37,7 @@
  form.querySelector('[data-composition-close]').addEventListener('click',()=>dialog.close());
  form.querySelectorAll('[data-composition-search]').forEach(input=>input.addEventListener('input',()=>{
   const list=form.querySelector('[data-composition-list="'+input.dataset.compositionSearch+'"]');
-  [...list.children].forEach(row=>row.hidden=!row.textContent.toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase()));
+  [...list.children].forEach(row=>row.hidden=!row.textContent.toLocaleLowerCase().includes(input.value.trim().toLocaleLowerCase())||(input.dataset.compositionSearch==='rows'&&!(window.SplitGroupPicker?.matches(row.dataset.compositionGroup)??true)));
  }));
  const channelsPicker=form.querySelector('.split-composition-channels');
  document.addEventListener('click',event=>{if(!channelsPicker.contains(event.target))channelsPicker.open=false;});
@@ -48,7 +48,7 @@
  const removeAll=form.querySelector('[data-composition-remove-all]');
  const removalRows=[...form.querySelectorAll('[data-composition-group]')];
  function refreshRemovals(){
-  const visible=removalRows.filter(row=>!row.hidden);
+  const visible=removalRows.filter(row=>!row.hidden&&!row.hasAttribute('data-group-picker-excluded'));
   const marked=removalRows.filter(row=>row.querySelector('[name=removed_groups]').checked);
   removalRows.forEach(row=>row.toggleAttribute('data-composition-excluded',row.querySelector('[name=removed_groups]').checked));
   removeAll.checked=visible.length>0 && visible.every(row=>row.querySelector('[name=removed_groups]').checked);
@@ -56,7 +56,8 @@
   removeAll.disabled=!visible.length || !!form.querySelector('fieldset:disabled');
   form.querySelector('[data-composition-removal-count]').textContent='Исключено: '+marked.length+' групп · с остатками: '+marked.filter(row=>row.dataset.stockWarning==='1').length;
  }
- removeAll.addEventListener('change',()=>{const checked=removeAll.checked;removalRows.filter(row=>!row.hidden).forEach(row=>row.querySelector('[name=removed_groups]').checked=checked);update();});
+ removeAll.addEventListener('change',()=>{const checked=removeAll.checked;removalRows.filter(row=>!row.hidden&&!row.hasAttribute('data-group-picker-excluded')).forEach(row=>row.querySelector('[name=removed_groups]').checked=checked);update();});
+ document.addEventListener('split-group-selection-change',()=>{form.querySelector('[data-composition-search="rows"]').dispatchEvent(new Event('input'));refreshRemovals();});
  form.querySelector('[data-composition-search="rows"]').addEventListener('input',refreshRemovals);
  form.addEventListener('reset',()=>setTimeout(refreshRemovals,0));
  async function confirmRemovals(){
