@@ -91,7 +91,7 @@ class SixStepWorkflowBrowserTests(StaticLiveServerTestCase):
             page.get_by_label('Новые поставки G',exact=True).fill('100')
             expect(page.locator('[data-plan-balance-status]')).to_contain_text('Предварительный баланс')
             expect(page.locator('[data-plan-group] [data-plan-inventory="closing"]')).to_contain_text('-600')
-            page.get_by_role('button',name='Рассчитать закупки и сохранить план',exact=True).click()
+            page.get_by_role('button',name='Заполнить закупки',exact=True).click()
             page.wait_for_load_state('networkidle')
             expect(page.get_by_label('Новые поставки G',exact=True)).to_have_value('880.000000')
             self.assertEqual(errors,[])
