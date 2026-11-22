@@ -36,6 +36,11 @@ def parameters(batch,row,overrides=True):
 
 
 def calculate(batch,row):
+    steps=[]
+    def step(label,formula,value,currency='USD'):
+        steps.append({'label':label,'formula':formula,'value':str(value),'currency':currency})
+    def fmt(value):
+        return format(Decimal(str(value)).quantize(Decimal('.000001')),'f').rstrip('0').rstrip('.') or '0'
     try:
         if row.source_data.get('error'):raise ValidationError(row.source_data['error'])
         if row.source_data.get('unit') and not row.overrides.get('price_unit_confirmed',False):raise ValidationError(row.source_data.get('unit_warning','Подтвердите единицу закупочной цены.'))
@@ -43,9 +48,13 @@ def calculate(batch,row):
         if row.currency not in CURRENCIES:raise ValidationError('Не определена поддерживаемая валюта закупочной цены.')
         rates={key:decimal(value,'Курс '+key,optional=True,positive=True) for key,value in batch.rates.items() if key in CURRENCIES};rates['RUB']=Decimal(1)
         price=decimal(row.price,'Цена')/decimal(row.overrides.get('price_quantity') or '1','Количество единиц в цене',positive=True)
+        quantity=decimal(row.overrides.get('price_quantity') or '1','Количество единиц в цене',positive=True)
+        step('Цена единицы модели',f'{fmt(row.price)} / {fmt(quantity)}',price,row.currency)
         if row.currency!='USD':
             if not rates.get('USD') or not rates.get(row.currency):raise ValidationError('Для перевода цены в USD заполните курсы USD и '+row.currency+'.')
+            original=price
             price=price*rates[row.currency]/rates['USD']
+            step('Перевод цены в USD',f'{fmt(original)} × {fmt(rates[row.currency])} / {fmt(rates["USD"])}',price)
         inputs=parameters(batch,row);supply=inputs.get('supply_type')
         if supply not in ('direct','p2','russian'):raise ValidationError('Выберите тип поставки.')
         if supply=='russian':volume,container,duty=Decimal(0),Decimal(1),Decimal(0)
@@ -61,13 +70,26 @@ def calculate(batch,row):
             if values['customs_rate']>100 or values['nr_customs_vat_rate']>100:raise ValidationError('Процентная ставка должна быть от 0 до 100.')
             freight=SimpleNamespace(**values)
         apply_price(good,freight,supply_type=supply)
+        if supply=='russian':
+            step('DDP закупки РФ','Закупочная цена в USD; логистические расходы не добавляются',good.ddp_usd)
+        else:
+            ratio=volume/container
+            step('Доля контейнера',f'{fmt(volume)} м³ / {fmt(container)} м³',ratio,'')
+            step('Фрахт',f'{fmt(values["price_per_container"])} × {fmt(ratio)}',good.freight_usd)
+            step('CIF',f'{fmt(price)} + {fmt(good.freight_usd)}',good.cif_usd)
+            step('Таможенный платёж',f'{fmt(values["customs_rate"])} / 100 × {fmt(good.cif_usd)} × (1 + {fmt(duty*100)} / 100)',good.customs_payment_usd)
+            step('Доставка до склада',f'{fmt(values["warehouse_delivery_cost"])} × {fmt(ratio)}',good.warehouse_delivery_usd)
+            step('DDP',f'{fmt(good.cif_usd)} + {fmt(good.customs_payment_usd)} + {fmt(good.warehouse_delivery_usd)}',good.ddp_usd)
+            step('Загран доставка — отдельно от DDP',f'{fmt(values["foreign_delivery_cost"])} × {fmt(ratio)}',good.foreign_delivery_usd)
+            step('НР НДС — отдельно от DDP',f'{fmt(values["nr_customs_vat_rate"])} / 100 × {fmt(good.customs_payment_usd)}' if supply=='p2' else 'Для этого типа поставки не начисляется',good.nr_customs_vat_usd)
         ddp=Decimal(str(good.ddp_usd));converted={'USD':str(ddp)};warnings=[]
         for code in CURRENCIES[1:]:
             if rates.get('USD') and rates.get(code):converted[code]=str((ddp*rates['USD']/rates[code]).quantize(Decimal('.000001')))
             else:converted[code]=None;warnings.append('Нет курса для DDP '+code)
-        return {'status':'partial' if warnings else 'ready','ddp':converted,'components':{'exw_usd':str(price),**{key:None if getattr(good,key) is None else str(getattr(good,key)) for key in CALCULATED_FIELDS}},'warnings':warnings,'calculated_at':timezone.now().isoformat()}
+            if converted[code] is not None:step('DDP '+code,f'{fmt(ddp)} USD × {fmt(rates["USD"])} / {fmt(rates[code])}',converted[code],code)
+        return {'steps':steps,'status':'partial' if warnings else 'ready','ddp':converted,'components':{'exw_usd':str(price),**{key:None if getattr(good,key) is None else str(getattr(good,key)) for key in CALCULATED_FIELDS}},'warnings':warnings,'calculated_at':timezone.now().isoformat()}
     except (ValidationError,ArithmeticError) as exc:
-        return {'status':'error','error':' '.join(exc.messages) if isinstance(exc,ValidationError) else 'Расчёт вышел за допустимую точность.'}
+        return {'steps':steps,'status':'error','error':' '.join(exc.messages) if isinstance(exc,ValidationError) else 'Расчёт вышел за допустимую точность.'}
 
 
 def source_parameters(source):

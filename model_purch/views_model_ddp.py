@@ -120,6 +120,11 @@ def export(request,pk):
         values.extend([row.source_data.get('unit',''),Decimal(str(row.overrides.get('price_quantity') or '1')),bool(row.overrides.get('price_unit_confirmed'))])
         values.extend([p.get(k) for k in ('planning_sales','group_goods','brand','purch','kind_purch','weight_kg','stock_cnt_day','percent_stock_end',*FREIGHT_FIELDS)])
         sheet.append([safe(v) for v in values])
+    trace=book.create_sheet('Этапы расчёта');trace.append(['Модель','Вид цены','Валюта цены','Этап','Формула','Результат','Валюта результата'])
+    for row in batch.rows.all().iterator(chunk_size=500):
+        for step in row.result.get('steps',[]):
+            trace.append([safe(row.model_name),safe(row.price_type),safe(row.currency),safe(step['label']),safe(step['formula']),Decimal(step['value']),safe(step['currency'])])
+    trace.freeze_panes='A2';trace.auto_filter.ref=trace.dimensions
     sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions
     output=BytesIO();book.save(output);book.close()
     response=HttpResponse(output.getvalue(),content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');response['Content-Disposition']=f'attachment; filename="model-ddp-{pk}.xlsx"';return response
