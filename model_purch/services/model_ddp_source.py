@@ -24,11 +24,20 @@ def column(columns,*choices,required=False):
     if not found and required:raise ValidationError('В источнике не найдено поле: '+', '.join(choices))
     return found
 
-def text(alias,key):return 'CAST('+alias+'.'+quoted(key)+' AS nvarchar(500))' if key else 'NULL'
+def sql_text(alias,key,data_type=None):
+    if not key:return 'NULL'
+    source=alias+'.'+quoted(key)
+    if str(data_type or '').lower() in ('binary','varbinary','image','timestamp','rowversion'):
+        # ERP references are opaque bytes, never UTF-16 characters.
+        return 'CONVERT(varchar(max),'+source+',2)'
+    return 'CAST('+source+' AS nvarchar(500))'
 
 
 def build_sql(schema):
     n=schema.get(GOODS,{});p=schema.get(PRICES,{})
+    types={'n':n,'p':p}
+    def text(alias,key):
+        return sql_text(alias,key,types.get(alias,{}).get(key))
     ref=column(n,'Ссылка',required=True);name=column(n,'Наименование',required=True)
     model=column(p,'НоменклатураСсылка','Номенклатура',required=True)
     kind=column(p,'ВидЦеныСсылка','ВидЦенСсылка','ТипЦенСсылка','ВидЦены','ВидЦен','ТипЦен',required=True)
@@ -37,6 +46,7 @@ def build_sql(schema):
     for table in KINDS:
         c=schema.get(table,{})
         if 'Ссылка' in c and 'Наименование' in c:
+            types['k']=c
             joins+=' LEFT JOIN DataWH.erp.'+quoted(table)+' k ON '+text('k','Ссылка')+'='+text('p',kind)
             kind_name='COALESCE('+text('k','Наименование')+','+kind_name+')';break
     currency=column(p,'ВалютаСсылка','Валюта')
@@ -46,6 +56,7 @@ def build_sql(schema):
             c=schema.get(table,{})
             code=column(c,'БуквенныйКод','КодISO','Код','Наименование')
             if 'Ссылка' in c and code:
+                types['c']=c
                 joins+=' LEFT JOIN DataWH.erp.'+quoted(table)+' c ON '+text('c','Ссылка')+'='+text('p',currency)
                 currency_name='COALESCE('+text('c',code)+','+currency_name+')';break
     period=column(p,'Период','Дата',required=True);price=column(p,'Цена',required=True)
@@ -156,7 +167,7 @@ def records(raw):
                 if not isinstance(at,datetime):at=datetime.combine(at,datetime.min.time())
                 data['price_at']=timezone.make_aware(at) if timezone.is_naive(at) else at
         except (ValueError,TypeError,InvalidOperation,OverflowError):data['source_data']['error']='Некорректная цена или характеристики в источнике.';data['price']=None
-        if characteristic and characteristic not in ('00000000-0000-0000-0000-000000000000','0'):
+        if characteristic and characteristic not in ('00000000-0000-0000-0000-000000000000','0') and set(characteristic)!={'0'}:
             data['source_data']['error']='Цена задана для характеристики номенклатуры. Требуется уточнить отбор источника.'
         if unit:data['source_data']['unit_warning']='Проверьте, что цена задана за одну единицу модели: '+str(unit)
         key=(data['model_ref'],data['price_type_ref'],currency)

@@ -107,6 +107,24 @@ class SourceTests(SimpleTestCase):
         self.assertIsNone(records([self.raw(price=None)])[0]['price'])
         self.assertIn('характеристики',records([self.raw()+('variant',)])[0]['source_data']['error'])
 
+    def test_binary_erp_references_are_hex_not_utf16(self):
+        from .services.model_ddp_source import KINDS, CURRENCY_TABLES
+        schema={
+            GOODS:{'Ссылка':'binary','Наименование':'nvarchar','Даичи_ГруппаПланирования':'nvarchar','Марка':'varbinary'},
+            PRICES:{'Номенклатура':'binary','ВидЦены':'binary','Валюта':'binary','Период':'datetime','Цена':'numeric','Единица':'binary','Характеристика':'binary'},
+            KINDS[0]:{'Ссылка':'binary','Наименование':'nvarchar'},
+            CURRENCY_TABLES[0]:{'Ссылка':'binary','Код':'varchar'}}
+        sql=build_sql(schema)
+        self.assertIn('CONVERT(varchar(max),p.[Номенклатура],2)',sql)
+        self.assertIn('CONVERT(varchar(max),n.[Ссылка],2)',sql)
+        self.assertIn('CONVERT(varchar(max),p.[Характеристика],2)',sql)
+        self.assertIn('CONVERT(varchar(max),p.[Единица],2)',sql)
+        self.assertIn('CONVERT(varchar(max),n.[Марка],2)',sql)
+        self.assertNotIn('CAST(p.[ВидЦены] AS nvarchar',sql)
+        self.assertIn('CAST(k.[Наименование] AS nvarchar(500))',sql)
+        raw=self.raw()+('00000000000000000000000000000000',)
+        self.assertNotIn('error',records([raw])[0]['source_data'])
+
     def test_diagnostics_redact_secrets(self):
         message=diagnostic_text(RuntimeError("PWD={secret;pass};UID=alice;SERVER=private;DATABASE=db; Login failed for user 'alice'"))
         for secret in ('secret','pass}','alice','private','db;'):
