@@ -45,7 +45,8 @@ WHERE s.name=? AND t.name=? AND ic.key_ordinal>0 ORDER BY i.index_id,ic.key_ordi
                 if name and name not in (model,kind,period) and fields[name] not in ('text','ntext','image'):include.append(name)
             sql='CREATE NONCLUSTERED INDEX [IX_Portal_PURCH_ModelKindPeriod] ON DataWH.erp.'+quoted(PRICES)+' ('+quoted(model)+','+quoted(kind)+','+quoted(period)+' DESC)'
             if include:sql+=' INCLUDE ('+','.join(quoted(c) for c in include)+')'
-            sql+=' WITH (ONLINE = ON (WAIT_AT_LOW_PRIORITY (MAX_DURATION = 1 MINUTES, ABORT_AFTER_WAIT = SELF)), MAXDOP = 2);'
+            sql+=' WITH (ONLINE = ON, MAXDOP = 2);'
+            sql='SET LOCK_TIMEOUT 60000; '+sql
             self.stdout.write(sql)
             if not options['apply']:
                 self.stdout.write('Для создания: manage.py optimize_purch_prices --apply. Для 117 млн строк нужны свободное место и журнал транзакций.');return

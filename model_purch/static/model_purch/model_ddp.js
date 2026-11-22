@@ -19,14 +19,15 @@
  let loading=false;
  async function loadPrices(form){
   if(loading)return;loading=true;
-  const panel=root.querySelector('[data-load-status]'),stage=panel.querySelector('[data-load-stage]'),timer=panel.querySelector('[data-load-time]'),count=panel.querySelector('[data-load-count]'),error=panel.querySelector('[data-load-error]'),bar=panel.querySelector('progress');
-  panel.hidden=false;stage.textContent='Подключение к DataWH…';count.textContent='';error.textContent='';bar.removeAttribute('value');
+  const panel=root.querySelector('[data-load-status]'),stage=panel.querySelector('[data-load-stage]'),timer=panel.querySelector('[data-load-time]'),count=panel.querySelector('[data-load-count]'),error=panel.querySelector('[data-load-error]'),warning=panel.querySelector('[data-load-warning]'),bar=panel.querySelector('progress');
+  panel.hidden=false;stage.textContent='Подключение к DataWH…';count.textContent='';error.textContent='';warning.textContent='';bar.removeAttribute('value');
   const buttons=[...root.querySelectorAll('button')].filter(button=>!button.disabled);buttons.forEach(button=>button.disabled=true);
   const started=Date.now(),interval=setInterval(()=>timer.textContent=' Время: '+Math.floor((Date.now()-started)/1000)+' с',1000);
   const show=item=>{
    if(item.error)throw new Error(item.error);
    if(item.stage)stage.textContent=item.stage;
    if(item.strategy)count.textContent=item.strategy;
+   if(item.warning)warning.textContent=item.warning;
    if(item.rows!==undefined)count.textContent=' Получено вариантов: '+item.rows;
    if(item.done){bar.max=1;bar.value=1;stage.textContent='Загружено '+item.rows+' вариантов. Обновите таблицу.';return true;}return false;
   };

@@ -59,13 +59,14 @@ class ModelDDPBrowserTests(StaticLiveServerTestCase):
             try:
                 page=browser.new_page()
                 page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
-                payload=[{'stage':'выполнение запроса PURCH'},{'stage':'чтение результата PURCH','rows':1000},{'done':True,'rows':1200}]
+                payload=[{'stage':'создание индекса пропущено','warning':'ONLINE недоступен: загрузка без индекса'},{'stage':'выполнение запроса PURCH'},{'stage':'чтение результата PURCH','rows':1000},{'done':True,'rows':1200}]
                 page.route('**/load-stream/',lambda route:route.fulfill(content_type='application/x-ndjson',body='\n'.join(json.dumps(event) for event in payload)+'\n'))
                 url=self.live_server_url+reverse('model_ddp_detail',args=[batch.pk])
                 page.goto(url)
                 page.get_by_role('button',name='Загрузить цены PURCH').click()
                 expect(page.locator('[data-load-status]')).to_be_visible()
                 expect(page.locator('[data-load-stage]')).to_contain_text('1200')
+                expect(page.locator('[data-load-warning]')).to_contain_text('ONLINE недоступен')
                 expect(page.get_by_role('link',name='Показать загруженные цены')).to_be_visible()
                 expect(page.locator('[data-load-status] progress')).to_have_attribute('value','1')
                 page.unroute('**/load-stream/')

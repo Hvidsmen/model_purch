@@ -132,7 +132,7 @@ def load_prices(as_of,progress=None,ensure_index=False):
             class IndexOutput(StringIO):
                 def write(self,message):
                     nonlocal stage
-                    if message.startswith('CREATE NONCLUSTERED INDEX'):
+                    if 'CREATE NONCLUSTERED INDEX' in message:
                         stage='создание индекса DataWH — первый запуск может занять длительное время'
                         progress(stage)
                     elif 'Подходящий индекс уже есть' in message:
@@ -140,7 +140,17 @@ def load_prices(as_of,progress=None,ensure_index=False):
                     elif 'Индекс DataWH создан' in message:
                         progress('индекс DataWH создан')
                     return super().write(message)
-            call_command('optimize_purch_prices',apply=True,stdout=IndexOutput())
+            from django.core.management.base import CommandError
+            try:
+                call_command('optimize_purch_prices',apply=True,stdout=IndexOutput())
+            except CommandError as error:
+                detail=str(error)
+                unsupported=(re.search(r'\b1712\b',detail) is not None or
+                             'WAIT_AT_LOW_PRIORITY' in detail and re.search(r'\b155\b',detail) is not None)
+                if not unsupported:raise
+                warning='SQL Server не поддерживает выбранное создание индекса ONLINE. Индекс не создан; загрузка продолжается. Для создания OFFLINE нужно отдельное окно обслуживания.'
+                logger.warning('PURCH index preparation skipped: %s',diagnostic_text(error))
+                progress('создание индекса пропущено',warning=warning)
             stage='подключение к DataWH'
         progress(stage)
         end=as_of+timedelta(days=1)
