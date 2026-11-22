@@ -1,5 +1,9 @@
 """Read-only ERP price snapshots. Resolve real column names before building SQL."""
 from collections import defaultdict
+import logging
+import re
+import traceback
+from uuid import uuid4
 from datetime import datetime,timedelta
 from decimal import Decimal,InvalidOperation
 from django.core.exceptions import ValidationError
@@ -68,24 +72,64 @@ def build_sql(schema):
     return sql
 
 
+logger=logging.getLogger(__name__)
+
+
+def diagnostic_text(error):
+    """Keep driver diagnostics useful without exposing connection credentials."""
+    message=str(error)
+    message=re.sub(r"(?i)\b(?:password|pwd|uid|user\s*id|username|access[_ ]?token|client[_ ]?secret|server|data\s*source|database|dsn)\s*=\s*(?:\{[^}]*\}|[^;\r\n]*)", "[скрыто]", message)
+    message=re.sub('(?i)(login failed for user|пользовател[ья])\\s*[\'"][^\'"]*[\'"]', '\\1 [скрыто]', message)
+    return message[:2000]
+
+
 def load_prices(as_of):
     connection=cursor=None
+    stage='подключение к DataWH'
+    sql=''
+    schema=defaultdict(dict)
     try:
         end=as_of+timedelta(days=1)
         connection,cursor=connect_database('vm-dwh','DataWH');connection.timeout=90
+        stage='чтение схемы ERP'
         cursor.execute('SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE FROM DataWH.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME IN ('+','.join('?' for _ in TABLES)+')','erp',*TABLES)
-        schema=defaultdict(dict)
         for table,name,kind in cursor.fetchall():schema[table][name]=kind
-        sql=build_sql(schema);cursor.execute(sql,end,'PURCH%');raw=cursor.fetchall()
+        stage='подготовка запроса PURCH'
+        missing=[table for table in (PRICES,GOODS) if not schema.get(table)]
+        if missing:raise ValidationError('Не найдены таблицы или нет доступа к их метаданным: '+', '.join(missing))
+        sql=build_sql(schema)
+        stage='выполнение запроса PURCH'
+        cursor.execute(sql,end,'PURCH%')
+        stage='чтение результата PURCH'
+        raw=cursor.fetchall()
         if len(raw)>50000:raise ValidationError('Источник вернул больше 50 000 вариантов. Нужен более узкий отбор источника.')
+        stage='обработка цен и характеристик'
         return records(raw)
-    except ValidationError:raise
-    except Exception:raise ValidationError('Не удалось загрузить цены PURCH из DataWH. Проверьте подключение и схему регистра; сохранённые данные не изменены.')
+    except Exception as error:
+        code=uuid4().hex[:12]
+        state=str(error.args[0]) if error.args and re.fullmatch(r'[A-Z0-9]{5}',str(error.args[0])) else ''
+        detail=' '.join(error.messages) if isinstance(error,ValidationError) else diagnostic_text(error)
+        logger.error('PURCH diagnostic=%s stage=%s date=%s SQLSTATE=%s exception=%s detail=%s schema=%s query=%s stack=%s',
+                     code,stage,as_of,state,type(error).__name__,detail,dict(schema),sql,
+                     ''.join(traceback.format_tb(error.__traceback__)))
+        hint={'08001':'Проверьте доступность SQL Server и параметры подключения.',
+              '28000':'Проверьте права учётной записи службы портала.',
+              '42S02':'Таблица или представление не найдено.',
+              '42S22':'В запросе указано отсутствующее поле.',
+              '42000':'Проверьте права SELECT и синтаксис запроса.',
+              'HYT00':'Истекло время ожидания SQL Server.',
+              'IM002':'На сервере портала не найден ODBC-драйвер или DSN.'}.get(state,'')
+        raise ValidationError(
+            f'Не удалось загрузить цены PURCH. Этап: {stage}. '
+            f'Код диагностики: {code}. '+(f'SQLSTATE: {state}. ' if state else '')+
+            hint+' '+detail[:800]+
+            ' Сохранённые данные не изменены. Подробности в серверном журнале по коду диагностики.'
+        ) from None
     finally:
-        try:
-            if cursor is not None:cursor.close()
-        finally:
-            if connection is not None:connection.close()
+        for resource in (cursor,connection):
+            if resource is not None:
+                try:resource.close()
+                except Exception:logger.warning('PURCH: не удалось закрыть соединение/курсор',exc_info=False)
 
 
 def records(raw):
