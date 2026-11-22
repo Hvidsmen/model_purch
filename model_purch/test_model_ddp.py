@@ -13,7 +13,7 @@ from base.models import UserProjectAccess
 from base.access import ANALYST
 from .models import ModelDDPCalculation, ModelDDPRow, ScenarioModel, Freight
 from .services.model_ddp import calculate, mutate, preview_token
-from .services.model_ddp_source import records, build_sql, load_prices, PRICES, GOODS
+from .services.model_ddp_source import records, build_sql, load_prices, PRICES, GOODS, diagnostic_text
 from .model_ddp_forms import RowForm
 from .goods_identity import planning_group_key
 
@@ -106,6 +106,36 @@ class SourceTests(SimpleTestCase):
         self.assertIn('Несколько',result['source_data']['error'])
         self.assertIsNone(records([self.raw(price=None)])[0]['price'])
         self.assertIn('характеристики',records([self.raw()+('variant',)])[0]['source_data']['error'])
+
+    def test_diagnostics_redact_secrets(self):
+        message=diagnostic_text(RuntimeError("PWD={secret;pass};UID=alice;SERVER=private;DATABASE=db; Login failed for user 'alice'"))
+        for secret in ('secret','pass}','alice','private','db;'):
+            self.assertNotIn(secret,message)
+        self.assertIn('[скрыто]',message)
+
+    def test_connection_failure_has_stage_id_state_and_safe_message(self):
+        with patch('model_purch.services.model_ddp_source.connect_database',side_effect=RuntimeError('08001','PWD=secret;SERVER=private;network unreachable')):
+            with self.assertLogs('model_purch.services.model_ddp_source',level='ERROR') as logs:
+                with self.assertRaises(ValidationError) as caught:load_prices(date(2026,11,22))
+        message=str(caught.exception)
+        self.assertIn('подключение к DataWH',message)
+        self.assertIn('SQLSTATE: 08001',message)
+        self.assertIn('Код диагностики:',message)
+        self.assertNotIn('secret',message)
+        self.assertNotIn('private',message)
+        self.assertNotIn('secret',' '.join(logs.output))
+
+    def test_missing_metadata_explains_permissions_and_closes_resources(self):
+        from unittest.mock import MagicMock
+        connection,cursor=MagicMock(),MagicMock()
+        cursor.fetchall.return_value=[]
+        with patch('model_purch.services.model_ddp_source.connect_database',return_value=(connection,cursor)):
+            with self.assertLogs('model_purch.services.model_ddp_source',level='ERROR'):
+                with self.assertRaises(ValidationError) as caught:load_prices(date(2026,11,22))
+        self.assertIn('подготовка запроса PURCH',str(caught.exception))
+        self.assertIn('нет доступа',str(caught.exception))
+        cursor.close.assert_called_once()
+        connection.close.assert_called_once()
 
     def test_schema_required_and_parameterized_cutoff(self):
         with self.assertRaises(ValidationError):build_sql({})
