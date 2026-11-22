@@ -117,13 +117,31 @@ def diagnostic_text(error):
     return message[:2000]
 
 
-def load_prices(as_of,progress=None):
+def load_prices(as_of,progress=None,ensure_index=False):
     progress=progress or (lambda stage,**data: None)
     connection=cursor=None
     stage='подключение к DataWH'
     sql=''
     schema=defaultdict(dict)
     try:
+        if ensure_index:
+            stage='проверка индекса DataWH'
+            progress(stage)
+            from django.core.management import call_command
+            from io import StringIO
+            class IndexOutput(StringIO):
+                def write(self,message):
+                    nonlocal stage
+                    if message.startswith('CREATE NONCLUSTERED INDEX'):
+                        stage='создание индекса DataWH — первый запуск может занять длительное время'
+                        progress(stage)
+                    elif 'Подходящий индекс уже есть' in message:
+                        progress('индекс DataWH уже подготовлен')
+                    elif 'Индекс DataWH создан' in message:
+                        progress('индекс DataWH создан')
+                    return super().write(message)
+            call_command('optimize_purch_prices',apply=True,stdout=IndexOutput())
+            stage='подключение к DataWH'
         progress(stage)
         end=as_of+timedelta(days=1)
         connection,cursor=connect_database('vm-dwh','DataWH');connection.timeout=90
