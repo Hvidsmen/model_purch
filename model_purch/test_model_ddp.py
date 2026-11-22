@@ -187,6 +187,15 @@ class SourceTests(SimpleTestCase):
         cursor=MagicMock()
         cursor.fetchall.return_value=[(table,col,kind) for table,cols in schema.items() for col,kind in cols.items()]
         cursor.fetchmany.side_effect=[[self.raw()+('',)],[]]
+        from django.core.management.base import CommandError
+        events=[]
+        with patch('model_purch.services.model_ddp_source.connect_database',return_value=(connection,cursor)), patch('django.core.management.call_command',side_effect=CommandError("42000 ONLINE Enterprise Edition (1712)")):
+            with self.assertLogs('model_purch.services.model_ddp_source',level='WARNING'):
+                result=load_prices(date(2026,11,22),progress=lambda stage,**data:events.append(data),ensure_index=True)
+        self.assertEqual(len(result),1)
+        self.assertTrue(any('warning' in event for event in events))
+        cursor.reset_mock()
+        cursor.fetchmany.side_effect=[[self.raw()+('',)],[]]
         with patch('model_purch.services.model_ddp_source.connect_database',return_value=(connection,cursor)):
             self.assertEqual(len(load_prices(date(2026,11,22))),1)
         self.assertEqual(cursor.execute.call_args.args[1:],(date(2026,11,23),'PURCH%'))
@@ -335,7 +344,8 @@ class IndexCommandTests(SimpleTestCase):
         self.assertIn('([Номенклатура],[ВидЦены],[Период] DESC)',sql)
         self.assertIn('INCLUDE ([Цена])',sql)
         self.assertIn('ONLINE = ON',sql)
-        self.assertIn('ABORT_AFTER_WAIT = SELF',sql)
+        self.assertIn('SET LOCK_TIMEOUT 60000',sql)
+        self.assertNotIn('WAIT_AT_LOW_PRIORITY',sql)
         connection.commit.assert_called_once()
 
     def test_equivalent_index_is_not_duplicated(self):
