@@ -18,6 +18,24 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_directory_and_group_card_table_headers_also_stay_fixed(self):
+        from playwright.sync_api import sync_playwright,expect
+        from django.urls import reverse
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page(viewport={'width':1400,'height':800})
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            paths=[reverse(name) for name in ('sales_planning_goods','sales_planning_groups')]+[reverse('sales_planning_group_detail',args=[self.group.pk])]
+            for path in paths:
+                page.goto(self.live_server_url+path)
+                page.evaluate("""() => {document.querySelectorAll('#portal-main details').forEach(el=>el.open=true);
+                  const table=[...document.querySelectorAll('.split-table-viewport>table')].find(el=>el.getBoundingClientRect().height>0),body=table.tBodies[0];
+                  const sample=[...body.rows].find(el=>getComputedStyle(el).display!=='none');for(let i=0;i<45;i++)body.append(sample.cloneNode(true));window.scrollTo(0,table.getBoundingClientRect().top+scrollY+120);
+                }""")
+                expect(page.locator('.split-floating-header:visible')).to_have_count(1)
+                self.assertAlmostEqual(page.locator('.split-floating-header:visible').bounding_box()['y'],0,delta=1)
+            browser.close()
+
     def test_page_scroll_keeps_header_aligned_and_month_toggle_works(self):
         from playwright.sync_api import sync_playwright,expect
         with sync_playwright() as driver:

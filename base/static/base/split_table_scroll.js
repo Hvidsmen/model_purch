@@ -13,7 +13,8 @@
     bar.addEventListener('scroll',()=>{if(viewport.scrollLeft!==bar.scrollLeft)viewport.scrollLeft=bar.scrollLeft;});
     viewport.addEventListener('scroll',()=>{if(bar.scrollLeft!==viewport.scrollLeft)bar.scrollLeft=viewport.scrollLeft;});
     const floating=document.createElement('div');floating.className='split-floating-header';floating.hidden=true;
-    (table.closest('[data-stock-workspace]')||table.closest('.split-workspace'))?.append(floating);
+    const owner=table.closest('[data-stock-workspace],.split-workspace,.split-groups,.split-goods,.split-channels,.portal-welcome')||document.getElementById('portal-main');
+    owner.append(floating);
     let signature='',controls=[];
     function fixedHeader(){
       const head=table.tHead,rect=viewport.getBoundingClientRect(),body=table.getBoundingClientRect(),h=head.getBoundingClientRect();
@@ -34,12 +35,15 @@
         });
       });
       const state=[...head.querySelectorAll('input,select')].map(el=>[el.value,el.checked,el.indeterminate]);
-      const next=head.outerHTML+'|'+widths.map(w=>w.toFixed(2)).join(',')+'|'+JSON.stringify(state);
+      const next=head.outerHTML+'|'+h.height.toFixed(2)+'|'+widths.map(w=>w.toFixed(2)).join(',')+'|'+JSON.stringify(state);
       if(next!==signature){
-        signature=next;const clone=table.cloneNode(false);clone.removeAttribute('id');
+        signature=next;const clone=table.cloneNode(false);clone.removeAttribute('id');const tableStyle=getComputedStyle(table);clone.style.borderCollapse=tableStyle.borderCollapse;clone.style.borderSpacing=tableStyle.borderSpacing;
         [...clone.attributes].filter(a=>a.name.startsWith('data-')).forEach(a=>clone.removeAttribute(a.name));
         const columns=document.createElement('colgroup');widths.forEach(w=>{const col=document.createElement('col');col.style.width=w+'px';columns.append(col);});
-        const copy=head.cloneNode(true);controls=[...head.querySelectorAll('button,[role=button],summary,a,input,select')];
+        const copy=head.cloneNode(true);
+        const originals=[...head.querySelectorAll('th,td')];
+        [...copy.querySelectorAll('th,td')].forEach((cell,i)=>{const style=getComputedStyle(originals[i]);for(const key of ['font','padding','lineHeight','whiteSpace','overflowWrap','textAlign','verticalAlign','color','backgroundColor','borderTop','borderRight','borderBottom','borderLeft'])cell.style[key]=style[key];});
+        controls=[...head.querySelectorAll('button,[role=button],summary,a,input,select')];
         const copiedControls=[...copy.querySelectorAll('button,[role=button],summary,a,input,select')];
         [copy,...copy.querySelectorAll('*')].forEach(el=>{[...el.attributes].filter(a=>a.name==='id'||a.name==='name'||a.name.startsWith('data-')&&!['data-split-metric-off','data-sales-channel-filtered'].includes(a.name)).forEach(a=>el.removeAttribute(a.name));});
         copiedControls.forEach((el,i)=>{el.dataset.floatingControl=String(i);if('checked' in el){el.checked=controls[i].checked;el.indeterminate=controls[i].indeterminate;}if('value' in el)el.value=controls[i].value;});
