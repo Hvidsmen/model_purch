@@ -42,7 +42,7 @@ def index(request):
 @login_required
 @require_http_methods(['GET','HEAD','POST'])
 def detail(request,pk):
-    access(request);batch=get_object_or_404(ModelDDPCalculation,pk=pk)
+    role=access(request);batch=get_object_or_404(ModelDDPCalculation,pk=pk)
     form=ParametersForm(initial=initial_parameters(batch));source_form=SourceForm();preview=None;token=''
     error=''
     if request.method=='POST':
@@ -53,7 +53,7 @@ def detail(request,pk):
                 source_form=SourceForm(request.POST)
                 if source_form.is_valid():preview,token=preview_token(batch,source_form.cleaned_data['source'],request.user)
             elif action=='copy':mutate(pk,batch.revision,'copy',user=request.user,token=request.POST.get('token',''))
-            elif action=='load':mutate(pk,batch.revision,'load',rows=load_prices(batch.as_of))
+            elif action=='load':mutate(pk,batch.revision,'load',rows=load_prices(batch.as_of,ensure_index=role==ADMIN))
             elif action=='parameters':
                 form=ParametersForm(request.POST)
                 if form.is_valid():
@@ -88,7 +88,7 @@ def detail(request,pk):
         values=parameters(batch,row);values.update(price_quantity=row.overrides.get('price_quantity') or '1',price_unit_confirmed=row.overrides.get('price_unit_confirmed',False))
         row.edit_form=RowForm(prefix='r'+str(row.pk),initial=values)
     preserved=request.GET.copy();preserved.pop('page',None)
-    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
+    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
 
 
 def safe(value):
@@ -138,7 +138,7 @@ def load_stream(request,pk):
     from django.db import close_old_connections
     from threading import Thread, Event
     from queue import Queue, Empty
-    access(request)
+    role=access(request)
     batch=get_object_or_404(ModelDDPCalculation,pk=pk)
     revision=request.POST.get('revision')
     if str(batch.revision)!=str(revision):
@@ -151,7 +151,7 @@ def load_stream(request,pk):
     def work():
         close_old_connections()
         try:
-            rows=load_prices(batch.as_of,progress=progress)
+            rows=load_prices(batch.as_of,progress=progress,ensure_index=role==ADMIN)
             progress('сохранение снимка',rows=len(rows))
             mutate(pk,revision,'load',rows=rows)
             queue.put({'done':True,'stage':'Загрузка завершена','rows':len(rows)})

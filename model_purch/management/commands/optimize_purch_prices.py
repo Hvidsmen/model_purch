@@ -15,6 +15,12 @@ class Command(BaseCommand):
         try:
             connection,cursor=connect_database('vm-dwh','DataWH')
             connection.timeout=0  # Index builds can exceed the application's query timeout.
+            cursor.execute("""DECLARE @result int;
+EXEC @result = DataWH.sys.sp_getapplock @Resource=N'Portal_PURCH_ModelKindPeriod',
+ @LockMode='Exclusive', @LockOwner='Session', @LockTimeout=0;
+SELECT @result;""")
+            if cursor.fetchone()[0] < 0:
+                raise CommandError('Подготовка индекса DataWH уже выполняется. Повторите загрузку после её завершения.')
             cursor.execute('SELECT COLUMN_NAME,DATA_TYPE FROM DataWH.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME=?','erp',PRICES)
             fields=dict(cursor.fetchall())
             model=column(fields,'НоменклатураСсылка','Номенклатура',required=True)

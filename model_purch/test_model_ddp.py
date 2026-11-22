@@ -10,7 +10,7 @@ from django.urls import reverse
 from openpyxl import load_workbook
 from base.testing import authorize_admin
 from base.models import UserProjectAccess
-from base.access import ANALYST
+from base.access import ANALYST, LOGISTICIAN
 from .models import ModelDDPCalculation, ModelDDPRow, ScenarioModel, Freight
 from .services.model_ddp import calculate, mutate, preview_token
 from .services.model_ddp_source import records, build_sql, load_prices, PRICES, GOODS, diagnostic_text
@@ -157,6 +157,22 @@ class SourceTests(SimpleTestCase):
         cursor.close.assert_called_once()
         connection.close.assert_called_once()
 
+    def test_admin_load_prepares_index_before_reading_prices(self):
+        from django.core.management.base import CommandError
+        def index(*args,**kwargs):
+            kwargs['stdout'].write('CREATE NONCLUSTERED INDEX test')
+            raise CommandError('ALTER permission denied')
+        stages=[]
+        with patch('django.core.management.call_command',side_effect=index) as command, patch('model_purch.services.model_ddp_source.connect_database') as connect:
+            with self.assertLogs('model_purch.services.model_ddp_source',level='ERROR'):
+                with self.assertRaises(ValidationError) as caught:
+                    load_prices(date(2026,11,22),progress=lambda stage,**data:stages.append(stage),ensure_index=True)
+        self.assertIn('создание индекса DataWH',str(caught.exception))
+        self.assertIn('ALTER permission denied',str(caught.exception))
+        self.assertEqual(command.call_args.args,('optimize_purch_prices',))
+        self.assertTrue(command.call_args.kwargs['apply'])
+        connect.assert_not_called()
+
     def test_schema_required_and_parameterized_cutoff(self):
         with self.assertRaises(ValidationError):build_sql({})
         schema={GOODS:{'Ссылка':'varchar','Наименование':'varchar'},PRICES:{
@@ -235,7 +251,8 @@ class SnapshotTests(TestCase):
 
     def test_stream_load_reports_actual_stages_and_completion(self):
         import json
-        def loader(as_of,progress):
+        def loader(as_of,progress,ensure_index=False):
+            self.assertTrue(ensure_index)
             progress('выполнение запроса PURCH')
             progress('чтение результата PURCH',rows=10)
             return []
@@ -247,6 +264,15 @@ class SnapshotTests(TestCase):
         self.assertEqual(events[-1]['rows'],0)
         self.assertTrue(any(event.get('rows')==10 for event in events))
         save.assert_called_once_with(self.batch.pk,'1','load',rows=[])
+
+    def test_logistician_load_does_not_run_ddl(self):
+        user=User.objects.create_user('loader-logistician')
+        UserProjectAccess.objects.create(user=user,project='purchases',role=LOGISTICIAN)
+        self.client.force_login(user)
+        with patch('model_purch.views_model_ddp.load_prices',return_value=[]) as loader, patch('model_purch.views_model_ddp.mutate'):
+            response=self.client.post(reverse('model_ddp_load_stream',args=[self.batch.pk]),{'revision':1})
+            list(response.streaming_content)
+        self.assertFalse(loader.call_args.kwargs['ensure_index'])
 
     def test_stream_load_failure_never_saves(self):
         import json
@@ -292,6 +318,7 @@ class IndexCommandTests(SimpleTestCase):
     def fixture(self):
         from unittest.mock import MagicMock
         connection,cursor=MagicMock(),MagicMock()
+        cursor.fetchone.return_value=(0,)
         cursor.fetchall.side_effect=[
             [('Номенклатура','binary'),('ВидЦены','binary'),('Период','datetime'),('Цена','numeric')],
             []]
@@ -320,5 +347,5 @@ class IndexCommandTests(SimpleTestCase):
             [('Existing',1,'ВидЦены',False,False),('Existing',2,'Номенклатура',False,False),('Existing',3,'Период',False,False)]]
         with patch('model_purch.management.commands.optimize_purch_prices.connect_database',return_value=(connection,cursor)):
             call_command('optimize_purch_prices',apply=True,stdout=StringIO())
-        self.assertEqual(cursor.execute.call_count,2)
+        self.assertEqual(cursor.execute.call_count,3)
         connection.commit.assert_not_called()
