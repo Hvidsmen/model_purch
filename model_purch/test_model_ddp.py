@@ -34,6 +34,11 @@ class CalculationTests(SimpleTestCase):
     def test_existing_formula_and_all_currencies(self):
         result = calculate(self.batch(), self.row())
         self.assertEqual(result['status'], 'ready')
+        steps={step['label']:step for step in result['steps']}
+        self.assertEqual(Decimal(steps['CIF']['value']),Decimal('120'))
+        self.assertEqual(Decimal(steps['Таможенный платёж']['value']),Decimal('13.2'))
+        self.assertIn('1000',steps['Фрахт']['formula'])
+        self.assertEqual(Decimal(steps['DDP RUB']['value']),Decimal('14320'))
         # CIF=120; customs=120*.1*1.1=13.2; warehouse=10.
         self.assertEqual(Decimal(result['ddp']['USD']), Decimal('143.2'))
         self.assertEqual(Decimal(result['ddp']['EUR']), Decimal('114.56'))
@@ -195,6 +200,7 @@ class SnapshotTests(TestCase):
         self.assertEqual(response.status_code,200)
         book=load_workbook(BytesIO(response.content))
         self.assertEqual(book['Помодельный DDP']['A2'].value,"'=1+1")
+        self.assertGreater(book['Этапы расчёта'].max_row,5)
         self.assertEqual(self.client.get(self.url,{'status':'ready','brand':'B'}).context['page'].paginator.count,1)
         self.assertEqual(self.client.get(self.url,{'status':'error'}).context['page'].paginator.count,0)
 
