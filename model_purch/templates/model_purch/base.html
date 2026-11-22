@@ -34,6 +34,7 @@
                             <i aria-hidden="true" class="bi bi-list-ul"></i> Товары
                         </a>
                     </li>
+                    <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'model_ddp_index' or request.resolver_match.url_name == 'model_ddp_detail' %}active{% endif %}" href="{% url 'model_ddp_index' %}">Помодельный DDP</a></li>
                     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'goods_groups' %}active{% endif %}" href="{% url 'goods_groups' %}">Группы и пошлины</a></li>
 
                     <li class="nav-item">
@@ -56,7 +57,7 @@
 {% block portal_content %}
     <div class="container-fluid px-4{% if portal_purchases_readonly %} purchases-readonly{% endif %}">
         {% if portal_purchases_readonly %}<p class="alert alert-info" role="status">Аналитик · Только просмотр и скачивание Excel. Изменение данных и запуск расчёта недоступны.</p>{% endif %}
-        <section class="workspace-panel" aria-label="Рабочий сценарий">
+        {% block workspace_panel %}<section class="workspace-panel" aria-label="Рабочий сценарий">
             <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
                 {% if workspace_shared_purchases %}<div><strong>Общий справочник закупок</strong><div class="text-muted small">Настройки используются во всех сценариях</div></div>{% else %}
                 <form method="get" action="{{ workspace_selection_url }}" class="d-flex align-items-end gap-2">
@@ -76,6 +77,7 @@
                 {% if not portal_purchases_readonly %}<details class="workspace-database"><summary>Активная база</summary><span id="active-database">{{ active_database }}</span></details>{% endif %}
             </div>
         </section>
+        {% endblock %}
         <!-- Глобальные сообщения -->
         {% if messages %}
             <div id="messagesContainer">

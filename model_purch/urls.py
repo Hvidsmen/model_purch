@@ -1,4 +1,5 @@
 from django.urls import path
+from . import views_model_ddp
 from . import views_warning_reviews
 from . import views, views_freight
 from . import  views_graph
@@ -6,6 +7,9 @@ from . import views_plan_parameters
 from . import views_goods_directory, views_goods_presence, views_scenario_setup
 from . import views_purchase_excel
 urlpatterns = [
+    path('model-ddp/', views_model_ddp.index, name='model_ddp_index'),
+    path('model-ddp/<int:pk>/', views_model_ddp.detail, name='model_ddp_detail'),
+    path('model-ddp/<int:pk>/export/', views_model_ddp.export, name='model_ddp_export'),
     path('pggoods/<int:pk>/review-warning/', views_warning_reviews.review_warning, name='review_goods_warning'),
     path('calculations/prepare-data/', views.prepare_calculation_data, name='prepare_calculation_data'),
     path('scenarios/<int:scenario_id>/dismiss-setup/', views_scenario_setup.dismiss_setup, name='dismiss_scenario_setup'),
