@@ -28,7 +28,7 @@ class CalculationTests(SimpleTestCase):
         return SimpleNamespace(parameters={**PARAMS, **kwargs}, rates=RATES.copy())
 
     def row(self, **kwargs):
-        return SimpleNamespace(**dict(dict(price=Decimal('100'), currency='USD', planning_group='G',
+        return SimpleNamespace(**dict(dict(price=Decimal('100'), currency='USD', planning_group='G', brand='B',
                                           source_data={'volume':'1'}, overrides={}), **kwargs))
 
     def test_existing_formula_and_all_currencies(self):
@@ -73,6 +73,12 @@ class CalculationTests(SimpleTestCase):
         b=self.batch(groups={planning_group_key('G'):{'container_volume':'100','duty_percent':'0','supply_type':'direct'}})
         self.assertEqual(Decimal(calculate(b,self.row())['ddp']['USD']),126)
         self.assertEqual(Decimal(calculate(b,self.row(overrides={'supply_type':'russian'}))['ddp']['USD']),100)
+
+    def test_model_logistics_override_does_not_change_other_models(self):
+        b=self.batch()
+        r=self.row(overrides={'price_per_container':'2000','warehouse_delivery_cost':'0'})
+        self.assertEqual(Decimal(calculate(b,r)['ddp']['USD']),Decimal('155.4'))
+        self.assertEqual(Decimal(calculate(b,self.row())['ddp']['USD']),Decimal('143.2'))
 
     def test_high_precision_erp_volume_remains_editable(self):
         f=RowForm({'volume':'0.123456789123','container_volume':'65','duty_percent':'10','supply_type':'direct'})
@@ -153,6 +159,17 @@ class SnapshotTests(TestCase):
         self.assertEqual(self.batch.parameters['price_per_container'],'1000.00')
         self.assertEqual(self.batch.source_scenario,source)
         with self.assertRaises(ValidationError):mutate(self.batch.pk,2,'copy',user=self.user,token=token)
+
+    def test_model_metadata_and_costs_are_saved_independently(self):
+        mutate(self.batch.pk,1,'rows',rows={self.row.pk:{
+            'purch':'Model supplier','planning_sales':'RAC','weight_kg':'12',
+            'stock_cnt_day':'90','percent_stock_end':'25','price_per_container':'2000'}})
+        self.row.refresh_from_db()
+        self.assertEqual(self.row.overrides['purch'],'Model supplier')
+        self.assertEqual(self.row.overrides['stock_cnt_day'],'90')
+        self.assertEqual(Decimal(self.row.result['ddp']['USD']),Decimal('165.4'))
+        self.batch.refresh_from_db()
+        self.assertEqual(self.batch.parameters['price_per_container'],'1000')
 
     def test_failed_load_does_not_change_saved_rows(self):
         with patch('model_purch.views_model_ddp.load_prices',side_effect=ValidationError('Unavailable')):

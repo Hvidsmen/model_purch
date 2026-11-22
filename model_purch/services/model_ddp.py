@@ -11,7 +11,8 @@ from ..goods_identity import planning_group_key
 from .pricing import apply_price,CALCULATED_FIELDS
 
 CURRENCIES=('USD','EUR','CNY','RUB')
-FIELDS=('volume','container_volume','duty_percent','supply_type','price_unit_confirmed','price_quantity')
+MODEL_FIELDS=('container_volume','duty_percent','supply_type','planning_sales','group_goods','brand','purch','kind_purch','stock_cnt_day','percent_stock_end')
+FIELDS=('volume','weight_kg','price_unit_confirmed','price_quantity',*MODEL_FIELDS,'price_per_container','customs_rate','warehouse_delivery_cost','foreign_delivery_cost','nr_customs_vat_rate')
 FREIGHT_FIELDS=('price_per_container','customs_rate','warehouse_delivery_cost','foreign_delivery_cost','nr_customs_vat_rate')
 SALT='purchase-model-ddp-parameters-v1'
 
@@ -27,9 +28,9 @@ def decimal(value,label,optional=False,positive=False):
 
 def parameters(batch,row,overrides=True):
     group=batch.parameters.get('groups',{}).get(planning_group_key(row.planning_group),{})
-    result={'volume':row.source_data.get('volume')}
-    for key in ('container_volume','duty_percent','supply_type'):
-        result[key]=group.get(key) if group.get(key) is not None else batch.parameters.get(key)
+    result={'volume':row.source_data.get('volume'),'weight_kg':row.source_data.get('weight'),'brand':row.brand}
+    for key in (*MODEL_FIELDS,*FREIGHT_FIELDS):
+        result[key]=group.get(key) if group.get(key) is not None else batch.parameters.get(key,result.get(key))
     if overrides:result.update({k:v for k,v in row.overrides.items() if v is not None})
     return result
 
@@ -56,7 +57,7 @@ def calculate(batch,row):
         good=SimpleNamespace(exw_usd=price,volume=volume,container_volume=container,duty_rate=duty,kddp=None)
         freight=None
         if supply!='russian':
-            values={key:decimal(batch.parameters.get(key),key) for key in FREIGHT_FIELDS}
+            values={key:decimal(inputs.get(key),key) for key in FREIGHT_FIELDS}
             if values['customs_rate']>100 or values['nr_customs_vat_rate']>100:raise ValidationError('Процентная ставка должна быть от 0 до 100.')
             freight=SimpleNamespace(**values)
         apply_price(good,freight,supply_type=supply)
@@ -75,10 +76,10 @@ def source_parameters(source):
     result={key:str(getattr(freight,key)) for key in FREIGHT_FIELDS}
     result['container_volume']=str(freight.volume_per_container);result['groups']={}
     suppliers=dict(Purch.objects.values_list('name_key','supply_type'))
-    for good in PGGoods.objects.filter(scenario_plan=source):
+    for good in PGGoods.objects.filter(scenario_plan=source).select_related('kind_purch'):
         key=planning_group_key(good.planning_group)
         if key in result['groups']:raise ValidationError('В источнике неоднозначные параметры группы '+good.planning_group)
-        result['groups'][key]={'name':good.planning_group,'container_volume':str(good.container_volume),'duty_percent':str(Decimal(str(good.duty_rate))*100),'supply_type':suppliers.get(planning_group_key(good.purch or ''))}
+        result['groups'][key]={'name':good.planning_group,'container_volume':str(good.container_volume),'duty_percent':str(Decimal(str(good.duty_rate))*100),'supply_type':suppliers.get(planning_group_key(good.purch or '')),**{k:getattr(good,k) for k in ('planning_sales','group_goods','brand','purch','stock_cnt_day','percent_stock_end')},'kind_purch':str(good.kind_purch)}
     return {'parameters':result,'source':{'id':source.pk,'name':source.name,'copied_at':timezone.now().isoformat()}}
 
 
