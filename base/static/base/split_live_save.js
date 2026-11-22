@@ -31,10 +31,10 @@
  }
  function capture(root){
   const controls=[...root.querySelectorAll('input[type=checkbox]:not([name]),[data-sales-search],[data-sales-check-filter],[data-stock-search],[data-stock-state],[data-reference-filter],[data-grid-search],[data-grid-channel],[data-month-unit],[data-composition-search],[data-group-picker-search]')]
-   .filter(el=>!el.closest('dialog')&&!el.hasAttribute('data-history-forecast-choice'))
+   .filter(el=>!el.closest('dialog,.split-floating-header')&&!el.hasAttribute('data-history-forecast-choice'))
    .map(el=>({selector:path(el,root),checked:el.type==='checkbox'?el.checked:null,value:el.value,selected:el.multiple?[...el.selectedOptions].map(o=>o.value):null}));
   return {controls,details:[...root.querySelectorAll('details')].map(el=>({selector:path(el,root),open:el.open})),
-   expanded:[...root.querySelectorAll('[aria-expanded="true"]')].map(el=>path(el,root)),
+   expanded:[...root.querySelectorAll('[aria-expanded="true"]')].filter(el=>!el.closest('.split-floating-header')).map(el=>path(el,root)),
    scroll:[...root.querySelectorAll('.split-table-viewport,.split-table-top-scroll')].map(el=>({selector:path(el,root),left:el.scrollLeft})),x:scrollX,y:scrollY};
  }
  function restore(root,state){

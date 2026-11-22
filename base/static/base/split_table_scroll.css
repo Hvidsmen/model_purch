@@ -9,3 +9,7 @@
 #portal-main :is(.split-table-viewport,.split-stock-workspace-scroll,.split-stock-table-scroll){
   height:auto!important;max-height:none!important;overflow-x:auto;overflow-y:hidden;
 }
+
+.split-floating-header{position:fixed;z-index:45;overflow:hidden;background:#f6f7fb;box-shadow:0 3px 8px #25375526;box-sizing:border-box;overscroll-behavior-x:contain}
+.split-floating-header[hidden]{display:none!important}.split-floating-header>table{margin:0!important;border-collapse:separate;border-spacing:0}.split-floating-header thead{position:static!important}.split-floating-header th{box-sizing:border-box}
+@media print{.split-floating-header{display:none!important}}
