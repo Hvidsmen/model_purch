@@ -454,3 +454,40 @@ class GoodsWarningReview(models.Model):
 
     class Meta:
         constraints = [models.UniqueConstraint(fields=['good', 'kind'], name='unique_goods_warning_review')]
+
+
+class ModelDDPCalculation(models.Model):
+    name = models.CharField(max_length=200)
+    as_of = models.DateField()
+    revision = models.PositiveIntegerField(default=1)
+    parameters = models.JSONField(default=dict)
+    rates = models.JSONField(default=dict)
+    source_metadata = models.JSONField(default=dict)
+    source_scenario = models.ForeignKey(ScenarioModel, null=True, blank=True, on_delete=models.PROTECT, related_name='model_ddp_calculations')
+    created_by = models.ForeignKey('auth.User', on_delete=models.PROTECT, related_name='+')
+    created_at = models.DateTimeField(auto_now_add=True)
+    loaded_at = models.DateTimeField(null=True, blank=True)
+    calculated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+
+
+class ModelDDPRow(models.Model):
+    calculation = models.ForeignKey(ModelDDPCalculation, on_delete=models.CASCADE, related_name='rows')
+    model_ref = models.CharField(max_length=255)
+    model_name = models.CharField(max_length=500)
+    planning_group = models.CharField(max_length=500, blank=True)
+    brand = models.CharField(max_length=255, blank=True)
+    price_type_ref = models.CharField(max_length=255, blank=True)
+    price_type = models.CharField(max_length=500, blank=True)
+    currency = models.CharField(max_length=100, blank=True)
+    price = models.DecimalField(max_digits=24, decimal_places=8, null=True, blank=True)
+    price_at = models.DateTimeField(null=True, blank=True)
+    source_data = models.JSONField(default=dict)
+    overrides = models.JSONField(default=dict)
+    result = models.JSONField(default=dict)
+
+    class Meta:
+        ordering = ['model_name', 'price_type', 'currency', 'pk']
+        constraints = [models.UniqueConstraint(fields=['calculation','model_ref','price_type_ref','currency'], name='unique_model_ddp_variant')]

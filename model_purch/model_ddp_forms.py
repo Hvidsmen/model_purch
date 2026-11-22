@@ -1,0 +1,35 @@
+from django import forms
+from decimal import Decimal
+from .models import ScenarioModel
+
+SUPPLY=(('','Не задан'),('direct','Прямой контракт'),('p2','P2'),('russian','Закупка РФ'))
+
+class CreateForm(forms.Form):
+    name=forms.CharField(label='Название расчёта',max_length=200)
+    as_of=forms.DateField(label='Дата цен и курсов',widget=forms.DateInput(attrs={'type':'date'},format='%Y-%m-%d'))
+
+class ParametersForm(forms.Form):
+    price_per_container=forms.DecimalField(label='Фрахт контейнера, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
+    customs_rate=forms.DecimalField(label='Таможенная ставка, %',min_value=0,max_value=100,max_digits=5,decimal_places=2,required=False)
+    warehouse_delivery_cost=forms.DecimalField(label='Доставка до склада за контейнер, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
+    foreign_delivery_cost=forms.DecimalField(label='Загран доставка без DDP за контейнер, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
+    nr_customs_vat_rate=forms.DecimalField(label='НР таможенного НДС, %',min_value=0,max_value=100,max_digits=5,decimal_places=2,required=False)
+    container_volume=forms.DecimalField(label='Общий объём контейнера, м³',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
+    duty_percent=forms.DecimalField(label='Общая пошлина, % (10 = 10%)',min_value=0,max_value=10000,max_digits=12,decimal_places=6,required=False)
+    supply_type=forms.ChoiceField(label='Общий тип поставки',choices=SUPPLY,required=False)
+    usd=forms.DecimalField(label='RUB за 1 USD',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
+    eur=forms.DecimalField(label='RUB за 1 EUR',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
+    cny=forms.DecimalField(label='RUB за 1 CNY',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
+
+class RowForm(forms.Form):
+    volume=forms.DecimalField(label='Объём модели, м³',min_value=0,max_digits=24,decimal_places=12,required=False)
+    container_volume=forms.DecimalField(label='Контейнер, м³',min_value=Decimal('.000001'),max_digits=24,decimal_places=12,required=False)
+    duty_percent=forms.DecimalField(label='Пошлина, %',min_value=0,max_value=10000,max_digits=12,decimal_places=6,required=False)
+    supply_type=forms.ChoiceField(label='Тип поставки',choices=SUPPLY,required=False)
+    price_quantity=forms.DecimalField(label='Единиц модели в цене',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
+    price_unit_confirmed=forms.BooleanField(label='Количество единиц в цене подтверждено',required=False)
+
+class SourceForm(forms.Form):
+    source=forms.ModelChoiceField(label='Сценарий закупок',queryset=ScenarioModel.objects.none())
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs);self.fields['source'].queryset=ScenarioModel.objects.order_by('-date_start_plan','-pk')
