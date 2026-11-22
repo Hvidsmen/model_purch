@@ -18,6 +18,43 @@ class StockWorkspaceBrowserTests(StaticLiveServerTestCase):
                 power.update(stock_indoor='0',stock_outdoor='0',incoming_indoor='0',incoming_outdoor='0')
         self.scenario.save(update_fields=['state'])
 
+    def test_page_scroll_keeps_header_aligned_and_month_toggle_works(self):
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as driver:
+            browser=driver.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE'),headless=True)
+            page=browser.new_page(viewport={'width':1300,'height':800});errors=[]
+            page.on('pageerror',lambda error:errors.append(str(error)))
+            page.context.add_cookies([{'name':'sessionid','value':self.client.cookies['sessionid'].value,'url':self.live_server_url}])
+            page.goto(self.live_server_url+self.url+'?tab=plan&brand_page=alpha')
+            page.evaluate("""() => {const table=document.querySelector('.split-plan-matrix'),body=table.tBodies[0];for(let i=0;i<45;i++)body.append(body.rows[0].cloneNode(true));window.scrollTo(0,table.getBoundingClientRect().top+scrollY+150);} """)
+            floating=page.locator('.split-floating-header').first
+            expect(floating).to_be_visible()
+            self.assertAlmostEqual(floating.bounding_box()['y'],0,delta=1)
+            page.evaluate("document.querySelector('.split-plan-matrix').parentElement.scrollLeft=160")
+            page.wait_for_timeout(100)
+            align=page.evaluate("""() => {
+              const source=document.querySelector('.split-table-viewport .split-plan-matrix thead'),copy=document.querySelector('.split-floating-header thead');
+              const a=[...source.querySelectorAll('th')].filter(el=>getComputedStyle(el).display!=='none'),b=[...copy.querySelectorAll('th')].filter(el=>getComputedStyle(el).display!=='none');
+              return a.every((el,i)=>Math.abs(el.getBoundingClientRect().width-b[i].getBoundingClientRect().width)<2&&Math.abs(el.getBoundingClientRect().left-b[i].getBoundingClientRect().left)<2);
+            }""")
+            self.assertTrue(align)
+            toggle=floating.get_by_role('button',name='План · итого',exact=False)
+            toggle.click()
+            expect(page.locator('.split-table-viewport [data-plan-month-toggle="all"]')).to_have_attribute('aria-expanded','true')
+            expect(floating).to_be_visible()
+            self.assertEqual(page.evaluate("document.querySelector('.split-table-viewport').scrollHeight<=document.querySelector('.split-table-viewport').clientHeight+1"),True)
+            page.screenshot(path='/tmp/fixed-page-header.png',full_page=False)
+            page.evaluate('window.scrollTo(0,0)');expect(floating).not_to_be_visible()
+            for query in ('tab=distribution&section=months','tab=distribution&section=powers','tab=stock&stock_step=opening','tab=composition'):
+                page.goto(self.live_server_url+self.url+'?'+query+'&brand_page=alpha')
+                page.evaluate("""() => {const table=document.querySelector('.split-table-viewport>table'),body=table.tBodies[0];const sample=[...body.rows].find(row=>getComputedStyle(row).display!=='none');for(let i=0;i<30;i++)body.append(sample.cloneNode(true));window.scrollTo(0,table.getBoundingClientRect().top+scrollY+150);} """)
+                expect(page.locator('.split-floating-header').first).to_be_visible()
+                if query=='tab=composition':
+                    page.locator('.split-floating-header').first.get_by_role('checkbox',name='Исключить все показанные группы',exact=True).check()
+                    expect(page.locator('.split-table-viewport [data-composition-remove-all]')).to_be_checked()
+            self.assertEqual(errors,[])
+            browser.close()
+
     def test_financial_values_stay_inside_cells_with_open_stock_columns(self):
         from playwright.sync_api import sync_playwright
         with sync_playwright() as driver:
