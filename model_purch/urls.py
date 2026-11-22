@@ -7,6 +7,7 @@ from . import views_plan_parameters
 from . import views_goods_directory, views_goods_presence, views_scenario_setup
 from . import views_purchase_excel
 urlpatterns = [
+    path('model-ddp/<int:pk>/load-stream/', views_model_ddp.load_stream, name='model_ddp_load_stream'),
     path('model-ddp/', views_model_ddp.index, name='model_ddp_index'),
     path('model-ddp/<int:pk>/', views_model_ddp.detail, name='model_ddp_detail'),
     path('model-ddp/<int:pk>/export/', views_model_ddp.export, name='model_ddp_export'),

@@ -48,3 +48,30 @@ class ModelDDPBrowserTests(StaticLiveServerTestCase):
                 page.screenshot(path='/tmp/model-ddp-browser.png',full_page=True)
                 self.assertEqual(errors,[])
             finally:browser.close()
+
+    def test_load_progress_stream_completion_and_error(self):
+        user=authorize_admin(self.client)
+        batch=ModelDDPCalculation.objects.create(name='Progress',as_of=date(2026,11,22),created_by=user)
+        from playwright.sync_api import sync_playwright,expect
+        import json
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None,headless=True)
+            try:
+                page=browser.new_page()
+                page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
+                payload=[{'stage':'выполнение запроса PURCH'},{'stage':'чтение результата PURCH','rows':1000},{'done':True,'rows':1200}]
+                page.route('**/load-stream/',lambda route:route.fulfill(content_type='application/x-ndjson',body='\n'.join(json.dumps(event) for event in payload)+'\n'))
+                url=self.live_server_url+reverse('model_ddp_detail',args=[batch.pk])
+                page.goto(url)
+                page.get_by_role('button',name='Загрузить цены PURCH').click()
+                expect(page.locator('[data-load-status]')).to_be_visible()
+                expect(page.locator('[data-load-stage]')).to_contain_text('1200')
+                expect(page.get_by_role('link',name='Показать загруженные цены')).to_be_visible()
+                expect(page.locator('[data-load-status] progress')).to_have_attribute('value','1')
+                page.unroute('**/load-stream/')
+                page.route('**/load-stream/',lambda route:route.fulfill(content_type='application/x-ndjson',body=json.dumps({'done':True,'error':'SQLSTATE 08001 test'})+'\n'))
+                page.goto(url)
+                page.get_by_role('button',name='Загрузить цены PURCH').click()
+                expect(page.locator('[data-load-error]')).to_contain_text('SQLSTATE 08001')
+                expect(page.get_by_role('button',name='Загрузить цены PURCH')).to_be_enabled()
+            finally:browser.close()

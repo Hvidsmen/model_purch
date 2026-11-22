@@ -42,12 +42,12 @@ def build_sql(schema):
     model=column(p,'НоменклатураСсылка','Номенклатура',required=True)
     kind=column(p,'ВидЦеныСсылка','ВидЦенСсылка','ТипЦенСсылка','ВидЦены','ВидЦен','ТипЦен',required=True)
     kind_text=column(p,'ВидЦены','ВидЦен','ТипЦен') or kind
-    joins='';kind_name=text('p',kind_text)
+    joins='';kind_table=None;kind_name=text('p',kind_text)
     for table in KINDS:
         c=schema.get(table,{})
         if 'Ссылка' in c and 'Наименование' in c:
-            types['k']=c
-            joins+=' LEFT JOIN DataWH.erp.'+quoted(table)+' k ON '+text('k','Ссылка')+'='+text('p',kind)
+            types['k']=c;kind_table=table
+            joins+=' LEFT JOIN DataWH.erp.'+quoted(table)+' k ON '+'k.[Ссылка]=p.'+quoted(kind)
             kind_name='COALESCE('+text('k','Наименование')+','+kind_name+')';break
     currency=column(p,'ВалютаСсылка','Валюта')
     currency_name=text('p',column(p,'Валюта') or currency)
@@ -57,7 +57,7 @@ def build_sql(schema):
             code=column(c,'БуквенныйКод','КодISO','Код','Наименование')
             if 'Ссылка' in c and code:
                 types['c']=c
-                joins+=' LEFT JOIN DataWH.erp.'+quoted(table)+' c ON '+text('c','Ссылка')+'='+text('p',currency)
+                joins+=' LEFT JOIN DataWH.erp.'+quoted(table)+' c ON '+'c.[Ссылка]=p.'+quoted(currency)
                 currency_name='COALESCE('+text('c',code)+','+currency_name+')';break
     period=column(p,'Период','Дата',required=True);price=column(p,'Цена',required=True)
     group=column(n,'Даичи_ГруппаПланирования','даичи_ГруппаПланирования','ГруппаПланирования','ГруппаПланированияНаименование')
@@ -72,12 +72,35 @@ def build_sql(schema):
     predicates=[]
     for flag in ('ЭтоГруппа','ПометкаУдаления'):
         if flag in n and n[flag] in ('bit','int','smallint','tinyint','numeric','decimal'):predicates.append('COALESCE(n.'+quoted(flag)+',0)=0')
+    if kind_table and n.get(ref)==p.get(model) and types['k'].get('Ссылка')==p.get(kind):
+        # Seek by the native model + price-kind keys; never rank the full history.
+        currency_join=''
+        for table in CURRENCY_TABLES:
+            c=schema.get(table,{})
+            code=column(c,'БуквенныйКод','КодISO','Код','Наименование')
+            if currency and 'Ссылка' in c and code:
+                currency_join=' LEFT JOIN DataWH.erp.'+quoted(table)+' c ON c.[Ссылка]=p.'+quoted(currency)
+                break
+        sql='SELECT TOP (50001) '+','.join((text('n',ref),text('n',name),text('n',group),text('n',brand),volume_sql,weight_sql))+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
+ FROM DataWH.erp.'''+quoted(GOODS)+''' n
+ OUTER APPLY (
+ SELECT '''+text('p',kind)+' kind_ref,'+text('k','Наименование')+' kind_name,'+currency_name+''' currency,
+ p.'''+quoted(price)+''' price,p.'''+quoted(period)+''' price_at,'''+text('p',unit)+''' price_unit,'''+text('p',characteristic)+''' characteristic
+ FROM DataWH.erp.'''+quoted(kind_table)+''' k
+ CROSS APPLY (
+ SELECT TOP (1) WITH TIES p.* FROM DataWH.erp.'''+quoted(PRICES)+''' p
+ WHERE p.'''+quoted(model)+'''=n.'''+quoted(ref)+''' AND p.'''+quoted(kind)+'''=k.[Ссылка]
+ AND p.'''+quoted(period)+''' < ? ORDER BY p.'''+quoted(period)+''' DESC
+ ) p '''+currency_join+'''
+ WHERE k.[Наименование] LIKE ?
+ ) x'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
+        return sql
     sql='''WITH prices AS (SELECT '''+text('p',model)+''' model_ref,'''+text('p',kind)+''' kind_ref,
  '''+kind_name+''' kind_name,'''+currency_name+''' currency,p.'''+quoted(price)+''' price,p.'''+quoted(period)+''' price_at,
  '''+text('p',unit)+''' price_unit,'''+text('p',characteristic)+''' characteristic,
  DENSE_RANK() OVER(PARTITION BY p.'''+quoted(model)+''',p.'''+quoted(kind)+''' ORDER BY p.'''+quoted(period)+''' DESC) latest
  FROM DataWH.erp.'''+quoted(PRICES)+''' p '''+joins+'''
- WHERE p.'''+quoted(period)+''' < ? AND '''+kind_name+''' LIKE ?)
+ WHERE p.'''+quoted(period)+''' < ? AND '''+('k.[Наименование]' if kind_table else 'p.'+quoted(kind_text))+''' LIKE ?)
  SELECT TOP (50001) '''+text('n',ref)+','+text('n',name)+','+text('n',group)+','+text('n',brand)+','+volume_sql+','+weight_sql+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
  FROM DataWH.erp.'''+quoted(GOODS)+''' n LEFT JOIN prices x ON x.model_ref='''+text('n',ref)+''' AND x.latest=1'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
     return sql
@@ -94,27 +117,41 @@ def diagnostic_text(error):
     return message[:2000]
 
 
-def load_prices(as_of):
+def load_prices(as_of,progress=None):
+    progress=progress or (lambda stage,**data: None)
     connection=cursor=None
     stage='подключение к DataWH'
     sql=''
     schema=defaultdict(dict)
     try:
+        progress(stage)
         end=as_of+timedelta(days=1)
         connection,cursor=connect_database('vm-dwh','DataWH');connection.timeout=90
         stage='чтение схемы ERP'
+        progress(stage)
         cursor.execute('SELECT TABLE_NAME,COLUMN_NAME,DATA_TYPE FROM DataWH.INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA=? AND TABLE_NAME IN ('+','.join('?' for _ in TABLES)+')','erp',*TABLES)
         for table,name,kind in cursor.fetchall():schema[table][name]=kind
         stage='подготовка запроса PURCH'
+        progress(stage)
         missing=[table for table in (PRICES,GOODS) if not schema.get(table)]
         if missing:raise ValidationError('Не найдены таблицы или нет доступа к их метаданным: '+', '.join(missing))
         sql=build_sql(schema)
+        progress('подготовка запроса PURCH',strategy='Поиск последних цен по ключам' if 'TOP (1) WITH TIES' in sql else 'Совместимый режим: ранжирование истории PURCH')
         stage='выполнение запроса PURCH'
+        progress(stage)
         cursor.execute(sql,end,'PURCH%')
         stage='чтение результата PURCH'
-        raw=cursor.fetchall()
+        progress(stage)
+        raw=[]
+        while True:
+            chunk=cursor.fetchmany(1000)
+            if not chunk:break
+            raw.extend(chunk)
+            progress(stage,rows=len(raw))
+            if len(raw)>50000:break
         if len(raw)>50000:raise ValidationError('Источник вернул больше 50 000 вариантов. Нужен более узкий отбор источника.')
         stage='обработка цен и характеристик'
+        progress(stage)
         return records(raw)
     except Exception as error:
         code=uuid4().hex[:12]

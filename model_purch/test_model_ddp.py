@@ -115,7 +115,9 @@ class SourceTests(SimpleTestCase):
             KINDS[0]:{'Ссылка':'binary','Наименование':'nvarchar'},
             CURRENCY_TABLES[0]:{'Ссылка':'binary','Код':'varchar'}}
         sql=build_sql(schema)
-        self.assertIn('CONVERT(varchar(max),p.[Номенклатура],2)',sql)
+        self.assertIn('p.[Номенклатура]=n.[Ссылка]',sql)
+        self.assertIn('TOP (1) WITH TIES',sql)
+        self.assertNotIn('DENSE_RANK()',sql)
         self.assertIn('CONVERT(varchar(max),n.[Ссылка],2)',sql)
         self.assertIn('CONVERT(varchar(max),p.[Характеристика],2)',sql)
         self.assertIn('CONVERT(varchar(max),p.[Единица],2)',sql)
@@ -167,9 +169,8 @@ class SourceTests(SimpleTestCase):
         connection=SimpleNamespace(timeout=0,close=lambda:None)
         from unittest.mock import MagicMock
         cursor=MagicMock()
-        cursor.fetchall.side_effect=[
-            [(table,col,kind) for table,cols in schema.items() for col,kind in cols.items()],
-            [self.raw()+('',)]]
+        cursor.fetchall.return_value=[(table,col,kind) for table,cols in schema.items() for col,kind in cols.items()]
+        cursor.fetchmany.side_effect=[[self.raw()+('',)],[]]
         with patch('model_purch.services.model_ddp_source.connect_database',return_value=(connection,cursor)):
             self.assertEqual(len(load_prices(date(2026,11,22))),1)
         self.assertEqual(cursor.execute.call_args.args[1:],(date(2026,11,23),'PURCH%'))
@@ -232,6 +233,29 @@ class SnapshotTests(TestCase):
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.revision,1)
 
+    def test_stream_load_reports_actual_stages_and_completion(self):
+        import json
+        def loader(as_of,progress):
+            progress('выполнение запроса PURCH')
+            progress('чтение результата PURCH',rows=10)
+            return []
+        with patch('model_purch.views_model_ddp.load_prices',side_effect=loader), patch('model_purch.views_model_ddp.mutate') as save:
+            response=self.client.post(reverse('model_ddp_load_stream',args=[self.batch.pk]),{'revision':1})
+            self.assertEqual(response.status_code,200)
+            events=[json.loads(line) for chunk in response.streaming_content for line in chunk.decode().splitlines()]
+        self.assertTrue(events[-1]['done'])
+        self.assertEqual(events[-1]['rows'],0)
+        self.assertTrue(any(event.get('rows')==10 for event in events))
+        save.assert_called_once_with(self.batch.pk,'1','load',rows=[])
+
+    def test_stream_load_failure_never_saves(self):
+        import json
+        with patch('model_purch.views_model_ddp.load_prices',side_effect=ValidationError('SQL failed')), patch('model_purch.views_model_ddp.mutate') as save:
+            response=self.client.post(reverse('model_ddp_load_stream',args=[self.batch.pk]),{'revision':1})
+            events=[json.loads(chunk.decode()) for chunk in response.streaming_content]
+        self.assertEqual(events[-1]['error'],'SQL failed')
+        save.assert_not_called()
+
     def test_other_batch_row_is_rejected(self):
         b=ModelDDPCalculation.objects.create(name='Other',as_of=self.batch.as_of,created_by=self.user)
         r=ModelDDPRow.objects.create(calculation=b,model_ref='x',model_name='X')
@@ -262,3 +286,39 @@ class SnapshotTests(TestCase):
         outsider=User.objects.create_user('outsider')
         self.client.force_login(outsider)
         self.assertEqual(self.client.get(self.url).status_code,403)
+
+
+class IndexCommandTests(SimpleTestCase):
+    def fixture(self):
+        from unittest.mock import MagicMock
+        connection,cursor=MagicMock(),MagicMock()
+        cursor.fetchall.side_effect=[
+            [('Номенклатура','binary'),('ВидЦены','binary'),('Период','datetime'),('Цена','numeric')],
+            []]
+        return connection,cursor
+
+    def test_apply_creates_online_covering_index_and_commits(self):
+        from django.core.management import call_command
+        from io import StringIO
+        connection,cursor=self.fixture()
+        cursor.nextset.return_value=False
+        with patch('model_purch.management.commands.optimize_purch_prices.connect_database',return_value=(connection,cursor)):
+            call_command('optimize_purch_prices',apply=True,stdout=StringIO())
+        sql=cursor.execute.call_args.args[0]
+        self.assertIn('([Номенклатура],[ВидЦены],[Период] DESC)',sql)
+        self.assertIn('INCLUDE ([Цена])',sql)
+        self.assertIn('ONLINE = ON',sql)
+        self.assertIn('ABORT_AFTER_WAIT = SELF',sql)
+        connection.commit.assert_called_once()
+
+    def test_equivalent_index_is_not_duplicated(self):
+        from django.core.management import call_command
+        from io import StringIO
+        connection,cursor=self.fixture()
+        cursor.fetchall.side_effect=[
+            [('Номенклатура','binary'),('ВидЦены','binary'),('Период','datetime')],
+            [('Existing',1,'ВидЦены',False,False),('Existing',2,'Номенклатура',False,False),('Existing',3,'Период',False,False)]]
+        with patch('model_purch.management.commands.optimize_purch_prices.connect_database',return_value=(connection,cursor)):
+            call_command('optimize_purch_prices',apply=True,stdout=StringIO())
+        self.assertEqual(cursor.execute.call_count,2)
+        connection.commit.assert_not_called()

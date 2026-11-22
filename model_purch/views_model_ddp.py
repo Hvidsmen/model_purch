@@ -128,3 +128,52 @@ def export(request,pk):
     sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions
     output=BytesIO();book.save(output);book.close()
     response=HttpResponse(output.getvalue(),content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');response['Content-Disposition']=f'attachment; filename="model-ddp-{pk}.xlsx"';return response
+
+
+@login_required
+@require_http_methods(['POST'])
+def load_stream(request,pk):
+    """Stream real loader milestones; SQL execution has no fabricated percentage."""
+    from django.http import StreamingHttpResponse, JsonResponse
+    from django.db import close_old_connections
+    from threading import Thread, Event
+    from queue import Queue, Empty
+    access(request)
+    batch=get_object_or_404(ModelDDPCalculation,pk=pk)
+    revision=request.POST.get('revision')
+    if str(batch.revision)!=str(revision):
+        return JsonResponse({'error':'Расчёт изменён в другой вкладке. Обновите страницу.'},status=409)
+    queue=Queue()
+    disconnected=Event()
+    def progress(stage,**data):
+        if disconnected.is_set():raise ValidationError('Загрузка прервана до сохранения.')
+        queue.put({'stage':stage,**data})
+    def work():
+        close_old_connections()
+        try:
+            rows=load_prices(batch.as_of,progress=progress)
+            progress('сохранение снимка',rows=len(rows))
+            mutate(pk,revision,'load',rows=rows)
+            queue.put({'done':True,'stage':'Загрузка завершена','rows':len(rows)})
+        except ValidationError as error:queue.put({'done':True,'error':' '.join(error.messages)})
+        except Exception:
+            import logging
+            from uuid import uuid4
+            code=uuid4().hex[:12]
+            logging.getLogger(__name__).error('PURCH save diagnostic=%s exception during snapshot save',code)
+            queue.put({'done':True,'error':'Ошибка сохранения снимка. Код диагностики: '+code})
+        finally:close_old_connections()
+    def events():
+        thread=Thread(target=work,daemon=True)
+        thread.start()
+        try:
+            while True:
+                try:item=queue.get(timeout=1)
+                except Empty:item={'heartbeat':True}
+                yield json.dumps(item,ensure_ascii=False)+'\n'
+                if item.get('done'):break
+        finally:disconnected.set()
+    response=StreamingHttpResponse(events(),content_type='application/x-ndjson')
+    response['Cache-Control']='no-cache, no-store'
+    response['X-Accel-Buffering']='no'
+    return response
