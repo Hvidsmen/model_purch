@@ -28,6 +28,20 @@ class RowForm(forms.Form):
     supply_type=forms.ChoiceField(label='Тип поставки',choices=SUPPLY,required=False)
     price_quantity=forms.DecimalField(label='Единиц модели в цене',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
     price_unit_confirmed=forms.BooleanField(label='Количество единиц в цене подтверждено',required=False)
+    weight_kg=forms.DecimalField(label='Вес модели, кг',min_value=0,max_digits=24,decimal_places=12,required=False)
+    planning_sales=forms.CharField(label='Группа планов продаж',max_length=255,required=False)
+    group_goods=forms.CharField(label='Группа товаров',max_length=255,required=False)
+    brand=forms.CharField(label='Марка',max_length=255,required=False)
+    purch=forms.CharField(label='Закупка / поставщик',max_length=255,required=False)
+    kind_purch=forms.CharField(label='Вид закупки',max_length=255,required=False)
+    stock_cnt_day=forms.IntegerField(label='Запас, дни',min_value=0,required=False)
+    percent_stock_end=forms.DecimalField(label='Остаток, %',min_value=0,max_value=100,max_digits=9,decimal_places=6,required=False)
+    price_per_container=forms.DecimalField(label='Фрахт контейнера, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
+    customs_rate=forms.DecimalField(label='Таможенная ставка, %',min_value=0,max_value=100,max_digits=5,decimal_places=2,required=False)
+    warehouse_delivery_cost=forms.DecimalField(label='Доставка до склада за контейнер, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
+    foreign_delivery_cost=forms.DecimalField(label='Загран доставка за контейнер, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
+    nr_customs_vat_rate=forms.DecimalField(label='НР таможенного НДС, %',min_value=0,max_value=100,max_digits=5,decimal_places=2,required=False)
+
 
 class SourceForm(forms.Form):
     source=forms.ModelChoiceField(label='Сценарий закупок',queryset=ScenarioModel.objects.none())
