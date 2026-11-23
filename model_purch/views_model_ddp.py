@@ -118,7 +118,7 @@ def detail(request,pk):
             if action not in ('preview','model_copy_preview') and (action not in ('parameters','workflow_calculate') or form.is_valid()):
                 messages.success(request,'Параметры моделей сохранены.' if action=='rows_save' else 'DDP рассчитан. Проверьте результаты и строки с ошибками.' if action in ('rows','calculate','parameters','workflow_calculate') else 'Данные сохранены. Перейдите к расчёту DDP.')
                 destination=request.GET.copy()
-                if action=='load':destination['step']='review'
+                if action=='load':destination['step']='calculate'
                 elif action in ('workflow_calculate','calculate','parameters'):destination['step']='calculate'
                 return redirect(reverse('model_ddp_detail',args=[pk])+'?'+destination.urlencode())
         except ValidationError as exc:error=' '.join(exc.messages)
@@ -152,8 +152,9 @@ def detail(request,pk):
     stats['missing_supplier']=sum(values['supply_type'] not in ('direct','p2','russian') for pk,values,text in entries)
     needs_recalculation=batch.needs_recalculation or bool(stats['pending']) or batch.source_metadata.get('directory_signature')!=directory_signature(batch)
     step=request.GET.get('step')
-    if step not in ('load','review','calculate'):
-        step='load' if not batch.loaded_at and not stats['total'] else 'review' if needs_recalculation else 'calculate'
+    if step=='review':step='calculate'  # Existing bookmarks use the same workspace.
+    if step not in ('load','calculate'):
+        step='load' if not batch.loaded_at and not stats['total'] else 'calculate'
     if request.method=='POST' and request.POST.get('action') in ('preview','copy','model_copy_preview','model_copy_apply','workflow_calculate','parameters'):
         step='calculate'
     rejected_edits=''
@@ -236,7 +237,7 @@ def load_stream(request,pk):
     revision=request.POST.get('revision')
     if str(batch.revision)!=str(revision):
         return JsonResponse({'error':'Расчёт изменён в другой вкладке. Обновите страницу.'},status=409)
-    next_query=request.GET.copy();next_query['step']='review'
+    next_query=request.GET.copy();next_query['step']='calculate'
     next_url=reverse('model_ddp_detail',args=[pk])+'?'+next_query.urlencode()
     queue=Queue()
     disconnected=Event()
