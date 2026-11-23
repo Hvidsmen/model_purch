@@ -241,3 +241,24 @@ class WorkflowTests(TestCase):
         self.assertEqual(params['currency'],['USD'])
         self.assertEqual(params['q'],['Model'])
         self.assertContains(self.client.get(self.url),'Все модели — фильтры не заданы')
+
+    def test_completed_setup_collapses_and_status_distinguishes_errors(self):
+        self.assertTrue(self.client.get(self.url).context['parameters_open'])
+        mutate(self.batch.pk,1,'calculate')
+        response=self.client.get(self.url)
+        self.assertFalse(response.context['parameters_open'])
+        self.assertEqual(response.context['calculation_status'],'Рассчитано без ошибок')
+        self.row.result={'status':'error','error':'Missing price'};self.row.save()
+        response=self.client.get(self.url)
+        self.assertEqual(response.context['calculation_status'],'Расчёт завершён · есть ошибки')
+        self.assertFalse(response.context['parameters_open'])
+        self.assertContains(response,'Скачать Excel по фильтрам')
+        self.assertContains(response,'Рассчитать весь набор')
+        self.assertEqual({f['key'] for f in response.context['primary_filters']},{'planning_group','brand'})
+        self.assertEqual(len(response.context['primary_filters'])+len(response.context['secondary_filters']),7)
+
+    def test_invalid_global_parameters_open_settings_and_preserve_inputs(self):
+        mutate(self.batch.pk,1,'calculate');self.batch.refresh_from_db()
+        response=self.client.post(self.url,self.data(usd='bad'))
+        self.assertTrue(response.context['parameters_open'])
+        self.assertTrue(response.context['parameters_form'].errors)
