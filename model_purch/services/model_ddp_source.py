@@ -78,12 +78,9 @@ def build_sql(schema):
     period=column(p,'Период','Дата',required=True);price=column(p,'Цена',required=True)
     group=column(n,'Даичи_ГруппаПланирования','даичи_ГруппаПланирования','ГруппаПланирования','ГруппаПланированияНаименование')
     brand=column(n,'Марка','Бренд','BrandName')
-    parent=column(n,'РодительСсылка',required=True)
-    types['parent_goods']=n
-    reference_joins=' INNER JOIN DataWH.erp.'+quoted(GOODS)+' parent_goods ON n.'+quoted(parent)+'=parent_goods.'+quoted(ref)
     classification_sql={
         'planning_sales':text('n',column(n,'Даичи_ГруппаПлановПродаж')),
-        'group_goods':text('parent_goods',name),
+        'group_goods':text('n',column(n,'бит_даичи_НаименованиеАх')),
         'brand':text('n',column(n,'Марка')),
         'purch':text('n',column(n,'Производитель')),
         'kind_purch':'NULL','supply_type':'NULL'}
@@ -106,7 +103,7 @@ def build_sql(schema):
                 currency_join=' LEFT JOIN DataWH.erp.'+quoted(table)+' c ON c.[Ссылка]=p.'+quoted(currency)
                 break
         sql='SELECT TOP ('+str(variant_limit()+1)+') '+','.join((text('n',ref),text('n',name),text('n',group),classification_sql['brand'],volume_sql,weight_sql))+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic'''+extra_sql+'''
- FROM DataWH.erp.'''+quoted(GOODS)+''' n '''+reference_joins+'''
+ FROM DataWH.erp.'''+quoted(GOODS)+''' n 
  CROSS APPLY (
  SELECT '''+text('p',kind)+' kind_ref,'+text('k','Наименование')+' kind_name,'+currency_name+''' currency,
  p.'''+quoted(price)+''' price,p.'''+quoted(period)+''' price_at,'''+text('p',unit)+''' price_unit,'''+text('p',characteristic)+''' characteristic
@@ -126,7 +123,7 @@ def build_sql(schema):
  FROM DataWH.erp.'''+quoted(PRICES)+''' p '''+joins+'''
  WHERE p.'''+quoted(period)+''' < ? AND '''+('k.[Наименование]' if kind_table else 'p.'+quoted(kind_text))+''' LIKE ?)
  SELECT TOP ('''+str(variant_limit()+1)+''') '''+text('n',ref)+','+text('n',name)+','+text('n',group)+','+classification_sql['brand']+','+volume_sql+','+weight_sql+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic'''+extra_sql+'''
- FROM DataWH.erp.'''+quoted(GOODS)+''' n '''+reference_joins+''' INNER JOIN prices x ON x.model_ref='''+text('n',ref)+''' AND x.latest=1'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
+ FROM DataWH.erp.'''+quoted(GOODS)+''' n  INNER JOIN prices x ON x.model_ref='''+text('n',ref)+''' AND x.latest=1'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
     return sql
 
 
