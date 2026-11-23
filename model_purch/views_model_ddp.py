@@ -16,7 +16,7 @@ from .models import ModelDDPCalculation
 from .model_ddp_forms import CreateForm,ParametersForm,RowForm,SourceForm,ModelCopyForm
 from .services.model_ddp import mutate,parameters,preview_token,FREIGHT_FIELDS,MODEL_FIELDS,directory_signature
 from .services.model_ddp_source import load_prices,empty_reference
-from .services.model_ddp_references import filter_data,catalog,apply_query_filters,visible_prices
+from .services.model_ddp_references import filter_data,catalog,apply_query_filters,visible_prices,FILTERS
 
 
 def access(request):
@@ -162,11 +162,32 @@ def detail(request,pk):
         if request.POST.get('action')=='workflow_calculate':rejected_edits='both'
         elif request.POST.get('action')=='rows_save':rejected_edits='rows'
     preserved=request.GET.copy();preserved.pop('page',None);preserved['step']=step
+    price_scope=request.GET.copy();price_scope.pop('price_check',None);price_scope.pop('page',None);price_scope['step']=step
+    clear_price_check_url=reverse('model_ddp_detail',args=[pk])+'?'+price_scope.urlencode()
+    clear_checks=request.GET.copy()
+    for key in ('price_check','status','page'):clear_checks.pop(key,None)
+    clear_checks['step']=step
+    clear_checks_url=reverse('model_ddp_detail',args=[pk])+'?'+clear_checks.urlencode()
+    active_filters=[]
+    filter_labels=dict(FILTERS)|{'q':'Поиск','currency':'Валюта цены','status':'Состояние','price_check':'Проверка цен'}
+    value_labels={'status':{'ready':'Рассчитан','partial':'Не все валюты','error':'Не хватает данных','pending':'Не рассчитан'},'price_check':{'zero':'Нулевая цена','missing':'Нет цены','currency':'Не определена валюта','supplier':'Не определён тип поставки'}}
+    for key,label in filter_labels.items():
+        value=request.GET.get(key,'')
+        if not value:continue
+        params=request.GET.copy();params.pop(key,None);params.pop('page',None);params['step']=step
+        active_filters.append({'label':label,'value':'Не заполнено' if value=='__empty__' else value_labels.get(key,{}).get(value,value),'url':reverse('model_ddp_detail',args=[pk])+'?'+params.urlencode()})
+    check_links=[]
+    for key,value,label,count in (('price_check','zero','Нулевая цена',stats['zero']),('price_check','currency','Не определена валюта',stats['missing_currency']),('price_check','supplier','Не определён тип поставки',stats['missing_supplier']),('status','error','Ошибок расчёта',stats['errors']),('status','partial','Не все валюты',stats['partial'])):
+        active=request.GET.get(key)==value
+        params=clear_checks.copy()
+        if not active:params[key]=value
+        check_links.append({'url':reverse('model_ddp_detail',args=[pk])+'?'+params.urlencode(),'label':label,'count':count,'active':active})
+
     step_urls={}
     for name in ('load','review','calculate'):
         params=preserved.copy();params['step']=name
         step_urls[name]=reverse('model_ddp_detail',args=[pk])+'?'+params.urlencode()
-    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'rejected_edits':rejected_edits,'expense_fields':[form[name] for name in FREIGHT_FIELDS],'rate_fields':[form[name] for name in ('usd','eur','cny')],'workflow_step':step,'step_urls':step_urls,'stats':stats,'needs_recalculation':needs_recalculation,'price_check':request.GET.get('price_check',''),'model_copy_form':model_copy_form,'model_copy_preview':model_copy_preview,'model_copy_token':model_copy_token,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'model_total':batch.rows.values('model_ref').distinct().count(),'total':batch.rows.count()})
+    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'clear_price_check_url':clear_price_check_url,'clear_checks_url':clear_checks_url,'check_links':check_links,'active_filters':active_filters,'reset_filters_url':reverse('model_ddp_detail',args=[pk])+'?step='+step,'rejected_edits':rejected_edits,'expense_fields':[form[name] for name in FREIGHT_FIELDS],'rate_fields':[form[name] for name in ('usd','eur','cny')],'workflow_step':step,'step_urls':step_urls,'stats':stats,'needs_recalculation':needs_recalculation,'price_check':request.GET.get('price_check',''),'model_copy_form':model_copy_form,'model_copy_preview':model_copy_preview,'model_copy_token':model_copy_token,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'model_total':batch.rows.values('model_ref').distinct().count(),'total':batch.rows.count()})
 
 
 def safe(value):
