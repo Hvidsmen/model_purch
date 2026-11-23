@@ -24,11 +24,12 @@
  const savedStale=root.dataset.calculationStale==='1',note=root.querySelector('[data-recalculation-note]'),noteText=note?.textContent||'';
  function showDirty(){
   const changed=dirty().length>0,stale=savedStale||changed;
-  if(status)status.textContent=changed?'Есть несохранённые параметры. «Рассчитать DDP» сохранит их и выполнит расчёт.':'';
+  if(status)status.textContent=changed?'Есть несохранённые параметры. «Рассчитать весь набор» сохранит их и выполнит расчёт.':'';
   root.classList.toggle('ddp-is-stale',stale);
-  const state=root.querySelector('[data-calculation-status]');if(state)state.textContent=Number(root.dataset.priceCount)===0?'Сначала загрузите цены':changed?'Изменены параметры — требуется пересчёт':stale?'Требуется пересчёт':'Рассчитано';
+  const state=root.querySelector('[data-calculation-status]');if(state)state.textContent=Number(root.dataset.priceCount)===0?'Сначала загрузите цены':changed?'Изменены параметры — требуется пересчёт':stale?'Требуется пересчёт':state.dataset.savedStatus;
   if(note){note.hidden=!changed&&(!savedStale||!root.dataset.lastCalculated);note.textContent=changed?'Параметры изменены. Старые результаты требуют пересчёта.':noteText;}
  }
+ root.querySelector('[data-copy-source]')?.addEventListener('change',event=>{root.querySelectorAll('[data-copy-pane]').forEach(pane=>pane.hidden=pane.dataset.copyPane!==event.target.value);});
  root.addEventListener('input',showDirty);root.addEventListener('change',showDirty);showDirty();
  root.addEventListener('change',event=>{if(event.target.closest('[data-model-copy-options]'))root.querySelector('[data-model-copy-preview]')?.remove();});
  root.addEventListener('keydown',event=>{

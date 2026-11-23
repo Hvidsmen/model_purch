@@ -6,7 +6,9 @@
  function update(){
   pending=false;
   const frame=viewport.getBoundingClientRect(),rect=table.getBoundingClientRect(),header=head.getBoundingClientRect();
-  const active=header.top<0&&rect.bottom>0&&frame.width>0&&header.height>0;
+  const panel=root.querySelector('[data-filter-panel]'),panelRect=panel?.getBoundingClientRect();
+  const offset=panelRect&&panelRect.top<=1?Math.max(0,panelRect.bottom):0;
+  const active=header.top<offset&&rect.bottom>offset&&frame.width>0&&header.height>0;
   floating.hidden=!active;if(!active)return;
   const widths=[...head.rows[0].cells].map(cell=>cell.getBoundingClientRect().width);
   const next=JSON.stringify(widths)+head.innerHTML;
@@ -25,13 +27,14 @@
    });
    floating.replaceChildren(copyTable);
   }
-  Object.assign(floating.style,{left:frame.left+'px',top:Math.min(0,rect.bottom-header.height)+'px',width:viewport.clientWidth+'px',height:header.height+'px'});
+  Object.assign(floating.style,{left:frame.left+'px',top:Math.min(offset,rect.bottom-header.height)+'px',width:viewport.clientWidth+'px',height:header.height+'px'});
   copyTable.style.transform='translateX('+(-viewport.scrollLeft)+'px)';
  }
  function schedule(){if(!pending){pending=true;requestAnimationFrame(update);}}
  window.addEventListener('scroll',schedule,{passive:true,capture:true});
  window.addEventListener('resize',schedule);
  floating.addEventListener('wheel',event=>{const dx=event.deltaX||(event.shiftKey?event.deltaY:0);if(dx){event.preventDefault();viewport.scrollLeft+=dx;schedule();}},{passive:false});
+ const panel=root.querySelector('[data-filter-panel]');if(panel)new ResizeObserver(schedule).observe(panel);
  new ResizeObserver(schedule).observe(table);new ResizeObserver(schedule).observe(viewport);
  document.fonts?.ready.then(schedule);schedule();
 })();
