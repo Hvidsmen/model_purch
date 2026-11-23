@@ -5,7 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
-from django.test import SimpleTestCase, TestCase
+from django.test import SimpleTestCase, TestCase, override_settings
 from django.urls import reverse
 from openpyxl import load_workbook
 from base.testing import authorize_admin
@@ -118,6 +118,9 @@ class SourceTests(SimpleTestCase):
         self.assertIn('p.[Номенклатура]=n.[Ссылка]',sql)
         self.assertIn('TOP (1) WITH TIES',sql)
         self.assertNotIn('DENSE_RANK()',sql)
+        self.assertNotIn('OUTER APPLY',sql)
+        self.assertIn('CROSS APPLY',sql)
+        self.assertIn('TOP (250001)',sql)
         self.assertIn('CONVERT(varchar(max),n.[Ссылка],2)',sql)
         self.assertIn('CONVERT(varchar(max),p.[Характеристика],2)',sql)
         self.assertIn('CONVERT(varchar(max),p.[Единица],2)',sql)
@@ -173,12 +176,23 @@ class SourceTests(SimpleTestCase):
         self.assertTrue(command.call_args.kwargs['apply'])
         connect.assert_not_called()
 
+    def test_price_variant_limit_is_configurable_and_validated(self):
+        schema={GOODS:{'Ссылка':'varchar','Наименование':'varchar'},PRICES:{
+            'Номенклатура':'varchar','ВидЦены':'varchar','Период':'datetime','Цена':'numeric'}}
+        with override_settings(MODEL_DDP_MAX_PRICE_VARIANTS=100000):
+            self.assertIn('TOP (100001)',build_sql(schema))
+        with override_settings(MODEL_DDP_MAX_PRICE_VARIANTS='100000; DROP TABLE'):
+            with self.assertRaises(ValidationError):build_sql(schema)
+
     def test_schema_required_and_parameterized_cutoff(self):
         with self.assertRaises(ValidationError):build_sql({})
         schema={GOODS:{'Ссылка':'varchar','Наименование':'varchar'},PRICES:{
             'Номенклатура':'varchar','ВидЦены':'varchar','Валюта':'varchar','Период':'datetime','Цена':'numeric'}}
         sql=build_sql(schema)
         self.assertIn('DENSE_RANK()',sql)
+        self.assertIn('INNER JOIN prices',sql)
+        self.assertNotIn('LEFT JOIN prices',sql)
+        self.assertIn('TOP (250001)',sql)
         self.assertIn(' < ? ',sql)
         self.assertIn(' LIKE ?',sql)
         self.assertNotIn('PURCH%',sql)
