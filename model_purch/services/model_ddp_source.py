@@ -15,13 +15,21 @@ PRICES='РегистрСведений.ЦеныНоменклатуры'
 GOODS='Справочники.Номенклатура'
 KINDS=('Справочники.ВидыЦен','Справочники.ВидыЦенНоменклатуры','Справочник.ВидыЦен')
 CURRENCY_TABLES=('Справочники.Валюты','Справочник.Валюты')
+CLASSIFICATION_COLUMNS={
+ 'planning_sales':('Даичи_ГруппаПлановПродаж',),
+ 'group_goods':(),
+ 'brand':('Марка',),
+ 'purch':('Производитель',),
+ 'kind_purch':(),
+ 'supply_type':()}
 TABLES=(PRICES,GOODS,*KINDS,*CURRENCY_TABLES)
 ALIASES={'usd':'USD','840':'USD','доллар сша':'USD','доллар':'USD','eur':'EUR','978':'EUR','евро':'EUR','cny':'CNY','156':'CNY','юань':'CNY','китайский юань':'CNY','руб':'RUB','rub':'RUB','rur':'RUB','643':'RUB','рубль':'RUB','российский рубль':'RUB'}
 
 
 def quoted(value):return '['+value.replace(']',']]')+']'
 def column(columns,*choices,required=False):
-    found=next((key for key in choices if key in columns),None)
+    names={key.casefold():key for key in columns}
+    found=next((names[key.casefold()] for key in choices if key.casefold() in names),None)
     if not found and required:raise ValidationError('В источнике не найдено поле: '+', '.join(choices))
     return found
 
@@ -70,10 +78,18 @@ def build_sql(schema):
     period=column(p,'Период','Дата',required=True);price=column(p,'Цена',required=True)
     group=column(n,'Даичи_ГруппаПланирования','даичи_ГруппаПланирования','ГруппаПланирования','ГруппаПланированияНаименование')
     brand=column(n,'Марка','Бренд','BrandName')
+    parent=column(n,'РодительСсылка',required=True)
+    types['parent_goods']=n
+    reference_joins=' INNER JOIN DataWH.erp.'+quoted(GOODS)+' parent_goods ON n.'+quoted(parent)+'=parent_goods.'+quoted(ref)
+    classification_sql={
+        'planning_sales':text('n',column(n,'Даичи_ГруппаПлановПродаж')),
+        'group_goods':text('parent_goods',name),
+        'brand':text('n',column(n,'Марка')),
+        'purch':text('n',column(n,'Производитель')),
+        'kind_purch':'NULL','supply_type':'NULL'}
+    extra_sql=','+','.join(classification_sql.values())
     volume=column(n,'ОбъемЧислитель','ОбъёмЧислитель','Объем','Объём','Volume')
-    denominator=column(n,'ОбъемЗнаменатель','ОбъёмЗнаменатель')
     volume_sql='n.'+quoted(volume) if volume else 'NULL'
-    if volume and denominator:volume_sql='CAST(n.'+quoted(volume)+' AS decimal(28,12))/NULLIF(n.'+quoted(denominator)+',0)'
     weight=column(n,'ВесЧислитель','Вес','Weight');weight_sql='n.'+quoted(weight) if weight else 'NULL'
     unit=column(p,'ЕдиницаИзмерения','Упаковка','Единица')
     characteristic=column(p,'ХарактеристикаНоменклатурыСсылка','ХарактеристикаНоменклатуры','Характеристика')
@@ -89,8 +105,8 @@ def build_sql(schema):
             if currency and 'Ссылка' in c and code:
                 currency_join=' LEFT JOIN DataWH.erp.'+quoted(table)+' c ON c.[Ссылка]=p.'+quoted(currency)
                 break
-        sql='SELECT TOP ('+str(variant_limit()+1)+') '+','.join((text('n',ref),text('n',name),text('n',group),text('n',brand),volume_sql,weight_sql))+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
- FROM DataWH.erp.'''+quoted(GOODS)+''' n
+        sql='SELECT TOP ('+str(variant_limit()+1)+') '+','.join((text('n',ref),text('n',name),text('n',group),classification_sql['brand'],volume_sql,weight_sql))+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic'''+extra_sql+'''
+ FROM DataWH.erp.'''+quoted(GOODS)+''' n '''+reference_joins+'''
  CROSS APPLY (
  SELECT '''+text('p',kind)+' kind_ref,'+text('k','Наименование')+' kind_name,'+currency_name+''' currency,
  p.'''+quoted(price)+''' price,p.'''+quoted(period)+''' price_at,'''+text('p',unit)+''' price_unit,'''+text('p',characteristic)+''' characteristic
@@ -109,8 +125,8 @@ def build_sql(schema):
  DENSE_RANK() OVER(PARTITION BY p.'''+quoted(model)+''',p.'''+quoted(kind)+''' ORDER BY p.'''+quoted(period)+''' DESC) latest
  FROM DataWH.erp.'''+quoted(PRICES)+''' p '''+joins+'''
  WHERE p.'''+quoted(period)+''' < ? AND '''+('k.[Наименование]' if kind_table else 'p.'+quoted(kind_text))+''' LIKE ?)
- SELECT TOP ('''+str(variant_limit()+1)+''') '''+text('n',ref)+','+text('n',name)+','+text('n',group)+','+text('n',brand)+','+volume_sql+','+weight_sql+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
- FROM DataWH.erp.'''+quoted(GOODS)+''' n INNER JOIN prices x ON x.model_ref='''+text('n',ref)+''' AND x.latest=1'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
+ SELECT TOP ('''+str(variant_limit()+1)+''') '''+text('n',ref)+','+text('n',name)+','+text('n',group)+','+classification_sql['brand']+','+volume_sql+','+weight_sql+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic'''+extra_sql+'''
+ FROM DataWH.erp.'''+quoted(GOODS)+''' n '''+reference_joins+''' INNER JOIN prices x ON x.model_ref='''+text('n',ref)+''' AND x.latest=1'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
     return sql
 
 
@@ -172,6 +188,10 @@ def load_prices(as_of,progress=None,ensure_index=False):
         missing=[table for table in (PRICES,GOODS) if not schema.get(table)]
         if missing:raise ValidationError('Не найдены таблицы или нет доступа к их метаданным: '+', '.join(missing))
         sql=build_sql(schema)
+        absent=[key for key,names in CLASSIFICATION_COLUMNS.items() if names and not column(schema[GOODS],*names)]
+        if absent:
+            labels={'planning_sales':'группа планов продаж','group_goods':'группа товаров','brand':'марка','purch':'закупка','kind_purch':'вид закупки','supply_type':'тип поставки'}
+            progress('чтение классификации номенклатуры',warning='В номенклатуре не найдены поля: '+', '.join(labels[key] for key in absent)+'. Эти значения не подставляются из сценария группы.')
         progress('подготовка запроса PURCH',strategy='Поиск последних цен по ключам' if 'TOP (1) WITH TIES' in sql else 'Совместимый режим: ранжирование истории PURCH')
         stage='выполнение запроса PURCH'
         progress(stage)
@@ -188,7 +208,25 @@ def load_prices(as_of,progress=None,ensure_index=False):
         if len(raw)>variant_limit():raise ValidationError(f'Число моделей/видов цены PURCH превышает лимит {variant_limit():,}. Снимок не усечён и не сохранён. Увеличьте MODEL_DDP_MAX_PRICE_VARIANTS на сервере или сузьте источник.')
         stage='обработка цен и характеристик'
         progress(stage)
-        return records(raw)
+        result=records(raw)
+        from ..models import Purch
+        from ..goods_identity import planning_group_key
+        suppliers={item.name_key:item for item in Purch.objects.select_related('kind_purch')}
+        missing_suppliers=set();missing_kinds=set()
+        for row in result:
+            classification=row['source_data'].setdefault('classification',{})
+            supplier=suppliers.get(planning_group_key(classification.get('purch') or ''))
+            if supplier:
+                classification['supply_type']=supplier.supply_type
+                classification['kind_purch']=str(supplier.kind_purch) if supplier.kind_purch_id else None
+                row['source_data']['supplier_id']=supplier.pk
+                if not supplier.kind_purch_id:missing_kinds.add(supplier.name)
+            else:
+                classification['supply_type']=None;classification['kind_purch']=None
+                missing_suppliers.add(classification.get('purch') or '(производитель не заполнен)')
+        if missing_suppliers:progress('сопоставление поставщиков',warning='Не найдены поставщики: '+', '.join(sorted(missing_suppliers))[:700]+'. Тип поставки и вид закупки не подставлены.')
+        if missing_kinds:progress('сопоставление поставщиков',warning='В карточках поставщиков не заполнен вид закупки: '+', '.join(sorted(missing_kinds))[:700])
+        return result
     except Exception as error:
         code=uuid4().hex[:12]
         state=str(error.args[0]) if error.args and re.fullmatch(r'[A-Z0-9]{5}',str(error.args[0])) else ''
@@ -233,6 +271,12 @@ def records(raw):
         data={'model_ref':str(ref),'model_name':str(name),'planning_group':str(group or ''),'brand':str(brand or ''),
               'price_type_ref':str(kind_ref or ''),'price_type':str(kind_name or ''),'currency':currency,'price':None,'price_at':None,
               'source_data':{'volume':None,'weight':None,'unit':str(unit or '')}}
+        if len(record)>=13+len(CLASSIFICATION_COLUMNS):
+            data['source_data']['classification']={key:None if value is None or empty_reference(value) else str(value).strip() for key,value in zip(CLASSIFICATION_COLUMNS,record[13:])}
+            supply=data['source_data']['classification'].get('supply_type')
+            if supply:
+                mapped={'direct':'direct','прямой контракт':'direct','прямая':'direct','p2':'p2','р2':'p2','russian':'russian','закупка рф':'russian','рф':'russian'}.get(supply.casefold())
+                data['source_data']['classification']['supply_type']=mapped
         try:
             if price is not None:
                 value=Decimal(str(price))

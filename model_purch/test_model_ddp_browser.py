@@ -15,7 +15,7 @@ class ModelDDPBrowserTests(StaticLiveServerTestCase):
     def test_calculation_edit_guard_and_scenario_snapshot(self):
         user=authorize_admin(self.client)
         batch=ModelDDPCalculation.objects.create(name='DDP моделей',as_of=date(2026,11,22),created_by=user,parameters=PARAMS,rates=RATES)
-        row=ModelDDPRow.objects.create(calculation=batch,model_ref='m',model_name='Внутренний блок',price_type='PURCH USD',currency='USD',price=100,source_data={'volume':'1'})
+        row=ModelDDPRow.objects.create(calculation=batch,model_ref='m',model_name='Внутренний блок',price_type='PURCH USD',currency='USD',price=100,source_data={'volume':'1','classification':{'supply_type':'p2'}})
         source=ScenarioModel.objects.create(name='Логистика 2027',date_start_plan=date(2027,1,1),date_end_plan=date(2027,12,31))
         Freight.objects.create(scenario=source,price_per_container=1200)
         from playwright.sync_api import sync_playwright, expect

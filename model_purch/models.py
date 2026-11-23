@@ -341,6 +341,7 @@ class Purch(models.Model):
         RUSSIAN = 'russian', 'Закупка РФ'
 
     supply_type = models.CharField('Тип поставки', max_length=16, choices=SupplyType.choices, default=SupplyType.P2)
+    kind_purch = models.ForeignKey(KindPurch, null=True, blank=True, on_delete=models.PROTECT, verbose_name='Вид закупки')
 
     def clean(self):
         super().clean()

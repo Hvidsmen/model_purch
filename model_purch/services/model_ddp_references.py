@@ -7,12 +7,12 @@ FILTERS=(('planning_group','Группа планирования'),('planning_s
          ('group_goods','Группа товаров'),('brand','Марка'),('purch','Закупка'),
          ('kind_purch','Вид закупки'),('supply_type','Тип поставки'))
 def catalog(batch):
-    key=f'model-ddp-reference-v1:{batch.pk}:{batch.created_at.isoformat()}:{batch.revision}'
+    key=f'model-ddp-reference-v2:{batch.pk}:{batch.created_at.isoformat()}:{batch.revision}'
     found=cache.get(key)
     if found is not None:return found
     entries=[];options={key:set() for key,label in FILTERS}
-    for data in batch.rows.values('pk','planning_group','brand','overrides','model_name','price_type').iterator(chunk_size=1000):
-        row=SimpleNamespace(source_data={},**data)
+    for data in batch.rows.values('pk','planning_group','brand','overrides','model_name','price_type','source_data').iterator(chunk_size=1000):
+        row=SimpleNamespace(**data)
         p=parameters(batch,row)
         effective={key:str(data['planning_group'] if key=='planning_group' else p.get(key) or '') for key,label in FILTERS}
         for name,value in effective.items():

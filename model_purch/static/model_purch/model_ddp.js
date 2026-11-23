@@ -27,7 +27,7 @@
    if(item.error)throw new Error(item.error);
    if(item.stage)stage.textContent=item.stage;
    if(item.strategy)count.textContent=item.strategy;
-   if(item.warning)warning.textContent=item.warning;
+   if(item.warning)warning.textContent+=(warning.textContent?'\n':'')+item.warning;
    if(item.rows!==undefined)count.textContent=' Получено вариантов: '+item.rows;
    if(item.done){bar.max=1;bar.value=1;stage.textContent='Загружено '+item.rows+' вариантов. Обновите таблицу.';return true;}return false;
   };

@@ -126,12 +126,14 @@ def export_scenario(request, scenario, connection_string):
             ('Scenario', ScenarioModel, set()),
             ('Freight', Freight, {'scenario'}),
             ('ScenarioPlanSales', ScenarioPlanSales, {'scenario_model'}),
-            ('Purch', Purch, set()),
+            ('Purch', Purch, {'kind_purch'}),
             ('PurchPay', PurchPay, {'purch', 'kind_lag_pay'}),
             ('PGGoods', PGGoods, {'scenario_plan', 'kind_purch'}),
             ('KindLagPay', KindLagPay, set()),
         ]:
             ensure_model_columns(cursor, table, model, relations, {'name_key'} if model is Purch else ())
+        ensure_column(cursor, 'Purch', 'kind_purch_id', 'INT')
+        ensure_column(cursor, 'Purch', 'kind_purch', 'NVARCHAR(255)')
         ensure_column(cursor, 'PurchPay', 'kind_lag_pay_id', 'INT')
         ensure_column(cursor, 'PurchPay', 'kind_lag_pay', 'NVARCHAR(255)')
         conn.commit()
@@ -266,6 +268,7 @@ def export_scenario(request, scenario, connection_string):
                     raise RuntimeError('SQL Server не вернул ID экспортированной закупки.')
 
                 if purch_id is not None:
+                    cursor.execute('UPDATE portal.Purch SET kind_purch_id=?, kind_purch=? WHERE id=?', purch.kind_purch_id, str(purch.kind_purch) if purch.kind_purch_id else None, purch_id)
                     export_additional_fields(cursor, 'Purch', purch, {'name', 'lag_income', 'name_key'}, {'id': purch_id})
                     # Удаляем старые платежи этой закупки в этом сценарии
                     cursor.execute("""

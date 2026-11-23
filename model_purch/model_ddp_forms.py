@@ -16,7 +16,6 @@ class ParametersForm(forms.Form):
     nr_customs_vat_rate=forms.DecimalField(label='НР таможенного НДС, %',min_value=0,max_value=100,max_digits=5,decimal_places=2,required=False)
     container_volume=forms.DecimalField(label='Общий объём контейнера, м³',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
     duty_percent=forms.DecimalField(label='Общая пошлина, % (10 = 10%)',min_value=0,max_value=10000,max_digits=12,decimal_places=6,required=False)
-    supply_type=forms.ChoiceField(label='Общий тип поставки',choices=SUPPLY,required=False)
     usd=forms.DecimalField(label='RUB за 1 USD',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
     eur=forms.DecimalField(label='RUB за 1 EUR',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
     cny=forms.DecimalField(label='RUB за 1 CNY',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
