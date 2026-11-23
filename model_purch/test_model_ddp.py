@@ -133,7 +133,7 @@ class SourceTests(SimpleTestCase):
     def test_binary_erp_references_are_hex_not_utf16(self):
         from .services.model_ddp_source import KINDS, CURRENCY_TABLES
         schema={
-            GOODS:{'Ссылка':'binary','Наименование':'nvarchar','РодительСсылка':'binary','Даичи_ГруппаПланирования':'nvarchar','Марка':'varbinary'},
+            GOODS:{'Ссылка':'binary','Наименование':'nvarchar','бит_даичи_НаименованиеАх':'nvarchar','Даичи_ГруппаПланирования':'nvarchar','Марка':'varbinary'},
             PRICES:{'Номенклатура':'binary','ВидЦены':'binary','Валюта':'binary','Период':'datetime','Цена':'numeric','Единица':'binary','Характеристика':'binary'},
             KINDS[0]:{'Ссылка':'binary','Наименование':'nvarchar','РодительСсылка':'binary'},
             CURRENCY_TABLES[0]:{'Ссылка':'binary','Код':'varchar'}}
@@ -143,6 +143,8 @@ class SourceTests(SimpleTestCase):
         self.assertNotIn('DENSE_RANK()',sql)
         self.assertNotIn('OUTER APPLY',sql)
         self.assertIn('CROSS APPLY',sql)
+        self.assertIn('n.[бит_даичи_НаименованиеАх]',sql)
+        self.assertNotIn('parent_goods',sql)
         self.assertIn('TOP (250001)',sql)
         self.assertIn('CONVERT(varchar(max),n.[Ссылка],2)',sql)
         self.assertIn('CONVERT(varchar(max),p.[Характеристика],2)',sql)
@@ -154,12 +156,13 @@ class SourceTests(SimpleTestCase):
         self.assertNotIn('error',records([raw])[0]['source_data'])
 
     def test_user_nomenclature_query_fields(self):
-        schema={GOODS:{'Ссылка':'binary','РодительСсылка':'binary','Наименование':'nvarchar','Даичи_ГруппаПлановПродаж':'nvarchar','Марка':'nvarchar','Производитель':'nvarchar','ОбъемЧислитель':'numeric','ВесЧислитель':'numeric'},
+        schema={GOODS:{'Ссылка':'binary','бит_даичи_НаименованиеАх':'nvarchar','Наименование':'nvarchar','Даичи_ГруппаПлановПродаж':'nvarchar','Марка':'nvarchar','Производитель':'nvarchar','ОбъемЧислитель':'numeric','ВесЧислитель':'numeric'},
                 PRICES:{'Номенклатура':'binary','ВидЦены':'nvarchar','Период':'datetime','Цена':'numeric'}}
         sql=build_sql(schema)
         self.assertIn('n.[Даичи_ГруппаПлановПродаж]',sql)
-        self.assertIn('parent_goods.[Наименование]',sql)
-        self.assertIn('n.[РодительСсылка]=parent_goods.[Ссылка]',sql)
+        self.assertIn('n.[бит_даичи_НаименованиеАх]',sql)
+        self.assertNotIn('parent_goods',sql)
+        self.assertNotIn('РодительСсылка',sql)
         self.assertIn('n.[Производитель]',sql)
         self.assertIn('n.[ОбъемЧислитель]',sql)
         row=records([self.raw()+('', 'ERP sales','ERP goods','ERP brand','ERP supplier',None,None)])[0]
