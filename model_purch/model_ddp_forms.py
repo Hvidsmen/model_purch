@@ -42,8 +42,6 @@ class RowForm(forms.Form):
     brand=forms.CharField(label='Марка',max_length=255,required=False)
     purch=forms.CharField(label='Закупка / поставщик',max_length=255,required=False)
     kind_purch=forms.CharField(label='Вид закупки',max_length=255,required=False)
-    stock_cnt_day=forms.IntegerField(label='Запас, дни',min_value=0,required=False)
-    percent_stock_end=forms.DecimalField(label='Остаток, %',min_value=0,max_value=100,max_digits=9,decimal_places=6,required=False)
     price_per_container=forms.DecimalField(label='Фрахт контейнера, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
     customs_rate=forms.DecimalField(label='Таможенная ставка, %',min_value=0,max_value=100,max_digits=5,decimal_places=2,required=False)
     warehouse_delivery_cost=forms.DecimalField(label='Доставка до склада за контейнер, USD',min_value=0,max_digits=18,decimal_places=2,required=False)
