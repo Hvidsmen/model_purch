@@ -2,11 +2,12 @@
  const root=document.querySelector('.model-ddp');if(!root)return;
  const diagnosticsKey='model-ddp-load:'+root.dataset.calculationId;
  try{const stored=sessionStorage.getItem(diagnosticsKey),saved=root.querySelector('[data-saved-load-diagnostics]');if(stored&&saved){saved.hidden=false;saved.querySelector('p').textContent=stored;}}catch(_){}
+ const initialStep=root.dataset.workflowStep;
  const setStep=(name,updateHistory=false)=>{
-  if(!['load','review','calculate'].includes(name))return;
+  if(name==='review')name='calculate';
+  if(!['load','calculate'].includes(name))return;
   root.dataset.workflowStep=name;
   root.querySelectorAll('[data-step-panel]').forEach(panel=>panel.hidden=!panel.dataset.stepPanel.split(' ').includes(name));
-  root.querySelectorAll('[data-review-only]').forEach(el=>el.hidden=name!=='review');
   root.querySelectorAll('[data-calculate-only]').forEach(el=>el.hidden=name!=='calculate');
   root.querySelectorAll('[data-current-step]').forEach(el=>el.value=name);
   root.querySelectorAll('.ddp-workflow [data-step-link]').forEach(link=>{if(link.dataset.stepLink===name)link.setAttribute('aria-current','step');else link.removeAttribute('aria-current');});
@@ -15,7 +16,7 @@
  };
  setStep(root.dataset.workflowStep);
  root.addEventListener('click',event=>{const link=event.target.closest('[data-step-link]');if(!link||event.ctrlKey||event.metaKey||event.shiftKey)return;event.preventDefault();if(loading)return;setStep(link.dataset.stepLink,true);root.querySelector('.ddp-workflow')?.scrollIntoView({block:'start'});});
- window.addEventListener('popstate',()=>setStep(new URL(window.location.href).searchParams.get('step')||'load'));
+ window.addEventListener('popstate',()=>setStep(new URL(window.location.href).searchParams.get('step')||initialStep));
  const forms=[...root.querySelectorAll('[data-ddp-edit]')],status=root.querySelector('[data-ddp-dirty-status]');let leaving=false;
  const snapshot=form=>JSON.stringify([...new FormData(form)].filter(([key])=>key!=='csrfmiddlewaretoken'));
  const original=new Map(forms.map(form=>[form,snapshot(form)]));

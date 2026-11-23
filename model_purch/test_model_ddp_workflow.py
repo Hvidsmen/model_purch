@@ -24,10 +24,12 @@ class WorkflowTests(TestCase):
                 **{key:value for key,value in PARAMS.items() if key not in ('container_volume','duty_percent','supply_type')},
                 'usd':'100','eur':'125','cny':'10',**extra}
 
-    def test_loaded_prices_default_to_review_and_empty_calculation_to_load(self):
+    def test_loaded_prices_open_shared_workspace_and_empty_calculation_opens_load(self):
         response=self.client.get(self.url)
-        self.assertEqual(response.context['workflow_step'],'review')
-        self.assertContains(response,'Перейти к расчёту')
+        self.assertEqual(response.context['workflow_step'],'calculate')
+        self.assertContains(response,'Модели, цены и результаты DDP')
+        self.assertNotContains(response,'Перейти к расчёту')
+        self.assertNotContains(response,'data-step-link="review"')
         self.batch.rows.all().delete()
         self.assertEqual(self.client.get(self.url).context['workflow_step'],'load')
 
@@ -89,7 +91,7 @@ class WorkflowTests(TestCase):
     def test_free_navigation_does_not_save_or_calculate(self):
         for step in ('load','calculate','review'):
             response=self.client.get(self.url,{'step':step})
-            self.assertEqual(response.context['workflow_step'],step)
+            self.assertEqual(response.context['workflow_step'],'calculate' if step=='review' else step)
         self.batch.refresh_from_db();self.assertEqual(self.batch.revision,1)
         self.assertEqual(self.batch.rows.filter(result={}).count(),2)
 
@@ -181,3 +183,16 @@ class WorkflowTests(TestCase):
         self.other.price=0;self.other.save()
         response=self.client.get(self.url+'?price_check=zero')
         self.assertEqual([row.model_ref for row in response.context['page']],['B'])
+
+    def test_existing_results_and_old_review_link_use_one_workspace(self):
+        mutate(self.batch.pk,1,'calculate')
+        for suffix in ('','?step=review','?step=calculate'):
+            response=self.client.get(self.url+suffix)
+            self.assertEqual(response.context['workflow_step'],'calculate')
+            self.assertContains(response,'class="ddp-table"',count=1)
+            self.assertContains(response,'Цена PURCH / единица')
+            self.assertContains(response,'DDP за модель')
+            self.assertNotContains(response,'data-step-link="review"')
+            self.assertNotContains(response,'Перейти к расчёту')
+            self.assertNotContains(response,'Вернуться к ценам')
+        self.batch.refresh_from_db();self.assertEqual(self.batch.revision,2)
