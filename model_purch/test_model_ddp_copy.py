@@ -170,3 +170,12 @@ class CopyTests(TestCase):
         url=reverse('model_ddp_detail',args=[self.target.pk])
         self.assertEqual(self.client.get(url).status_code,200)
         self.assertEqual(self.client.post(url,{'revision':1,'action':'model_copy_preview'}).status_code,403)
+
+    def test_currency_filter_copies_shared_parameters_to_all_model_prices(self):
+        second=ModelDDPRow.objects.create(calculation=self.target,model_ref='0',model_name='Model 0',price_type_ref='eur',price_type='PURCH_EUR',currency='EUR',price=90,source_data=self.target.rows.get(model_ref='0').source_data)
+        result,token=self.make_preview(currency='EUR')
+        self.assertEqual(result['matched'],2)
+        apply(self.target.pk,token,self.user)
+        for row in self.target.rows.filter(model_ref='0'):
+            self.assertEqual(row.overrides['volume'],'2')
+        second.refresh_from_db();self.assertEqual(second.price,90)

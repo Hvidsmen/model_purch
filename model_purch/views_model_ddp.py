@@ -131,13 +131,16 @@ def detail(request,pk):
     choices.update(purch=list(Purch.objects.values_list('name',flat=True)),kind_purch=list(KindPurch.objects.values_list('name',flat=True)))
     for key,values in reference_choices.items():
         if key in ('planning_sales','group_goods','brand','purch','kind_purch'):choices[key]=sorted(set(choices.get(key,[]))|set(values),key=str.casefold)
-    ordered_ids=list(query.values_list('pk',flat=True))
-    if ids is not None:ordered_ids=[pk for pk in ordered_ids if pk in ids]
-    page=Paginator(ordered_ids,50).get_page(request.GET.get('page'))
-    by_id={row.pk:row for row in batch.rows.filter(pk__in=list(page))}
-    page.object_list=[by_id[pk] for pk in page.object_list]
+    # Filter matches select models; keep all prices of each selected model together.
+    selected_refs=list(dict.fromkeys(ref for pk,ref in query.order_by('model_name','model_ref','pk').values_list('pk','model_ref').iterator(chunk_size=1000) if ids is None or pk in ids))
+    page=Paginator(selected_refs,50).get_page(request.GET.get('page'))
+    groups={ref:[] for ref in page.object_list}
+    for variant in batch.rows.filter(model_ref__in=list(groups)).order_by('price_type','currency','pk'):
+        if empty_reference(variant.source_data.get('unit')):variant.source_data={**variant.source_data,'unit':''}
+        groups[variant.model_ref].append(variant)
+    page.object_list=[groups[ref][0] for ref in page.object_list]
     for row in page:
-        if empty_reference(row.source_data.get('unit')):row.source_data={**row.source_data,'unit':''}
+        row.price_variants=groups[row.model_ref]
         values=parameters(batch,row)
         row.edit_form=bound_rows.get(row.pk) or RowForm(prefix='r'+str(row.pk),initial=values,reference_choices=choices)
     from django.db.models import Count
@@ -162,7 +165,7 @@ def detail(request,pk):
     for name in ('load','review','calculate'):
         params=preserved.copy();params['step']=name
         step_urls[name]=reverse('model_ddp_detail',args=[pk])+'?'+params.urlencode()
-    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'rejected_edits':rejected_edits,'expense_fields':[form[name] for name in FREIGHT_FIELDS],'rate_fields':[form[name] for name in ('usd','eur','cny')],'workflow_step':step,'step_urls':step_urls,'stats':stats,'needs_recalculation':needs_recalculation,'price_check':request.GET.get('price_check',''),'model_copy_form':model_copy_form,'model_copy_preview':model_copy_preview,'model_copy_token':model_copy_token,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
+    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'rejected_edits':rejected_edits,'expense_fields':[form[name] for name in FREIGHT_FIELDS],'rate_fields':[form[name] for name in ('usd','eur','cny')],'workflow_step':step,'step_urls':step_urls,'stats':stats,'needs_recalculation':needs_recalculation,'price_check':request.GET.get('price_check',''),'model_copy_form':model_copy_form,'model_copy_preview':model_copy_preview,'model_copy_token':model_copy_token,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'model_total':batch.rows.values('model_ref').distinct().count(),'total':batch.rows.count()})
 
 
 def safe(value):
@@ -185,7 +188,9 @@ def export(request,pk):
         if k in FREIGHT_FIELDS:meta.append([k,safe(v)])
     meta.append(['Источник параметров',safe(batch.source_metadata.get('name','Вручную'))])
     sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
-    for row in batch.rows.all().iterator(chunk_size=500):
+    model_ranges={}
+    for row in batch.rows.order_by('model_name','model_ref','price_type','currency','pk').iterator(chunk_size=500):
+        model_ranges.setdefault(row.model_ref,[]).append(sheet.max_row+1)
         p=parameters(batch,row);result=row.result;ddp=result.get('ddp',{});c=result.get('components',{})
         values=[row.model_name,row.model_ref,row.planning_group,row.brand,row.price_type,row.currency,row.price,str(row.price_at or ''),*[p.get(k) for k in ('volume','container_volume','duty_percent','supply_type')],*[ddp.get(k) for k in ('USD','EUR','CNY','RUB')],result.get('error') or '; '.join(result.get('warnings',[])) or result.get('status','Не рассчитан'),*[c.get(k) for k in ('exw_usd','freight_usd','cif_usd','customs_payment_usd','warehouse_delivery_usd','foreign_delivery_usd','nr_customs_vat_usd')]]
         # Preserve numeric cells for Excel formulas; escape source text separately.
@@ -197,6 +202,10 @@ def export(request,pk):
         values.extend([p.get(k) for k in ('planning_sales','group_goods','brand','purch','kind_purch','weight_kg',*FREIGHT_FIELDS)])
         if export_stale or row.result.get('stale'):values[16]='Требуется пересчёт · '+str(values[16])
         sheet.append([safe(v) for v in values])
+    for positions in model_ranges.values():
+        if len(positions)>1:
+            for column in (1,2,3,4,9,10,11,12,*range(26,37)):
+                sheet.merge_cells(start_row=positions[0],end_row=positions[-1],start_column=column,end_column=column)
     trace=book.create_sheet('Этапы расчёта');trace.append(['Модель','Вид цены','Валюта цены','Этап','Формула','Результат','Валюта результата'])
     for row in batch.rows.all().iterator(chunk_size=500):
         for step in row.result.get('steps',[]):

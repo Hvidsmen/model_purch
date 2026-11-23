@@ -1,6 +1,7 @@
 <details class="ddp-card"{% if model_copy_preview or model_copy_form.errors %} open{% endif %}>
 <summary>Копировать из помодельного расчёта</summary>
-<p class="ddp-note">Сначала загрузите цены PURCH в текущий расчёт. Параметры моделей копируются во все строки текущего фильтра на всех страницах. Совпадение: модель + вид цены + валюта. Пустые значения источника пропускаются. Цены PURCH, дата цен и состав моделей текущего расчёта сохраняются.</p>
+<p class="ddp-note">Копируются общие параметры выбранных моделей для всех их цен PURCH. Фильтр по валюте выбирает модели; текущие цены сохраняются.</p>
+<p class="ddp-note">Сначала загрузите цены PURCH в текущий расчёт. Параметры моделей копируются во все строки текущего фильтра на всех страницах. Совпадение: ссылка модели. Пустые значения источника пропускаются. Цены PURCH, дата цен и состав моделей текущего расчёта сохраняются.</p>
 <form method="post" data-model-copy-options>{% csrf_token %}<input type="hidden" name="revision" value="{{ batch.revision }}"><fieldset{% if not portal_can_edit_purchases %} disabled{% endif %}><div class="ddp-fields">{{ model_copy_form.as_p }}</div><button class="btn btn-outline-primary" name="action" value="model_copy_preview">Показать, что будет скопировано</button></fieldset></form>
 {% if model_copy_preview %}
 <div class="ddp-snapshot" data-model-copy-preview>
