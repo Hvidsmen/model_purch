@@ -9,6 +9,7 @@ from django.utils import timezone
 from ..models import ModelDDPCalculation,ModelDDPRow,ScenarioModel,Freight,PGGoods,Purch
 from ..goods_identity import planning_group_key
 from .pricing import apply_price,CALCULATED_FIELDS
+from .model_ddp_source import empty_reference
 
 CURRENCIES=('USD','EUR','CNY','RUB')
 MODEL_FIELDS=('container_volume','duty_percent','supply_type','planning_sales','group_goods','brand','purch','kind_purch','stock_cnt_day','percent_stock_end')
@@ -43,7 +44,7 @@ def calculate(batch,row):
         return format(Decimal(str(value)).quantize(Decimal('.000001')),'f').rstrip('0').rstrip('.') or '0'
     try:
         if row.source_data.get('error'):raise ValidationError(row.source_data['error'])
-        if row.source_data.get('unit') and not row.overrides.get('price_unit_confirmed',False):raise ValidationError(row.source_data.get('unit_warning','Подтвердите единицу закупочной цены.'))
+        if not empty_reference(row.source_data.get('unit')) and not row.overrides.get('price_unit_confirmed',False):raise ValidationError(row.source_data.get('unit_warning','Подтвердите единицу закупочной цены.'))
         if row.price is None:raise ValidationError('Нет цены PURCH на дату расчёта.')
         if row.currency not in CURRENCIES:raise ValidationError('Не определена поддерживаемая валюта закупочной цены.')
         rates={key:decimal(value,'Курс '+key,optional=True,positive=True) for key,value in batch.rates.items() if key in CURRENCIES};rates['RUB']=Decimal(1)

@@ -216,10 +216,17 @@ def load_prices(as_of,progress=None,ensure_index=False):
                 except Exception:logger.warning('PURCH: не удалось закрыть соединение/курсор',exc_info=False)
 
 
+def empty_reference(value):
+    value=str(value or '').strip().lower()
+    if value.startswith('0x'):value=value[2:]
+    return not value or not value.replace('-','').replace('{','').replace('}','').strip('0')
+
+
 def records(raw):
     grouped={}
     for record in raw:
         ref,name,group,brand,volume,weight,kind_ref,kind_name,currency,price,at,unit=record[:12]
+        if empty_reference(unit):unit=''
         characteristic=str(record[12] or '').strip() if len(record)>12 else ''
         if not ref or not name:continue
         currency=ALIASES.get(str(currency or '').strip().casefold(),str(currency or '').strip())

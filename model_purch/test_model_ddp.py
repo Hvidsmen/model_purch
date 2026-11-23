@@ -57,6 +57,10 @@ class CalculationTests(SimpleTestCase):
         row.overrides = {'price_quantity':'12','price_unit_confirmed':True}
         self.assertEqual(Decimal(calculate(self.batch(),row)['ddp']['USD']), Decimal('143.2'))
 
+    def test_empty_erp_unit_reference_does_not_require_confirmation(self):
+        for unit in ('0'*32,'00000000-0000-0000-0000-000000000000','0x'+'0'*32):
+            self.assertEqual(calculate(self.batch(),self.row(source_data={'volume':'1','unit':unit}))['status'],'ready')
+
     def test_missing_inputs_not_zero(self):
         for changed in [{'volume':None}, {'volume':'0'}, {'volume':'NaN'}]:
             self.assertEqual(calculate(self.batch(), self.row(source_data=changed))['status'], 'error')
@@ -100,6 +104,7 @@ class SourceTests(SimpleTestCase):
 
     def test_currency_missing_price_duplicates_and_characteristics(self):
         self.assertEqual(records([self.raw()])[0]['currency'],'USD')
+        self.assertEqual(records([self.raw(unit='0'*32)])[0]['source_data']['unit'],'')
         self.assertEqual(len(records([self.raw(),self.raw()])),1)
         result=records([self.raw(),self.raw(price='101')])[0]
         self.assertIsNone(result['price'])

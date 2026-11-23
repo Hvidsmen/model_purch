@@ -15,7 +15,7 @@ from base.access import role_for,ADMIN,LOGISTICIAN,ANALYST
 from .models import ModelDDPCalculation
 from .model_ddp_forms import CreateForm,ParametersForm,RowForm,SourceForm
 from .services.model_ddp import mutate,parameters,preview_token,FREIGHT_FIELDS,MODEL_FIELDS
-from .services.model_ddp_source import load_prices
+from .services.model_ddp_source import load_prices,empty_reference
 
 
 def access(request):
@@ -85,6 +85,7 @@ def detail(request,pk):
     elif status=='pending':query=query.filter(result={})
     page=Paginator(query,50).get_page(request.GET.get('page'))
     for row in page:
+        if empty_reference(row.source_data.get('unit')):row.source_data={**row.source_data,'unit':''}
         values=parameters(batch,row);values.update(price_quantity=row.overrides.get('price_quantity') or '1',price_unit_confirmed=row.overrides.get('price_unit_confirmed',False))
         row.edit_form=RowForm(prefix='r'+str(row.pk),initial=values)
     preserved=request.GET.copy();preserved.pop('page',None)
