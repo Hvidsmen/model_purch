@@ -177,6 +177,8 @@ def safe(value):
 @require_http_methods(['GET','HEAD'])
 def export(request,pk):
     access(request);batch=get_object_or_404(ModelDDPCalculation,pk=pk)
+    from .services.model_ddp_copy import filtered_ids,FILTER_KEYS
+    selected=filtered_ids(batch,request.GET)
     from openpyxl import Workbook
     book=Workbook();meta=book.active;meta.title='Параметры'
     meta.append(['Расчёт',safe(batch.name)]);meta.append(['Дата цен и курсов',str(batch.as_of)]);meta.append(['Ревизия',batch.revision])
@@ -187,9 +189,13 @@ def export(request,pk):
     for k,v in batch.parameters.items():
         if k in FREIGHT_FIELDS:meta.append([k,safe(v)])
     meta.append(['Источник параметров',safe(batch.source_metadata.get('name','Вручную'))])
+    meta.append(['Область выгрузки','Все цены моделей, выбранных текущими фильтрами; все страницы'])
+    for key in FILTER_KEYS:
+        if request.GET.get(key):meta.append(['Фильтр: '+key,safe(request.GET[key])])
     sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
     model_ranges={}
     for row in batch.rows.order_by('model_name','model_ref','price_type','currency','pk').iterator(chunk_size=500):
+        if row.pk not in selected:continue
         model_ranges.setdefault(row.model_ref,[]).append(sheet.max_row+1)
         p=parameters(batch,row);result=row.result;ddp=result.get('ddp',{});c=result.get('components',{})
         values=[row.model_name,row.model_ref,row.planning_group,row.brand,row.price_type,row.currency,row.price,str(row.price_at or ''),*[p.get(k) for k in ('volume','container_volume','duty_percent','supply_type')],*[ddp.get(k) for k in ('USD','EUR','CNY','RUB')],result.get('error') or '; '.join(result.get('warnings',[])) or result.get('status','Не рассчитан'),*[c.get(k) for k in ('exw_usd','freight_usd','cif_usd','customs_payment_usd','warehouse_delivery_usd','foreign_delivery_usd','nr_customs_vat_usd')]]
@@ -208,6 +214,7 @@ def export(request,pk):
                 sheet.merge_cells(start_row=positions[0],end_row=positions[-1],start_column=column,end_column=column)
     trace=book.create_sheet('Этапы расчёта');trace.append(['Модель','Вид цены','Валюта цены','Этап','Формула','Результат','Валюта результата'])
     for row in batch.rows.all().iterator(chunk_size=500):
+        if row.pk not in selected:continue
         for step in row.result.get('steps',[]):
             trace.append([safe(row.model_name),safe(row.price_type),safe(row.currency),safe(step['label']),safe(step['formula']),Decimal(step['value']),safe(step['currency'])])
     trace.freeze_panes='A2';trace.auto_filter.ref=trace.dimensions

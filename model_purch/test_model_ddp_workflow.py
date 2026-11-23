@@ -120,3 +120,37 @@ class WorkflowTests(TestCase):
         sheet=load_workbook(BytesIO(response.content))['Помодельный DDP']
         self.assertIn('A2:A3',{str(r) for r in sheet.merged_cells.ranges})
         self.assertEqual({sheet.cell(r,6).value for r in (2,3)},{'USD','EUR'})
+
+    def workbook(self,query):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        response=self.client.get(reverse('model_ddp_export',args=[self.batch.pk])+query)
+        self.assertEqual(response.status_code,200)
+        return load_workbook(BytesIO(response.content))
+
+    def test_excel_keeps_filters_in_download_link_and_both_sheets(self):
+        for row in (self.row,self.other):
+            row.result={'status':'ready','steps':[{'label':'Step','formula':'1','value':'1','currency':'USD'}]}
+            row.save()
+        query='?brand=A&step=calculate&page=2'
+        response=self.client.get(self.url+query)
+        self.assertContains(response,reverse('model_ddp_export',args=[self.batch.pk])+'?brand=A&amp;step=calculate')
+        book=self.workbook(query)
+        self.assertEqual(book['Помодельный DDP'].max_row,2)
+        self.assertEqual(book['Помодельный DDP']['A2'].value,'Model A')
+        self.assertEqual(book['Этапы расчёта'].max_row,2)
+        self.assertEqual(book['Этапы расчёта']['A2'].value,'Model A')
+        self.assertIn(('Фильтр: brand','A'),list(book['Параметры'].values))
+
+    def test_excel_empty_filters_do_not_fall_back_to_entire_calculation(self):
+        book=self.workbook('?brand=NoSuchBrand')
+        self.assertEqual(book['Помодельный DDP'].max_row,1)
+        self.assertEqual(book['Этапы расчёта'].max_row,1)
+
+    def test_excel_currency_filter_selects_model_and_keeps_all_its_prices(self):
+        ModelDDPRow.objects.create(calculation=self.batch,model_ref='A',model_name='Model A',price_type_ref='eur',price=90,currency='EUR',source_data=self.row.source_data)
+        book=self.workbook('?currency=EUR&page=99')
+        sheet=book['Помодельный DDP']
+        self.assertEqual(sheet.max_row,3)
+        self.assertEqual({sheet.cell(r,6).value for r in (2,3)},{'USD','EUR'})
+        self.assertEqual(sheet['A2'].value,'Model A')
