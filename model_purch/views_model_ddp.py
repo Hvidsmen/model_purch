@@ -16,7 +16,7 @@ from .models import ModelDDPCalculation
 from .model_ddp_forms import CreateForm,ParametersForm,RowForm,SourceForm,ModelCopyForm
 from .services.model_ddp import mutate,parameters,preview_token,FREIGHT_FIELDS,MODEL_FIELDS,directory_signature
 from .services.model_ddp_source import load_prices,empty_reference
-from .services.model_ddp_references import filter_data,catalog,apply_query_filters
+from .services.model_ddp_references import filter_data,catalog,apply_query_filters,visible_prices
 
 
 def access(request):
@@ -135,7 +135,7 @@ def detail(request,pk):
     selected_refs=list(dict.fromkeys(ref for pk,ref in query.order_by('model_name','model_ref','pk').values_list('pk','model_ref').iterator(chunk_size=1000) if ids is None or pk in ids))
     page=Paginator(selected_refs,50).get_page(request.GET.get('page'))
     groups={ref:[] for ref in page.object_list}
-    for variant in batch.rows.filter(model_ref__in=list(groups)).order_by('price_type','currency','pk'):
+    for variant in visible_prices(batch.rows.filter(model_ref__in=list(groups))).order_by('price_type','currency','pk'):
         if empty_reference(variant.source_data.get('unit')):variant.source_data={**variant.source_data,'unit':''}
         groups[variant.model_ref].append(variant)
     page.object_list=[groups[ref][0] for ref in page.object_list]
@@ -144,7 +144,7 @@ def detail(request,pk):
         values=parameters(batch,row)
         row.edit_form=bound_rows.get(row.pk) or RowForm(prefix='r'+str(row.pk),initial=values,reference_choices=choices)
     from django.db.models import Count
-    stats=batch.rows.aggregate(total=Count('pk'),zero=Count('pk',filter=Q(price=0)),
+    stats=visible_prices(batch.rows.all()).aggregate(total=Count('pk'),zero=Count('pk',filter=Q(price=0)),
         missing_price=Count('pk',filter=Q(price__isnull=True)),
         missing_currency=Count('pk',filter=~Q(currency__in=('USD','EUR','CNY','RUB'))),
         errors=Count('pk',filter=Q(result__status='error')),partial=Count('pk',filter=Q(result__status='partial')),pending=Count('pk',filter=Q(result={})))
@@ -189,12 +189,12 @@ def export(request,pk):
     for k,v in batch.parameters.items():
         if k in FREIGHT_FIELDS:meta.append([k,safe(v)])
     meta.append(['Источник параметров',safe(batch.source_metadata.get('name','Вручную'))])
-    meta.append(['Область выгрузки','Все цены моделей, выбранных текущими фильтрами; все страницы'])
+    meta.append(['Область выгрузки','Цены выбранных моделей; все страницы. Нули скрыты, если есть ненулевые цены'])
     for key in FILTER_KEYS:
         if request.GET.get(key):meta.append(['Фильтр: '+key,safe(request.GET[key])])
     sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
     model_ranges={}
-    for row in batch.rows.order_by('model_name','model_ref','price_type','currency','pk').iterator(chunk_size=500):
+    for row in visible_prices(batch.rows.all()).order_by('model_name','model_ref','price_type','currency','pk').iterator(chunk_size=500):
         if row.pk not in selected:continue
         model_ranges.setdefault(row.model_ref,[]).append(sheet.max_row+1)
         p=parameters(batch,row);result=row.result;ddp=result.get('ddp',{});c=result.get('components',{})
@@ -213,7 +213,7 @@ def export(request,pk):
             for column in (1,2,3,4,9,10,11,12,*range(26,37)):
                 sheet.merge_cells(start_row=positions[0],end_row=positions[-1],start_column=column,end_column=column)
     trace=book.create_sheet('Этапы расчёта');trace.append(['Модель','Вид цены','Валюта цены','Этап','Формула','Результат','Валюта результата'])
-    for row in batch.rows.all().iterator(chunk_size=500):
+    for row in visible_prices(batch.rows.all()).iterator(chunk_size=500):
         if row.pk not in selected:continue
         for step in row.result.get('steps',[]):
             trace.append([safe(row.model_name),safe(row.price_type),safe(row.currency),safe(step['label']),safe(step['formula']),Decimal(step['value']),safe(step['currency'])])

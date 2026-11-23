@@ -1,6 +1,7 @@
 """Filters use effective per-model classification, including snapshot defaults."""
 from types import SimpleNamespace
 from django.core.cache import cache
+from django.db.models import Exists,OuterRef,Q
 from .model_ddp import parameters
 
 FILTERS=(('planning_group','Группа планирования'),('planning_sales','Группа планов продаж'),
@@ -37,7 +38,14 @@ def filter_data(batch,request):
     return ids,controls,options
 
 
+def visible_prices(query):
+    """A zero is only useful when the model has no nonzero source price."""
+    nonzero=query.model.objects.filter(calculation_id=OuterRef('calculation_id'),model_ref=OuterRef('model_ref')).exclude(price__isnull=True).exclude(price=0)
+    return query.alias(has_nonzero_price=Exists(nonzero)).exclude(Q(price=0)&Q(has_nonzero_price=True))
+
+
 def apply_query_filters(query,filters):
+    query=visible_prices(query)
     if filters.get('currency'):query=query.filter(currency=filters['currency'])
     state=filters.get('status')
     if state in ('ready','partial','error'):query=query.filter(result__status=state)

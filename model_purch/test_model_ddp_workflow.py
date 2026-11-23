@@ -154,3 +154,30 @@ class WorkflowTests(TestCase):
         self.assertEqual(sheet.max_row,3)
         self.assertEqual({sheet.cell(r,6).value for r in (2,3)},{'USD','EUR'})
         self.assertEqual(sheet['A2'].value,'Model A')
+
+    def test_zero_prices_hidden_only_when_same_model_has_nonzero_price(self):
+        zero=ModelDDPRow.objects.create(calculation=self.batch,model_ref='A',model_name='Model A',price_type_ref='eur',price_type='ZERO_EUR',price=0,currency='EUR',source_data=self.row.source_data,
+            result={'status':'error','steps':[{'label':'Hidden zero','formula':'0','value':'0','currency':'EUR'}]})
+        self.other.price=0;self.other.save()
+        response=self.client.get(self.url)
+        groups={row.model_ref:row for row in response.context['page']}
+        self.assertEqual([r.pk for r in groups['A'].price_variants],[self.row.pk])
+        self.assertEqual([r.pk for r in groups['B'].price_variants],[self.other.pk])
+        self.assertEqual(response.context['stats']['zero'],1)
+        self.assertNotContains(response,'ZERO_EUR')
+        book=self.workbook('')
+        self.assertEqual(book['Помодельный DDP'].max_row,3)
+        self.assertNotIn('Hidden zero',[row[3] for row in book['Этапы расчёта'].values])
+        zero.refresh_from_db();self.assertEqual(zero.price,0)
+        filtered=self.client.get(self.url+'?price_check=zero')
+        self.assertEqual([row.model_ref for row in filtered.context['page']],['B'])
+        sheet=self.workbook('?price_check=zero')['Помодельный DDP']
+        self.assertEqual(sheet.max_row,2)
+        self.assertEqual(sheet['A2'].value,'Model B')
+
+    def test_prices_in_another_calculation_do_not_hide_zero(self):
+        other_batch=ModelDDPCalculation.objects.create(name='Other',as_of=self.batch.as_of,created_by=self.user)
+        ModelDDPRow.objects.create(calculation=other_batch,model_ref='B',price=5,currency='USD')
+        self.other.price=0;self.other.save()
+        response=self.client.get(self.url+'?price_check=zero')
+        self.assertEqual([row.model_ref for row in response.context['page']],['B'])
