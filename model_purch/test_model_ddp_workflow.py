@@ -196,3 +196,48 @@ class WorkflowTests(TestCase):
             self.assertNotContains(response,'Перейти к расчёту')
             self.assertNotContains(response,'Вернуться к ценам')
         self.batch.refresh_from_db();self.assertEqual(self.batch.revision,2)
+
+    def test_zero_filter_is_explicit_and_can_be_cleared_without_losing_brand(self):
+        self.other.price=0;self.other.source_data=self.row.source_data;self.other.save()
+        response=self.client.get(self.url+'?step=calculate&brand=A&price_check=zero&page=2')
+        self.assertContains(response,'Включён фильтр «Нулевая цена».')
+        link=response.context['clear_price_check_url']
+        self.assertNotIn('price_check=',link)
+        self.assertNotIn('page=',link)
+        self.assertIn('brand=A',link)
+        cleared=self.client.get(link)
+        self.assertEqual({row.model_ref for row in cleared.context['page']},{'A','B'})
+        self.assertEqual(cleared.context['page'][0].price_variants[0].price,100)
+
+    def test_summary_checks_toggle_and_clear_preserving_other_filters(self):
+        from urllib.parse import urlparse,parse_qs
+        for key,value in (('price_check','zero'),('status','error'),('status','partial')):
+            response=self.client.get(self.url,{'step':'calculate','brand':'A',key:value,'page':3})
+            checks=response.context['check_links']
+            active=[check for check in checks if check['active']]
+            self.assertEqual(len(active),1)
+            for link in (active[0]['url'],response.context['clear_checks_url']):
+                params=parse_qs(urlparse(link).query)
+                self.assertNotIn('price_check',params)
+                self.assertNotIn('status',params)
+                self.assertNotIn('page',params)
+                self.assertEqual(params['brand'],['A'])
+            self.assertContains(response,'Снять проверку ×')
+            self.assertContains(response,'Сбросить все фильтры')
+            self.assertEqual(parse_qs(urlparse(response.context['reset_filters_url']).query),{'step':['calculate']})
+
+    def test_active_filter_labels_and_individual_removal(self):
+        from urllib.parse import urlparse,parse_qs
+        response=self.client.get(self.url,{'brand':'A','price_check':'zero','currency':'USD','q':'Model','group_goods':'__empty__','page':4})
+        self.assertContains(response,'Применены фильтры:')
+        self.assertContains(response,'Марка: A ×')
+        self.assertContains(response,'Проверка цен: Нулевая цена ×')
+        self.assertContains(response,'Группа товаров: Не заполнено ×')
+        brand=next(f for f in response.context['active_filters'] if f['label']=='Марка')
+        params=parse_qs(urlparse(brand['url']).query)
+        self.assertNotIn('brand',params)
+        self.assertNotIn('page',params)
+        self.assertEqual(params['price_check'],['zero'])
+        self.assertEqual(params['currency'],['USD'])
+        self.assertEqual(params['q'],['Model'])
+        self.assertContains(self.client.get(self.url),'Все модели — фильтры не заданы')

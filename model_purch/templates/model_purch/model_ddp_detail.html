@@ -1,6 +1,6 @@
 {% extends 'model_purch/base.html' %}{% load static %}
 {% block title %}{{ batch.name }} · Помодельный DDP{% endblock %}
-{% block extra_css %}<link rel="stylesheet" href="{% static 'model_purch/model_ddp.css' %}?v=single-workspace-20261124">{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'model_purch/model_ddp.css' %}?v=active-filters-20261124">{% endblock %}
 {% block workspace_panel %}{% endblock %}
 {% block content %}
 <section class="model-ddp{% if needs_recalculation %} ddp-is-stale{% endif %}" data-workflow-step="{{ workflow_step }}" data-rejected-edits="{{ rejected_edits }}" data-calculation-stale="{{ needs_recalculation|yesno:'1,0' }}" data-review-url="{{ step_urls.calculate }}" data-price-count="{{ total }}" data-calculation-id="{{ batch.pk }}" data-last-calculated="{{ batch.calculated_at|date:'c' }}">
@@ -11,6 +11,7 @@
 <a href="{{ step_urls.calculate }}" data-step-link="calculate"{% if workflow_step == 'calculate' %} aria-current="step"{% endif %}><span>2</span><div><strong>Цены и расчёт DDP</strong><small data-calculation-status>{% if not total %}Сначала загрузите цены{% elif needs_recalculation %}Требуется пересчёт{% else %}Рассчитано{% endif %}</small></div></a>
 </nav>
 <p role="status" data-ddp-dirty-status></p>
+{% if price_check == 'zero' %}<div class="ddp-card ddp-recalculation-note" role="status" data-step-panel="calculate"><strong>Включён фильтр «Нулевая цена».</strong> Показаны только модели без ненулевых цен. Модели с ненулевыми ценами исключены этим фильтром. <a href="{{ clear_price_check_url }}">Снять фильтр нулевых цен</a></div>{% endif %}
 <div class="ddp-card ddp-recalculation-note" data-recalculation-note{% if not needs_recalculation or not batch.calculated_at %} hidden{% endif %}>Требуется пересчёт. Показаны результаты последнего расчёта от {{ batch.calculated_at|date:'d.m.Y H:i' }}; параметры могли измениться.</div>
 <section class="ddp-card" data-step-panel="load">
 <h2 class="h5">1. Загрузить цены</h2><p>Последние цены PURCH на <strong>{{ batch.as_of|date:'d.m.Y' }}</strong>. После загрузки откроется таблица для проверки.</p>
@@ -19,8 +20,9 @@
 <details data-saved-load-diagnostics hidden><summary>Подробности последней загрузки</summary><p></p></details></section>
 <div class="ddp-card" data-load-status hidden role="status" aria-live="polite"><strong data-load-stage></strong><progress aria-label="Загрузка цен"></progress><span data-load-time></span><span data-load-count></span><p data-load-error></p><details><summary>Подробности загрузки</summary><p data-load-technical-stage></p><p data-load-warning></p></details></div>
 <div class="ddp-summary" data-step-panel="calculate">
-<span>Загружено <strong>{{ model_total }}</strong> моделей · {{ total }} цен</span><a href="?step=calculate&amp;price_check=zero" data-price-check-link>Нулевая цена: {{ stats.zero }}</a><a href="?step=calculate&amp;price_check=currency" data-price-check-link>Не определена валюта: {{ stats.missing_currency }}</a><a href="?step=calculate&amp;price_check=supplier" data-price-check-link>Не определён тип поставки: {{ stats.missing_supplier }}</a><a href="?step=calculate&amp;status=error" data-calculate-only>Ошибок расчёта: {{ stats.errors }}</a><span data-calculate-only>Не все валюты: {{ stats.partial }}</span>
+<span>Загружено <strong>{{ model_total }}</strong> моделей · {{ total }} цен</span>{% for check in check_links %}<a href="{{ check.url }}"{% if check.active %} class="ddp-check-active" aria-current="true" title="Нажмите, чтобы снять проверку"{% endif %}>{{ check.label }}: {{ check.count }}{% if check.active %} ×{% endif %}</a>{% endfor %}{% if price_check or status %}<a href="{{ clear_checks_url }}">Снять проверку ×</a>{% endif %}
 </div>
+<div class="ddp-summary" data-step-panel="calculate" role="status" aria-label="Применённые фильтры">{% if active_filters %}<strong>Применены фильтры:</strong>{% for filter in active_filters %}<a class="ddp-check-active" href="{{ filter.url }}" aria-label="Снять фильтр {{ filter.label }}: {{ filter.value }}">{{ filter.label }}: {{ filter.value }} ×</a>{% endfor %}{% else %}<span>Все модели — фильтры не заданы</span>{% endif %}</div>
 <section data-step-panel="calculate" id="ddp-calculation-settings">
 <h2 class="h5">2. Цены и расчёт DDP</h2>
 <details class="ddp-card"{% if preview or source_form.errors %} open{% endif %}><summary>Скопировать параметры из сценария закупок</summary><form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ batch.revision }}">{{ source_form.as_p }}<button class="btn btn-outline-primary" name="action" value="preview"{% if not portal_can_edit_purchases %} disabled{% endif %}>Показать параметры</button></form>
@@ -38,4 +40,4 @@
 </section>
 {% include 'model_purch/model_ddp_table.html' %}
 </section>{% endblock %}
-{% block extra_js %}<script src="{% static 'model_purch/model_ddp_header.js' %}?v=1" defer></script><script src="{% static 'model_purch/model_ddp.js' %}?v=single-workspace-20261124" defer></script>{% endblock %}
+{% block extra_js %}<script src="{% static 'model_purch/model_ddp_header.js' %}?v=1" defer></script><script src="{% static 'model_purch/model_ddp.js' %}?v=active-filters-20261124" defer></script>{% endblock %}
