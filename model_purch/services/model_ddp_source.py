@@ -7,6 +7,7 @@ from uuid import uuid4
 from datetime import datetime,timedelta
 from decimal import Decimal,InvalidOperation
 from django.core.exceptions import ValidationError
+from django.conf import settings
 from django.utils import timezone
 from ..conns import connect_database
 
@@ -31,6 +32,13 @@ def sql_text(alias,key,data_type=None):
         # ERP references are opaque bytes, never UTF-16 characters.
         return 'CONVERT(varchar(max),'+source+',2)'
     return 'CAST('+source+' AS nvarchar(500))'
+
+
+def variant_limit():
+    value=getattr(settings,'MODEL_DDP_MAX_PRICE_VARIANTS',250000)
+    if isinstance(value,bool) or not isinstance(value,int) or not 1<=value<=1000000:
+        raise ValidationError('MODEL_DDP_MAX_PRICE_VARIANTS должен быть целым числом от 1 до 1000000.')
+    return value
 
 
 def build_sql(schema):
@@ -81,9 +89,9 @@ def build_sql(schema):
             if currency and 'Ссылка' in c and code:
                 currency_join=' LEFT JOIN DataWH.erp.'+quoted(table)+' c ON c.[Ссылка]=p.'+quoted(currency)
                 break
-        sql='SELECT TOP (50001) '+','.join((text('n',ref),text('n',name),text('n',group),text('n',brand),volume_sql,weight_sql))+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
+        sql='SELECT TOP ('+str(variant_limit()+1)+') '+','.join((text('n',ref),text('n',name),text('n',group),text('n',brand),volume_sql,weight_sql))+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
  FROM DataWH.erp.'''+quoted(GOODS)+''' n
- OUTER APPLY (
+ CROSS APPLY (
  SELECT '''+text('p',kind)+' kind_ref,'+text('k','Наименование')+' kind_name,'+currency_name+''' currency,
  p.'''+quoted(price)+''' price,p.'''+quoted(period)+''' price_at,'''+text('p',unit)+''' price_unit,'''+text('p',characteristic)+''' characteristic
  FROM DataWH.erp.'''+quoted(kind_table)+''' k
@@ -101,8 +109,8 @@ def build_sql(schema):
  DENSE_RANK() OVER(PARTITION BY p.'''+quoted(model)+''',p.'''+quoted(kind)+''' ORDER BY p.'''+quoted(period)+''' DESC) latest
  FROM DataWH.erp.'''+quoted(PRICES)+''' p '''+joins+'''
  WHERE p.'''+quoted(period)+''' < ? AND '''+('k.[Наименование]' if kind_table else 'p.'+quoted(kind_text))+''' LIKE ?)
- SELECT TOP (50001) '''+text('n',ref)+','+text('n',name)+','+text('n',group)+','+text('n',brand)+','+volume_sql+','+weight_sql+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
- FROM DataWH.erp.'''+quoted(GOODS)+''' n LEFT JOIN prices x ON x.model_ref='''+text('n',ref)+''' AND x.latest=1'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
+ SELECT TOP ('''+str(variant_limit()+1)+''') '''+text('n',ref)+','+text('n',name)+','+text('n',group)+','+text('n',brand)+','+volume_sql+','+weight_sql+''',x.kind_ref,x.kind_name,x.currency,x.price,x.price_at,x.price_unit,x.characteristic
+ FROM DataWH.erp.'''+quoted(GOODS)+''' n INNER JOIN prices x ON x.model_ref='''+text('n',ref)+''' AND x.latest=1'''+(' WHERE '+' AND '.join(predicates) if predicates else '')
     return sql
 
 
@@ -176,8 +184,8 @@ def load_prices(as_of,progress=None,ensure_index=False):
             if not chunk:break
             raw.extend(chunk)
             progress(stage,rows=len(raw))
-            if len(raw)>50000:break
-        if len(raw)>50000:raise ValidationError('Источник вернул больше 50 000 вариантов. Нужен более узкий отбор источника.')
+            if len(raw)>variant_limit():break
+        if len(raw)>variant_limit():raise ValidationError(f'Число моделей/видов цены PURCH превышает лимит {variant_limit():,}. Снимок не усечён и не сохранён. Увеличьте MODEL_DDP_MAX_PRICE_VARIANTS на сервере или сузьте источник.')
         stage='обработка цен и характеристик'
         progress(stage)
         return records(raw)
