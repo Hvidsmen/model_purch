@@ -7,6 +7,8 @@ from sqlalchemy import create_engine as sqlalchemy_create_engine
 
 
 def connection_string(server, database):
+    if getattr(settings,'PORTAL_SQLSERVER_TRIAL',False):
+        raise RuntimeError('Тестовый контур: подключения к DataWH и внешним SQL-базам отключены. Используйте перенесённые снимки данных.')
     setting = 'MS_SQL_CONN_STR' if database.lower() == 'modelpurch' else 'DWH_SQL_CONN_STR'
     configured = getattr(settings, setting, None)
     if configured is not None and not isinstance(configured, str):

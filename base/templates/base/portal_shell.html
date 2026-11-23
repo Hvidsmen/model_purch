@@ -50,7 +50,7 @@
         </details>
         {% endif %}
     </aside>
-    <main class="portal-main" id="portal-main" tabindex="-1">{% block portal_content %}{% block content %}{% endblock %}{% endblock %}</main>
+    <main class="portal-main" id="portal-main" tabindex="-1">{% if portal_sqlserver_trial %}<div role="status" style="padding:12px;background:#fff3cd;border:1px solid #edcc76;margin-bottom:16px"><strong>ТЕСТОВЫЙ КОНТУР SQL SERVER · {{ portal_trial_database }}</strong><br>Копия данных. Внешние SQL-подключения и обновление рабочего портала отключены.</div>{% endif %}{% block portal_content %}{% block content %}{% endblock %}{% endblock %}</main>
 </div>
 {% block module_js %}{% endblock %}
 <script src="{% static 'base/searchable_filters.js' %}?v=split-search-20261109" defer></script>
