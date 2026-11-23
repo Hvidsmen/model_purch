@@ -76,3 +76,29 @@ class ModelDDPBrowserTests(StaticLiveServerTestCase):
                 expect(page.locator('[data-load-error]')).to_contain_text('SQLSTATE 08001')
                 expect(page.get_by_role('button',name='Загрузить цены PURCH')).to_be_enabled()
             finally:browser.close()
+
+    def test_header_stays_fixed_with_page_scroll_and_horizontal_alignment(self):
+        user=authorize_admin(self.client)
+        batch=ModelDDPCalculation.objects.create(name='Header',as_of=date(2026,11,22),created_by=user)
+        ModelDDPRow.objects.bulk_create([ModelDDPRow(calculation=batch,model_ref=str(i),model_name='Model '+str(i),price=100,currency='USD') for i in range(15)])
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as pw:
+            browser=pw.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None,headless=True)
+            try:
+                page=browser.new_page(viewport={'width':1400,'height':900})
+                page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
+                page.goto(self.live_server_url+reverse('model_ddp_detail',args=[batch.pk]))
+                page.evaluate("window.scrollTo(0,document.querySelector('.ddp-table').getBoundingClientRect().top+window.scrollY+180)")
+                floating=page.locator('.ddp-floating-header')
+                expect(floating).to_be_visible()
+                self.assertLess(abs(floating.bounding_box()['y']),1)
+                page.locator('.ddp-table-scroll').evaluate('(el)=>{el.scrollLeft=250}')
+                page.wait_for_timeout(100)
+                original=page.locator('.ddp-table-scroll th').nth(1).bounding_box()
+                copied=floating.locator('th').nth(1).bounding_box()
+                self.assertLess(abs(original['x']-copied['x']),2)
+                self.assertLess(abs(original['width']-copied['width']),2)
+                self.assertTrue(page.locator('.ddp-table-scroll').evaluate('(el)=>el.scrollHeight<=el.clientHeight+1'))
+                page.evaluate('window.scrollTo(0,0)')
+                expect(floating).to_be_hidden()
+            finally:browser.close()
