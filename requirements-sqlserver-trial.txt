@@ -1,0 +1,3 @@
+-r requirements.txt
+# Separate trial environment; production dependencies and SQLite settings are unchanged.
+mssql-django==1.8.0
