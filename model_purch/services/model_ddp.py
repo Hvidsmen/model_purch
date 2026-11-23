@@ -1,5 +1,7 @@
 """Independent per-model DDP snapshots, reusing the purchase pricing formula."""
 from copy import deepcopy
+from hashlib import sha256
+import json
 from decimal import Decimal,InvalidOperation
 from types import SimpleNamespace
 from django.core.exceptions import ValidationError
@@ -33,6 +35,15 @@ def goods_group_parameters(batch):
             'duty_percent':str(Decimal(str(group.duty_rate))*100)}
             for group in GoodsGroup.objects.all()}
     return batch._ddp_goods_groups
+
+
+def directory_signature(batch):
+    return sha256(json.dumps(goods_group_parameters(batch),sort_keys=True).encode()).hexdigest()
+
+
+def mark_calculated(batch):
+    batch.needs_recalculation=False
+    batch.source_metadata={**batch.source_metadata,'directory_signature':directory_signature(batch)}
 
 
 def parameters(batch,row,overrides=True):
@@ -130,6 +141,17 @@ def same_parameter(key,left,right):
 def mutate(batch_id,revision,action,*,user=None,token=None,values=None,rows=None):
     batch=ModelDDPCalculation.objects.select_for_update().get(pk=batch_id)
     if str(batch.revision)!=str(revision):raise ValidationError('Расчёт изменён в другой вкладке. Обновите страницу.')
+    if action=='workflow_calculate':
+        # Compare submitted row values against the old effective defaults BEFORE changing globals.
+        # Otherwise unchanged inherited values become overrides and defeat the new global settings.
+        changed={}
+        for pk,data in (rows or {}).items():
+            row=batch.rows.filter(pk=pk).first()
+            if not row:raise ValidationError('Строка не принадлежит выбранному расчёту.')
+            current=parameters(batch,row)
+            changed[pk]={key:value for key,value in data.items() if key in FIELDS and not same_parameter(key,value,current.get(key))}
+        rows=changed
+        batch.parameters={**batch.parameters,**values['parameters']};batch.rates=values['rates']
     if action=='copy':
         try:data=signing.loads(token,salt=SALT,max_age=3600)
         except signing.BadSignature:raise ValidationError('Предпросмотр устарел. Повторите выбор сценария.')
@@ -144,23 +166,33 @@ def mutate(batch_id,revision,action,*,user=None,token=None,values=None,rows=None
             entry=deepcopy(data);entry['overrides']=previous.get((entry['model_ref'],entry['price_type_ref'],entry['currency']),{})
             records.append(ModelDDPRow(calculation=batch,**entry))
         batch.rows.all().delete();ModelDDPRow.objects.bulk_create(records,batch_size=200);batch.loaded_at=timezone.now()
-    elif action=='rows':
+    elif action in ('rows','rows_save','workflow_calculate'):
         for pk,data in rows.items():
             row=batch.rows.filter(pk=pk).first()
             if not row:raise ValidationError('Строка не принадлежит выбранному расчёту.')
             base=parameters(batch,row,False)
-            row.overrides={key:value for key,value in data.items() if key in FIELDS and value is not None and not same_parameter(key,value,base.get(key))}
-            row.save(update_fields=['overrides'])
+            if action=='workflow_calculate':
+                new_overrides=deepcopy(row.overrides)
+                for key,value in data.items():
+                    if value is None or same_parameter(key,value,base.get(key)):new_overrides.pop(key,None)
+                    else:new_overrides[key]=value
+            else:
+                new_overrides={key:value for key,value in data.items() if key in FIELDS and value is not None and not same_parameter(key,value,base.get(key))}
+            if action=='rows_save' and new_overrides!=row.overrides:
+                batch.needs_recalculation=True
+                if row.result:row.result={**row.result,'stale':True}
+            row.overrides=new_overrides
+            row.save(update_fields=['overrides','result'])
     elif action!='calculate':raise ValidationError('Неизвестное действие.')
     batch.revision+=1
-    if action in ('calculate','rows','parameters'):
+    if action in ('calculate','rows','parameters','workflow_calculate'):
         updates=[]
         for row in batch.rows.all().iterator(chunk_size=200):
             row.result=calculate(batch,row);updates.append(row)
             if len(updates)==200:ModelDDPRow.objects.bulk_update(updates,['result']);updates=[]
         if updates:ModelDDPRow.objects.bulk_update(updates,['result'])
-        batch.calculated_at=timezone.now()
-    else:
-        batch.rows.update(result={});batch.calculated_at=None
+        batch.calculated_at=timezone.now();mark_calculated(batch)
+    elif action!='rows_save':
+        batch.rows.update(result={});batch.calculated_at=None;batch.needs_recalculation=True
     batch.save()
     return batch

@@ -12,6 +12,6 @@
 <p><strong>Глобальные расходы и курсы изменятся для всего текущего расчёта, включая строки вне фильтра.</strong> Курсы копируются из источника; проверьте их соответствие текущей дате.</p>
 <dl>{% for label,value,previous in model_copy_preview.global_fields %}<dt>{{ label }}</dt><dd>{{ previous|default_if_none:'—' }} → {{ value|default_if_none:'не заполнено' }}</dd>{% endfor %}{% for code,value in model_copy_preview.global_values.rates.items %}<dt>RUB за 1 {{ code }}</dt><dd>{{ value|default_if_none:'не заполнено' }}</dd>{% endfor %}</dl>
 {% endif %}
-<form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ batch.revision }}"><input type="hidden" name="model_copy_token" value="{{ model_copy_token }}"><button class="btn btn-primary" name="action" value="model_copy_apply"{% if not portal_can_edit_purchases %} disabled{% endif %}>Копировать и пересчитать</button></form>
+<form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ batch.revision }}"><input type="hidden" name="model_copy_token" value="{{ model_copy_token }}"><button class="btn btn-outline-primary" name="action" value="model_copy_apply"{% if not portal_can_edit_purchases %} disabled{% endif %}>Копировать и пересчитать</button></form>
 </div>{% endif %}
 </details>

@@ -27,10 +27,23 @@ def filter_data(batch,request):
     entries,options=catalog(batch)
     selected={key:request.GET.get(key,'') for key,label in FILTERS}
     q=request.GET.get('q','').strip().casefold()
-    active=q or any(selected.values())
+    supplier_missing=request.GET.get('price_check')=='supplier'
+    active=q or any(selected.values()) or supplier_missing
     ids=None
     if active:
-        ids={pk for pk,values,text in entries if (not q or q in text) and
+        ids={pk for pk,values,text in entries if (not q or q in text) and (not supplier_missing or values['supply_type'] not in ('direct','p2','russian')) and
              all(not value or (not values[key] if value=='__empty__' else values[key]==value) for key,value in selected.items())}
     controls=[{'key':key,'label':label,'value':selected[key],'options':options[key]} for key,label in FILTERS]
     return ids,controls,options
+
+
+def apply_query_filters(query,filters):
+    if filters.get('currency'):query=query.filter(currency=filters['currency'])
+    state=filters.get('status')
+    if state in ('ready','partial','error'):query=query.filter(result__status=state)
+    elif state=='pending':query=query.filter(result={})
+    issue=filters.get('price_check')
+    if issue=='zero':query=query.filter(price=0)
+    elif issue=='missing':query=query.filter(price__isnull=True)
+    elif issue=='currency':query=query.exclude(currency__in=('USD','EUR','CNY','RUB'))
+    return query
