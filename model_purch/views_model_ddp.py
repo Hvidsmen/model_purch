@@ -117,7 +117,7 @@ def export(request,pk):
     meta.append(['Формула','Существующая модель закупок; загран доставка и НР НДС не входят в DDP'])
     for k,v in batch.rates.items():meta.append(['RUB за 1 '+k,safe(v)])
     for k,v in batch.parameters.items():
-        if k!='groups':meta.append([k,safe(v)])
+        if k in FREIGHT_FIELDS:meta.append([k,safe(v)])
     meta.append(['Источник параметров',safe(batch.source_metadata.get('name','Вручную'))])
     sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
     for row in batch.rows.all().iterator(chunk_size=500):

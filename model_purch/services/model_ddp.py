@@ -6,7 +6,7 @@ from django.core.exceptions import ValidationError
 from django.core import signing
 from django.db import transaction
 from django.utils import timezone
-from ..models import ModelDDPCalculation,ModelDDPRow,ScenarioModel,Freight,PGGoods,Purch
+from ..models import ModelDDPCalculation,ModelDDPRow,ScenarioModel,Freight,GoodsGroup
 from ..goods_identity import planning_group_key
 from .pricing import apply_price,CALCULATED_FIELDS
 
@@ -26,16 +26,26 @@ def decimal(value,label,optional=False,positive=False):
     except (ValueError,InvalidOperation,TypeError):raise ValidationError(label+': некорректное значение.')
 
 
+def goods_group_parameters(batch):
+    if not hasattr(batch,'_ddp_goods_groups'):
+        batch._ddp_goods_groups={group.name_key:{
+            'container_volume':str(group.container_volume),
+            'duty_percent':str(Decimal(str(group.duty_rate))*100)}
+            for group in GoodsGroup.objects.all()}
+    return batch._ddp_goods_groups
+
+
 def parameters(batch,row,overrides=True):
-    group=batch.parameters.get('groups',{}).get(planning_group_key(row.planning_group),{})
     result={'volume':row.source_data.get('volume'),'weight_kg':row.source_data.get('weight'),'brand':row.brand}
-    for key in ('container_volume','duty_percent',*FREIGHT_FIELDS):
-        result[key]=group.get(key) if group.get(key) is not None else batch.parameters.get(key,result.get(key))
+    for key in FREIGHT_FIELDS:result[key]=batch.parameters.get(key)
     classification=row.source_data.get('classification',{})
     for key in ('planning_sales','group_goods','brand','purch','kind_purch'):
         result[key]=classification.get(key) if 'classification' in row.source_data else row.brand if key=='brand' else None
     result['supply_type']=classification.get('supply_type')
     if overrides:result.update({k:v for k,v in row.overrides.items() if v is not None and k in FIELDS})
+    group=goods_group_parameters(batch).get(planning_group_key(result.get('group_goods') or ''),{})
+    for key in ('container_volume','duty_percent'):
+        result[key]=row.overrides[key] if overrides and row.overrides.get(key) is not None else group.get(key)
     return result
 
 
@@ -62,6 +72,8 @@ def calculate(batch,row):
         if supply not in ('direct','p2','russian'):raise ValidationError('Выберите тип поставки.')
         if supply=='russian':volume,container,duty=Decimal(0),Decimal(1),Decimal(0)
         else:
+            if inputs.get('container_volume') is None or inputs.get('duty_percent') is None:
+                raise ValidationError('Для группы товаров «'+str(inputs.get('group_goods') or 'не задана')+'» не найдены контейнер и/или пошлина в справочнике «Группы и пошлины». Заполните справочник или задайте значения модели вручную.')
             volume=decimal(inputs.get('volume'),'Объём модели, м³',positive=True)
             container=decimal(inputs.get('container_volume'),'Объём контейнера, м³',positive=True)
             duty=decimal(inputs.get('duty_percent'),'Пошлина, %')/100
@@ -99,17 +111,19 @@ def source_parameters(source):
     freight=Freight.objects.filter(scenario=source).first()
     if not freight:raise ValidationError('В выбранном сценарии не заполнены параметры фрахта.')
     result={key:str(getattr(freight,key)) for key in FREIGHT_FIELDS}
-    result['container_volume']=str(freight.volume_per_container);result['groups']={}
-    for good in PGGoods.objects.filter(scenario_plan=source):
-        key=planning_group_key(good.planning_group)
-        if key in result['groups']:raise ValidationError('В источнике неоднозначные параметры группы '+good.planning_group)
-        result['groups'][key]={'name':good.planning_group,'container_volume':str(good.container_volume),'duty_percent':str(Decimal(str(good.duty_rate))*100)}
     return {'parameters':result,'source':{'id':source.pk,'name':source.name,'copied_at':timezone.now().isoformat()}}
 
 
 def preview_token(batch,source,user):
     data=source_parameters(source)
     return data,signing.dumps({'identity':[batch.pk,batch.revision,user.pk],**data},salt=SALT,compress=True)
+
+
+def same_parameter(key,left,right):
+    if key in ('volume','weight_kg','container_volume','duty_percent',*FREIGHT_FIELDS):
+        try:return Decimal(str(left))==Decimal(str(right))
+        except (InvalidOperation,ValueError):return False
+    return str(left)==str(right)
 
 
 @transaction.atomic
@@ -135,7 +149,7 @@ def mutate(batch_id,revision,action,*,user=None,token=None,values=None,rows=None
             row=batch.rows.filter(pk=pk).first()
             if not row:raise ValidationError('Строка не принадлежит выбранному расчёту.')
             base=parameters(batch,row,False)
-            row.overrides={key:value for key,value in data.items() if key in FIELDS and value is not None and str(value)!=str(base.get(key))}
+            row.overrides={key:value for key,value in data.items() if key in FIELDS and value is not None and not same_parameter(key,value,base.get(key))}
             row.save(update_fields=['overrides'])
     elif action!='calculate':raise ValidationError('Неизвестное действие.')
     batch.revision+=1

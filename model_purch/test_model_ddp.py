@@ -25,12 +25,12 @@ RATES = dict(USD='100', EUR='125', CNY='10', RUB='1')
 
 class CalculationTests(SimpleTestCase):
     def batch(self, **kwargs):
-        return SimpleNamespace(parameters={**PARAMS, **kwargs}, rates=RATES.copy())
+        return SimpleNamespace(parameters={**PARAMS, **kwargs}, rates=RATES.copy(),_ddp_goods_groups={planning_group_key('ERP goods'):{'container_volume':'50','duty_percent':'10'}})
 
     def row(self, **kwargs):
         data=dict(price=Decimal('100'),currency='USD',planning_group='G',brand='B',source_data={'volume':'1'},overrides={})
         data.update(kwargs)
-        data['source_data']={'classification':{'supply_type':'p2'},**data['source_data']}
+        data['source_data']={'classification':{'supply_type':'p2','group_goods':'ERP goods'},**data['source_data']}
         return SimpleNamespace(**data)
 
     def test_existing_formula_and_all_currencies(self):
@@ -77,7 +77,7 @@ class CalculationTests(SimpleTestCase):
     def test_missing_inputs_not_zero(self):
         for changed in [{'volume':None}, {'volume':'0'}, {'volume':'NaN'}]:
             self.assertEqual(calculate(self.batch(), self.row(source_data=changed))['status'], 'error')
-        for changed in [{'container_volume':None}, {'duty_percent':None}, {'customs_rate':'101'}]:
+        for changed in [{'customs_rate':'101'}]:
             self.assertEqual(calculate(self.batch(**changed), self.row())['status'], 'error')
         self.assertEqual(calculate(self.batch(),self.row(source_data={'volume':'1','classification':{}}))['status'],'error')
         self.assertEqual(calculate(self.batch(), self.row(price=None))['status'],'error')
@@ -94,7 +94,7 @@ class CalculationTests(SimpleTestCase):
 
     def test_group_and_manual_override_precedence(self):
         b=self.batch(groups={planning_group_key('G'):{'container_volume':'100','duty_percent':'0','supply_type':'direct'}})
-        self.assertEqual(Decimal(calculate(b,self.row())['ddp']['USD']),126)
+        self.assertEqual(Decimal(calculate(b,self.row())['ddp']['USD']),Decimal('143.2'))
         self.assertEqual(Decimal(calculate(b,self.row(overrides={'supply_type':'russian'}))['ddp']['USD']),100)
 
     def test_model_logistics_override_does_not_change_other_models(self):
@@ -255,9 +255,11 @@ class SourceTests(SimpleTestCase):
 class SnapshotTests(TestCase):
     def setUp(self):
         self.user=authorize_admin(self.client)
+        from .models import GoodsGroup
+        GoodsGroup.objects.create(name='ERP goods',container_volume=50,duty_rate=.1)
         self.batch=ModelDDPCalculation.objects.create(name='DDP',as_of=date(2026,11,22),created_by=self.user,parameters=PARAMS,rates=RATES)
         self.row=ModelDDPRow.objects.create(calculation=self.batch,model_ref='m',model_name='Model',brand='B',
-                      price_type_ref='k',price_type='PURCH USD',currency='USD',price=100,source_data={'volume':'1','classification':{'supply_type':'p2','brand':'B'}})
+                      price_type_ref='k',price_type='PURCH USD',currency='USD',price=100,source_data={'volume':'1','classification':{'supply_type':'p2','brand':'B','group_goods':'ERP goods'}})
         self.url=reverse('model_ddp_detail',args=[self.batch.pk])
 
     def test_calculate_persists_and_stale_write_rejected(self):
@@ -373,6 +375,37 @@ class SnapshotTests(TestCase):
         known.refresh_from_db();ambiguous.refresh_from_db()
         self.assertEqual(known.kind_purch,first)
         self.assertIsNone(ambiguous.kind_purch)
+
+    def test_container_and_duty_come_from_goods_group_directory(self):
+        from .services.model_ddp import parameters
+        from .models import GoodsGroup
+        self.batch.parameters={**PARAMS,'container_volume':'999','duty_percent':'99','groups':{
+            planning_group_key('G'):{'container_volume':'888','duty_percent':'88'}}}
+        self.batch.save()
+        self.row.planning_group='G';self.row.save()
+        p=parameters(self.batch,self.row)
+        self.assertEqual(Decimal(p['container_volume']),50)
+        self.assertEqual(Decimal(p['duty_percent']),10)
+        GoodsGroup.objects.filter(name='ERP goods').update(container_volume=60,duty_rate=.2)
+        fresh=ModelDDPCalculation.objects.get(pk=self.batch.pk)
+        p=parameters(fresh,self.row)
+        self.assertEqual(Decimal(p['container_volume']),60)
+        self.assertEqual(Decimal(p['duty_percent']),20)
+
+    def test_missing_goods_group_has_no_scenario_fallback(self):
+        self.row.source_data['classification']['group_goods']='Unknown group'
+        self.row.save()
+        result=calculate(self.batch,self.row)
+        self.assertEqual(result['status'],'error')
+        self.assertIn('Группы и пошлины',result['error'])
+        self.row.overrides={'container_volume':'50','duty_percent':'10'}
+        self.assertEqual(calculate(self.batch,self.row)['status'],'ready')
+
+    def test_decimal_format_does_not_create_manual_directory_overrides(self):
+        mutate(self.batch.pk,1,'rows',rows={self.row.pk:{'container_volume':'50.000000','duty_percent':'10.0'}})
+        self.row.refresh_from_db()
+        self.assertNotIn('container_volume',self.row.overrides)
+        self.assertNotIn('duty_percent',self.row.overrides)
 
     def test_failed_load_does_not_change_saved_rows(self):
         with patch('model_purch.views_model_ddp.load_prices',side_effect=ValidationError('Unavailable')):
