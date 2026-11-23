@@ -1,0 +1,50 @@
+<tr>
+<td class="ddp-model-identity"><strong>{{ row.model_name }}</strong><div>{{ row.planning_group|default:'Группа не определена' }}</div><small>{{ row.brand }}</small></td>
+<td class="ddp-input-column ddp-classification">
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.planning_sales label='План продаж' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.group_goods label='Группа товаров' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.brand label='Марка' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.purch label='Закупка' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.kind_purch label='Вид закупки' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.supply_type label='Тип поставки' %}
+</td>
+<td class="ddp-input-column">
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.container_volume label='Контейнер, м³' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.volume label='Модель, м³' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.weight_kg label='Вес, кг' %}
+<small>ERP: {{ row.source_data.volume|default_if_none:'—' }} м³</small>
+</td>
+<td class="ddp-input-column ddp-source-price"><strong>{{ row.price|floatformat:'4g'|default:'—' }} {{ row.currency|default:'Валюта не определена' }}</strong><div>{{ row.price_type|default:'Нет цены PURCH' }}</div><small>{{ row.price_at|date:'d.m.Y H:i' }}</small>
+{% if row.source_data.unit %}<div>Единица: {{ row.source_data.unit }}</div>{% endif %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.price_quantity label='Единиц в цене' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.price_unit_confirmed label='Подтверждено' %}
+</td>
+<td class="ddp-input-column">
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.duty_percent label='Пошлина, %' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.customs_rate label='Таможня, %' %}
+</td>
+<td class="ddp-input-column ddp-cost-inputs">
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.price_per_container label='Фрахт / контейнер' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.warehouse_delivery_cost label='До склада / конт.' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.foreign_delivery_cost label='Загран / контейнер' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.nr_customs_vat_rate label='НР НДС, %' %}
+<small>Загран доставка и НР НДС — вне DDP.</small>
+</td>
+<td class="ddp-currency-results">
+<div class="ddp-inline-result"><span>USD</span><strong class="ddp-money">{{ row.result.ddp.USD|floatformat:'2g'|default:'—' }}</strong></div>
+<div class="ddp-inline-result"><span>EUR</span><strong class="ddp-money">{{ row.result.ddp.EUR|floatformat:'2g'|default:'—' }}</strong></div>
+<div class="ddp-inline-result"><span>CNY</span><strong class="ddp-money">{{ row.result.ddp.CNY|floatformat:'2g'|default:'—' }}</strong></div>
+<div class="ddp-inline-result"><span>RUB</span><strong class="ddp-money">{{ row.result.ddp.RUB|floatformat:'2g'|default:'—' }}</strong></div>
+</td>
+<td class="ddp-input-column">
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.stock_cnt_day label='Запас, дни' %}
+{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.percent_stock_end label='Остаток, %' %}
+</td>
+<td class="ddp-status-{{ row.result.status }} ddp-calculation-column">
+{% if row.result.status == 'ready' %}Рассчитан{% elif row.result.status == 'partial' %}Рассчитан не во всех валютах{% elif row.result.error %}{{ row.result.error }}{% else %}Не рассчитан{% endif %}
+{% for warning in row.result.warnings %}<div>{{ warning }}</div>{% endfor %}
+{% if row.result.steps %}{% include 'model_purch/model_ddp_steps.html' %}{% elif row.result.components %}
+<div class="ddp-component-list"><span>EXW: {{ row.result.components.exw_usd|floatformat:4 }}</span><span>Фрахт: {{ row.result.components.freight_usd|floatformat:4 }}</span><span>CIF: {{ row.result.components.cif_usd|floatformat:4 }}</span><span>Таможня: {{ row.result.components.customs_payment_usd|floatformat:4 }}</span><span>До склада: {{ row.result.components.warehouse_delivery_usd|floatformat:4 }}</span></div><small>Для подробных этапов пересчитайте модели.</small>
+{% endif %}
+</td>
+</tr>
