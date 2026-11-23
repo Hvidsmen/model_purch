@@ -160,19 +160,28 @@ def mutate(batch_id,revision,action,*,user=None,token=None,values=None,rows=None
     elif action=='parameters':
         batch.parameters={**batch.parameters,**values['parameters']};batch.rates=values['rates']
     elif action=='load':
-        previous={(r.model_ref,r.price_type_ref,r.currency):r.overrides for r in batch.rows.all()}
+        previous={}
+        for old in batch.rows.order_by('price_type','currency','pk'):
+            previous.setdefault(old.model_ref,old.overrides)
         records=[]
         for data in rows:
-            entry=deepcopy(data);entry['overrides']=previous.get((entry['model_ref'],entry['price_type_ref'],entry['currency']),{})
+            entry=deepcopy(data);entry['overrides']=previous.get(entry['model_ref'],{})
             records.append(ModelDDPRow(calculation=batch,**entry))
         batch.rows.all().delete();ModelDDPRow.objects.bulk_create(records,batch_size=200);batch.loaded_at=timezone.now()
     elif action in ('rows','rows_save','workflow_calculate'):
+        model_changes={}
         for pk,data in rows.items():
             row=batch.rows.filter(pk=pk).first()
             if not row:raise ValidationError('Строка не принадлежит выбранному расчёту.')
+            if row.model_ref in model_changes and model_changes[row.model_ref]!=data:
+                raise ValidationError('Для одной модели переданы разные параметры.')
+            model_changes[row.model_ref]=data
+        representatives={row.model_ref:row for row in batch.rows.filter(pk__in=rows)}
+        for row in batch.rows.filter(model_ref__in=model_changes):
+            data=model_changes[row.model_ref]
             base=parameters(batch,row,False)
             if action=='workflow_calculate':
-                new_overrides=deepcopy(row.overrides)
+                new_overrides=deepcopy(representatives[row.model_ref].overrides)
                 for key,value in data.items():
                     if value is None or same_parameter(key,value,base.get(key)):new_overrides.pop(key,None)
                     else:new_overrides[key]=value
@@ -186,11 +195,13 @@ def mutate(batch_id,revision,action,*,user=None,token=None,values=None,rows=None
     elif action!='calculate':raise ValidationError('Неизвестное действие.')
     batch.revision+=1
     if action in ('calculate','rows','parameters','workflow_calculate'):
-        updates=[]
-        for row in batch.rows.all().iterator(chunk_size=200):
+        updates=[];shared={}
+        for row in batch.rows.order_by('model_ref','price_type','currency','pk').iterator(chunk_size=200):
+            shared.setdefault(row.model_ref,deepcopy(row.overrides))
+            row.overrides=deepcopy(shared[row.model_ref])
             row.result=calculate(batch,row);updates.append(row)
-            if len(updates)==200:ModelDDPRow.objects.bulk_update(updates,['result']);updates=[]
-        if updates:ModelDDPRow.objects.bulk_update(updates,['result'])
+            if len(updates)==200:ModelDDPRow.objects.bulk_update(updates,['overrides','result']);updates=[]
+        if updates:ModelDDPRow.objects.bulk_update(updates,['overrides','result'])
         batch.calculated_at=timezone.now();mark_calculated(batch)
     elif action!='rows_save':
         batch.rows.update(result={});batch.calculated_at=None;batch.needs_recalculation=True

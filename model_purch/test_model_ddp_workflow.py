@@ -92,3 +92,31 @@ class WorkflowTests(TestCase):
             self.assertEqual(response.context['workflow_step'],step)
         self.batch.refresh_from_db();self.assertEqual(self.batch.revision,1)
         self.assertEqual(self.batch.rows.filter(result={}).count(),2)
+
+    def test_prices_share_one_model_row_even_when_currency_filtered(self):
+        second=ModelDDPRow.objects.create(calculation=self.batch,model_ref='A',model_name='Model A',price_type='PURCH_EUR',price_type_ref='eur',price=90,currency='EUR',source_data=self.row.source_data)
+        response=self.client.get(self.url+'?currency=EUR')
+        page=response.context['page']
+        self.assertEqual(page.paginator.count,1)
+        self.assertEqual({r.pk for r in page[0].price_variants},{self.row.pk,second.pk})
+        self.assertEqual(response.content.decode().count('class="ddp-model-identity"'),1)
+        self.assertContains(response,'PURCH_EUR')
+        self.assertContains(response,f'name="r{page[0].pk}-volume"',count=1)
+
+    def test_model_edit_updates_every_price_without_changing_prices(self):
+        second=ModelDDPRow.objects.create(calculation=self.batch,model_ref='A',model_name='Model A',price_type_ref='eur',price=90,currency='EUR',source_data=self.row.source_data)
+        mutate(self.batch.pk,1,'rows_save',rows={self.row.pk:{'volume':'2'}})
+        self.row.refresh_from_db();second.refresh_from_db();self.other.refresh_from_db()
+        self.assertEqual(self.row.overrides,second.overrides)
+        self.assertEqual(second.overrides['volume'],'2')
+        self.assertEqual(second.price,90)
+        self.assertEqual(self.other.overrides,{})
+
+    def test_excel_groups_model_columns_and_preserves_each_price(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        ModelDDPRow.objects.create(calculation=self.batch,model_ref='A',model_name='Model A',price_type_ref='eur',price=90,currency='EUR',source_data=self.row.source_data)
+        response=self.client.get(reverse('model_ddp_export',args=[self.batch.pk]))
+        sheet=load_workbook(BytesIO(response.content))['Помодельный DDP']
+        self.assertIn('A2:A3',{str(r) for r in sheet.merged_cells.ranges})
+        self.assertEqual({sheet.cell(r,6).value for r in (2,3)},{'USD','EUR'})

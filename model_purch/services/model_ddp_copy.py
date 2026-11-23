@@ -21,7 +21,8 @@ MODES=('rows','globals','all')
 def filtered_ids(batch,filters):
     ids,_,_=filter_data(batch,SimpleNamespace(GET=filters))
     query=apply_query_filters(batch.rows.all(),filters)
-    return {pk for pk in query.values_list('pk',flat=True) if ids is None or pk in ids}
+    refs={ref for pk,ref in query.values_list('pk','model_ref').iterator(chunk_size=1000) if ids is None or pk in ids}
+    return {pk for pk,ref in batch.rows.values_list('pk','model_ref').iterator(chunk_size=1000) if ref in refs}
 
 
 def key(row):
@@ -42,10 +43,13 @@ def plan(target,source,mode,filters):
     if mode in ('rows','all'):
         if not selected:raise ValidationError('В текущем фильтре нет моделей для копирования. Загрузите цены PURCH в текущий расчёт или измените фильтры.')
         wanted={(ref,kind,currency) for pk,ref,kind,currency in target.rows.values_list('pk','model_ref','price_type_ref','currency').iterator(chunk_size=1000) if pk in selected}
-        sources={key(row):row for row in source.rows.all().iterator(chunk_size=500) if key(row) in wanted}
+        sources={}
+        wanted_refs={ref for ref,kind,currency in wanted}
+        for original in source.rows.all().order_by('price_type','currency','pk').iterator(chunk_size=500):
+            if original.model_ref in wanted_refs:sources.setdefault(original.model_ref,original)
         for row in target.rows.all().iterator(chunk_size=500):
             if row.pk not in selected:continue
-            original=sources.get(key(row))
+            original=sources.get(row.model_ref)
             if original is None:missing+=1;continue
             values={name:value for name,value in parameters(source,original).items() if name in FIELDS and value not in (None,'')}
             form=RowForm(values)
@@ -88,7 +92,7 @@ def preview(target,source,mode,request):
     filters={name:request.GET.get(name,'') for name in FILTER_KEYS}
     result=plan(target,source,mode,filters)
     if mode=='rows' and not result['matched']:
-        raise ValidationError('В источнике нет подходящих строк с корректными параметрами. Совпадение: модель + вид цены + валюта.')
+        raise ValidationError('В источнике нет подходящих строк с корректными параметрами. Совпадение: ссылка модели.')
     token=signing.dumps({'target':target.pk,'revision':target.revision,'user':request.user.pk,
                         'source':source.pk,'source_revision':source.revision,'mode':mode,
                         'filters':filters,'digest':result['digest']},salt=SALT,compress=True)

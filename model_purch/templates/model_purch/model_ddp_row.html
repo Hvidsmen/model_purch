@@ -14,9 +14,8 @@
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.weight_kg label='Вес, кг' %}
 <small>ERP: {{ row.source_data.volume|default_if_none:'—' }} м³</small>
 </td>
-<td class="ddp-input-column ddp-source-price"><strong>{{ row.price|floatformat:'4g'|default:'—' }} {{ row.currency|default:'Валюта не определена' }}</strong><div>{{ row.price_type|default:'Нет цены PURCH' }}</div><small>{{ row.price_at|date:'d.m.Y H:i' }}</small>
-{% if row.source_data.unit %}<div>Единица: {{ row.source_data.unit }}</div>{% endif %}
-</td>
+<td class="ddp-input-column ddp-source-price">{% for variant in row.price_variants %}<div class="ddp-price-variant"><strong>{{ variant.price|floatformat:'4g'|default:'—' }} {{ variant.currency|default:'Валюта не определена' }}</strong><div>{{ variant.price_type|default:'Нет цены PURCH' }}</div><small>{{ variant.price_at|date:'d.m.Y H:i' }}</small>
+{% if variant.source_data.unit %}<div>Единица: {{ variant.source_data.unit }}</div>{% endif %}</div>{% endfor %}</td>
 <td class="ddp-input-column">
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.duty_percent label='Пошлина, %' %}
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.customs_rate label='Таможня, %' %}
@@ -28,17 +27,16 @@
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.nr_customs_vat_rate label='НР НДС, %' %}
 <small>Загран доставка и НР НДС — вне DDP.</small>
 </td>
-<td class="ddp-currency-results">
-<div class="ddp-inline-result"><span>KDDP</span><strong>{{ row.result.components.kddp|floatformat:'4g'|default:'—' }}</strong></div><div class="ddp-inline-result"><span>USD</span><strong class="ddp-money">{{ row.result.ddp.USD|floatformat:'2g'|default:'—' }}</strong></div>
-<div class="ddp-inline-result"><span>EUR</span><strong class="ddp-money">{{ row.result.ddp.EUR|floatformat:'2g'|default:'—' }}</strong></div>
-<div class="ddp-inline-result"><span>CNY</span><strong class="ddp-money">{{ row.result.ddp.CNY|floatformat:'2g'|default:'—' }}</strong></div>
-<div class="ddp-inline-result"><span>RUB</span><strong class="ddp-money">{{ row.result.ddp.RUB|floatformat:'2g'|default:'—' }}</strong></div>
-</td>
-<td class="ddp-status-{{ row.result.status }} ddp-calculation-column">
-{% if row.result.status == 'ready' %}Рассчитан{% elif row.result.status == 'partial' %}Рассчитан не во всех валютах{% elif row.result.error %}{{ row.result.error }}{% else %}Не рассчитан{% endif %}
-{% for warning in row.result.warnings %}<div>{{ warning }}</div>{% endfor %}
-{% if row.result.steps %}{% include 'model_purch/model_ddp_steps.html' %}{% elif row.result.components %}
-<div class="ddp-component-list"><span>EXW: {{ row.result.components.exw_usd|floatformat:4 }}</span><span>Фрахт: {{ row.result.components.freight_usd|floatformat:4 }}</span><span>CIF: {{ row.result.components.cif_usd|floatformat:4 }}</span><span>Таможня: {{ row.result.components.customs_payment_usd|floatformat:4 }}</span><span>До склада: {{ row.result.components.warehouse_delivery_usd|floatformat:4 }}</span></div><small>Для подробных этапов пересчитайте модели.</small>
-{% endif %}
+<td class="ddp-currency-results">{% for variant in row.price_variants %}<div class="ddp-price-variant"><strong>{{ variant.price_type }} · {{ variant.currency }}</strong>
+<div class="ddp-inline-result"><span>KDDP</span><strong>{{ variant.result.components.kddp|floatformat:'4g'|default:'—' }}</strong></div><div class="ddp-inline-result"><span>USD</span><strong class="ddp-money">{{ variant.result.ddp.USD|floatformat:'2g'|default:'—' }}</strong></div>
+<div class="ddp-inline-result"><span>EUR</span><strong class="ddp-money">{{ variant.result.ddp.EUR|floatformat:'2g'|default:'—' }}</strong></div>
+<div class="ddp-inline-result"><span>CNY</span><strong class="ddp-money">{{ variant.result.ddp.CNY|floatformat:'2g'|default:'—' }}</strong></div>
+<div class="ddp-inline-result"><span>RUB</span><strong class="ddp-money">{{ variant.result.ddp.RUB|floatformat:'2g'|default:'—' }}</strong></div>
+</div>{% endfor %}</td>
+<td class="ddp-calculation-column">{% for variant in row.price_variants %}<div class="ddp-price-variant ddp-status-{{ variant.result.status }}"><strong>{{ variant.price_type }} · {{ variant.currency }}</strong><br>{% if variant.result.status == 'ready' %}Рассчитан{% elif variant.result.status == 'partial' %}Рассчитан не во всех валютах{% elif variant.result.error %}{{ variant.result.error }}{% else %}Не рассчитан{% endif %}
+{% for warning in variant.result.warnings %}<div>{{ warning }}</div>{% endfor %}
+{% if variant.result.steps %}{% include 'model_purch/model_ddp_steps.html' with row=variant %}{% elif variant.result.components %}
+<div class="ddp-component-list"><span>EXW: {{ variant.result.components.exw_usd|floatformat:4 }}</span><span>Фрахт: {{ variant.result.components.freight_usd|floatformat:4 }}</span><span>CIF: {{ variant.result.components.cif_usd|floatformat:4 }}</span><span>Таможня: {{ variant.result.components.customs_payment_usd|floatformat:4 }}</span><span>До склада: {{ variant.result.components.warehouse_delivery_usd|floatformat:4 }}</span></div><small>Для подробных этапов пересчитайте модели.</small>
+{% endif %}</div>{% endfor %}
 </td>
 </tr>
