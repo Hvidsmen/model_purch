@@ -10,21 +10,17 @@ from django.db import transaction
 from django.utils import timezone
 from ..models import ModelDDPCalculation
 from ..model_ddp_forms import RowForm,ParametersForm
-from .model_ddp import FIELDS,FREIGHT_FIELDS,parameters,same_parameter,calculate
-from .model_ddp_references import FILTERS,filter_data
+from .model_ddp import FIELDS,FREIGHT_FIELDS,parameters,same_parameter,calculate,mark_calculated,directory_signature
+from .model_ddp_references import FILTERS,filter_data,apply_query_filters
 
 SALT='model-ddp-copy-v1'
-FILTER_KEYS=('q','currency','status',*[key for key,label in FILTERS])
+FILTER_KEYS=('q','currency','status','price_check',*[key for key,label in FILTERS])
 MODES=('rows','globals','all')
 
 
 def filtered_ids(batch,filters):
     ids,_,_=filter_data(batch,SimpleNamespace(GET=filters))
-    query=batch.rows.all()
-    if filters.get('currency'):query=query.filter(currency=filters['currency'])
-    status=filters.get('status')
-    if status in ('ready','partial','error'):query=query.filter(result__status=status)
-    elif status=='pending':query=query.filter(result={})
+    query=apply_query_filters(batch.rows.all(),filters)
     return {pk for pk in query.values_list('pk',flat=True) if ids is None or pk in ids}
 
 
@@ -114,6 +110,7 @@ def apply(target_id,token,user):
     if not compare_digest(result['digest'],data['digest']):
         raise ValidationError('Параметры или область копирования изменились. Повторите предпросмотр.')
     global_copy=data['mode'] in ('globals','all')
+    prior_stale=target.needs_recalculation or target.source_metadata.get('directory_signature')!=directory_signature(target)
     assignments={item['id']:item['overrides'] for item in result['payload']['rows']}
     if global_copy:
         target.parameters={name:value for name,value in result['global_values']['parameters'].items()}
@@ -133,6 +130,8 @@ def apply(target_id,token,user):
         if len(pending)==250:
             target.rows.model.objects.bulk_update(pending,['overrides','result'],batch_size=200);pending=[]
     if pending:target.rows.model.objects.bulk_update(pending,['overrides','result'],batch_size=200)
-    target.revision+=1;target.calculated_at=timezone.now();target.save()
+    target.revision+=1;target.calculated_at=timezone.now();mark_calculated(target)
+    target.needs_recalculation=(not global_copy and prior_stale and len(assignments)<target.rows.count()) or target.rows.filter(result={}).exists() or target.rows.filter(result__stale=True).exists()
+    target.save()
     return {'copied':len(assignments),'calculated':calculated,'errors':errors,
             'missing':result['missing'],'invalid':result['invalid']}

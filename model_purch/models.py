@@ -469,6 +469,7 @@ class ModelDDPCalculation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     loaded_at = models.DateTimeField(null=True, blank=True)
     calculated_at = models.DateTimeField(null=True, blank=True)
+    needs_recalculation = models.BooleanField(default=True)
 
     class Meta:
         ordering = ['-created_at', '-pk']

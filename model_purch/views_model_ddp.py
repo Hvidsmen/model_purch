@@ -14,9 +14,9 @@ from django.views.decorators.http import require_http_methods
 from base.access import role_for,ADMIN,LOGISTICIAN,ANALYST
 from .models import ModelDDPCalculation
 from .model_ddp_forms import CreateForm,ParametersForm,RowForm,SourceForm,ModelCopyForm
-from .services.model_ddp import mutate,parameters,preview_token,FREIGHT_FIELDS,MODEL_FIELDS
+from .services.model_ddp import mutate,parameters,preview_token,FREIGHT_FIELDS,MODEL_FIELDS,directory_signature
 from .services.model_ddp_source import load_prices,empty_reference
-from .services.model_ddp_references import filter_data
+from .services.model_ddp_references import filter_data,catalog,apply_query_filters
 
 
 def access(request):
@@ -27,6 +27,23 @@ def access(request):
 
 def initial_parameters(batch):
     return {**{k:v for k,v in batch.parameters.items() if k!='groups'},**{code.lower():batch.rates.get(code) for code in ('USD','EUR','CNY')}}
+
+
+def row_changes(batch,data,optional=False):
+    try:ids=json.loads(data.get('rows','[]'))
+    except (ValueError,TypeError):raise ValidationError('Некорректный список строк.')
+    if optional and ids==[]:return {},{},[]
+    if not isinstance(ids,list) or not ids or len(ids)>200 or any(type(i) is not int for i in ids) or len(set(ids))!=len(ids):
+        raise ValidationError('Выберите строки текущего расчёта.')
+    found=list(batch.rows.filter(pk__in=ids))
+    if len(found)!=len(ids):raise ValidationError('Строка не принадлежит выбранному расчёту.')
+    changes={};forms={};errors=[]
+    for row in found:
+        f=RowForm(data,prefix='r'+str(row.pk));forms[row.pk]=f
+        if not f.is_valid():
+            errors.append(row.model_name+': '+'; '.join(str(e) for values in f.errors.values() for e in values));continue
+        changes[row.pk]={k:v if isinstance(v,bool) else None if v in (None,'') else str(v) for k,v in f.cleaned_data.items()}
+    return changes,forms,errors
 
 
 @login_required
@@ -46,7 +63,7 @@ def detail(request,pk):
     role=access(request);batch=get_object_or_404(ModelDDPCalculation,pk=pk)
     form=ParametersForm(initial=initial_parameters(batch));source_form=SourceForm();preview=None;token=''
     model_copy_form=ModelCopyForm(target=batch);model_copy_preview=None;model_copy_token=''
-    error=''
+    error='';bound_rows={}
     if request.method=='POST':
         action=request.POST.get('action')
         try:
@@ -71,6 +88,19 @@ def detail(request,pk):
                 if form.is_valid():
                     data={key:None if value in (None,'') else str(value) for key,value in form.cleaned_data.items()}
                     mutate(pk,batch.revision,'parameters',values={'parameters':{k:v for k,v in data.items() if k not in ('usd','eur','cny')},'rates':{'USD':data['usd'],'EUR':data['eur'],'CNY':data['cny'],'RUB':'1'}})
+            elif action=='workflow_calculate':
+                form=ParametersForm(request.POST)
+                changes,bound_rows,row_errors=row_changes(batch,request.POST,optional=True)
+                if row_errors:raise ValidationError(row_errors[:10])
+                if form.is_valid():
+                    data={key:None if value in (None,'') else str(value) for key,value in form.cleaned_data.items()}
+                    mutate(pk,batch.revision,'workflow_calculate',rows=changes,values={
+                        'parameters':{k:v for k,v in data.items() if k not in ('usd','eur','cny')},
+                        'rates':{'USD':data['usd'],'EUR':data['eur'],'CNY':data['cny'],'RUB':'1'}})
+            elif action=='rows_save':
+                changes,bound_rows,row_errors=row_changes(batch,request.POST)
+                if row_errors:raise ValidationError(row_errors[:10])
+                mutate(pk,batch.revision,'rows_save',rows=changes)
             elif action=='calculate':mutate(pk,batch.revision,'calculate')
             elif action=='rows':
                 try:ids=json.loads(request.POST.get('rows','[]'))
@@ -85,15 +115,16 @@ def detail(request,pk):
                     changes[row.pk]={k:v if isinstance(v,bool) else None if v in (None,'') else str(v) for k,v in f.cleaned_data.items()}
                 mutate(pk,batch.revision,'rows',rows=changes)
             else:raise ValidationError('Неизвестное действие.')
-            if action not in ('preview','model_copy_preview') and (action!='parameters' or form.is_valid()):
-                messages.success(request,'Данные сохранены. Результаты рассчитаны.' if action in ('rows','calculate','parameters') else 'Данные сохранены. Для обновления DDP нажмите «Рассчитать».')
-                return redirect(reverse('model_ddp_detail',args=[pk])+'?'+request.GET.urlencode())
+            if action not in ('preview','model_copy_preview') and (action not in ('parameters','workflow_calculate') or form.is_valid()):
+                messages.success(request,'Параметры моделей сохранены.' if action=='rows_save' else 'DDP рассчитан. Проверьте результаты и строки с ошибками.' if action in ('rows','calculate','parameters','workflow_calculate') else 'Данные сохранены. Перейдите к расчёту DDP.')
+                destination=request.GET.copy()
+                if action=='load':destination['step']='review'
+                elif action in ('workflow_calculate','calculate','parameters'):destination['step']='calculate'
+                return redirect(reverse('model_ddp_detail',args=[pk])+'?'+destination.urlencode())
         except ValidationError as exc:error=' '.join(exc.messages)
     query=batch.rows.all();q=request.GET.get('q','').strip();currency=request.GET.get('currency','');status=request.GET.get('status','');brand=request.GET.get('brand','')
     ids,reference_filters,reference_choices=filter_data(batch,request)
-    if currency:query=query.filter(currency=currency)
-    if status in ('ready','partial','error'):query=query.filter(result__status=status)
-    elif status=='pending':query=query.filter(result={})
+    query=apply_query_filters(query,request.GET)
     from .services.product_options import classification_options
     from .models import Purch,KindPurch
     choices=classification_options()
@@ -108,9 +139,30 @@ def detail(request,pk):
     for row in page:
         if empty_reference(row.source_data.get('unit')):row.source_data={**row.source_data,'unit':''}
         values=parameters(batch,row)
-        row.edit_form=RowForm(prefix='r'+str(row.pk),initial=values,reference_choices=choices)
-    preserved=request.GET.copy();preserved.pop('page',None)
-    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'model_copy_form':model_copy_form,'model_copy_preview':model_copy_preview,'model_copy_token':model_copy_token,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
+        row.edit_form=bound_rows.get(row.pk) or RowForm(prefix='r'+str(row.pk),initial=values,reference_choices=choices)
+    from django.db.models import Count
+    stats=batch.rows.aggregate(total=Count('pk'),zero=Count('pk',filter=Q(price=0)),
+        missing_price=Count('pk',filter=Q(price__isnull=True)),
+        missing_currency=Count('pk',filter=~Q(currency__in=('USD','EUR','CNY','RUB'))),
+        errors=Count('pk',filter=Q(result__status='error')),partial=Count('pk',filter=Q(result__status='partial')),pending=Count('pk',filter=Q(result={})))
+    entries,_=catalog(batch)
+    stats['missing_supplier']=sum(values['supply_type'] not in ('direct','p2','russian') for pk,values,text in entries)
+    needs_recalculation=batch.needs_recalculation or bool(stats['pending']) or batch.source_metadata.get('directory_signature')!=directory_signature(batch)
+    step=request.GET.get('step')
+    if step not in ('load','review','calculate'):
+        step='load' if not batch.loaded_at and not stats['total'] else 'review' if needs_recalculation else 'calculate'
+    if request.method=='POST' and request.POST.get('action') in ('preview','copy','model_copy_preview','model_copy_apply','workflow_calculate','parameters'):
+        step='calculate'
+    rejected_edits=''
+    if request.method=='POST' and (error or form.errors):
+        if request.POST.get('action')=='workflow_calculate':rejected_edits='both'
+        elif request.POST.get('action')=='rows_save':rejected_edits='rows'
+    preserved=request.GET.copy();preserved.pop('page',None);preserved['step']=step
+    step_urls={}
+    for name in ('load','review','calculate'):
+        params=preserved.copy();params['step']=name
+        step_urls[name]=reverse('model_ddp_detail',args=[pk])+'?'+params.urlencode()
+    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'rejected_edits':rejected_edits,'expense_fields':[form[name] for name in FREIGHT_FIELDS],'rate_fields':[form[name] for name in ('usd','eur','cny')],'workflow_step':step,'step_urls':step_urls,'stats':stats,'needs_recalculation':needs_recalculation,'price_check':request.GET.get('price_check',''),'model_copy_form':model_copy_form,'model_copy_preview':model_copy_preview,'model_copy_token':model_copy_token,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
 
 
 def safe(value):
@@ -125,6 +177,8 @@ def export(request,pk):
     from openpyxl import Workbook
     book=Workbook();meta=book.active;meta.title='Параметры'
     meta.append(['Расчёт',safe(batch.name)]);meta.append(['Дата цен и курсов',str(batch.as_of)]);meta.append(['Ревизия',batch.revision])
+    export_stale=batch.needs_recalculation or batch.source_metadata.get('directory_signature')!=directory_signature(batch)
+    meta.append(['Состояние расчёта','Требуется пересчёт' if export_stale else 'Рассчитано'])
     meta.append(['Формула','Существующая модель закупок; загран доставка и НР НДС не входят в DDP'])
     for k,v in batch.rates.items():meta.append(['RUB за 1 '+k,safe(v)])
     for k,v in batch.parameters.items():
@@ -141,6 +195,7 @@ def export(request,pk):
                 values[index]=Decimal(str(values[index]))
         values.append(row.source_data.get('unit',''))
         values.extend([p.get(k) for k in ('planning_sales','group_goods','brand','purch','kind_purch','weight_kg',*FREIGHT_FIELDS)])
+        if export_stale or row.result.get('stale'):values[16]='Требуется пересчёт · '+str(values[16])
         sheet.append([safe(v) for v in values])
     trace=book.create_sheet('Этапы расчёта');trace.append(['Модель','Вид цены','Валюта цены','Этап','Формула','Результат','Валюта результата'])
     for row in batch.rows.all().iterator(chunk_size=500):
@@ -165,6 +220,8 @@ def load_stream(request,pk):
     revision=request.POST.get('revision')
     if str(batch.revision)!=str(revision):
         return JsonResponse({'error':'Расчёт изменён в другой вкладке. Обновите страницу.'},status=409)
+    next_query=request.GET.copy();next_query['step']='review'
+    next_url=reverse('model_ddp_detail',args=[pk])+'?'+next_query.urlencode()
     queue=Queue()
     disconnected=Event()
     def progress(stage,**data):
@@ -176,7 +233,7 @@ def load_stream(request,pk):
             rows=load_prices(batch.as_of,progress=progress,ensure_index=role==ADMIN)
             progress('сохранение снимка',rows=len(rows))
             mutate(pk,revision,'load',rows=rows)
-            queue.put({'done':True,'stage':'Загрузка завершена','rows':len(rows)})
+            queue.put({'done':True,'stage':'Загрузка завершена','rows':len(rows),'next_url':next_url})
         except ValidationError as error:queue.put({'done':True,'error':' '.join(error.messages)})
         except Exception:
             import logging

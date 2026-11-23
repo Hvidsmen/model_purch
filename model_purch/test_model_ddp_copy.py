@@ -61,6 +61,15 @@ class CopyTests(TestCase):
         self.assertEqual(result['copied'],61)
         self.assertEqual(self.target.rows.filter(overrides__volume='2').count(),61)
 
+    def test_price_check_filter_limits_table_copy(self):
+        self.target.rows.filter(model_ref='0').update(price=0)
+        plan,token=self.make_preview('rows',price_check='zero')
+        self.assertEqual(plan['selected'],1)
+        outcome=apply(self.target.pk,token,self.user)
+        self.assertEqual(outcome['copied'],1)
+        self.assertEqual(self.target.rows.get(model_ref='0').price,0)
+        self.assertEqual(self.target.rows.get(model_ref='1').overrides,{})
+
     def test_global_copy_ignores_row_filter_and_recalculates_all(self):
         plan,token=self.make_preview('globals',brand='No such brand')
         self.assertEqual(plan['selected'],0)
@@ -127,6 +136,16 @@ class CopyTests(TestCase):
         GoodsGroup.objects.update(duty_rate=.2)
         with self.assertRaises(ValidationError):apply(self.target.pk,token,self.user)
         self.assertEqual(self.target.rows.get(model_ref='0').overrides,{})
+
+    def test_partial_copy_does_not_hide_directory_staleness_outside_filter(self):
+        from .services.model_ddp import mutate
+        mutate(self.target.pk,1,'calculate')
+        self.target.refresh_from_db()
+        GoodsGroup.objects.update(duty_rate=.2)
+        _,token=self.make_preview('rows',brand='A')
+        apply(self.target.pk,token,self.user)
+        self.target.refresh_from_db()
+        self.assertTrue(self.target.needs_recalculation)
 
     def test_copy_same_calculation_is_rejected(self):
         request=self.factory.get('/');request.user=self.user
