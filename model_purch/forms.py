@@ -148,12 +148,13 @@ from .models import Purch, PurchPay, ScenarioModel, KindLagPay
 class PurchForm(forms.ModelForm):
     class Meta:
         model = Purch
-        fields = ['name', 'lag_income', 'lage_make', 'supply_type']
+        fields = ['name', 'lag_income', 'lage_make', 'supply_type', 'kind_purch']
         labels = {
             'name': 'Название закупки',
             'lag_income': 'Лаг доставки (дней)',
             'lage_make': 'Лаг производства (дней)',
             'supply_type': 'Тип поставки',
+            'kind_purch': 'Вид закупки',
         }
         widgets = {
             'name': forms.TextInput(attrs={
@@ -165,6 +166,7 @@ class PurchForm(forms.ModelForm):
                 'min': '0'
             }),
             'supply_type': forms.Select(attrs={'class': 'form-select'}),
+            'kind_purch': forms.Select(attrs={'class': 'form-select'}),
             'lage_make': forms.NumberInput(attrs={
                 'class': 'form-control',
                 'min': '0'
@@ -176,6 +178,9 @@ class PurchForm(forms.ModelForm):
         super().__init__(*args, **kwargs)
         if self.is_bound and self.add_prefix('supply_type') not in self.data:
             self.fields['supply_type'].required = False
+
+    def clean_kind_purch(self):
+        return self.cleaned_data.get('kind_purch') if self.add_prefix('kind_purch') in self.data else self.instance.kind_purch
 
     def clean_supply_type(self):
         if self.add_prefix('supply_type') not in self.data:

@@ -29,8 +29,12 @@ def decimal(value,label,optional=False,positive=False):
 def parameters(batch,row,overrides=True):
     group=batch.parameters.get('groups',{}).get(planning_group_key(row.planning_group),{})
     result={'volume':row.source_data.get('volume'),'weight_kg':row.source_data.get('weight'),'brand':row.brand}
-    for key in (*MODEL_FIELDS,*FREIGHT_FIELDS):
+    for key in ('container_volume','duty_percent',*FREIGHT_FIELDS):
         result[key]=group.get(key) if group.get(key) is not None else batch.parameters.get(key,result.get(key))
+    classification=row.source_data.get('classification',{})
+    for key in ('planning_sales','group_goods','brand','purch','kind_purch'):
+        result[key]=classification.get(key) if 'classification' in row.source_data else row.brand if key=='brand' else None
+    result['supply_type']=classification.get('supply_type')
     if overrides:result.update({k:v for k,v in row.overrides.items() if v is not None and k in FIELDS})
     return result
 
@@ -96,11 +100,10 @@ def source_parameters(source):
     if not freight:raise ValidationError('В выбранном сценарии не заполнены параметры фрахта.')
     result={key:str(getattr(freight,key)) for key in FREIGHT_FIELDS}
     result['container_volume']=str(freight.volume_per_container);result['groups']={}
-    suppliers=dict(Purch.objects.values_list('name_key','supply_type'))
-    for good in PGGoods.objects.filter(scenario_plan=source).select_related('kind_purch'):
+    for good in PGGoods.objects.filter(scenario_plan=source):
         key=planning_group_key(good.planning_group)
         if key in result['groups']:raise ValidationError('В источнике неоднозначные параметры группы '+good.planning_group)
-        result['groups'][key]={'name':good.planning_group,'container_volume':str(good.container_volume),'duty_percent':str(Decimal(str(good.duty_rate))*100),'supply_type':suppliers.get(planning_group_key(good.purch or '')),**{k:getattr(good,k) for k in ('planning_sales','group_goods','brand','purch')},'kind_purch':str(good.kind_purch)}
+        result['groups'][key]={'name':good.planning_group,'container_volume':str(good.container_volume),'duty_percent':str(Decimal(str(good.duty_rate))*100)}
     return {'parameters':result,'source':{'id':source.pk,'name':source.name,'copied_at':timezone.now().isoformat()}}
 
 

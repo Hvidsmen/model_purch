@@ -210,7 +210,7 @@
                     {% for purch in purch_list %}
                         <tr id="purchase-{{ purch.pk }}" data-payment-valid="{% if purch.payment_valid %}true{% else %}false{% endif %}">
                             <td class="text-muted">{{ purch.id }}</td>
-                            <td><strong>{{ purch.name }}</strong></td><td>{{ purch.get_supply_type_display }}</td>
+                            <td><strong>{{ purch.name }}</strong></td><td>{{ purch.get_supply_type_display }}<div class="small text-muted">{{ purch.kind_purch|default:"Вид закупки не задан" }}</div></td>
                             <td>
                                 <span class="badge bg-secondary">{{ purch.lag_income }}</span>
                             </td><td>{{ purch.lage_make|default_if_none:"0" }}</td>

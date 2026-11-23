@@ -28,8 +28,10 @@ class CalculationTests(SimpleTestCase):
         return SimpleNamespace(parameters={**PARAMS, **kwargs}, rates=RATES.copy())
 
     def row(self, **kwargs):
-        return SimpleNamespace(**dict(dict(price=Decimal('100'), currency='USD', planning_group='G', brand='B',
-                                          source_data={'volume':'1'}, overrides={}), **kwargs))
+        data=dict(price=Decimal('100'),currency='USD',planning_group='G',brand='B',source_data={'volume':'1'},overrides={})
+        data.update(kwargs)
+        data['source_data']={'classification':{'supply_type':'p2'},**data['source_data']}
+        return SimpleNamespace(**data)
 
     def test_existing_formula_and_all_currencies(self):
         result = calculate(self.batch(), self.row())
@@ -61,17 +63,29 @@ class CalculationTests(SimpleTestCase):
         for unit in ('0'*32,'00000000-0000-0000-0000-000000000000','0x'+'0'*32):
             self.assertEqual(calculate(self.batch(),self.row(source_data={'volume':'1','unit':unit}))['status'],'ready')
 
+    def test_nomenclature_classification_has_priority_over_group(self):
+        from .services.model_ddp import parameters
+        batch=self.batch(groups={planning_group_key('G'):{'brand':'Wrong group brand','purch':'Wrong supplier'}})
+        row=self.row(source_data={'volume':'1','classification':{'brand':'ERP brand','purch':'ERP supplier','supply_type':'russian'}})
+        self.assertEqual(parameters(batch,row)['brand'],'ERP brand')
+        self.assertEqual(parameters(batch,row)['purch'],'ERP supplier')
+        self.assertEqual(calculate(batch,row)['ddp']['USD'],'100.0')
+        row.source_data['classification']={}
+        self.assertIsNone(parameters(batch,row)['brand'])
+        self.assertIsNone(parameters(batch,row)['purch'])
+
     def test_missing_inputs_not_zero(self):
         for changed in [{'volume':None}, {'volume':'0'}, {'volume':'NaN'}]:
             self.assertEqual(calculate(self.batch(), self.row(source_data=changed))['status'], 'error')
-        for changed in [{'container_volume':None}, {'duty_percent':None}, {'supply_type':''}, {'customs_rate':'101'}]:
+        for changed in [{'container_volume':None}, {'duty_percent':None}, {'customs_rate':'101'}]:
             self.assertEqual(calculate(self.batch(**changed), self.row())['status'], 'error')
+        self.assertEqual(calculate(self.batch(),self.row(source_data={'volume':'1','classification':{}}))['status'],'error')
         self.assertEqual(calculate(self.batch(), self.row(price=None))['status'],'error')
         self.assertEqual(calculate(self.batch(), self.row(currency='JPY'))['status'],'error')
 
     def test_russian_and_missing_rate(self):
         b = self.batch(supply_type='russian')
-        self.assertEqual(Decimal(calculate(b,self.row(source_data={}))['ddp']['USD']),100)
+        self.assertEqual(Decimal(calculate(b,self.row(source_data={'classification':{'supply_type':'russian'}}))['ddp']['USD']),100)
         b.rates={}
         result=calculate(b,self.row())
         self.assertEqual(result['status'],'partial')
@@ -95,6 +109,10 @@ class CalculationTests(SimpleTestCase):
 
 
 class SourceTests(SimpleTestCase):
+    def setUp(self):
+        supplier_query=patch('model_purch.models.Purch.objects.select_related',return_value=[])
+        supplier_query.start();self.addCleanup(supplier_query.stop)
+
     def raw(self, **kwargs):
         data=dict(ref='m',name='Model',group='G',brand='B',volume='1',weight='2',
                   kind_ref='k',kind_name='PURCH USD',currency='840',price='100',
@@ -115,9 +133,9 @@ class SourceTests(SimpleTestCase):
     def test_binary_erp_references_are_hex_not_utf16(self):
         from .services.model_ddp_source import KINDS, CURRENCY_TABLES
         schema={
-            GOODS:{'Ссылка':'binary','Наименование':'nvarchar','Даичи_ГруппаПланирования':'nvarchar','Марка':'varbinary'},
+            GOODS:{'Ссылка':'binary','Наименование':'nvarchar','РодительСсылка':'binary','Даичи_ГруппаПланирования':'nvarchar','Марка':'varbinary'},
             PRICES:{'Номенклатура':'binary','ВидЦены':'binary','Валюта':'binary','Период':'datetime','Цена':'numeric','Единица':'binary','Характеристика':'binary'},
-            KINDS[0]:{'Ссылка':'binary','Наименование':'nvarchar'},
+            KINDS[0]:{'Ссылка':'binary','Наименование':'nvarchar','РодительСсылка':'binary'},
             CURRENCY_TABLES[0]:{'Ссылка':'binary','Код':'varchar'}}
         sql=build_sql(schema)
         self.assertIn('p.[Номенклатура]=n.[Ссылка]',sql)
@@ -134,6 +152,19 @@ class SourceTests(SimpleTestCase):
         self.assertIn('CAST(k.[Наименование] AS nvarchar(500))',sql)
         raw=self.raw()+('00000000000000000000000000000000',)
         self.assertNotIn('error',records([raw])[0]['source_data'])
+
+    def test_user_nomenclature_query_fields(self):
+        schema={GOODS:{'Ссылка':'binary','РодительСсылка':'binary','Наименование':'nvarchar','Даичи_ГруппаПлановПродаж':'nvarchar','Марка':'nvarchar','Производитель':'nvarchar','ОбъемЧислитель':'numeric','ВесЧислитель':'numeric'},
+                PRICES:{'Номенклатура':'binary','ВидЦены':'nvarchar','Период':'datetime','Цена':'numeric'}}
+        sql=build_sql(schema)
+        self.assertIn('n.[Даичи_ГруппаПлановПродаж]',sql)
+        self.assertIn('parent_goods.[Наименование]',sql)
+        self.assertIn('n.[РодительСсылка]=parent_goods.[Ссылка]',sql)
+        self.assertIn('n.[Производитель]',sql)
+        self.assertIn('n.[ОбъемЧислитель]',sql)
+        row=records([self.raw()+('', 'ERP sales','ERP goods','ERP brand','ERP supplier',None,None)])[0]
+        self.assertEqual(row['source_data']['classification']['purch'],'ERP supplier')
+        self.assertIsNone(row['source_data']['classification']['supply_type'])
 
     def test_diagnostics_redact_secrets(self):
         message=diagnostic_text(RuntimeError("PWD={secret;pass};UID=alice;SERVER=private;DATABASE=db; Login failed for user 'alice'"))
@@ -182,7 +213,7 @@ class SourceTests(SimpleTestCase):
         connect.assert_not_called()
 
     def test_price_variant_limit_is_configurable_and_validated(self):
-        schema={GOODS:{'Ссылка':'varchar','Наименование':'varchar'},PRICES:{
+        schema={GOODS:{'Ссылка':'varchar','Наименование':'varchar','РодительСсылка':'varchar'},PRICES:{
             'Номенклатура':'varchar','ВидЦены':'varchar','Период':'datetime','Цена':'numeric'}}
         with override_settings(MODEL_DDP_MAX_PRICE_VARIANTS=100000):
             self.assertIn('TOP (100001)',build_sql(schema))
@@ -191,7 +222,7 @@ class SourceTests(SimpleTestCase):
 
     def test_schema_required_and_parameterized_cutoff(self):
         with self.assertRaises(ValidationError):build_sql({})
-        schema={GOODS:{'Ссылка':'varchar','Наименование':'varchar'},PRICES:{
+        schema={GOODS:{'Ссылка':'varchar','Наименование':'varchar','РодительСсылка':'varchar'},PRICES:{
             'Номенклатура':'varchar','ВидЦены':'varchar','Валюта':'varchar','Период':'datetime','Цена':'numeric'}}
         sql=build_sql(schema)
         self.assertIn('DENSE_RANK()',sql)
@@ -226,7 +257,7 @@ class SnapshotTests(TestCase):
         self.user=authorize_admin(self.client)
         self.batch=ModelDDPCalculation.objects.create(name='DDP',as_of=date(2026,11,22),created_by=self.user,parameters=PARAMS,rates=RATES)
         self.row=ModelDDPRow.objects.create(calculation=self.batch,model_ref='m',model_name='Model',brand='B',
-                      price_type_ref='k',price_type='PURCH USD',currency='USD',price=100,source_data={'volume':'1'})
+                      price_type_ref='k',price_type='PURCH USD',currency='USD',price=100,source_data={'volume':'1','classification':{'supply_type':'p2','brand':'B'}})
         self.url=reverse('model_ddp_detail',args=[self.batch.pk])
 
     def test_calculate_persists_and_stale_write_rejected(self):
@@ -275,7 +306,9 @@ class SnapshotTests(TestCase):
             'planning_sales':'Sales group','group_goods':'Goods group','brand':'Inherited',
             'purch':'Supplier','kind_purch':'Purchased','supply_type':'p2'}}}
         self.batch.save()
-        self.row.planning_group='G';self.row.save()
+        self.row.planning_group='G'
+        self.row.source_data={**self.row.source_data,'classification':{'planning_sales':'Sales group','group_goods':'Goods group','brand':'Inherited','purch':'Supplier','kind_purch':'Purchased','supply_type':'p2'}}
+        self.row.save()
         response=self.client.get(self.url,{'planning_sales':'Sales group','purch':'Supplier'})
         self.assertEqual(response.context['page'].paginator.count,1)
         self.assertContains(response,'Группа планов продаж')
@@ -291,6 +324,55 @@ class SnapshotTests(TestCase):
         response=self.client.get(self.url,{'planning_sales':'__empty__'})
         self.assertEqual(response.context['page'].paginator.count,1)
         self.assertNotContains(response,'Справочно по группе')
+
+    def test_supplier_mapping_uses_erp_manufacturer(self):
+        from unittest.mock import MagicMock
+        from .models import Purch,KindPurch
+        kind=KindPurch.objects.create(name='Закупается')
+        supplier=Purch.objects.create(name='MIDEA_RAC',lag_income=30,supply_type='direct',kind_purch=kind)
+        schema={GOODS:{'Ссылка':'varchar','РодительСсылка':'varchar','Наименование':'varchar','Даичи_ГруппаПлановПродаж':'varchar','Марка':'varchar','Производитель':'varchar'},
+                PRICES:{'Номенклатура':'varchar','ВидЦены':'varchar','Период':'datetime','Цена':'numeric'}}
+        connection,cursor=MagicMock(),MagicMock()
+        cursor.fetchall.return_value=[(table,col,kind) for table,cols in schema.items() for col,kind in cols.items()]
+        def raw(ref,purchase):
+            return (ref,'Model','G','ERP brand','1','2','k','PURCH USD','USD',100,datetime(2026,11,22),'','',
+                    'ERP sales','Parent goods','ERP brand',purchase,None,None)
+        cursor.fetchmany.side_effect=[[raw('m',' mideA_RAC '),raw('x','Unknown supplier')],[]]
+        events=[]
+        with patch('model_purch.services.model_ddp_source.connect_database',return_value=(connection,cursor)):
+            rows=load_prices(date(2026,11,22),progress=lambda stage,**data:events.append(data))
+        self.assertEqual(rows[0]['source_data']['classification']['supply_type'],'direct')
+        self.assertEqual(rows[0]['source_data']['classification']['kind_purch'],'Закупается')
+        self.assertEqual(rows[0]['source_data']['supplier_id'],supplier.pk)
+        self.assertIsNone(rows[1]['source_data']['classification']['supply_type'])
+        self.assertTrue(any('Unknown supplier' in event.get('warning','') for event in events))
+
+    def test_supplier_kind_form_preserves_value_for_older_posts(self):
+        from .models import Purch,KindPurch
+        from .forms import PurchForm
+        kind=KindPurch.objects.create(name='Закупается')
+        supplier=Purch.objects.create(name='Supplier form',lag_income=30,kind_purch=kind)
+        form=PurchForm({'name':supplier.name,'lag_income':'31','lage_make':'0','supply_type':'direct'},instance=supplier)
+        self.assertTrue(form.is_valid(),form.errors)
+        form.save()
+        supplier.refresh_from_db()
+        self.assertEqual(supplier.kind_purch,kind)
+
+    def test_supplier_kind_backfill_only_uses_unambiguous_assignments(self):
+        from importlib import import_module
+        from django.apps import apps
+        from .models import Purch,KindPurch,PGGoods
+        first=KindPurch.objects.create(name='Закупается')
+        second=KindPurch.objects.create(name='Не закупается')
+        known=Purch.objects.create(name='Known supplier',lag_income=30)
+        ambiguous=Purch.objects.create(name='Ambiguous supplier',lag_income=30)
+        PGGoods.objects.bulk_create([PGGoods(planning_group=str(i),planning_group_key=planning_group_key(str(i)),
+            planning_sales='Sales',group_goods='Goods',purch=purchase,kind_purch=kind,volume=1,exw_usd=100,stock_cnt_day=0,percent_stock_end=0)
+            for i,(purchase,kind) in enumerate([(known.name,first),(ambiguous.name,first),(ambiguous.name,second)])])
+        import_module('model_purch.migrations.0034_purch_kind_purch').fill_unambiguous_kinds(apps,None)
+        known.refresh_from_db();ambiguous.refresh_from_db()
+        self.assertEqual(known.kind_purch,first)
+        self.assertIsNone(ambiguous.kind_purch)
 
     def test_failed_load_does_not_change_saved_rows(self):
         with patch('model_purch.views_model_ddp.load_prices',side_effect=ValidationError('Unavailable')):

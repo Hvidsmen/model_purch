@@ -1,6 +1,6 @@
 <tr>
 <td class="ddp-model-identity"><strong>{{ row.model_name }}</strong><div>{{ row.planning_group|default:'Группа не определена' }}</div><small>{{ row.brand }}</small></td>
-<td class="ddp-input-column ddp-classification">
+<td class="ddp-input-column ddp-classification"><small>Источник: номенклатура ERP; вид закупки и тип — поставщик</small>
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.planning_sales label='План продаж' %}
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.group_goods label='Группа товаров' %}
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.brand label='Марка' %}
