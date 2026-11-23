@@ -13,7 +13,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 from base.access import role_for,ADMIN,LOGISTICIAN,ANALYST
 from .models import ModelDDPCalculation
-from .model_ddp_forms import CreateForm,ParametersForm,RowForm,SourceForm
+from .model_ddp_forms import CreateForm,ParametersForm,RowForm,SourceForm,ModelCopyForm
 from .services.model_ddp import mutate,parameters,preview_token,FREIGHT_FIELDS,MODEL_FIELDS
 from .services.model_ddp_source import load_prices,empty_reference
 from .services.model_ddp_references import filter_data
@@ -45,12 +45,23 @@ def index(request):
 def detail(request,pk):
     role=access(request);batch=get_object_or_404(ModelDDPCalculation,pk=pk)
     form=ParametersForm(initial=initial_parameters(batch));source_form=SourceForm();preview=None;token=''
+    model_copy_form=ModelCopyForm(target=batch);model_copy_preview=None;model_copy_token=''
     error=''
     if request.method=='POST':
         action=request.POST.get('action')
         try:
             if str(request.POST.get('revision'))!=str(batch.revision):raise ValidationError('Расчёт изменён в другой вкладке. Обновите страницу.')
-            if action=='preview':
+            if action=='model_copy_preview':
+                from .services.model_ddp_copy import preview as copy_preview
+                model_copy_form=ModelCopyForm(request.POST,target=batch)
+                if model_copy_form.is_valid():
+                    model_copy_preview,model_copy_token=copy_preview(batch,model_copy_form.cleaned_data['source_calculation'],model_copy_form.cleaned_data['mode'],request)
+            elif action=='model_copy_apply':
+                from .services.model_ddp_copy import apply as copy_apply
+                copied=copy_apply(pk,request.POST.get('model_copy_token',''),request.user)
+                messages.success(request,f"Скопировано строк: {copied['copied']}. Пересчитано: {copied['calculated']}. Ошибок расчёта: {copied['errors']}. Без совпадения: {copied['missing']}; некорректных строк источника: {copied['invalid']}.")
+                return redirect(reverse('model_ddp_detail',args=[pk])+'?'+request.GET.urlencode())
+            elif action=='preview':
                 source_form=SourceForm(request.POST)
                 if source_form.is_valid():preview,token=preview_token(batch,source_form.cleaned_data['source'],request.user)
             elif action=='copy':mutate(pk,batch.revision,'copy',user=request.user,token=request.POST.get('token',''))
@@ -74,7 +85,7 @@ def detail(request,pk):
                     changes[row.pk]={k:v if isinstance(v,bool) else None if v in (None,'') else str(v) for k,v in f.cleaned_data.items()}
                 mutate(pk,batch.revision,'rows',rows=changes)
             else:raise ValidationError('Неизвестное действие.')
-            if action!='preview' and (action!='parameters' or form.is_valid()):
+            if action not in ('preview','model_copy_preview') and (action!='parameters' or form.is_valid()):
                 messages.success(request,'Данные сохранены. Результаты рассчитаны.' if action in ('rows','calculate','parameters') else 'Данные сохранены. Для обновления DDP нажмите «Рассчитать».')
                 return redirect(reverse('model_ddp_detail',args=[pk])+'?'+request.GET.urlencode())
         except ValidationError as exc:error=' '.join(exc.messages)
@@ -99,7 +110,7 @@ def detail(request,pk):
         values=parameters(batch,row)
         row.edit_form=RowForm(prefix='r'+str(row.pk),initial=values,reference_choices=choices)
     preserved=request.GET.copy();preserved.pop('page',None)
-    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
+    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'model_copy_form':model_copy_form,'model_copy_preview':model_copy_preview,'model_copy_token':model_copy_token,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
 
 
 def safe(value):

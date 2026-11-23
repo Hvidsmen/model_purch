@@ -1,0 +1,17 @@
+<details class="ddp-card"{% if model_copy_preview or model_copy_form.errors %} open{% endif %}>
+<summary>Копировать из помодельного расчёта</summary>
+<p class="ddp-note">Сначала загрузите цены PURCH в текущий расчёт. Параметры моделей копируются во все строки текущего фильтра на всех страницах. Совпадение: модель + вид цены + валюта. Пустые значения источника пропускаются. Цены PURCH, дата цен и состав моделей текущего расчёта сохраняются.</p>
+<form method="post" data-model-copy-options>{% csrf_token %}<input type="hidden" name="revision" value="{{ batch.revision }}"><fieldset{% if not portal_can_edit_purchases %} disabled{% endif %}><div class="ddp-fields">{{ model_copy_form.as_p }}</div><button class="btn btn-outline-primary" name="action" value="model_copy_preview">Показать, что будет скопировано</button></fieldset></form>
+{% if model_copy_preview %}
+<div class="ddp-snapshot" data-model-copy-preview>
+<p><strong>Источник: {{ model_copy_preview.source.name }}</strong> · дата цен источника {{ model_copy_preview.source.as_of|date:'d.m.Y' }}. Текущая дата цен {{ batch.as_of|date:'d.m.Y' }} сохраняется.</p>
+{% if model_copy_preview.mode != 'globals' %}<p>В фильтре: <strong>{{ model_copy_preview.selected }}</strong> строк. Совпало: <strong>{{ model_copy_preview.matched }}</strong>. Без совпадения: {{ model_copy_preview.missing }}. Некорректных строк источника: {{ model_copy_preview.invalid }}.</p>
+{% if model_copy_preview.filters %}<p class="ddp-note">Зафиксированные фильтры: {% for label,value in model_copy_preview.filter_labels %}{{ label }}: {{ value }}; {% empty %}Все строки{% endfor %}</p>{% endif %}
+<ul>{% for sample in model_copy_preview.samples %}<li>{{ sample.name }} · {{ sample.kind }} · {{ sample.currency }} · заполненных параметров: {{ sample.fields }}{% for change in sample.changes %}<div class="ddp-note">{{ change.label }}: {{ change.before|default_if_none:'—' }} → {{ change.after }}</div>{% endfor %}</li>{% endfor %}</ul>{% endif %}
+{% if model_copy_preview.mode != 'rows' %}
+<p><strong>Глобальные расходы и курсы изменятся для всего текущего расчёта, включая строки вне фильтра.</strong> Курсы копируются из источника; проверьте их соответствие текущей дате.</p>
+<dl>{% for label,value,previous in model_copy_preview.global_fields %}<dt>{{ label }}</dt><dd>{{ previous|default_if_none:'—' }} → {{ value|default_if_none:'не заполнено' }}</dd>{% endfor %}{% for code,value in model_copy_preview.global_values.rates.items %}<dt>RUB за 1 {{ code }}</dt><dd>{{ value|default_if_none:'не заполнено' }}</dd>{% endfor %}</dl>
+{% endif %}
+<form method="post">{% csrf_token %}<input type="hidden" name="revision" value="{{ batch.revision }}"><input type="hidden" name="model_copy_token" value="{{ model_copy_token }}"><button class="btn btn-primary" name="action" value="model_copy_apply"{% if not portal_can_edit_purchases %} disabled{% endif %}>Копировать и пересчитать</button></form>
+</div>{% endif %}
+</details>
