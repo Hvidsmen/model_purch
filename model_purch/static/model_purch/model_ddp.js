@@ -5,6 +5,7 @@
  const original=new Map(forms.map(form=>[form,snapshot(form)]));
  const dirty=()=>forms.filter(form=>snapshot(form)!==original.get(form));
  root.addEventListener('input',()=>{if(status)status.textContent=dirty().length?'Есть несохранённые параметры. Сохраните их соответствующей кнопкой.':'';});
+ root.addEventListener('change',event=>{if(event.target.closest('[data-model-copy-options]'))root.querySelector('[data-model-copy-preview]')?.remove();});
  root.addEventListener('keydown',event=>{
   if(event.key==='Enter'&&event.target.matches('input:not([type=submit]):not([type=button])')&&event.target.form?.method.toLowerCase()==='post')event.preventDefault();
  });

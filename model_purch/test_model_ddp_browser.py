@@ -103,3 +103,37 @@ class ModelDDPBrowserTests(StaticLiveServerTestCase):
                 page.evaluate('window.scrollTo(0,0)')
                 expect(floating).to_be_hidden()
             finally:browser.close()
+
+    def test_filtered_model_copy_preview_and_apply(self):
+        user=authorize_admin(self.client)
+        GoodsGroup.objects.create(name='Copy goods',container_volume=50,duty_rate=.1)
+        source=ModelDDPCalculation.objects.create(name='Copy source',as_of=date(2026,10,1),created_by=user,parameters=PARAMS,rates=RATES)
+        target=ModelDDPCalculation.objects.create(name='Copy target',as_of=date(2026,11,22),created_by=user,parameters=PARAMS,rates=RATES)
+        for batch,is_source in ((source,True),(target,False)):
+            ModelDDPRow.objects.bulk_create([ModelDDPRow(calculation=batch,model_ref=str(i),model_name='Copy model '+str(i),
+                price_type_ref='k',price_type='PURCH USD',currency='USD',price=200 if is_source else 100,
+                source_data={'volume':'1','classification':{'brand':'A' if i==0 else 'B','group_goods':'Copy goods','supply_type':'p2'}},
+                overrides={'volume':'2'} if is_source else {}) for i in range(2)])
+        from playwright.sync_api import sync_playwright,expect
+        with sync_playwright() as pw,ThreadPoolExecutor(max_workers=1) as pool:
+            browser=pw.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None,headless=True)
+            try:
+                page=browser.new_page()
+                page.context.add_cookies([{'name':settings.SESSION_COOKIE_NAME,'value':self.client.cookies[settings.SESSION_COOKIE_NAME].value,'url':self.live_server_url}])
+                page.goto(self.live_server_url+reverse('model_ddp_detail',args=[target.pk])+'?brand=A')
+                page.get_by_text('Копировать из помодельного расчёта',exact=True).click()
+                page.locator('[name=source_calculation]').select_option(str(source.pk))
+                page.locator('[name=mode]').select_option('rows')
+                with page.expect_navigation():page.get_by_role('button',name='Показать, что будет скопировано').click()
+                expect(page.locator('[data-model-copy-preview]')).to_contain_text('Совпало: 1')
+                with page.expect_navigation():page.get_by_role('button',name='Копировать и пересчитать',exact=True).click()
+                expect(page.locator('.alert-success')).to_contain_text('Скопировано строк: 1')
+                self.assertIn('brand=A',page.url)
+                values=pool.submit(lambda:[
+                    (row.model_ref,row.price,row.overrides,row.result)
+                    for row in ModelDDPRow.objects.filter(calculation=target).order_by('model_ref')]).result()
+                self.assertEqual(values[0][1],100)
+                self.assertEqual(values[0][2]['volume'],'2')
+                self.assertEqual(values[1][2],{})
+                self.assertEqual(values[1][3],{})
+            finally:browser.close()

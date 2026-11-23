@@ -50,3 +50,16 @@ class SourceForm(forms.Form):
     source=forms.ModelChoiceField(label='Сценарий закупок',queryset=ScenarioModel.objects.none())
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs);self.fields['source'].queryset=ScenarioModel.objects.order_by('-date_start_plan','-pk')
+
+
+class ModelCopyForm(forms.Form):
+    source_calculation=forms.ModelChoiceField(label='Помодельный расчёт — источник',queryset=None)
+    mode=forms.ChoiceField(label='Что копировать',choices=(
+        ('rows','Параметры моделей по текущим фильтрам'),
+        ('globals','Глобальные расходы и курсы — весь расчёт'),
+        ('all','Параметры моделей по фильтрам + глобальные расходы и курсы')))
+    def __init__(self,*args,target=None,**kwargs):
+        super().__init__(*args,**kwargs)
+        from .models import ModelDDPCalculation
+        self.fields['source_calculation'].queryset=ModelDDPCalculation.objects.exclude(pk=target.pk).order_by('-created_at','-pk')
+        self.fields['source_calculation'].label_from_instance=lambda item:f'{item.name} · {item.as_of:%d.%m.%Y}'
