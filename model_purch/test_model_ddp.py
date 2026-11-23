@@ -47,13 +47,13 @@ class CalculationTests(SimpleTestCase):
         self.assertEqual(Decimal(result['components']['foreign_delivery_usd']), Decimal('40'))
         self.assertEqual(Decimal(result['components']['nr_customs_vat_usd']), Decimal('2.64'))
 
-    def test_equivalent_currency_and_packaged_price(self):
+    def test_equivalent_currency_and_unit_price(self):
         for currency, price in [('EUR', '80'), ('CNY', '1000'), ('RUB', '10000')]:
             with self.subTest(currency=currency):
                 r = calculate(self.batch(), self.row(currency=currency, price=Decimal(price)))
                 self.assertEqual(Decimal(r['ddp']['USD']), Decimal('143.2'))
-        row = self.row(price=Decimal('1200'), source_data={'volume':'1','unit':'упаковка'})
-        self.assertEqual(calculate(self.batch(),row)['status'], 'error')
+        row = self.row(price=Decimal('100'), source_data={'volume':'1','unit':'упаковка'})
+        self.assertEqual(calculate(self.batch(),row)['status'], 'ready')
         row.overrides = {'price_quantity':'12','price_unit_confirmed':True}
         self.assertEqual(Decimal(calculate(self.batch(),row)['ddp']['USD']), Decimal('143.2'))
 

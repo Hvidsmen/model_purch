@@ -36,8 +36,6 @@ class RowForm(forms.Form):
     container_volume=forms.DecimalField(label='Контейнер, м³',min_value=Decimal('.000001'),max_digits=24,decimal_places=12,required=False)
     duty_percent=forms.DecimalField(label='Пошлина, %',min_value=0,max_value=10000,max_digits=12,decimal_places=6,required=False)
     supply_type=forms.ChoiceField(label='Тип поставки',choices=SUPPLY,required=False)
-    price_quantity=forms.DecimalField(label='Единиц модели в цене',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
-    price_unit_confirmed=forms.BooleanField(label='Количество единиц в цене подтверждено',required=False)
     weight_kg=forms.DecimalField(label='Вес модели, кг',min_value=0,max_digits=24,decimal_places=12,required=False)
     planning_sales=forms.CharField(label='Группа планов продаж',max_length=255,required=False)
     group_goods=forms.CharField(label='Группа товаров',max_length=255,required=False)
