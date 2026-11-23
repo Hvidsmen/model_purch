@@ -119,7 +119,7 @@ def export(request,pk):
     for k,v in batch.parameters.items():
         if k!='groups':meta.append([k,safe(v)])
     meta.append(['Источник параметров',safe(batch.source_metadata.get('name','Вручную'))])
-    sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Запас, дни','Остаток, %','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
+    sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
     for row in batch.rows.all().iterator(chunk_size=500):
         p=parameters(batch,row);result=row.result;ddp=result.get('ddp',{});c=result.get('components',{})
         values=[row.model_name,row.model_ref,row.planning_group,row.brand,row.price_type,row.currency,row.price,str(row.price_at or ''),*[p.get(k) for k in ('volume','container_volume','duty_percent','supply_type')],*[ddp.get(k) for k in ('USD','EUR','CNY','RUB')],result.get('error') or '; '.join(result.get('warnings',[])) or result.get('status','Не рассчитан'),*[c.get(k) for k in ('exw_usd','freight_usd','cif_usd','customs_payment_usd','warehouse_delivery_usd','foreign_delivery_usd','nr_customs_vat_usd')]]
@@ -129,7 +129,7 @@ def export(request,pk):
             if values[index] is not None:
                 values[index]=Decimal(str(values[index]))
         values.append(row.source_data.get('unit',''))
-        values.extend([p.get(k) for k in ('planning_sales','group_goods','brand','purch','kind_purch','weight_kg','stock_cnt_day','percent_stock_end',*FREIGHT_FIELDS)])
+        values.extend([p.get(k) for k in ('planning_sales','group_goods','brand','purch','kind_purch','weight_kg',*FREIGHT_FIELDS)])
         sheet.append([safe(v) for v in values])
     trace=book.create_sheet('Этапы расчёта');trace.append(['Модель','Вид цены','Валюта цены','Этап','Формула','Результат','Валюта результата'])
     for row in batch.rows.all().iterator(chunk_size=500):

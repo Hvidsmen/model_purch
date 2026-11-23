@@ -34,10 +34,6 @@
 <div class="ddp-inline-result"><span>CNY</span><strong class="ddp-money">{{ row.result.ddp.CNY|floatformat:'2g'|default:'—' }}</strong></div>
 <div class="ddp-inline-result"><span>RUB</span><strong class="ddp-money">{{ row.result.ddp.RUB|floatformat:'2g'|default:'—' }}</strong></div>
 </td>
-<td class="ddp-input-column">
-{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.stock_cnt_day label='Запас, дни' %}
-{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.percent_stock_end label='Остаток, %' %}
-</td>
 <td class="ddp-status-{{ row.result.status }} ddp-calculation-column">
 {% if row.result.status == 'ready' %}Рассчитан{% elif row.result.status == 'partial' %}Рассчитан не во всех валютах{% elif row.result.error %}{{ row.result.error }}{% else %}Не рассчитан{% endif %}
 {% for warning in row.result.warnings %}<div>{{ warning }}</div>{% endfor %}

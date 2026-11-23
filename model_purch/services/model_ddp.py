@@ -11,7 +11,7 @@ from ..goods_identity import planning_group_key
 from .pricing import apply_price,CALCULATED_FIELDS
 
 CURRENCIES=('USD','EUR','CNY','RUB')
-MODEL_FIELDS=('container_volume','duty_percent','supply_type','planning_sales','group_goods','brand','purch','kind_purch','stock_cnt_day','percent_stock_end')
+MODEL_FIELDS=('container_volume','duty_percent','supply_type','planning_sales','group_goods','brand','purch','kind_purch')
 FIELDS=('volume','weight_kg',*MODEL_FIELDS,'price_per_container','customs_rate','warehouse_delivery_cost','foreign_delivery_cost','nr_customs_vat_rate')
 FREIGHT_FIELDS=('price_per_container','customs_rate','warehouse_delivery_cost','foreign_delivery_cost','nr_customs_vat_rate')
 SALT='purchase-model-ddp-parameters-v1'
@@ -100,7 +100,7 @@ def source_parameters(source):
     for good in PGGoods.objects.filter(scenario_plan=source).select_related('kind_purch'):
         key=planning_group_key(good.planning_group)
         if key in result['groups']:raise ValidationError('В источнике неоднозначные параметры группы '+good.planning_group)
-        result['groups'][key]={'name':good.planning_group,'container_volume':str(good.container_volume),'duty_percent':str(Decimal(str(good.duty_rate))*100),'supply_type':suppliers.get(planning_group_key(good.purch or '')),**{k:getattr(good,k) for k in ('planning_sales','group_goods','brand','purch','stock_cnt_day','percent_stock_end')},'kind_purch':str(good.kind_purch)}
+        result['groups'][key]={'name':good.planning_group,'container_volume':str(good.container_volume),'duty_percent':str(Decimal(str(good.duty_rate))*100),'supply_type':suppliers.get(planning_group_key(good.purch or '')),**{k:getattr(good,k) for k in ('planning_sales','group_goods','brand','purch')},'kind_purch':str(good.kind_purch)}
     return {'parameters':result,'source':{'id':source.pk,'name':source.name,'copied_at':timezone.now().isoformat()}}
 
 
