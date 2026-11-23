@@ -269,6 +269,28 @@ class SnapshotTests(TestCase):
         self.batch.refresh_from_db()
         self.assertEqual(self.batch.parameters['price_per_container'],'1000')
 
+    def test_reference_filters_use_effective_snapshot_and_manual_values(self):
+        self.batch.parameters={**PARAMS,'groups':{planning_group_key('G'):{
+            'planning_sales':'Sales group','group_goods':'Goods group','brand':'Inherited',
+            'purch':'Supplier','kind_purch':'Purchased','supply_type':'p2'}}}
+        self.batch.save()
+        self.row.planning_group='G';self.row.save()
+        response=self.client.get(self.url,{'planning_sales':'Sales group','purch':'Supplier'})
+        self.assertEqual(response.context['page'].paginator.count,1)
+        self.assertContains(response,'Группа планов продаж')
+        self.assertContains(response,'<select name="r'+str(self.row.pk)+'-planning_sales"',html=False)
+        self.assertEqual(self.client.get(self.url,{'brand':'B'}).context['page'].paginator.count,0)
+        self.assertEqual(self.client.get(self.url,{'q':'Supplier'}).context['page'].paginator.count,1)
+        mutate(self.batch.pk,1,'rows',rows={self.row.pk:{'brand':'Manual'}})
+        self.assertEqual(self.client.get(self.url,{'brand':'Manual'}).context['page'].paginator.count,1)
+        self.assertEqual(self.client.get(self.url,{'brand':'Inherited'}).context['page'].paginator.count,0)
+        self.assertEqual(self.client.get(self.url,{'kind_purch':'Purchased'}).context['page'].paginator.count,1)
+
+    def test_empty_classification_filter(self):
+        response=self.client.get(self.url,{'planning_sales':'__empty__'})
+        self.assertEqual(response.context['page'].paginator.count,1)
+        self.assertNotContains(response,'Справочно по группе')
+
     def test_failed_load_does_not_change_saved_rows(self):
         with patch('model_purch.views_model_ddp.load_prices',side_effect=ValidationError('Unavailable')):
             response=self.client.post(self.url,{'action':'load','revision':1})
