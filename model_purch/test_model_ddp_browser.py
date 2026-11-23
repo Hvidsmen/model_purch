@@ -30,7 +30,7 @@ class ModelDDPBrowserTests(StaticLiveServerTestCase):
                 with page.expect_navigation():page.get_by_role('button',name='Рассчитать все модели',exact=True).click()
                 expect(page.locator('.ddp-status-ready')).to_contain_text('Рассчитан')
                 expect(page.locator('.ddp-money').nth(0)).to_contain_text('143')
-                page.locator('.ddp-row-settings summary').click()
+                expect(page.locator('.ddp-model-fields')).to_be_visible()
                 field=page.locator('[name="r'+str(row.pk)+'-volume"]')
                 field.fill('2')
                 field.press('Enter')
