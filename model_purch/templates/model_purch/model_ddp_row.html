@@ -16,8 +16,6 @@
 </td>
 <td class="ddp-input-column ddp-source-price"><strong>{{ row.price|floatformat:'4g'|default:'—' }} {{ row.currency|default:'Валюта не определена' }}</strong><div>{{ row.price_type|default:'Нет цены PURCH' }}</div><small>{{ row.price_at|date:'d.m.Y H:i' }}</small>
 {% if row.source_data.unit %}<div>Единица: {{ row.source_data.unit }}</div>{% endif %}
-{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.price_quantity label='Единиц в цене' %}
-{% include 'model_purch/model_ddp_field.html' with field=row.edit_form.price_unit_confirmed label='Подтверждено' %}
 </td>
 <td class="ddp-input-column">
 {% include 'model_purch/model_ddp_field.html' with field=row.edit_form.duty_percent label='Пошлина, %' %}

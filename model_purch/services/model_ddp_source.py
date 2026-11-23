@@ -232,7 +232,7 @@ def records(raw):
         currency=ALIASES.get(str(currency or '').strip().casefold(),str(currency or '').strip())
         data={'model_ref':str(ref),'model_name':str(name),'planning_group':str(group or ''),'brand':str(brand or ''),
               'price_type_ref':str(kind_ref or ''),'price_type':str(kind_name or ''),'currency':currency,'price':None,'price_at':None,
-              'source_data':{'volume':None,'weight':None,'unit':str(unit or ''),'price_unit_confirmed':not bool(unit)}}
+              'source_data':{'volume':None,'weight':None,'unit':str(unit or '')}}
         try:
             if price is not None:
                 value=Decimal(str(price))
@@ -249,7 +249,6 @@ def records(raw):
         except (ValueError,TypeError,InvalidOperation,OverflowError):data['source_data']['error']='Некорректная цена или характеристики в источнике.';data['price']=None
         if characteristic and characteristic not in ('00000000-0000-0000-0000-000000000000','0') and set(characteristic)!={'0'}:
             data['source_data']['error']='Цена задана для характеристики номенклатуры. Требуется уточнить отбор источника.'
-        if unit:data['source_data']['unit_warning']='Проверьте, что цена задана за одну единицу модели: '+str(unit)
         key=(data['model_ref'],data['price_type_ref'],currency)
         if key in grouped and (grouped[key]['price'],grouped[key]['price_at'],grouped[key]['source_data'])!=(data['price'],data['price_at'],data['source_data']):
             grouped[key]['source_data']['error']='Несколько различных цен или единиц на последнюю дату. Уточните отбор регистра.';grouped[key]['price']=None

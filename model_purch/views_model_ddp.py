@@ -96,7 +96,7 @@ def detail(request,pk):
     page.object_list=[by_id[pk] for pk in page.object_list]
     for row in page:
         if empty_reference(row.source_data.get('unit')):row.source_data={**row.source_data,'unit':''}
-        values=parameters(batch,row);values.update(price_quantity=row.overrides.get('price_quantity') or '1',price_unit_confirmed=row.overrides.get('price_unit_confirmed',False))
+        values=parameters(batch,row)
         row.edit_form=RowForm(prefix='r'+str(row.pk),initial=values,reference_choices=choices)
     preserved=request.GET.copy();preserved.pop('page',None)
     return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
@@ -119,7 +119,7 @@ def export(request,pk):
     for k,v in batch.parameters.items():
         if k!='groups':meta.append([k,safe(v)])
     meta.append(['Источник параметров',safe(batch.source_metadata.get('name','Вручную'))])
-    sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Единиц модели в цене','Количество подтверждено','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Запас, дни','Остаток, %','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
+    sheet=book.create_sheet('Помодельный DDP');sheet.append(['Модель','Ссылка','Группа','Бренд','Вид цены','Валюта','Цена источника','Дата цены','Объём','Контейнер','Пошлина %','Тип поставки','DDP USD','DDP EUR','DDP CNY','DDP RUB','Состояние','EXW USD','Фрахт USD','CIF USD','Таможенный платёж USD','До склада USD','Загран доставка отдельно USD','НР НДС отдельно USD','Единица цены источника','Группа планов продаж','Группа товаров','Марка модели','Закупка / поставщик','Вид закупки','Вес модели, кг','Запас, дни','Остаток, %','Фрахт контейнера USD','Таможенная ставка %','Доставка за контейнер USD','Загран доставка за контейнер USD','НР НДС %'])
     for row in batch.rows.all().iterator(chunk_size=500):
         p=parameters(batch,row);result=row.result;ddp=result.get('ddp',{});c=result.get('components',{})
         values=[row.model_name,row.model_ref,row.planning_group,row.brand,row.price_type,row.currency,row.price,str(row.price_at or ''),*[p.get(k) for k in ('volume','container_volume','duty_percent','supply_type')],*[ddp.get(k) for k in ('USD','EUR','CNY','RUB')],result.get('error') or '; '.join(result.get('warnings',[])) or result.get('status','Не рассчитан'),*[c.get(k) for k in ('exw_usd','freight_usd','cif_usd','customs_payment_usd','warehouse_delivery_usd','foreign_delivery_usd','nr_customs_vat_usd')]]
@@ -128,7 +128,7 @@ def export(request,pk):
         for index in numeric_columns:
             if values[index] is not None:
                 values[index]=Decimal(str(values[index]))
-        values.extend([row.source_data.get('unit',''),Decimal(str(row.overrides.get('price_quantity') or '1')),bool(row.overrides.get('price_unit_confirmed'))])
+        values.append(row.source_data.get('unit',''))
         values.extend([p.get(k) for k in ('planning_sales','group_goods','brand','purch','kind_purch','weight_kg','stock_cnt_day','percent_stock_end',*FREIGHT_FIELDS)])
         sheet.append([safe(v) for v in values])
     trace=book.create_sheet('Этапы расчёта');trace.append(['Модель','Вид цены','Валюта цены','Этап','Формула','Результат','Валюта результата'])

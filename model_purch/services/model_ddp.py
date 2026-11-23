@@ -9,11 +9,10 @@ from django.utils import timezone
 from ..models import ModelDDPCalculation,ModelDDPRow,ScenarioModel,Freight,PGGoods,Purch
 from ..goods_identity import planning_group_key
 from .pricing import apply_price,CALCULATED_FIELDS
-from .model_ddp_source import empty_reference
 
 CURRENCIES=('USD','EUR','CNY','RUB')
 MODEL_FIELDS=('container_volume','duty_percent','supply_type','planning_sales','group_goods','brand','purch','kind_purch','stock_cnt_day','percent_stock_end')
-FIELDS=('volume','weight_kg','price_unit_confirmed','price_quantity',*MODEL_FIELDS,'price_per_container','customs_rate','warehouse_delivery_cost','foreign_delivery_cost','nr_customs_vat_rate')
+FIELDS=('volume','weight_kg',*MODEL_FIELDS,'price_per_container','customs_rate','warehouse_delivery_cost','foreign_delivery_cost','nr_customs_vat_rate')
 FREIGHT_FIELDS=('price_per_container','customs_rate','warehouse_delivery_cost','foreign_delivery_cost','nr_customs_vat_rate')
 SALT='purchase-model-ddp-parameters-v1'
 
@@ -32,7 +31,7 @@ def parameters(batch,row,overrides=True):
     result={'volume':row.source_data.get('volume'),'weight_kg':row.source_data.get('weight'),'brand':row.brand}
     for key in (*MODEL_FIELDS,*FREIGHT_FIELDS):
         result[key]=group.get(key) if group.get(key) is not None else batch.parameters.get(key,result.get(key))
-    if overrides:result.update({k:v for k,v in row.overrides.items() if v is not None})
+    if overrides:result.update({k:v for k,v in row.overrides.items() if v is not None and k in FIELDS})
     return result
 
 
@@ -44,12 +43,11 @@ def calculate(batch,row):
         return format(Decimal(str(value)).quantize(Decimal('.000001')),'f').rstrip('0').rstrip('.') or '0'
     try:
         if row.source_data.get('error'):raise ValidationError(row.source_data['error'])
-        if not empty_reference(row.source_data.get('unit')) and not row.overrides.get('price_unit_confirmed',False):raise ValidationError(row.source_data.get('unit_warning','Подтвердите единицу закупочной цены.'))
         if row.price is None:raise ValidationError('Нет цены PURCH на дату расчёта.')
         if row.currency not in CURRENCIES:raise ValidationError('Не определена поддерживаемая валюта закупочной цены.')
         rates={key:decimal(value,'Курс '+key,optional=True,positive=True) for key,value in batch.rates.items() if key in CURRENCIES};rates['RUB']=Decimal(1)
-        price=decimal(row.price,'Цена')/decimal(row.overrides.get('price_quantity') or '1','Количество единиц в цене',positive=True)
-        quantity=decimal(row.overrides.get('price_quantity') or '1','Количество единиц в цене',positive=True)
+        price=decimal(row.price,'Цена')
+        quantity=Decimal(1)
         step('Цена единицы модели',f'{fmt(row.price)} / {fmt(quantity)}',price,row.currency)
         if row.currency!='USD':
             if not rates.get('USD') or not rates.get(row.currency):raise ValidationError('Для перевода цены в USD заполните курсы USD и '+row.currency+'.')
