@@ -22,6 +22,16 @@ class ParametersForm(forms.Form):
     cny=forms.DecimalField(label='RUB за 1 CNY',min_value=Decimal('.000001'),max_digits=18,decimal_places=6,required=False)
 
 class RowForm(forms.Form):
+    def __init__(self,*args,reference_choices=None,**kwargs):
+        super().__init__(*args,**kwargs)
+        if reference_choices:
+            for name,values in reference_choices.items():
+                if name not in self.fields or name=='supply_type':continue
+                options=set(values)
+                current=self.initial.get(name)
+                if current:options.add(str(current))
+                self.fields[name].widget=forms.Select(choices=[('','— Из источника —')]+[(value,value) for value in sorted(options,key=str.casefold)])
+
     volume=forms.DecimalField(label='Объём модели, м³',min_value=0,max_digits=24,decimal_places=12,required=False)
     container_volume=forms.DecimalField(label='Контейнер, м³',min_value=Decimal('.000001'),max_digits=24,decimal_places=12,required=False)
     duty_percent=forms.DecimalField(label='Пошлина, %',min_value=0,max_value=10000,max_digits=12,decimal_places=6,required=False)

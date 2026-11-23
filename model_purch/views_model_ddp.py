@@ -16,6 +16,7 @@ from .models import ModelDDPCalculation
 from .model_ddp_forms import CreateForm,ParametersForm,RowForm,SourceForm
 from .services.model_ddp import mutate,parameters,preview_token,FREIGHT_FIELDS,MODEL_FIELDS
 from .services.model_ddp_source import load_prices,empty_reference
+from .services.model_ddp_references import filter_data
 
 
 def access(request):
@@ -78,18 +79,27 @@ def detail(request,pk):
                 return redirect(reverse('model_ddp_detail',args=[pk])+'?'+request.GET.urlencode())
         except ValidationError as exc:error=' '.join(exc.messages)
     query=batch.rows.all();q=request.GET.get('q','').strip();currency=request.GET.get('currency','');status=request.GET.get('status','');brand=request.GET.get('brand','')
-    if q:query=query.filter(Q(model_name__icontains=q)|Q(planning_group__icontains=q)|Q(price_type__icontains=q))
+    ids,reference_filters,reference_choices=filter_data(batch,request)
     if currency:query=query.filter(currency=currency)
-    if brand:query=query.filter(brand=brand)
     if status in ('ready','partial','error'):query=query.filter(result__status=status)
     elif status=='pending':query=query.filter(result={})
-    page=Paginator(query,50).get_page(request.GET.get('page'))
+    from .services.product_options import classification_options
+    from .models import Purch,KindPurch
+    choices=classification_options()
+    choices.update(purch=list(Purch.objects.values_list('name',flat=True)),kind_purch=list(KindPurch.objects.values_list('name',flat=True)))
+    for key,values in reference_choices.items():
+        if key in ('planning_sales','group_goods','brand','purch','kind_purch'):choices[key]=sorted(set(choices.get(key,[]))|set(values),key=str.casefold)
+    ordered_ids=list(query.values_list('pk',flat=True))
+    if ids is not None:ordered_ids=[pk for pk in ordered_ids if pk in ids]
+    page=Paginator(ordered_ids,50).get_page(request.GET.get('page'))
+    by_id={row.pk:row for row in batch.rows.filter(pk__in=list(page))}
+    page.object_list=[by_id[pk] for pk in page.object_list]
     for row in page:
         if empty_reference(row.source_data.get('unit')):row.source_data={**row.source_data,'unit':''}
         values=parameters(batch,row);values.update(price_quantity=row.overrides.get('price_quantity') or '1',price_unit_confirmed=row.overrides.get('price_unit_confirmed',False))
-        row.edit_form=RowForm(prefix='r'+str(row.pk),initial=values)
+        row.edit_form=RowForm(prefix='r'+str(row.pk),initial=values,reference_choices=choices)
     preserved=request.GET.copy();preserved.pop('page',None)
-    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
+    return render(request,'model_purch/model_ddp_detail.html',{'batch':batch,'reference_filters':reference_filters,'can_prepare_index':role==ADMIN,'parameters_form':form,'source_form':source_form,'preview':preview,'preview_fields':[(ParametersForm.base_fields[k].label,v) for k,v in (preview['parameters'].items() if preview else []) if k!='groups'],'token':token,'error':error,'page':page,'row_ids':json.dumps([r.pk for r in page]),'q':q,'currency':currency,'status':status,'brand':brand,'brands':batch.rows.exclude(brand='').order_by('brand').values_list('brand',flat=True).distinct(),'query_string':preserved.urlencode(),'total':batch.rows.count()})
 
 
 def safe(value):

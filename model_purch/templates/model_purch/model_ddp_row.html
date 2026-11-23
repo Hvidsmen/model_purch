@@ -31,7 +31,7 @@
 <small>Загран доставка и НР НДС — вне DDP.</small>
 </td>
 <td class="ddp-currency-results">
-<div class="ddp-inline-result"><span>USD</span><strong class="ddp-money">{{ row.result.ddp.USD|floatformat:'2g'|default:'—' }}</strong></div>
+<div class="ddp-inline-result"><span>KDDP</span><strong>{{ row.result.components.kddp|floatformat:'4g'|default:'—' }}</strong></div><div class="ddp-inline-result"><span>USD</span><strong class="ddp-money">{{ row.result.ddp.USD|floatformat:'2g'|default:'—' }}</strong></div>
 <div class="ddp-inline-result"><span>EUR</span><strong class="ddp-money">{{ row.result.ddp.EUR|floatformat:'2g'|default:'—' }}</strong></div>
 <div class="ddp-inline-result"><span>CNY</span><strong class="ddp-money">{{ row.result.ddp.CNY|floatformat:'2g'|default:'—' }}</strong></div>
 <div class="ddp-inline-result"><span>RUB</span><strong class="ddp-money">{{ row.result.ddp.RUB|floatformat:'2g'|default:'—' }}</strong></div>
