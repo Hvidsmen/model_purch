@@ -62,9 +62,10 @@ def gloabal_coeff(request, version_form=None):
         response['Content-Disposition'] = f'attachment; filename="motivation-directors-v{selected.pk}.xlsx"'
         return response
     from .services.coefficient_groups import global_matrix
+    from .services.curators import global_context
     from .services.edit_history import history_context
     return render(request, 'admin_motivation/gloabal_coeff.html', {
-        **context, **restore_context(request), 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.filter(is_archived=False),
+        **context, **global_context(selected,request.GET.get('curator_goods')), **restore_context(request), 'goods': global_matrix(selected), 'director_employees': DirectorEmployee.objects.filter(is_archived=False),
         **history_context(request.user, selected),
         'segments': SegmentCoeff.objects.order_by('pk'), 'types_coeffs': TypeCoeff.objects.order_by('pk'),
         'var_calcs': VariationCalculate.objects.order_by('pk'),

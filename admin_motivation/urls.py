@@ -11,6 +11,7 @@ from . import curator_views
 from . import premium_distribution_views, sales_employee_views
 
 urlpatterns = [
+    path('curator-coefficients/global/',curator_views.global_rates,name='motivation_curator_global_rates'),
     path('curator-coefficients/',curator_views.coefficient_workspace,name='motivation_curator_coefficients'),
     path('sales-employees/',sales_employee_views.directory,name='motivation_sales_employees'),
     path('distributions/',premium_distribution_views.index,name='motivation_distributions'),

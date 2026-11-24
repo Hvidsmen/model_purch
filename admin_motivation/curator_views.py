@@ -78,3 +78,16 @@ def coefficient_workspace(request):
         Prefetch('subdivisions',queryset=Subdivision.all_objects.order_by('subdivision_key'))).order_by('full_name')
     context.update(employees=employees)
     return render(request,'admin_motivation/curator_coefficients.html',context)
+
+
+@require_http_methods(['POST'])
+def global_rates(request):
+    if not can_access(request.user,'motivation_editor'):raise PermissionDenied
+    from .services.version_context import version_context
+    version=version_context(request)['selected_version']
+    try:
+        if not version:raise ValidationError('Выберите версию.')
+        curators.save_global_rates(version.pk,request.POST.get('goods'),{k:request.POST.get(k) for k in curators.KEYS},request.POST.get('variation'),request.POST.get('revision'))
+        messages.success(request,'Глобальные коэффициенты кураторов сохранены.')
+    except ValidationError as error:messages.error(request,' '.join(error.messages))
+    return redirect(reverse('global_coeff_admin_motivation')+('?version='+str(version.pk) if version else '')+'#global-curators')
