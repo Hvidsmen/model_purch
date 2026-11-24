@@ -120,6 +120,8 @@ def current_run(execution, connector=None):
     """The result table is replaceable: never label it as an arbitrary past run."""
     from ..conns import connect_database
     connection, cursor, locked = None, None, False
+    from .closing_coefficient import correction_mode
+    correction_token=correction_mode.set(execution.parameters.get('manager_correction_mode','legacy'))
     try:
         connection, cursor = (connector or connect_database)('vm-dwh', 'DataWH')
         connection.timeout = 30
@@ -137,6 +139,7 @@ def current_run(execution, connector=None):
             raise ValidationError('Таблица результатов относится к другому или незавершённому запуску. Выберите последний завершённый расчёт; архивные суммы пока не сохраняются.')
         yield
     finally:
+        correction_mode.reset(correction_token)
         if connection is not None:
             try:
                 if locked:

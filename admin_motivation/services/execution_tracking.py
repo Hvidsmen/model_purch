@@ -40,7 +40,7 @@ def parameters(job):
                 'coefficient_sha256': job.recalculation_2025.source_sha256,
                 'coefficient_exclusions':list(rules()),
                 'calculation_subdivisions': 'all_separate', 'currency': 'USD'}
-    return {'fact_year': job.fact_year, 'plan_version': job.plan_version,
+    return {'manager_correction_mode':'period-unified-v1','fact_year': job.fact_year, 'plan_version': job.plan_version,
             'quarter_share': str(job.quarter_share), 'year_share': str(job.year_share),
             'payout_threshold': str(job.payout_threshold), 'premium_periods': periods,
             'quarter_catchup': False,
