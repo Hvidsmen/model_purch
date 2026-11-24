@@ -44,12 +44,16 @@
     const signedMoney = value => value == null ? '—' : `${Number(value) > 0 && money(value) !== '0' ? '+' : ''}${money(value)}`;
     const prefix = panel.dataset.subdivision ? 'sub_coeff=' : 'global_coeff=';
     const directorInputs = () => [...document.querySelectorAll('input[name^="director_coeff="]')];
+    const kindInputs=[...panel.querySelectorAll('[data-comparison-kind]')];
+    const allKinds=document.getElementById('comparison-kinds-all');
+    function selectedKinds(){return kindInputs.filter(i=>i.checked).map(i=>i.value);}
+    function updateBreakdown(){const selected=selectedKinds(),open=breakdownToggle?.getAttribute('aria-expanded')==='true';panel.querySelectorAll('[data-motivation-breakdown]').forEach(row=>row.hidden=!open||!selected.includes(row.dataset.comparisonKindRow));}
     const breakdownToggle = document.getElementById('comparison-breakdown-toggle');
     breakdownToggle?.addEventListener('click', () => {
         const open = breakdownToggle.getAttribute('aria-expanded') !== 'true';
         breakdownToggle.setAttribute('aria-expanded', String(open));
         breakdownToggle.textContent = `${open ? '▾' : '▸'} Всего`;
-        document.querySelectorAll('[data-motivation-breakdown]').forEach(row => row.hidden = !open);
+        updateBreakdown();
     });
     const inputs = () => [...document.querySelectorAll(`input[name^="${prefix}"]`)];
     function parameters(action) {
@@ -62,7 +66,7 @@
         });
         const formula_changes={};document.querySelectorAll('.editor-formula-field.editor-changed:not(:disabled)').forEach(input=>formula_changes[input.name]=input.value);
         const manager_changes={};document.querySelectorAll('#manager-details .coeff-input.editor-changed:not(:disabled)').forEach(input=>manager_changes[input.name]=input.value);
-        return {manager_changes,revision:document.querySelector('#editor-toolbar')?.dataset.revision,formula_changes,employee: panel.dataset.employee || null, director_changes, action, version: panel.dataset.version, subdivision: panel.dataset.subdivision || null,
+        return {selected_kinds:action==='compare'?selectedKinds():undefined,manager_changes,revision:document.querySelector('#editor-toolbar')?.dataset.revision,formula_changes,employee: panel.dataset.employee || null, director_changes, action, version: panel.dataset.version, subdivision: panel.dataset.subdivision || null,
                 plan: plan.value || null, baseline: baseline.value || null, changes, deleted};
     }
     async function post(data, signal) {
@@ -101,6 +105,7 @@
         });
         warning.hidden = true; error.hidden = true;
         if(unsupported()){status.textContent='Сначала сохраните поправки руководителя, затем обновите сравнение.';summaryStatus('Сначала сохраните настройки');return;}
+        if(!selectedKinds().length){controller?.abort();error.hidden=false;error.textContent='Выберите хотя бы один вид мотивации.';status.textContent='Выберите виды мотивации для сравнения.';summaryStatus('Выберите виды мотивации');clearSummary();return;}
         if (!plan.value) { status.textContent = 'Выберите план для сравнения.'; summaryStatus('Выберите план ниже'); return; }
         controller = new AbortController();
         error.hidden = true;
@@ -116,7 +121,7 @@
             });
             document.querySelectorAll('[data-delta], [data-summary-delta]').forEach(cell => {
                 const [variant, field] = (cell.dataset.delta || cell.dataset.summaryDelta).split('.');
-                const delta = result.deltas[variant][field];
+                const delta = result.deltas[variant][field] || {amount:null,percent:null};
                 cell.textContent = `${signedMoney(delta.amount)} / ${percent(delta.percent)}`;
                 cell.classList.toggle('delta-up', Number(delta.amount) > 0);
                 cell.classList.toggle('delta-down', Number(delta.amount) < 0);
@@ -148,6 +153,9 @@
     document.querySelectorAll('input[name^="delete_coeff="]').forEach(input => input.addEventListener('change', schedule));
     document.querySelectorAll('.editor-formula-field,#manager-details .coeff-input').forEach(input=>input.addEventListener('change',schedule));
     document.addEventListener('motivation:editor-updated',schedule);
+    function kindsChanged(){allKinds.checked=kindInputs.every(i=>i.checked);allKinds.indeterminate=kindInputs.some(i=>i.checked)&&!allKinds.checked;updateBreakdown();++revision;compare();}
+    kindInputs.forEach(i=>i.addEventListener('change',kindsChanged));
+    allKinds.addEventListener('change',()=>{kindInputs.forEach(i=>i.checked=allKinds.checked);kindsChanged();});
     plan.addEventListener('change', compare);
     baseline.addEventListener('change', compare);
     document.getElementById('comparison-refresh').addEventListener('click', compare);

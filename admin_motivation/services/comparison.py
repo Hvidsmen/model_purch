@@ -113,8 +113,13 @@ def coefficient_rows(*args, **kwargs):
 
 
 @with_exclusions
-def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, deleted=None, all_subdivisions=False, change_subdivision=None, director_changes=None, employee=None):
+def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, deleted=None, all_subdivisions=False, change_subdivision=None, director_changes=None, employee=None, selected_kinds=None):
     from .director_comparison import DirectorIndex
+    options=('policies','sales','directors','curators')
+    selected=tuple(options if selected_kinds is None else selected_kinds) if isinstance(selected_kinds,(list,tuple,type(None))) else ()
+    if not selected or len(selected)>4 or any(not isinstance(k,str) or k not in options for k in selected) or len(selected)!=len(set(selected)):raise ValidationError('Выберите хотя бы один корректный вид мотивации.')
+    from ..models import CuratorCoefficient,CuratorEmployee
+    bindings={(employee,branch.casefold()) for employee,branch in CuratorEmployee.subdivisions.through.objects.filter(curatoremployee__is_archived=False).values_list('curatoremployee_id','subdivision__subdivision_key')} if 'curators' in selected else set()
     approved = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
     before = [version for version in approved if version.effective_from < current.effective_from]
     proposed = [*before, current]
@@ -160,10 +165,13 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
         director_index = DirectorIndex([version.pk for version in versions], local=bool(use_subdivision),
             current=current if name == 'current' else None, changes=director_changes if name == 'current' else None,
             subdivision=subdivision, employee=employee, deleted=deleted if name == 'current' else None)
-        results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'directors': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
+        curator_index=DirectorIndex([v.pk for v in versions],local=True,coefficient_model=CuratorCoefficient,merge_aliases=False) if 'curators' in selected and use_subdivision else None
+        curator_versions={key[0] for key in index.cells if key[5]=='Кураторы'}
+        results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'directors': Decimal(0), 'curators': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
         for on_date, sub, pg, group, brand, amounts in source_rows():
             if not included(sub, names):
                 continue
+            original_sub=sub
             sub = canonical(sub, names)
             if name == 'current':
                 found = True
@@ -182,7 +190,7 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             sales_usd=amounts_for('Продажи',amounts,pg)
             director_usd=amounts_for('Директора',amounts,pg)
             bases={'Политики':policy_usd,'Продажи':sales_usd}
-            kinds=[kind for kind,values in bases.items() if any(values)]
+            kinds=[kind for kind,values in bases.items() if any(values) and {'Политики':'policies','Продажи':'sales'}[kind] in selected]
             try:
                 matrix, fallbacks = index.coefficients(date_cache[date_key], sub, pg, group, brand,kinds=kinds) if kinds else ([],0)
             except ValidationError as error:
@@ -193,11 +201,23 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             sales=values.get('Продажи',Decimal(0))
             results[name]['policies'] += policies
             results[name]['sales'] += sales
-            directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, director_usd)
+            directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, director_usd) if 'directors' in selected else Decimal(0)
             results[name]['directors'] += directors
-            results[name]['total'] += policies + sales + directors
+            curators=Decimal(0)
+            if 'curators' in selected:
+                if curator_index:
+                    amounts=curator_index.by_employee(date_cache[date_key],original_sub,pg,group,brand,director_usd)
+                    curators=sum((amount for staff,amount in amounts.items() if (staff,original_sub.casefold()) in bindings),Decimal(0))
+                elif date_cache[date_key] in curator_versions:
+                    try:
+                        matrix,extra=index.coefficients(date_cache[date_key],'',pg,group,brand,kinds=['Кураторы'])
+                        curators=sum((rate*usd for rate,usd in zip(matrix[0],director_usd)),Decimal(0));fallbacks+=extra
+                    except ValidationError as error:
+                        results[name]={'error':' '.join(error.messages)};continue
+            results[name]['curators']+=curators
+            results[name]['total'] += policies + sales + directors + curators
             results[name]['fallbacks'] += fallbacks
-        del index, director_index
+        del index, director_index, curator_index
     if not found:
         raise ValidationError('В выбранном плане нет строк для этого разреза. Сначала загрузите план.')
     output = {}
@@ -210,7 +230,7 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
     deltas = {}
     for name in ['approved', 'baseline']:
         deltas[name] = {}
-        for field in ['policies', 'sales', 'directors', 'total']:
+        for field in ['policies', 'sales', 'directors', 'curators', 'total']:
             if results[name].get('error') or results['current'].get('error'):
                 deltas[name][field] = {'amount': None, 'percent': None}
             else:
@@ -218,6 +238,6 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
                 change = new - old
                 percent = change / abs(old) * 100 if old else (Decimal(0) if new == 0 else None)
                 deltas[name][field] = {'amount': str(change), 'percent': str(percent) if percent is not None else None}
-    return {'variants': output, 'deltas': deltas, 'current_date': current.effective_from.isoformat(), 'affected_plan_lines': affected_lines,
+    return {'selected_kinds':list(selected),'variants': output, 'deltas': deltas, 'current_date': current.effective_from.isoformat(), 'affected_plan_lines': affected_lines,
             'unsaved': bool(changes or deleted or director_changes), 'replaced_versions': [{'id': v.pk, 'title': str(v)} for v in approved if v.pk != current.pk and v.effective_from >= current.effective_from],
             'baseline_replaced': bool(baseline and current.effective_from <= baseline.effective_from)}

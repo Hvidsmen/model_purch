@@ -70,7 +70,7 @@ def comparison_action(request):
             return JsonResponse(review_approval(version, plan, baseline, sub, changes, deleted))
         if action != 'compare' or plan is None:
             raise ValidationError('Выберите загруженный план продаж для сравнения.')
-        result=compare_plan(plan, version, baseline, sub, changes, deleted, director_changes=director_changes, employee=employee)
+        result=compare_plan(plan, version, baseline, sub, changes, deleted, director_changes=director_changes, employee=employee,selected_kinds=data.get('selected_kinds'))
         if any(normalized_formulas):
             result['unsaved']=True
             result['formula_notice']='Учтены несохранённые формулы. Сравнение показывает возможную премию при 100% выполнения плана; формулы меняют базу и условия фактической выплаты, а не эту сумму.'
