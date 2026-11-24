@@ -67,3 +67,14 @@ def rates(request,pk):
     editing=CuratorCoefficient.objects.filter(version=version,employee=employee,subdivision=subdivision,goods_id=request.GET.get('goods')).first() if str(request.GET.get('goods','')).isdigit() else None
     context.update(editing=editing,employee=employee,subdivision=subdivision,goods=Goods.objects.order_by('pk'),rates=CuratorCoefficient.objects.filter(version=version,employee=employee,subdivision=subdivision).select_related('goods'),keys=[{'name':key,'value':getattr(editing,key)*100 if editing else ''} for key in curators.KEYS])
     return render(request,'admin_motivation/curator_rates.html',context)
+
+
+@require_http_methods(['GET'])
+def coefficient_workspace(request):
+    if role_for(request.user,'motivation') not in (ADMIN,MODELER,DIRECTOR,FINANCIER,MOTIVATION_VIEWER):raise PermissionDenied
+    from .services.version_context import version_context
+    context=version_context(request)
+    employees=CuratorEmployee.objects.filter(is_archived=False).prefetch_related(
+        Prefetch('subdivisions',queryset=Subdivision.all_objects.order_by('subdivision_key'))).order_by('full_name')
+    context.update(employees=employees)
+    return render(request,'admin_motivation/curator_coefficients.html',context)
