@@ -111,3 +111,48 @@ class TransferDigestTests(TestCase):
         self.assertEqual(digest_model(through,'default'),original)
         user.groups.add(second)
         self.assertNotEqual(digest_model(through,'default'),original)
+
+class TrialExportEncodingTests(SimpleTestCase):
+    def test_child_python_forces_utf8_for_files_and_console(self):
+        import os,sys
+        from scripts.sqlserver_trial import execute
+        with TemporaryDirectory() as directory:
+            target=Path(directory)/'export.json'
+            command=[sys.executable,'-c',"import sys,json; assert sys.flags.utf8_mode==1; open(sys.argv[1],'w').write(json.dumps({'name':'Модель\\u2010测试'},ensure_ascii=False))",str(target)]
+            execute(command,{**os.environ,'PYTHONUTF8':'0','PYTHONIOENCODING':'cp1251'})
+            import json
+            self.assertEqual(json.loads(target.read_text(encoding='utf-8')),{'name':'Модель‐测试'})
+
+    def test_resume_uses_complete_copies_without_backing_up_again(self):
+        import json
+        from scripts.sqlserver_trial import resumable_snapshot
+        with TemporaryDirectory() as directory:
+            base=Path(directory);workspace=base/'20261124-001'
+            workspace.mkdir();source=base/'live.sqlite3'
+            connection=sqlite3.connect(source);connection.execute('CREATE TABLE example(id INTEGER)');connection.commit();connection.close()
+            backup_sqlite(source,workspace/'source-original.sqlite3')
+            backup_sqlite(source,workspace/'source.sqlite3')
+            metadata={'database':'Portal_Test','server':'vm-dwh','run_id':'trial','source_sqlite':str(source)}
+            (workspace/'run.json').write_text(json.dumps(metadata),encoding='utf-8')
+            with patch('scripts.sqlserver_trial.backup_sqlite',side_effect=AssertionError('must not back up')):
+                found,saved=resumable_snapshot(base)
+            self.assertEqual(found,workspace)
+            self.assertEqual(saved,metadata)
+            (workspace/'source.sqlite3').unlink()
+            with self.assertRaisesRegex(RuntimeError,'source.sqlite3'):resumable_snapshot(base)
+
+    def test_resume_refuses_live_database_and_corrupt_copy(self):
+        import json
+        from scripts.sqlserver_trial import resumable_snapshot
+        with TemporaryDirectory() as directory:
+            base=Path(directory);workspace=base/'run';workspace.mkdir()
+            source=workspace/'source.sqlite3'
+            connection=sqlite3.connect(source);connection.execute('CREATE TABLE example(id INTEGER)');connection.commit();connection.close()
+            backup_sqlite(source,workspace/'source-original.sqlite3')
+            metadata={'database':'Portal_Test','server':'vm-dwh','run_id':'trial','source_sqlite':str(source)}
+            (workspace/'run.json').write_text(json.dumps(metadata),encoding='utf-8')
+            with self.assertRaisesRegex(RuntimeError,'отдельной'):resumable_snapshot(base)
+            metadata['source_sqlite']=str(base/'other.sqlite3')
+            (workspace/'run.json').write_text(json.dumps(metadata),encoding='utf-8')
+            source.write_bytes(b'broken database')
+            with self.assertRaises(sqlite3.DatabaseError):resumable_snapshot(base)

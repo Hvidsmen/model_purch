@@ -32,6 +32,7 @@ def backup_sqlite(source,destination):
 
 def execute(command,env):
     from portal.sqlserver_trial_config import redact
+    env={**env,'PYTHONUTF8':'1','PYTHONIOENCODING':'utf-8'}
     process=subprocess.Popen(command,cwd=ROOT,env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace')
     for line in process.stdout:print(redact(line).rstrip(),flush=True)
     code=process.wait()
@@ -97,15 +98,40 @@ def prepare_snapshot(workspace,source):
     print('Источник (только чтение): '+str(Path(source).resolve()),flush=True)
     backup_sqlite(source,workspace/'source-original.sqlite3')
     backup_sqlite(workspace/'source-original.sqlite3',workspace/'source.sqlite3')
+    export_snapshot(workspace)
+
+
+def export_snapshot(workspace):
     env=os.environ.copy()
     env.update(DJANGO_SETTINGS_MODULE='portal.settings_local',DJANGO_DB_PATH=str(workspace/'source.sqlite3'))
     print('2. Миграции только на копии SQLite…',flush=True)
     migrate_snapshot(env)
-    print('3. Выгрузка данных с исходными идентификаторами…',flush=True)
+    print('3. Выгрузка данных UTF-8 с исходными идентификаторами…',flush=True)
     managed(env,'dumpdata','--settings=portal.settings_local','--all','--exclude=sessions.session',
             '--output='+str(workspace/'data.json'),'--verbosity=0')
     try:(workspace/'data.json').chmod(0o600)
     except OSError:pass
+
+
+def resumable_snapshot(base,workspace=None):
+    if workspace is None:
+        candidates=sorted((path for path in base.iterdir() if path.is_dir() and (path/'run.json').is_file()),reverse=True)
+        if not candidates:raise RuntimeError('Не найдена папка предыдущего переноса.')
+        workspace=candidates[0]
+    workspace=Path(workspace).resolve()
+    metadata=json.loads((workspace/'run.json').read_text(encoding='utf-8'))
+    from portal.sqlserver_trial_config import trial_name
+    trial_name(metadata.get('database'))
+    if not metadata.get('run_id'):raise RuntimeError('В снимке нет идентификатора переноса.')
+    if (workspace/'verified.json').exists():raise RuntimeError('Этот запуск уже дошёл до сверки. Используйте --run-prepared или отдельную пустую тестовую базу.')
+    source=Path(metadata['source_sqlite']).resolve()
+    for name in ('source-original.sqlite3','source.sqlite3'):
+        snapshot=workspace/name
+        if not snapshot.is_file() or snapshot.resolve()==source or (source.exists() and snapshot.samefile(source)):
+            raise RuntimeError('Нет отдельной завершённой копии '+name+'. Рабочая база не изменена.')
+        with closing(sqlite3.connect(snapshot.as_uri()+'?mode=ro',uri=True)) as connection:
+            if connection.execute('PRAGMA quick_check').fetchone()[0]!='ok':raise RuntimeError('Снимок '+name+' не прошёл проверку целостности.')
+    return workspace,metadata
 
 
 def main():
@@ -114,6 +140,7 @@ def main():
     parser.add_argument('--database',default='Portal_Test')
     parser.add_argument('--source')
     parser.add_argument('--workspace')
+    parser.add_argument('--resume-snapshot',action='store_true')
     parser.add_argument('--snapshot-only',action='store_true')
     parser.add_argument('--run-prepared',action='store_true')
     parser.add_argument('--serve',action='store_true')
@@ -124,25 +151,31 @@ def main():
     from portal.sqlserver_trial_config import database_config,trial_name
     trial_name(options.database)
     base=ROOT/'.local'/'sqlserver-trial'
+    if options.run_prepared and options.resume_snapshot:raise RuntimeError('Выберите только один режим продолжения.')
     if options.run_prepared:
-        workspace=Path(options.workspace).resolve() if options.workspace else Path(json.loads((base/'latest.json').read_text())['workspace'])
+        workspace=Path(options.workspace).resolve() if options.workspace else Path(json.loads((base/'latest.json').read_text(encoding='utf-8'))['workspace'])
         metadata=json.loads((workspace/'run.json').read_text(encoding='utf-8'))
-        if not (workspace/'verified.json').exists() or not json.loads((workspace/'verified.json').read_text())['passed']:
+        if not (workspace/'verified.json').exists() or not json.loads((workspace/'verified.json').read_text(encoding='utf-8'))['passed']:
             raise RuntimeError('Нет успешного отчёта сверки.')
-        if not (workspace/'probe.json').exists() or not json.loads((workspace/'probe.json').read_text())['passed']:
+        if not (workspace/'probe.json').exists() or not json.loads((workspace/'probe.json').read_text(encoding='utf-8'))['passed']:
             raise RuntimeError('Нет успешной проверки совместимости SQL Server.')
         env=trial_environment(workspace,metadata)
     else:
-        workspace=Path(options.workspace).resolve() if options.workspace else base/(datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:6])
-        if workspace.exists():raise RuntimeError('Рабочая папка тестового запуска уже существует; перезапись запрещена.')
-        workspace.mkdir(parents=True)
-        try:workspace.chmod(0o700)
-        except OSError:pass
-        metadata={'server':options.server,'database':options.database,'run_id':uuid.uuid4().hex,
-                  'created_at_utc':datetime.now(timezone.utc).isoformat(),'workspace':str(workspace),
-                  'source_sqlite':str(Path(options.source).resolve())}
-        (workspace/'run.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
-        prepare_snapshot(workspace,options.source)
+        if options.resume_snapshot:
+            workspace,metadata=resumable_snapshot(base,options.workspace)
+            print('Продолжение с готовой копии; повторное копирование SQLite не требуется: '+str(workspace),flush=True)
+            export_snapshot(workspace)
+        else:
+            workspace=Path(options.workspace).resolve() if options.workspace else base/(datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')+'-'+uuid.uuid4().hex[:6])
+            if workspace.exists():raise RuntimeError('Рабочая папка тестового запуска уже существует; перезапись запрещена.')
+            workspace.mkdir(parents=True)
+            try:workspace.chmod(0o700)
+            except OSError:pass
+            metadata={'server':options.server,'database':options.database,'run_id':uuid.uuid4().hex,
+                      'created_at_utc':datetime.now(timezone.utc).isoformat(),'workspace':str(workspace),
+                      'source_sqlite':str(Path(options.source).resolve())}
+            (workspace/'run.json').write_text(json.dumps(metadata,ensure_ascii=False,indent=2),encoding='utf-8')
+            prepare_snapshot(workspace,options.source)
         if options.snapshot_only:
             print('Копия и выгрузка готовы. SQL Server не затронут: '+str(workspace),flush=True);return
         env=trial_environment(workspace,metadata)
