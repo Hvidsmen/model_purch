@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 from uuid import uuid4
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from . import test_shared_versions
 from .models import MotivationExportLog, MotivationExecution, MotivationCalculationSchedule, DirectorEmployee
@@ -44,6 +44,7 @@ class WorkflowUxTests(TestCase):
         connection.commit.assert_not_called();connection.rollback.assert_called_once()
         self.assertFalse(MotivationExportLog.objects.exists())
 
+    @override_settings(MOTIVATION_MAIN_ALL_QUARTERS=False)
     def test_execution_is_captured_from_actual_agent_record_and_becomes_stale(self):
         import json
         self.approve();snapshot=export_snapshot()
@@ -102,6 +103,7 @@ class WorkflowUxTests(TestCase):
         self.assertEqual(response.redirect_chain[0][0], reverse('motivation_report_next',args=['detail'])+'?year=2026')
         self.assertContains(response,'Recorded plan')
 
+    @override_settings(MOTIVATION_MAIN_ALL_QUARTERS=False)
     def test_monitor_links_actual_record_and_refreshes_workflow(self):
         from django.utils import timezone
         self.approve();snapshot=export_snapshot()

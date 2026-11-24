@@ -38,10 +38,11 @@ def context():
     snapshot = export_snapshot()
     exported = MotivationExportLog.objects.order_by('-pk').first()
     from .calculation_variants import main_runs
-    execution = main_runs().order_by('-started_at').first()
+    from .main_quarter_mode import periods as main_periods
+    execution = main_runs().order_by('-started_at','-pk').first()
     current = bool(exported and exported.fingerprint == snapshot['fingerprint'])
     complete = bool(execution and execution.state == 'completed')
-    calculated_current = bool(complete and current and execution.export_snapshot.get('fingerprint') == snapshot['fingerprint'] and execution.parameters.get('premium_periods')==['4','5'] and execution.parameters.get('quarter_catchup') is False and execution.parameters.get('premium_amount_quarters')==[4])
+    calculated_current = bool(complete and current and execution.export_snapshot.get('fingerprint') == snapshot['fingerprint'] and execution.parameters.get('premium_periods')==list(main_periods()) and execution.parameters.get('quarter_catchup') is False and execution.parameters.get('premium_amount_quarters')==[int(code) for code in main_periods() if code!='5'])
     if not snapshot['versions']:
         next_label, next_route = 'Настройте и утвердите версию', 'global_coeff_admin_motivation'
     elif not current:
