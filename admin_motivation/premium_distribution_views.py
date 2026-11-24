@@ -14,17 +14,20 @@ from .services import premium_distribution as service
 
 
 class StartForm(forms.Form):
-    execution=forms.ModelChoiceField(queryset=MotivationExecution.objects.none(),label='Завершённый расчёт')
     subdivision=forms.ModelChoiceField(queryset=Subdivision.objects.none(),label='Подразделение')
-    period=forms.TypedChoiceField(coerce=int,choices=PremiumDistribution._meta.get_field('period').choices,label='Период')
+    period=forms.TypedChoiceField(coerce=int,choices=PremiumDistribution._meta.get_field('period').choices,label='Период',initial=4)
     currency=forms.ChoiceField(choices=[('USD','USD'),('RUB','RUB')],label='Валюта распределения')
 
     def __init__(self,*args,user,**kwargs):
         super().__init__(*args,**kwargs)
-        self.fields['execution'].queryset=MotivationExecution.objects.filter(state='completed').order_by('-completed_at')
-        self.fields['execution'].label_from_instance=lambda e:f"{e.parameters.get('fact_year')} · {e.parameters.get('variant','main')} · {e.completed_at:%d.%m.%Y %H:%M}" if e.completed_at else str(e.run_id)
         allowed=service.branches(user,write=True)
         self.fields['subdivision'].queryset=Subdivision.objects.all() if allowed is None else Subdivision.objects.filter(subdivision_key__in=allowed)
+
+
+def latest_calculation(variant):
+    from .services.calculation_variants import main_runs
+    runs=main_runs() if variant=='main' else MotivationExecution.objects.filter(parameters__variant=variant)
+    return runs.filter(state='completed').order_by('-started_at','-pk').first()
 
 
 @require_http_methods(['GET','POST'])
@@ -38,11 +41,16 @@ def index(request):
         if not can_edit:raise PermissionDenied
         if form.is_valid():
             try:
-                batch=service.create(request.user,**form.cleaned_data)
+                from .services.execution_tracking import latest_for_report
+                period=form.cleaned_data['period']
+                variant='main' if period in (4,5) else 'all_2026'
+                execution=latest_for_report(latest_calculation(variant),variant=variant,persist=True)
+                if execution is None or execution.state!='completed':raise ValidationError('Нет завершённого расчёта для этого периода. Сначала запустите расчёт.')
+                batch=service.create(request.user,execution=execution,**form.cleaned_data)
                 return redirect('motivation_distribution_detail',pk=batch.pk)
             except (ValidationError,IntegrityError) as exc:
                 form.add_error(None,'Распределение уже создано.' if isinstance(exc,IntegrityError) else exc)
-    return render(request,'admin_motivation/distribution/index.html',{'form':form,'batches':batches[:200]})
+    return render(request,'admin_motivation/distribution/index.html',{'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','IV квартал и закрытие года'),('all_2026','I–III кварталы')]]})
 
 
 def snapshot_for(batch,user,version):
