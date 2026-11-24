@@ -132,5 +132,53 @@ def global_context(version,selected_goods=None):
         row=rows.setdefault(cell.goods_id,{'goods':cell.goods,'variation':cell.variation_calculate,'variation_id':cell.variation_calculate_id,'values':[None]*5})
         row['values'][int(key[1])]=cell.motivation_coeff
     editing=rows.get(int(selected_goods)) if str(selected_goods).isdigit() else None
-    return {'global_curator_rows':list(rows.values()),'curator_goods':Goods.objects.order_by('pk'),'curator_editing':editing,
+    return {'curator_copy_targets':global_copy_targets(),'global_curator_rows':list(rows.values()),'curator_goods':Goods.objects.order_by('pk'),'curator_editing':editing,
         'curator_inputs':[{'key':key,'value':Decimal(str(editing['values'][i]))*100 if editing and editing['values'][i] is not None else ''} for i,key in enumerate(KEYS)]}
+
+
+@transaction.atomic
+def copy_global_rates(version_id,targets,revision,*,goods_ids=(),replace=False):
+    """Copy complete matrices to explicit assigned pairs, preserving other rates."""
+    from ..models import GlobalCoeff
+    version=lock_editable(version_id)
+    if str(version.revision)!=str(revision):raise ValidationError('Версия изменилась. Обновите страницу.')
+    if not targets:raise ValidationError('Выберите куратора и подразделение.')
+    checked=[];seen=set()
+    for employee,subdivision in targets:
+        key=(employee.pk,subdivision.pk)
+        if key in seen:continue
+        if employee.is_archived or not employee.assigned_subdivisions().filter(pk=subdivision.pk).exists():
+            raise ValidationError('Куратор должен действовать и быть закреплён за выбранным подразделением.')
+        checked.append((employee,subdivision));seen.add(key)
+    source=GlobalCoeff.objects.filter(version=version,type_coeff__type_coeff_name=KIND).select_related('segment')
+    if goods_ids:source=source.filter(goods_id__in=goods_ids)
+    matrices={}
+    for cell in source:
+        key=cell.segment.segment_name.upper().replace('O','K',1).lower()
+        if key not in KEYS:raise ValidationError('Неизвестный сегмент глобальных коэффициентов куратора.')
+        matrix=matrices.setdefault(cell.goods_id,{'values':{},'formulas':set()})
+        if key in matrix['values']:raise ValidationError('В глобальной матрице повторяется сегмент.')
+        value=Decimal(str(cell.motivation_coeff))
+        if not value.is_finite() or not -1<=value<=1 or value!=value.quantize(Decimal('.000001')):
+            raise ValidationError('В глобальных ставках некорректное значение K0–K4.')
+        matrix['values'][key]=value;matrix['formulas'].add(cell.variation_calculate_id)
+    if not matrices or goods_ids and set(goods_ids)!=set(matrices):raise ValidationError('Для выбранных товаров нет глобальных коэффициентов кураторов.')
+    if any(set(m['values'])!=set(KEYS) or len(m['formulas'])!=1 for m in matrices.values()):
+        raise ValidationError('Глобальная матрица должна содержать K0–K4 и одну формулу для каждого товара. Копирование отменено.')
+    created=updated=skipped=0
+    for employee,subdivision in checked:
+        for goods_id,matrix in matrices.items():
+            row=CuratorCoefficient.objects.filter(version=version,employee=employee,subdivision=subdivision,goods_id=goods_id).first()
+            if row and not replace:skipped+=1;continue
+            defaults={**matrix['values'],'variation_calculate_id':next(iter(matrix['formulas']))}
+            if row:
+                for key,value in defaults.items():setattr(row,key,value)
+                row.save();updated+=1
+            else:
+                CuratorCoefficient.objects.create(version=version,employee=employee,subdivision=subdivision,goods_id=goods_id,**defaults);created+=1
+    return {'created':created,'updated':updated,'skipped':skipped}
+
+
+def global_copy_targets():
+    pairs=CuratorEmployee.subdivisions.through.objects.filter(curatoremployee__is_archived=False).order_by('curatoremployee__full_name','subdivision__subdivision_key').values_list('curatoremployee_id','curatoremployee__full_name','subdivision_id','subdivision__subdivision_key')
+    return [{'value':f'{employee}:{subdivision}','label':f'{name} · {branch}'} for employee,name,subdivision,branch in pairs]

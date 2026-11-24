@@ -65,6 +65,7 @@ def rates(request,pk):
             return redirect(reverse('motivation_curator_rates',args=[pk])+f'?version={version.pk}&subdivision={subdivision.pk}')
         except ValidationError as error:messages.error(request,' '.join(error.messages))
     editing=CuratorCoefficient.objects.filter(version=version,employee=employee,subdivision=subdivision,goods_id=request.GET.get('goods')).first() if str(request.GET.get('goods','')).isdigit() else None
+    context.update(curators.global_context(version))
     context.update(editing=editing,employee=employee,subdivision=subdivision,goods=Goods.objects.order_by('pk'),rates=CuratorCoefficient.objects.filter(version=version,employee=employee,subdivision=subdivision).select_related('goods'),keys=[{'name':key,'value':getattr(editing,key)*100 if editing else ''} for key in curators.KEYS])
     return render(request,'admin_motivation/curator_rates.html',context)
 
@@ -91,3 +92,31 @@ def global_rates(request):
         messages.success(request,'Глобальные коэффициенты кураторов сохранены.')
     except ValidationError as error:messages.error(request,' '.join(error.messages))
     return redirect(reverse('global_coeff_admin_motivation')+('?version='+str(version.pk) if version else '')+'#global-curators')
+
+
+@require_http_methods(['POST'])
+def copy_global(request):
+    if not can_access(request.user,'motivation_editor'):raise PermissionDenied
+    from .services.version_context import version_context
+    version=version_context(request)['selected_version']
+    target=reverse('global_coeff_admin_motivation')+('?version='+str(version.pk) if version else '')+'#global-curators'
+    try:
+        if not version:raise ValidationError('Выберите версию.')
+        pairs=request.POST.getlist('targets')
+        if len(pairs)>200:raise ValidationError('Выберите не более 200 получателей.')
+        targets=[]
+        for pair in pairs:
+            pieces=pair.split(':')
+            if len(pieces)!=2 or any(not p.isdigit() for p in pieces):raise ValidationError('Некорректный получатель.')
+            employee=get_object_or_404(CuratorEmployee,pk=pieces[0],is_archived=False)
+            subdivision=get_object_or_404(employee.assigned_subdivisions(),pk=pieces[1])
+            targets.append((employee,subdivision))
+        goods=request.POST.getlist('goods_ids')
+        if len(goods)>5000 or any(not g.isdigit() for g in goods):raise ValidationError('Некорректный список товаров.')
+        result=curators.copy_global_rates(version.pk,targets,request.POST.get('revision'),goods_ids=[int(g) for g in goods],replace=request.POST.get('replace')=='on')
+        messages.success(request,f"Скопировано из глобальных: добавлено {result['created']}, заменено {result['updated']}, сохранено существующих {result['skipped']}.")
+        if request.POST.get('return_to')=='curator' and len(targets)==1:
+            employee,subdivision=targets[0]
+            target=reverse('motivation_curator_rates',args=[employee.pk])+f'?version={version.pk}&subdivision={subdivision.pk}'
+    except ValidationError as error:messages.error(request,' '.join(error.messages))
+    return redirect(target)
