@@ -121,3 +121,12 @@
 .nr-target-secondary .nr-target-facts strong{font-size:11px}
 .nr-target-secondary .nr-target-track{height:4px}
 .nr-target-secondary.nr-target-complete .nr-target-amount{color:#218568}
+
+
+/* Use the same columns for period totals and the motivation-type breakdown. */
+.nr-report-period-card .nr-report-period-values{display:grid;grid-template-columns:30% 35% 35%;gap:0}
+.nr-report-period-card[data-period="5"] .nr-report-period-values{grid-template-columns:30% 70%}
+.nr-report-period-card .nr-report-period-values>div{padding:0 4px}
+.nr-report-period-card .nr-report-period-values>div:first-child{grid-column:2}
+.nr-report-period-card .nr-report-period-values>div+div{padding-left:4px}
+.nr-page .nr-report-period-card .nr-period-types :is(th,td){text-align:left}
