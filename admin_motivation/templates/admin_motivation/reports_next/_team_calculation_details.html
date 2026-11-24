@@ -7,10 +7,10 @@
 <tr class="nr-overview-section"><th colspan="{{ presentation.period_columns|length|add:2 }}">Премии · {{ ledger.currency }}</th></tr>
 {% for row in presentation.team_overview_rows %}<tr{% if row.primary %} class="nr-overview-primary"{% elif row.detail %} class="nr-overview-type"{% endif %}><th scope="row">{{ row.label }}</th>{% for value in row.values %}<td>{{ value|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total|report_cash }}</td></tr>{% endfor %}
 {% for row in presentation.department_performance_matrix.rows %}
-<tr class="nr-overview-section"><th colspan="{{ presentation.period_columns|length|add:2 }}">{{ row.subdivision }} · {{ row.year }} · План-факт всего подразделения, USD</th></tr>
-<tr><th scope="row">План</th>{% for cell in row.cells %}<td>{{ cell.plan|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.plan|report_cash }}</td></tr>
-<tr><th scope="row">Факт</th>{% for cell in row.cells %}<td>{{ cell.fact|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.fact|report_cash }}</td></tr>
-<tr><th scope="row">Выполнение</th>{% for cell in row.cells %}<td>{{ cell.ratio|report_percent }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.ratio|report_percent }}</td></tr>
+<tr class="nr-overview-section nr-overview-performance-heading"><th colspan="{{ presentation.period_columns|length|add:2 }}">{{ row.subdivision }} · {{ row.year }} · План-факт всего подразделения, USD</th></tr>
+<tr class="nr-overview-performance"><th scope="row">План</th>{% for cell in row.cells %}<td>{{ cell.plan|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.plan|report_cash }}</td></tr>
+<tr class="nr-overview-performance"><th scope="row">Факт</th>{% for cell in row.cells %}<td>{{ cell.fact|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.fact|report_cash }}</td></tr>
+<tr class="nr-overview-performance nr-overview-execution"><th scope="row">Выполнение</th>{% for cell in row.cells %}<td>{{ cell.ratio|report_percent }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.ratio|report_percent }}</td></tr>
 {% endfor %}
 </tbody></table></div>
 <p class="nr-muted">В годовую премию показано начисление до годового условия выплаты, отдельно от квартальной премии. План-факт — по всему подразделению, включая ДПП, независимо от отбора сотрудников и товаров. Накопительные план и факт квартала и года в «Итого» повторно не складываются. «—» — нет данных.</p>
