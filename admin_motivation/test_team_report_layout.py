@@ -10,7 +10,7 @@ class TeamReportLayoutTests(TestCase):
         from .test_reports_next import ReportsNextTests
         ReportsNextTests.setUp(self)
 
-    def test_filters_and_totals_precede_targets_and_targets_stay_in_details(self):
+    def test_targets_are_visible_before_totals_and_outside_collapsed_details(self):
         from .test_manager_detail import detail_rows
         source=manager_detail_report(detail_rows())
         with patch('admin_motivation.services.reports_next.current_run',return_value=nullcontext()),patch('admin_motivation.services.reports_next.load_report',return_value=source):
@@ -22,8 +22,9 @@ class TeamReportLayoutTests(TestCase):
         details=html.index('<details class="nr-deep nr-team-calculation-details">')
         targets=html.index('nr-target-overview')
         people=html.index('data-team-tabs')
+        self.assertLess(targets,totals)
         self.assertLess(totals,details)
-        self.assertLess(details,targets)
+        self.assertEqual(html.count('nr-target-overview'),1)
         self.assertLess(targets,people)
         self.assertContains(response,'Итоги и выполнение плана')
 
@@ -32,3 +33,16 @@ class TeamReportLayoutTests(TestCase):
         context={'shareholder_report':True,'kind':'team','ledger':{'currency':'USD'},'presentation':{'period_cards':[{'code':'2'}]}}
         html=render_to_string('admin_motivation/reports_next/_team_calculation_details.html',context)
         self.assertNotIn('nr-target-overview',html)
+
+    def test_shareholder_team_has_visible_aligned_targets_before_totals(self):
+        from django.template.loader import render_to_string
+        from .models import ShareholderCalculation
+        from datetime import date
+        run = ShareholderCalculation(as_of=date(2026,6,24),state='completed')
+        context = {'shareholder_report':True,'run':run,'kind':'team','ledger':{'currency':'USD'},
+                   'presentation':{'team_target_rows':[{'cells':[{'label':'Всё подразделение','cards':[]}]}]}}
+        html = render_to_string('admin_motivation/reports_next/shareholder_report.html',context)
+        self.assertEqual(html.count('nr-target-overview'),1)
+        self.assertIn('nr-target-matrix-row',html)
+        self.assertLess(html.index('nr-target-overview'),html.index('nr-mockup-summary'))
+        self.assertIn('shareholder-target-rows-20261125',html)
