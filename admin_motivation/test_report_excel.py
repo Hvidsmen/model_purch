@@ -27,11 +27,14 @@ class ReportExcelTests(TestCase):
                 if scope != 'detail':
                     sheet = book['Итого по мотивации']
                     self.assertEqual(sheet['B5'].value, 'Иванов')
-                    self.assertEqual(sheet['I3'].value, 18000)
-                    self.assertEqual(sheet['H3'].value, 0)
-                    self.assertIn('Доплата за кварталы не предусмотрена', sheet['H2'].comment.text)
-                    self.assertEqual(sheet['I3'].data_type, 'n')
-                    self.assertEqual(sheet['I4'].value, sheet['I3'].value)
+                    self.assertEqual(sheet['C2'].value, 'Возможная премия, всего')
+                    self.assertEqual(sheet['C3'].value, float(self.data['period_summary']['totals']['possible']))
+                    self.assertEqual(sheet['C3'].data_type, 'n')
+                    self.assertEqual(sheet['J3'].value, 18000)
+                    self.assertEqual(sheet['I3'].value, 0)
+                    self.assertIn('Доплата за кварталы не предусмотрена', sheet['I2'].comment.text)
+                    self.assertEqual(sheet['J3'].data_type, 'n')
+                    self.assertEqual(sheet['J4'].value, sheet['J3'].value)
                     self.assertEqual(sheet.freeze_panes, 'C3')
                 if scope != 'summary':
                     sheet = book['Расширенная мотивация']
@@ -70,7 +73,7 @@ class ReportExcelTests(TestCase):
         stream = report_excel(manager_detail_report([]), {}, 'summary')
         try:
             book = load_workbook(stream)
-            self.assertEqual(book.active['I3'].value, 0)
+            self.assertEqual(book.active['J3'].value, 0)
             book.close()
         finally:
             stream.close()
