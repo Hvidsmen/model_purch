@@ -438,6 +438,9 @@ class ReportsNextTests(TestCase):
         ledger = {'currency': 'USD', 'sections': [{'kind': 'Политики', 'data': data}]}
         result = personal_details(ledger, QueryDict('year=2026&period=all'))
         self.assertEqual(len(result['goals']), 2)
+        self.assertEqual(result['goals'][0]['period'], '4 квартал')
+        self.assertEqual(result['product_sections'][0]['periods'][0], '4 квартал')
+        self.assertEqual(data['periods'][0], '4 Квартал(1-4 кв)')
         self.assertEqual(result['goal_total']['remaining'], Decimal(400))
         self.assertEqual(result['goal_total']['possible'], Decimal(200))
         self.assertEqual(result['goal_total']['calculated'], Decimal(180))

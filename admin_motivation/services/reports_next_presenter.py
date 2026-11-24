@@ -1,10 +1,17 @@
 """Presentation only: grouping never changes calculated amounts or export rows."""
 from collections import defaultdict
 from decimal import Decimal
+import re
 from urllib.parse import urlsplit
 from django.http import QueryDict
 
 ZERO = Decimal(0)
+
+
+def display_period(value):
+    # Legacy source keys retain their historical spelling; current report headings
+    # name the premium period without implying a cumulative I-IV payout window.
+    return re.sub(r'4\s*Квартал\s*\(\s*1\s*[-–—]\s*4\s*кв\.?\s*\)', '4 квартал', str(value), flags=re.IGNORECASE)
 
 
 def present(kind, data, ledger=None, period='all'):
@@ -54,7 +61,7 @@ def present(kind, data, ledger=None, period='all'):
         if not row['unallocated']:
             totals['people'].add(identity)
         period_key = row['code']
-        card = periods.setdefault(period_key, {'code': period_key, 'label': 'Год' if period_key == '5' else row['period'], 'amount': ZERO, 'bonus': ZERO, 'total': ZERO, 'links': {}, 'kind_totals': {}})
+        card = periods.setdefault(period_key, {'code': period_key, 'label': 'Год' if period_key == '5' else display_period(row['period']), 'amount': ZERO, 'bonus': ZERO, 'total': ZERO, 'links': {}, 'kind_totals': {}})
         for name in ('amount', 'bonus', 'total'):
             card[name] += row[name]
         card['kind_totals'][row['kind']] = card['kind_totals'].get(row['kind'], ZERO) + row['total']
@@ -204,7 +211,7 @@ def personal_details(ledger, query):
             plan, fact, ratio = block[14:17]
             remaining = max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None else None
             first_quarter = period_code(label) == '1'
-            goals.append({'period': label, 'kind': kind, 'plan': plan, 'fact': fact, 'ratio': ratio,
+            goals.append({'period': display_period(label), 'kind': kind, 'plan': plan, 'fact': fact, 'ratio': ratio,
                 'remaining': remaining, 'first_quarter': first_quarter,
                 'threshold_remaining': max(plan * ledger['payout_threshold'] - fact, ZERO) if not first_quarter and plan is not None and plan > 0 and fact is not None and ledger.get('payout_threshold') is not None else None,
                 'global_scope': data.get('global_subdivision_mode', False), 'threshold': ledger.get('payout_threshold'),
@@ -273,7 +280,7 @@ def personal_details(ledger, query):
                 groups.append({'branch': branch['label'], 'author': author['label'], **matrix_metrics(author['values']),
                     'children': [matrix(node, branch['label'], author['label']) for node in author['children']],
                     'formula_groups': [matrix(node, branch['label'], author['label']) for node in author.get('formula_groups', [])]})
-        sections.append({'kind': kind, 'periods': data['periods'], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
+        sections.append({'kind': kind, 'periods': [display_period(label) for label in data['periods']], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
                          'metric_columns': len(data['periods']) * 4 + 6, 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
     # Premium components are additive; cumulative sales targets are not.
     latest = {}
@@ -294,6 +301,7 @@ def personal_details(ledger, query):
 def new_detail_labels(data):
     """Labels for the new tab only; legacy reports keep their terminology."""
     data = dict(data)
+    data['periods'] = [display_period(label) for label in data['periods']]
     data['headers'] = [dict(header) for header in data['headers']]
     for index, label, explanation in [
         (13, 'Возможная премия', 'Премия по уже совершённым отгрузкам до применения условий выплаты; это не прогноз премии при 100% плана.'),
