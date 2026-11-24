@@ -22,8 +22,7 @@ from .services.version_context import version_context
 def coefficient_group_copy(request):
     from base.access import can_access
     from .models import GlobalCoeffVersion, CoefficientGroupCopyLog
-    from .services.group_copy import copy_group
-    from .services.coefficient_groups import GROUP_NAMES
+    from .services.group_copy import copy_group, GROUP_NAMES, BASE_GROUP_NAMES
     data = request.POST if request.method == 'POST' else request.GET
     version = get_object_or_404(GlobalCoeffVersion, pk=data.get('version'))
     sub = get_object_or_404(Subdivision, pk=data['subdivision']) if data.get('subdivision') else None
@@ -48,7 +47,7 @@ def coefficient_group_copy(request):
         log.source_label = {**GROUP_NAMES, 'global': 'Глобальные'}.get(log.source_group, log.source_group)
         log.target_label = {**GROUP_NAMES, 'branch': 'Филиал'}.get(log.target_group, log.target_group)
     return render(request, 'admin_motivation/group_copy.html', {
-        'selected_version': version, 'sub': sub, 'employee': employee, 'groups': GROUP_NAMES,
+        'selected_version': version, 'sub': sub, 'employee': employee, 'groups': BASE_GROUP_NAMES if sub else GROUP_NAMES,
         'subdivisions': Subdivision.objects.all(),
         'copy_history': history,
     })
