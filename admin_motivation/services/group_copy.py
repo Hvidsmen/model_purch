@@ -5,7 +5,9 @@ from base.access import can_access
 from ..models import (GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff,
     GlobalDirectorCoeff, SubdivisionDirectorCoeff, TypeCoeff, SegmentCoeff,
     CoefficientGroupCopyLog, touch_version)
-from .coefficient_groups import GROUP_NAMES
+from .coefficient_groups import GROUP_NAMES as BASE_GROUP_NAMES
+
+GROUP_NAMES = {**BASE_GROUP_NAMES, 'curators': 'Кураторы'}
 
 
 @transaction.atomic
@@ -20,6 +22,8 @@ def copy_group(user, version_id, revision, source, target, subdivision=None, emp
         raise ValidationError('Версия изменена. Обновите страницу и повторите копирование.')
     if source not in GROUP_NAMES or target not in GROUP_NAMES or source == target:
         raise ValidationError('Выберите разные группы источника и назначения.')
+    if subdivision and 'curators' in (source, target):
+        raise ValidationError('Группа кураторов здесь доступна для глобальных ставок. Индивидуальные ставки копируются в коэффициентах кураторов с выбором подразделения.')
     if subdivision and 'directors' in (source, target) and (not employee or not employee.subdivisions.filter(pk=subdivision.pk).exists()):
         raise ValidationError('Выберите директора, привязанного к филиалу.')
     core = SubdivisionCoeff if subdivision else GlobalCoeff
@@ -32,7 +36,7 @@ def copy_group(user, version_id, revision, source, target, subdivision=None, emp
         if label in {f'{prefix}{i}' for prefix in ('K', 'O') for i in range(5)}:
             segments[segment.pk] = int(label[-1])
     types = {}
-    for group in ('policies', 'sales'):
+    for group in ('policies', 'sales', 'curators'):
         matches = list(TypeCoeff.objects.filter(type_coeff_name__iexact=GROUP_NAMES[group]))
         if len(matches) != 1 and group in (source, target):
             raise ValidationError('Не найдена однозначная группа коэффициентов.')
