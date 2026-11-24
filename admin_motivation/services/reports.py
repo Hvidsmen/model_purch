@@ -449,6 +449,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         if kind == 'manager-detail':
             from .manager_detail import grouped_sql, manager_detail_report
             rows = read_rows(cursor, grouped_sql(sql, summary_only=summary_only), args)
+            if values.get('TypeCoeff_')=='Кураторы':rows=[dict(row,ТипКоэф='Кураторы') for row in rows]
             if summary_only:
                 from .manager_detail import period_motivation_summary
                 if premium_period and premium_period != 'all':

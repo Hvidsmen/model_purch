@@ -212,15 +212,18 @@ def personal_details(ledger, query, *, period_codes=None):
     from datetime import date
     from django.urls import reverse
     from .reports_next import period_code, selected_periods
+    from .curators import personal_sections
     goals, sections = [], []
-    for section in ledger.get('sections', []):
+    personal=personal_sections(ledger.get('sections', []))
+    multiple_curator_branches=len({s.get('branch') for s in personal if s['kind']=='Кураторы' and s.get('branch')})>1
+    for section in personal:
         data, kind = section['data'], section['kind']
         for index, label in enumerate(data['periods']):
             block = data['detail_totals'][index]
             plan, fact, ratio = block[14:17]
             remaining = max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None else None
             first_quarter = period_code(label) == '1'
-            goals.append({'period': display_period(label), 'kind': kind, 'plan': plan, 'fact': fact, 'ratio': ratio,
+            goals.append({'period': display_period(label), 'kind': kind, 'branch':section.get('branch',''), 'plan': plan, 'fact': fact, 'ratio': ratio,
                 'remaining': remaining, 'first_quarter': first_quarter,
                 'threshold_remaining': max(plan * ledger['payout_threshold'] - fact, ZERO) if not first_quarter and plan is not None and plan > 0 and fact is not None and ledger.get('payout_threshold') is not None else None,
                 'global_scope': data.get('global_subdivision_mode', False), 'threshold': ledger.get('payout_threshold'),
@@ -296,13 +299,13 @@ def personal_details(ledger, query, *, period_codes=None):
     for goal in goals:
         if goal['kind'] not in latest or period_code(goal['period']) > period_code(latest[goal['kind']]['period']):
             latest[goal['kind']] = goal
-    basis = next(iter(latest.values())) if len(latest) == 1 else None
+    basis = next(iter(latest.values())) if len(latest) == 1 and not multiple_curator_branches else None
     goal_total = {'plan': None, 'fact': None, 'ratio': None, 'threshold_remaining': None, 'first_quarter': False, 'global_scope': False, **(basis or {}), 'is_total': True, 'period': 'Итого за выбранные периоды', 'kind': '',
         'possible': sum((goal['possible'] or ZERO for goal in goals), ZERO),
         'calculated': sum((goal['calculated'] or ZERO for goal in goals), ZERO),
         'reward_at_target': None, 'remaining': basis['remaining'] if basis and not basis['first_quarter'] else None,
         'reward_reason': 'Прогноз итоговой премии при 100% пока не рассчитан: неизвестны будущие личные отгрузки, товары и ступени скидки.',
-        'basis_note': ('Цель — ' + basis['period'] + '. Квартальная и годовая цели пересекаются, поэтому план, факт и остаток учтены один раз. Возможная премия и премия по расчёту суммируются за выбранные периоды.') if basis else 'Выбрано несколько видов мотивации с разными базами выполнения. Единого плана, факта, процента и остатка до 100% нет; смотрите цели по видам. Суммы премий сложены за выбранные периоды.'}
+        'basis_note': ('Цель — ' + basis['period'] + '. Квартальная и годовая цели пересекаются, поэтому план, факт и остаток учтены один раз. Возможная премия и премия по расчёту суммируются за выбранные периоды.') if basis else ('Выполнение куратора проверяется отдельно в каждом подразделении. Общий процент не рассчитывается; складываются только премии.' if multiple_curator_branches else 'Выбрано несколько видов мотивации с разными базами выполнения. Единого плана, факта, процента и остатка до 100% нет; смотрите цели по видам. Суммы премий сложены за выбранные периоды.')}
     return {'goals': goals, 'goals_with_total': [*goals, goal_total] if goals else [], 'goal_total': goal_total, 'product_sections': sections}
 
 

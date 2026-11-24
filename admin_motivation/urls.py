@@ -6,7 +6,11 @@ from . import report_navigation_views,coefficient_iteration_views,coefficient_it
 
 from . import shareholder_views
 
+from . import curator_views
+
 urlpatterns = [
+    path('curators/',curator_views.directory,name='motivation_curators'),
+    path('curators/<int:pk>/rates/',curator_views.rates,name='motivation_curator_rates'),
     path('reports-next/shareholders/',shareholder_views.index,name='motivation_shareholders'),
     path('reports-next/shareholders/<uuid:pk>/status/',shareholder_views.status,name='motivation_shareholder_status'),
     path('reports-next/shareholders/<uuid:pk>/<str:kind>/',shareholder_views.report,name='motivation_shareholder_report'),

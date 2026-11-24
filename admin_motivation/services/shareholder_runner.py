@@ -53,7 +53,10 @@ def progress(run,text):ShareholderCalculation.objects.filter(pk=run.pk,state='ru
 
 def save_query(run,cursor,mode,dataset,sql,args=(),kind=None):
     cursor.execute(sql,*args) if args else cursor.execute(sql)
-    fields=[column[0] for column in cursor.description];sequence=0;count=0
+    fields=[column[0] for column in cursor.description]
+    from django.db.models import Max
+    previous=ShareholderSnapshot.objects.filter(calculation=run,mode=mode,dataset=dataset).aggregate(value=Max('sequence'))['value']
+    sequence=previous+1 if previous is not None else 0;count=0
     while True:
         rows=cursor.fetchmany(500)
         if not rows:break
@@ -156,6 +159,10 @@ def execute(run,connector=None):
      FROM #share_transformed s JOIN dbo.Product p ON p.ProductCode=s.ProductCode AND p.[Тип номенклатуры]=N'Товар'
      WHERE EXISTS(SELECT 1 FROM dbo.Customer c WHERE c.CustomerKey=s.CustomerKey)''')
             metadata['counts'][mode]=counts
+        from .curator_sql import shareholder_snapshots
+        curator_count=shareholder_snapshots(run,cursor,definitions['combined'],save_query)
+        metadata['counts']['combined']['report']+=curator_count
+        metadata['curator_rows']=curator_count
         if not any(item['report'] for item in metadata['counts'].values()):raise ValidationError('Расчёт не вернул строк. Пустой результат не подставлен.')
         ShareholderCalculation.objects.filter(pk=run.pk,state='running').update(state='completed',stage='Готово · все отчёты используют один снимок',metadata=serial(metadata),completed_at=timezone.now())
     finally:
@@ -174,6 +181,7 @@ def run_calculation(pk,connector=None):
         reason=' '.join(error.messages) if isinstance(error,ValidationError) else 'Подробности в журнале отдельного задания.'
         if not isinstance(error,ValidationError):
             if re.search(r'\(50071\)',str(error)):reason='Перераспределение не сохранило оборот USD/RUB. Результаты не опубликованы.'
+            elif re.search(r'\(50081\)',str(error)):reason='Не найдены выгруженные ставки куратора. Проверьте назначения и выгрузку утверждённой версии.'
             elif re.search(r'\(50040\)',str(error)):reason='Нет совместимого подготовленного факта. Обновите подготовку в Центре расчётов.'
         ShareholderCalculation.objects.filter(pk=run.pk,state='running').update(state='failed',stage='Расчёт остановлен',error=reason+' Код: '+reference,completed_at=timezone.now())
         # Incomplete financial rows are never useful report data.

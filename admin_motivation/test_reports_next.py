@@ -679,7 +679,7 @@ class ReportsNextTests(TestCase):
                       for name in ('Same employee', 'Политики')]
             data = manager_detail_report(source, currency)
             with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=data):
-                response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency})
+                response = self.client.get(reverse('motivation_report_next', args=['team']), {'type':['Политики','Продажи','Директора'],'run': '1', 'currency': currency})
                 presentation = response.context['presentation']
                 self.assertEqual(presentation['total'], 0)
                 self.assertEqual(sum(card['possible'] for card in presentation['period_cards']), expected)
@@ -702,7 +702,7 @@ class ReportsNextTests(TestCase):
                 self.assertContains(response, presentation['premium_possible_label'] + ', ' + currency, count=3)
                 self.assertContains(response, 'class="num nr-possible-cell"', count=9)
                 self.assertTrue(all(row['possible'] == expected / 6 for section in presentation['team_sections'] for row in section['rows']))
-                exported = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency, 'export': 'xlsx'})
+                exported = self.client.get(reverse('motivation_report_next', args=['team']), {'type':['Политики','Продажи','Директора'],'run': '1', 'currency': currency, 'export': 'xlsx'})
             from io import BytesIO
             book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
             summary = [row for row in book['Сводка'].iter_rows(min_row=6, values_only=True) if row[0] == 'Все выбранные подразделения' and row[1] in ('Политики','Продажи','Директора')]
@@ -715,7 +715,7 @@ class ReportsNextTests(TestCase):
     def test_team_tables_have_independent_pagination_and_full_type_totals(self):
         source = manager_detail_report([dict(detail_rows()[1], АвторСделки=f'Person {i:03}') for i in range(55)])
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source):
-            response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'page_sales': '2'})
+            response = self.client.get(reverse('motivation_report_next', args=['team']), {'type':['Политики','Продажи','Директора'],'run': '1', 'page_sales': '2'})
         sections = response.context['presentation']['team_sections']
         self.assertEqual([section['page'].number for section in sections], [1, 2, 1])
         self.assertEqual([len(section['page']) for section in sections], [50, 5, 50])
@@ -792,7 +792,7 @@ class ReportsNextTests(TestCase):
     def test_registry_splits_types_with_card_totals_and_keeps_unallocated_visible(self):
         source = manager_detail_report([dict(detail_rows()[1], АвторСделки=name) for name in ('Employee', 'Политики')])
         with patch('admin_motivation.services.reports_next.current_run', return_value=nullcontext()), patch('admin_motivation.services.reports_next.load_report', return_value=source):
-            response = self.client.get(reverse('motivation_report_next', args=['registry']), {'run': '1'})
+            response = self.client.get(reverse('motivation_report_next', args=['registry']), {'type':['Политики','Продажи','Директора'],'run': '1'})
         self.assertContains(response, '<table class="nr-table">', count=3)
         self.assertContains(response, 'nr-kpi-types', count=3)
         self.assertContains(response, 'Не распределено', count=3)
@@ -813,7 +813,7 @@ class ReportsNextTests(TestCase):
         from .services.reports_next_presenter import present
         self.fixture.scenario.lines.filter(subdivision='A').update(amount_ddp_usd=600)
         self.fixture.scenario.lines.filter(subdivision='B').update(amount_ddp_usd=400)
-        data = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('year=2026'))
+        data = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('year=2026&type=Политики&type=Продажи&type=Директора'))
         root = data[0]
         self.assertEqual(root['ddp'], Decimal(1000))
         self.assertEqual(root['global_markup'], root['plan'] / (root['ddp'] + root['global']))
@@ -823,11 +823,11 @@ class ReportsNextTests(TestCase):
         display = present('executive', data)
         self.assertEqual([item['kind'] for item in display['executive_types']], ['Политики', 'Продажи', 'Директора'])
         self.assertEqual(sum(item['global'] for item in display['executive_types']), root['global'])
-        response = self.client.get(reverse('motivation_report_next', args=['executive']), {'run': '1'})
+        response = self.client.get(reverse('motivation_report_next', args=['executive']), {'run':'1','type':['Политики','Продажи','Директора']})
         for label in ('DDP, USD', 'Наценка глобальная', 'Наценка подразделений', 'Отклонение наценки'):
             self.assertContains(response, label)
         self.assertContains(response, 'nr-kpi-types', count=3)
-        exported = self.client.get(reverse('motivation_report_next', args=['executive']), {'export': 'xlsx'})
+        exported = self.client.get(reverse('motivation_report_next', args=['executive']), {'export':'xlsx','type':['Политики','Продажи','Директора']})
         from io import BytesIO
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
         sheet = book['Сравнение']
@@ -836,7 +836,7 @@ class ReportsNextTests(TestCase):
         self.assertEqual(sheet['G3'].number_format, '0.00%')
         book.close(); exported.close()
         self.fixture.scenario.lines.filter(subdivision='B').update(amount_ddp_usd=None)
-        missing = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('year=2026'))
+        missing = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('year=2026&type=Политики&type=Продажи&type=Директора'))
         self.assertIsNone(missing[0]['ddp'])
         self.assertIsNone(missing[0]['global_markup'])
         self.assertIsNotNone(next(row for row in missing if row['name'] == 'A')['global_markup'])

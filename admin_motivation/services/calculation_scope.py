@@ -10,6 +10,8 @@ def predicate(expression):
 def restrict_report(query, scope):
     """Keep the report and its export within the approved calculation scope."""
     from django.core.exceptions import PermissionDenied, ValidationError
+    if scope and scope.get('curator'):return
+    if query.getlist('type')==['Кураторы']:return
     from .subdivision_aliases import canonical, mapping
     names = mapping()
     if scope:

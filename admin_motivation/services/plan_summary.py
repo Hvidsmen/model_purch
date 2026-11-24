@@ -116,7 +116,7 @@ def summary_report(scenario, params, allowed_subdivisions=None):
         company['plan'] += bucket['plan']
         company['ddp'] = add(company['ddp'], bucket['ddp'])
         for side in ['global', 'local']:
-            for kind in ['policies', 'sales', 'directors']:
+            for kind in ['policies', 'sales', 'directors','curators']:
                 company[side][kind] = add(company[side][kind], bucket[side][kind])
         for staff, value in bucket['staff'].items():
             employee = company['staff'].setdefault(staff, {'plan': ZERO, 'ddp': ZERO, 'global': ZERO, 'local': ZERO})
@@ -136,7 +136,7 @@ def add(left, right):
 
 
 def empty_bucket():
-    return {'plan': ZERO, 'ddp': ZERO, 'staff': {}, **{side: dict.fromkeys(['policies', 'sales', 'directors'], ZERO) for side in ['global', 'local']}}
+    return {'plan': ZERO, 'ddp': ZERO, 'staff': {}, **{side: dict.fromkeys(['policies', 'sales', 'directors','curators'], ZERO) for side in ['global', 'local']}}
 
 
 def row(name, plan, global_value, local_value, children=None, ddp=None, global_quarter=None, global_annual=None):
@@ -155,7 +155,7 @@ def row(name, plan, global_value, local_value, children=None, ddp=None, global_q
 
 
 def empty_global_parts():
-    return {part:dict.fromkeys(['policies','sales','directors'],ZERO) for part in ('quarter','annual')}
+    return {part:dict.fromkeys(['policies','sales','directors','curators'],ZERO) for part in ('quarter','annual')}
 
 
 def global_part(bucket,part,kind=None):
@@ -167,7 +167,7 @@ def global_part(bucket,part,kind=None):
 def node(name, bucket, names, kinds):
     plan = bucket['plan']
     children = [row(label, plan, bucket['global'][kind], bucket['local'][kind], ddp=bucket['ddp'],global_quarter=global_part(bucket,'quarter',kind),global_annual=global_part(bucket,'annual',kind))
-                for kind, label in KINDS if kind in kinds]
+                for kind, label in [*KINDS,('curators','Кураторы')] if kind in kinds]
     for child in children:
         if child['name'] == 'Директор':
             child['children'] = [row(names.get(staff, str(staff)), value['plan'], value['global'], value['local'], ddp=value['ddp'],global_quarter=value.get('global_quarter'),global_annual=value.get('global_annual'))

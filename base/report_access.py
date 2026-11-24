@@ -1,6 +1,6 @@
 """Server-side report restrictions; never derive identity from query parameters."""
 from django.core.exceptions import PermissionDenied
-from .access import role_for, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, REPORT_ROLES, SALES, motivation_scopes
+from .access import role_for, POLITICIAN, DEPUTY_DIRECTOR, BRANCH_DIRECTOR, REPORT_ROLES, SALES, CURATOR, motivation_scopes
 from .models import MotivationReportAccess, PortalReportGroup
 
 PERSONAL_REPORTS = ('manager', 'manager-detail', 'deals')
@@ -21,6 +21,13 @@ def _politician_scope(user):
     role = role_for(user, 'motivation')
     if role not in REPORT_ROLES:
         return None
+    if role == CURATOR:
+        from admin_motivation.models import CuratorEmployee
+        employee=CuratorEmployee.objects.filter(user=user,is_archived=False).first()
+        if not employee:return None
+        branches=list(employee.assigned_subdivisions().values_list('subdivision_key',flat=True))
+        if not branches:return None
+        return {'subdivision':branches,'author':employee.full_name,'type':['Кураторы'],'reports':PERSONAL_REPORTS,'curator':True}
     if role in (DEPUTY_DIRECTOR, BRANCH_DIRECTOR):
         from admin_motivation.models import TypeCoeff
         groups = motivation_scopes(user.groups.all()).prefetch_related('subdivisions__merged_into')
@@ -92,6 +99,9 @@ def scoped_values(kind, values, scope):
     types, worker, branches = allowed_values(scope, values.get(type_key))
     selected = values.get(branch_key)
     selected = selected if isinstance(selected, list) else [selected]
+    if scope.get('curator'):
+        actual={value.casefold():value for value in branches}
+        selected=[actual.get(str(value).casefold()) for value in selected if str(value).casefold() in actual]
     selected = list(dict.fromkeys(value for value in selected if value in branches)) or branches
     for name, parameter, caption, dataset, multiple in FILTERS[kind]:
         if name == 'type':

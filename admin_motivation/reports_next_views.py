@@ -4,6 +4,7 @@ from tempfile import TemporaryFile
 from zoneinfo import ZoneInfo
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.paginator import Paginator
+from django.db.models import Q
 from django.http import FileResponse, Http404
 from django.shortcuts import render, get_object_or_404
 from django.urls import reverse
@@ -190,7 +191,7 @@ def report(request, kind):
     admin_preview = role_for(request.user, 'motivation') == ADMIN and kind in ('mine', 'detail')
     if admin_preview:
         from django.contrib.auth import get_user_model
-        candidates = get_user_model().objects.filter(is_active=True, motivation_report_access__isnull=False).select_related('motivation_report_access').prefetch_related('groups').order_by('last_name', 'first_name', 'username')
+        candidates = get_user_model().objects.filter(Q(motivation_report_access__isnull=False)|Q(motivation_curator__isnull=False),is_active=True).select_related('motivation_report_access').prefetch_related('groups').order_by('last_name', 'first_name', 'username')
         preview_scopes = {}
         for user in candidates:
             personal_scope = reports.preview_scope(user)
@@ -232,7 +233,7 @@ def report(request, kind):
     query.setdefault('currency', 'USD')
     query.setdefault('period', 'all')
     moscow_only = bool(selected and str(selected.parameters.get('transition_rule') or '').startswith('moscow-tt-q4-'))
-    if moscow_only:
+    if moscow_only and types!=['Кураторы'] and not (scope and scope.get('curator')):
         from .services.calculation_scope import restrict_report
         try:
             restrict_report(query, scope)
@@ -323,9 +324,9 @@ def report(request, kind):
         logging.getLogger(__name__).exception('New motivation report failed: %s', kind)
         error = 'Не удалось получить данные. Проверьте подключение к DWH и журнал сервера.'
     selected_subs = query.getlist('subdivision')
-    branch_names = scope.get('subdivision', []) if scope else list(Subdivision.objects.values_list('subdivision_key', flat=True))
+    branch_names = scope.get('subdivision', []) if scope else list((Subdivision.all_objects if types==['Кураторы'] else Subdivision.objects).values_list('subdivision_key', flat=True))
     branch_names = [branch_names] if isinstance(branch_names, str) else branch_names
-    if moscow_only:
+    if moscow_only and types!=['Кураторы'] and not (scope and scope.get('curator')):
         from .services.calculation_scope import SUBDIVISION
         branch_names = [SUBDIVISION]
     branches = [{'name': value, 'selected': value in selected_subs} for value in branch_names]
@@ -357,7 +358,7 @@ def report(request, kind):
     page_query = query.copy()
     page_query.pop('page', None)
     page_query.pop('export', None)
-    all_types = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
+    all_types = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора', 'Кураторы']
     all_types = [all_types] if isinstance(all_types, str) else all_types
     from .services.product_filters import fields as product_fields
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.available(request.user)[kind][0],

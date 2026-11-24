@@ -4,9 +4,10 @@ from ..models import GlobalDirectorCoeff, SubdivisionDirectorCoeff, Goods
 
 
 class DirectorIndex:
-    def __init__(self, versions, local=False, current=None, changes=None, subdivision=None, employee=None, deleted=None):
+    def __init__(self, versions, local=False, current=None, changes=None, subdivision=None, employee=None, deleted=None, *, coefficient_model=None, merge_aliases=True):
+        self.scope_key=(lambda value:str(value).casefold()) if coefficient_model else (lambda value:value)
         from .comparison import coefficient_input
-        model = SubdivisionDirectorCoeff if local else GlobalDirectorCoeff
+        model = coefficient_model or (SubdivisionDirectorCoeff if local else GlobalDirectorCoeff)
         # Scalar streaming avoids building a model plus related Goods/Subdivision
         # objects for every cell, and never retains the complete queryset cache.
         fields = ['version_id', 'goods_id', 'goods__planning_group_sales', 'goods__group', 'goods__brand',
@@ -16,7 +17,7 @@ class DirectorIndex:
         rows = model.objects.filter(version_id__in=versions).order_by().values_list(*fields)
         self.cells, self.minimum, self.table_minimum, self.employees = {}, {}, {}, {}
         self.budget_cache = {}
-        target_sub = subdivision.subdivision_key if subdivision else ''
+        target_sub = self.scope_key(subdivision.subdivision_key) if subdivision else ''
         target_staff = employee.pk if employee else 0
         present = set()
 
@@ -25,6 +26,7 @@ class DirectorIndex:
                 version, goods_id, pg, group, brand = row[:5]
                 values = row[5:10]
                 sub, staff = row[10:] if local else ('', 0)
+                sub=self.scope_key(sub)
                 matching = current and version == current.pk and target_sub == sub and (not local or (employee and staff == target_staff))
                 if matching:
                     if goods_id in (deleted or []):
@@ -41,7 +43,7 @@ class DirectorIndex:
                         changes.get(f'{goods_id}:{i}', Decimal(0)) for i in range(5)]
 
         from .subdivision_aliases import coefficient_rows as merged_rows
-        for version, sub, staff, pg, group, brand, values in merged_rows(inputs(), 1, range(6)):
+        for version, sub, staff, pg, group, brand, values in (merged_rows(inputs(), 1, range(6)) if merge_aliases else inputs()):
             scope = (version, sub, staff, pg, group, brand)
             if scope in self.cells:
                 raise ValidationError('Неоднозначные коэффициенты директора для товарной классификации.')
@@ -57,6 +59,7 @@ class DirectorIndex:
     def motivation(self, version, sub, pg, group, brand, amounts):
         # Budgets are linear in O0–O4 amounts. Resolve employee fallbacks once
         # per immutable index/classification, not once per employee/plan month.
+        sub=self.scope_key(sub)
         key=(version,sub,pg,group,brand)
         if key not in self.budget_cache:
             totals=[Decimal(0)]*5
@@ -68,6 +71,7 @@ class DirectorIndex:
         return sum((value*amount for value,amount in zip(self.budget_cache[key],amounts)),Decimal(0))
 
     def by_employee(self, version, sub, pg, group, brand, amounts):
+        sub=self.scope_key(sub)
         result = {}
         for staff in self.employees.get((version, sub), ()):
             values, _ = self.coefficients(version, sub, staff, pg, group, brand)
@@ -75,6 +79,7 @@ class DirectorIndex:
         return result
 
     def coefficients(self, version, sub, staff, pg, group, brand):
+        sub=self.scope_key(sub)
         values = self.cells.get((version, sub, staff, pg, group, brand))
         if values is not None:
             return values, 'exact'
