@@ -219,7 +219,7 @@ def report(request, kind):
     runs = main_runs().filter(state='completed').order_by('-completed_at', '-started_at', '-pk')
     selected = runs.first()
     run_error = None
-    if kind != 'executive' and (query.get('run') == '1' or query.get('export') == 'xlsx'):
+    if kind != 'executive':
         from .services.execution_tracking import latest_for_report
         try:
             selected = latest_for_report(selected, persist=role_for(request.user, 'motivation') == ADMIN)

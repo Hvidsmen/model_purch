@@ -193,10 +193,11 @@ class ReportsNextTests(TestCase):
                 guard.assert_not_called()
                 load.assert_not_called()
 
-    def test_filter_page_without_report_request_does_not_query_audit(self):
-        with patch('admin_motivation.services.execution_tracking.observe_latest') as audit:
+    def test_filter_page_refreshes_source_metadata_without_loading_report(self):
+        with patch('admin_motivation.services.execution_tracking.observe_latest',return_value=None) as audit,patch('admin_motivation.services.reports_next.actual_reports') as load:
             self.client.get(reverse('motivation_report_next', args=['team']))
-        audit.assert_not_called()
+        audit.assert_called_once()
+        load.assert_not_called()
 
     def test_finance_registry_does_not_claim_payment_approval(self):
         user = User.objects.create_user('next-finance')
