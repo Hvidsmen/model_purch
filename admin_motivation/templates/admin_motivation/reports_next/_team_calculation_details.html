@@ -1,6 +1,18 @@
+{% load report_format %}
 {% if presentation.period_cards or presentation.department_performance_matrix.rows %}
 <details class="nr-deep nr-team-calculation-details"><summary>Итоги и выполнение плана</summary><div class="nr-deep-body">
-{% include 'admin_motivation/reports_next/_report_period_cards.html' %}
-{% include 'admin_motivation/reports_next/_performance_sections.html' %}
+<div class="nr-table-wrap nr-team-overview-scroll"><table class="nr-table nr-team-overview" aria-label="Премии и план-факт по периодам">
+<thead><tr><th scope="col">Показатель</th>{% for column in presentation.period_columns %}<th scope="col">{% if column.code == '5' %}Год{% else %}{{ column.code }} квартал{% endif %}</th>{% endfor %}<th scope="col">Итого</th></tr></thead>
+<tbody>
+<tr class="nr-overview-section"><th colspan="{{ presentation.period_columns|length|add:2 }}">Премии · {{ ledger.currency }}</th></tr>
+{% for row in presentation.team_overview_rows %}<tr{% if row.primary %} class="nr-overview-primary"{% elif row.detail %} class="nr-overview-type"{% endif %}><th scope="row">{{ row.label }}</th>{% for value in row.values %}<td>{{ value|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total|report_cash }}</td></tr>{% endfor %}
+{% for row in presentation.department_performance_matrix.rows %}
+<tr class="nr-overview-section"><th colspan="{{ presentation.period_columns|length|add:2 }}">{{ row.subdivision }} · {{ row.year }} · План-факт всего подразделения, USD</th></tr>
+<tr><th scope="row">План</th>{% for cell in row.cells %}<td>{{ cell.plan|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.plan|report_cash }}</td></tr>
+<tr><th scope="row">Факт</th>{% for cell in row.cells %}<td>{{ cell.fact|report_cash }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.fact|report_cash }}</td></tr>
+<tr><th scope="row">Выполнение</th>{% for cell in row.cells %}<td>{{ cell.ratio|report_percent }}</td>{% endfor %}<td class="nr-overview-total">{{ row.total.ratio|report_percent }}</td></tr>
+{% endfor %}
+</tbody></table></div>
+<p class="nr-muted">В годовую премию показано начисление до годового условия выплаты, отдельно от квартальной премии. План-факт — по всему подразделению, включая ДПП, независимо от отбора сотрудников и товаров. Накопительные план и факт квартала и года в «Итого» повторно не складываются. «—» — нет данных.</p>
 </div></details>
 {% endif %}
