@@ -1,4 +1,5 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format %}{% block content %}
+{% if kind == 'detail' %}<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=detail-fit-20261103">{% endif %}
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}"><link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}"><link rel="stylesheet" href="{% static 'admin_motivation/shareholders.css' %}">
 <section class="content nr-page sh-page"><a href="{% url 'motivation_shareholders' %}">← Расчёты для акционеров</a><div class="nr-heading"><div><span class="nr-eyebrow">Отдельный сценарий для акционеров</span><h1>{{ title }}</h1><p>{{ run.name }} · реальный факт по {{ run.as_of|date:'d.m.Y' }} включительно · порог авторов {{ run.threshold_percent|floatformat:"-4" }}%</p></div>{% if ledger %}<a class="btn btn-outline-primary" href="{{ export_url }}">Скачать Excel</a>{% endif %}</div>
 <nav class="sh-nav" aria-label="Отчёты одного расчёта">{% for item in navigation %}<a href="{{ item.url }}"{% if item.active %} aria-current="page"{% endif %}>{{ item.title }}</a>{% endfor %}</nav>
