@@ -99,6 +99,7 @@ def period_motivation_summary(rows, currency='USD', pilot=False):
         return {'currency': currency,
                 'values': [total(grouped[key], paid_key) if key in grouped else None for key in keys],
                 'possible_values': [total(grouped[key], possible_key) if key in grouped else None for key in keys],
+                'possible': total(subset, possible_key),
                 'remainder': bonus, 'total': total(subset, paid_key) + bonus}
     authors = defaultdict(list)
     for row in rows:
