@@ -3,6 +3,9 @@
 {% load crispy_forms_tags l10n tz %}
 
 {% block content %}
+{% load static %}
+<link rel="stylesheet" href="{% static 'admin_motivation/coefficient_page_header.css' %}?v=1">
+<script src="{% static 'admin_motivation/coefficient_page_header.js' %}?v=1" defer> </script>
 
 <style>
     .content {
