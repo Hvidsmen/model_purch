@@ -18,7 +18,8 @@ CATALOG = {
     'manager-detail': {'title': 'Мотивация. Детально', 'description': 'Подробный отчёт: подразделения, сотрудники, кварталы, коэффициенты и товарная матрица. USD и RUB.'},
     'deals': {'title': 'Факт закрытых сделок', 'description': 'Отгрузки и возможная мотивация по сделкам, менеджерам и товарной матрице.'},
 }
-PREMIUM_PERIODS = [('4', '4 квартал'), ('5', 'Год')]
+from .main_quarter_mode import periods as main_periods
+PREMIUM_PERIODS = [(q,'Год' if q=='5' else q+' квартал') for q in main_periods()]
 
 # UI name, RDL parameter, caption, lookup dataset, multiple
 FILTERS = {
@@ -178,7 +179,7 @@ def number(value):
     return result
 
 
-PILOT_BONUS_NOTE = 'Пилот включает только 4 квартал и годовую премию. Доплата за кварталы не предусмотрена.'
+PILOT_BONUS_NOTE = 'Основной расчёт включает I–IV кварталы и годовую премию. Повторная доплата за кварталы не начисляется.'
 
 
 def total(rows, key):

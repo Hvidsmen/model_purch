@@ -89,7 +89,7 @@ class FastPipelineTests(SimpleTestCase):
                 db.execute(f'CREATE TABLE {target} AS SELECT * FROM {origin}'+match['where'].replace("N'","'"))
                 expected = db.execute(f'SELECT * FROM {origin}'+match['where'].replace("N'","'")).fetchall()
                 self.assertEqual(db.execute(f'SELECT * FROM {target}').fetchall(),expected)
-                self.assertEqual(len(expected),2 if target=='ReportMotivationByDealAuthor' else 3)
+                self.assertEqual(len(expected),3)
 
     def test_prepared_sales_guard_does_not_skip_later_coefficient_initialization(self):
         sql = share(isolate_sales(source()))

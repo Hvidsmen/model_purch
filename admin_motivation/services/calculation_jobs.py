@@ -240,7 +240,7 @@ def prepare(cursor, variant='main'):
     if SubdivisionManagerCoeff.objects.filter(version__status='approved').exists():
         from .manager_correction import patch
         changed = patch(changed)
-    from .pilot_calculation import patch as pilot_patch
+    from .pilot_calculation import main_patch as pilot_patch
     from .transition_2026 import patch as transition_patch, separate_coefficients
     from .annual_accrual import patch_calculation as capture_annual_contributions
     if variant == ALL_2026:

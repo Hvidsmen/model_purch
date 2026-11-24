@@ -57,7 +57,7 @@ def read_source(execution,subdivision,period,currency):
     from .reports import load_report
     variant=execution.parameters.get('variant','main')
     if execution.state!='completed' or variant not in ('main','all_2026','separate_2026'):raise ValidationError('Нужен завершённый рабочий расчёт.')
-    if variant=='main' and period not in (4,5):raise ValidationError('Основной расчёт содержит только IV квартал и год. Для I–III выберите расчёт всех кварталов.')
+    if variant=='main' and period in (1,2,3) and period not in execution.parameters.get('premium_amount_quarters',[]):raise ValidationError('Нужно заново запустить основной расчёт с I–III кварталами. Текущий сохранённый запуск их ещё не содержит.')
     if variant=='separate_2026' and period not in (1,2,3):raise ValidationError('Раздельный расчёт содержит только I–III кварталы.')
     rows=[]; funds=[]
     # Shared DWH application lock prevents replacing results during the snapshot.

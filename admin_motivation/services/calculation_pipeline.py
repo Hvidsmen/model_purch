@@ -38,7 +38,7 @@ def validate_equivalence(main_sql, combined_sql):
         if len(drops) > 1 or len(references) != expected:
             raise ValidationError('Обнаружена дополнительная обработка итогов. Требуется проверка ускоренного расчёта.')
     main_sql, count = re.subn(r'\bWHERE\s+1\s*=\s*0\s+AND\b', 'WHERE', main_sql, flags=re.I)
-    if count != 3:
+    if count != 3 and not (count == 0 and '-- Portal main premiums: quarters 1-4;' in main_sql):
         raise ValidationError('Не подтверждены периоды ускоренного основного расчёта.')
     main_sql = re.sub(r'\bIIF\s*\(\s*Квартал\s*=\s*4\s*,\s*(\[?СуммаМотивации(?:USD|RUR)Год\]?)\s*,\s*0\s*\)',
                       r'\1', main_sql, flags=re.I)
@@ -78,8 +78,8 @@ def main_projection():
                   'DECLARE @portalProjectionStarted datetime2=SYSUTCDATETIME();', 'BEGIN TRANSACTION;']
     for table in TABLES:
         target = 'DataWH.motivation.' + table
-        condition = (" WHERE SUBSTRING(LTRIM(RTRIM([КварталМотивации])),1,1)=N'4' "
-                     "OR LOWER(LTRIM(RTRIM([КварталМотивации])))=N'год'") if table == 'ReportMotivationByDealAuthor' else ''
+        from .main_quarter_mode import enabled
+        condition = '' if enabled() or table != 'ReportMotivationByDealAuthor' else " WHERE SUBSTRING(LTRIM(RTRIM([КварталМотивации])),1,1)=N'4' OR LOWER(LTRIM(RTRIM([КварталМотивации])))=N'год'"
         statements.extend([f"IF OBJECT_ID(N'{target}',N'U') IS NOT NULL DROP TABLE {target};",
                            f'SELECT * INTO {target} FROM {target}All2026{condition};'])
     statements.extend(['COMMIT TRANSACTION;',

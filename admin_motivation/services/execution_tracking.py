@@ -19,13 +19,13 @@ IF OBJECT_ID(N'motivation.PortalMotivationRun',N'U') IS NULL
 
 def parameters(job):
     from .motivation_exclusions import rules
-    from .pilot_calculation import PERIODS
+    from .main_quarter_mode import periods as main_periods
     from .calculation_variants import variant_of, ALL_2026
     variant = variant_of(job)
     from .transition_2026 import RULE_VERSION
     transition = job.fact_year == 2026
     from .annual_accrual import SNAPSHOT_VERSION
-    periods = list('123') if variant == 'separate_2026' else list('12345') if variant == ALL_2026 else list(PERIODS)
+    periods = list('123') if variant == 'separate_2026' else list('12345') if variant == ALL_2026 else list(main_periods())
     if variant == 'test_2025':
         from .recalculation_2025 import RULE_VERSION
         return {'fact_year': 2025, 'plan_version': job.plan_version,

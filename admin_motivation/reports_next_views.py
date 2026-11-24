@@ -332,7 +332,7 @@ def report(request, kind):
         from .services.calculation_scope import SUBDIVISION
         branch_names = [SUBDIVISION]
     branches = [{'name': value, 'selected': value in selected_subs} for value in branch_names]
-    period_options = [item for item in reports.PERIODS if not scope or not scope.get('pilot_periods') or item[0] in ('all', '4', '5')]
+    period_options = reports.period_options()
     export_query = query.copy()
     export_query['export'] = 'xlsx'
     executive_table_query=export_query.copy()
@@ -364,7 +364,7 @@ def report(request, kind):
     all_types = [all_types] if isinstance(all_types, str) else all_types
     from .services.product_filters import fields as product_fields
     return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.available(request.user)[kind][0],
-        'premium_rule_outdated': bool(kind != 'executive' and selected and (selected.parameters.get('premium_amount_quarters') != [4] or selected.parameters.get('transition_rule') != RULE_VERSION)),
+        'premium_rule_outdated': bool(kind != 'executive' and selected and (selected.parameters.get('premium_amount_quarters') != [int(code) for code,label in reports.period_options() if code not in ('all','5')] or selected.parameters.get('transition_rule') != RULE_VERSION)),
         'employee_report': employee_report, 'employee_filters': employee_filters, 'employee_authors': employee_authors,
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
         'execution': selected, 'plans': plans, 'plan': plan, 'query': query, 'types': types,

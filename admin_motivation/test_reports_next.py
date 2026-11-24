@@ -223,7 +223,7 @@ class ReportsNextTests(TestCase):
         values = load.call_args.args[1]
         self.assertEqual(values['DealAuthor'], ['Own Author'])
         self.assertEqual(values['Subdivision'], ['A'])
-        self.assertEqual(self.client.get(reverse('motivation_report_next', args=['mine']), {'period': '1'}).status_code, 403)
+        self.assertEqual(self.client.get(reverse('motivation_report_next', args=['mine']), {'period': '1'}).status_code, 200)
 
     def test_summary_query_does_not_load_coefficients_tree_or_department_inputs(self):
         from .services.reports import load_report
@@ -481,7 +481,7 @@ class ReportsNextTests(TestCase):
         self.assertIn('Цели и потенциал', book.sheetnames)
         self.assertIn('Товарная детализация', book.sheetnames)
         self.assertIn('Товарная матрица', book.sheetnames)
-        self.assertIn('Доплата за кварталы не предусмотрена', dict(book['Параметры'].values)['Доплата за кварталы'])
+        self.assertIn('Повторная доплата за кварталы не начисляется', dict(book['Параметры'].values)['Доплата за кварталы'])
         self.assertIsNone(book['Цели и потенциал']['H2'].value)
         self.assertIn('будущих личных отгрузок', book['Цели и потенциал']['I2'].value)
         self.assertEqual(sum(row[7].value for row in book['Товарная детализация'].iter_rows(min_row=2)), 180)
@@ -518,13 +518,13 @@ class ReportsNextTests(TestCase):
         self.assertEqual(result[0]['local'], Decimal(345))
         only_quarters = reports_next.planned_budget(self.run, self.fixture.scenario, QueryDict('period=4'))
         self.assertEqual(only_quarters[0]['global'], Decimal(180))
-        self.assertEqual(reports_next.period_label(query), 'Все доступные периоды')
+        self.assertEqual(reports_next.period_label(query), '4 квартал, Год')
         exported = self.client.get(reverse('motivation_report_next', args=['executive']),
             {'run': '1', 'period': ['4', '5'], 'plan': self.fixture.scenario.pk, 'export': 'xlsx'})
         from io import BytesIO
         book = load_workbook(BytesIO(b''.join(exported.streaming_content)))
         self.assertEqual(book['Сравнение']['D3'].value, 225)
-        self.assertEqual(dict(book['Параметры'].values)['Период премии'], 'Все доступные периоды')
+        self.assertEqual(dict(book['Параметры'].values)['Период премии'], '4 квартал, Год')
         book.close(); exported.close()
 
     def test_multiperiod_summary_query_filters_selected_periods_only(self):
@@ -559,7 +559,7 @@ class ReportsNextTests(TestCase):
         MotivationReportAccess.objects.create(user=user, subdivision=self.fixture.subs[0], deal_author='Own')
         self.client.force_login(user)
         response = self.client.get(reverse('motivation_report_next', args=['mine']) + '?period=1&period=4')
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(reports_next.restrict(user, QueryDict('period=4&period=5'))[2], ['4', '5'])
 
 

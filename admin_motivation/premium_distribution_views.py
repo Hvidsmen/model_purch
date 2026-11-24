@@ -43,14 +43,15 @@ def index(request):
             try:
                 from .services.execution_tracking import latest_for_report
                 period=form.cleaned_data['period']
-                variant='main' if period in (4,5) else 'all_2026'
+                from .services.main_quarter_mode import enabled
+                variant='main' if enabled() or period in (4,5) else 'all_2026'
                 execution=latest_for_report(latest_calculation(variant),variant=variant,persist=True)
                 if execution is None or execution.state!='completed':raise ValidationError('Нет завершённого расчёта для этого периода. Сначала запустите расчёт.')
                 batch=service.create(request.user,execution=execution,**form.cleaned_data)
                 return redirect('motivation_distribution_detail',pk=batch.pk)
             except (ValidationError,IntegrityError) as exc:
                 form.add_error(None,'Распределение уже создано.' if isinstance(exc,IntegrityError) else exc)
-    return render(request,'admin_motivation/distribution/index.html',{'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','IV квартал и закрытие года'),('all_2026','I–III кварталы')]]})
+    return render(request,'admin_motivation/distribution/index.html',{'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
 
 
 def snapshot_for(batch,user,version):

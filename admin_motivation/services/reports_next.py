@@ -16,7 +16,11 @@ CATALOG = {
     'deals': ('Факт закрытых сделок', 'Фактические отгрузки, авторы сделок и возможная мотивация.'),
     'detail': ('Детальный расчёт', 'Отгрузки, ставки K0–K4, условия выполнения и итоговая премия.'),
 }
-PERIODS = [('all', 'Все доступные периоды'), ('4', '4 квартал'), ('5', 'Год')]
+def period_options():
+    from .main_quarter_mode import periods
+    return [('all','Все доступные периоды')]+[(q,'Год' if q=='5' else q+' квартал') for q in periods()]
+
+PERIODS=period_options()
 
 
 def available(user):
@@ -45,16 +49,17 @@ def period_code(label):
 
 def selected_periods(query):
     values = list(dict.fromkeys(query.getlist('period'))) or ['all']
-    if len(values) > 5 or any(value not in dict(PERIODS) for value in values) or 'all' in values and len(values) > 1:
+    if len(values) > 5 or any(value not in dict(period_options()) for value in values) or 'all' in values and len(values) > 1:
         raise ValidationError('Выберите корректные периоды премии.')
-    return ['4', '5'] if values == ['all'] else sorted(values)
+    from .main_quarter_mode import periods
+    return list(periods()) if values == ['all'] else sorted(values)
 
 
 def period_label(query):
     values = list(dict.fromkeys(query.getlist('period')))
-    if not values or values == ['all'] or set(values) == set('45'):
+    if not values or values == ['all'] or set(values) == {code for code,label in period_options() if code!='all'}:
         return 'Все доступные периоды'
-    labels = dict(PERIODS)
+    labels = dict(period_options())
     return ', '.join(labels[value] for value in sorted(values) if value in labels)
 
 
@@ -105,7 +110,6 @@ def restrict(user, query, *, access_scope=None):
     allowed = [allowed] if isinstance(allowed, str) else allowed
     selected = selected_types(query, allowed)
     explicit = list(dict.fromkeys(query.getlist('period')))
-    if scope and explicit and explicit!=['all'] and any(code not in ('4','5') for code in explicit):raise PermissionDenied
     codes = selected_periods(query)
     period = 'all' if not explicit or explicit == ['all'] else codes[0] if len(codes) == 1 else codes
     return scope, selected, period
@@ -384,7 +388,7 @@ def employee_authors(user, branch, worker, year):
     from .report_periods import PILOT_SQL
     from .subdivision_scope import sql_predicate
     sql, args = bind_sql('SELECT DISTINCT [АвторСделки] AS author FROM DataWH.motivation.ReportMotivationByDealAuthor WHERE '
-        '[Подразделение] IN (@Subdivision) AND [ТипКоэф] IN (@TypeCoeff_) AND [Год] IN (@Years) AND ' + PILOT_SQL + ' AND ' + sql_predicate('[Подразделение]'),
+        '[Подразделение] IN (@Subdivision) AND [ТипКоэф] IN (@TypeCoeff_) AND [Год] IN (@Years) AND ' + sql_predicate('[Подразделение]'),
         {'Subdivision': [branch], 'TypeCoeff_': [worker], 'Years': [year]})
     connection, cursor = connect_database('vm-dwh', 'DataWH')
     try:
