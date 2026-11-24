@@ -1,8 +1,8 @@
 <div class="nr-section-title"><h2>Осталось до 100%</h2><span>План и факт — USD</span></div>
-<div class="nr-kpis nr-target-overview">
-<div class="nr-target-column">{% for row in presentation.department_remaining_targets %}{% for target in row.display_targets %}{% include 'admin_motivation/reports_next/_target_card.html' %}{% endfor %}{% empty %}<p class="nr-note">Нет данных по подразделению.</p>{% endfor %}</div>
-{% for section in presentation.team_sections %}
-<div class="nr-target-column">{% for row in section.remaining_targets %}{% for target in row.display_targets %}{% include 'admin_motivation/reports_next/_target_card.html' with compact=True %}{% endfor %}{% empty %}<article class="nr-target-card nr-target-secondary"><div class="nr-target-heading">{{ section.kind }}</div><p class="nr-muted">Нет данных план-факта.</p></article>{% endfor %}</div>
-{% endfor %}
+<div class="nr-target-overview nr-target-matrix">
+{% for line in presentation.team_target_rows %}
+<div class="nr-target-matrix-row" style="--nr-target-columns:{{ line.cells|length }}">
+{% for cell in line.cells %}<div class="nr-target-matrix-cell">{% for card in cell.cards %}{% include 'admin_motivation/reports_next/_target_card.html' with row=card.row target=card.target compact=card.compact %}{% empty %}<div class="nr-target-missing"><strong>{{ cell.label }}</strong><span>Нет данных за этот период</span></div>{% endfor %}</div>{% endfor %}
 </div>
-
+{% empty %}<p class="nr-muted">Нет данных план-факта по выбранным условиям.</p>{% endfor %}
+</div>

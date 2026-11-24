@@ -150,6 +150,8 @@ def present(kind, data, ledger=None, period='all'):
     for section in result['team_sections']:
         section['remaining_targets'] = [row for row in result['remaining_targets']
                                         if row['title'] == 'По коэффициентам' and row['kind'] == section['kind']]
+    from .team_target_layout import layout
+    result['team_target_rows']=layout(result)
     from .annual_accrual import enrich
     enrich(result, ledger)
     cards={card['code']:card for card in result['period_cards']}
