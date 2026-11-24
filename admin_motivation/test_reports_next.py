@@ -682,6 +682,7 @@ class ReportsNextTests(TestCase):
                 response = self.client.get(reverse('motivation_report_next', args=['team']), {'run': '1', 'currency': currency})
                 presentation = response.context['presentation']
                 self.assertEqual(presentation['total'], 0)
+                self.assertEqual(sum(card['possible'] for card in presentation['period_cards']), expected)
                 self.assertEqual(presentation['possible'], expected)
                 self.assertEqual([item['possible'] for item in presentation['type_totals']], [expected / 3] * 3)
                 self.assertEqual([section['kind'] for section in presentation['team_sections']], ['Политики', 'Продажи', 'Директора'])

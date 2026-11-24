@@ -110,6 +110,7 @@ def present(kind, data, ledger=None, period='all'):
     result['branches'] = len({row['subdivision'] for row in result['employees']})
     result['period_cards'] = [card for code, card in sorted(periods.items())]
     for card in result['period_cards']:
+        card['possible'] = possible_total([row for row in ledger['rows'] if row['code'] == card['code']])
         card['type_totals'] = [{'kind': item['kind'], 'total': card['kind_totals'].get(item['kind'])}
                                for item in result['type_totals']]
     if 'plan_fact' in ledger:
