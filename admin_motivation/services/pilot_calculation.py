@@ -7,8 +7,9 @@ from django.core.exceptions import ValidationError
 from .pilot_formula import mask_sql
 from .manager_correction import TABLE
 
-PERIODS=('4','5')
-NOTICE='Квартальная и годовая суммы премии учитывают только IV квартал. Доплат за предыдущие кварталы нет.'
+from .main_quarter_mode import periods
+PERIODS=periods()
+NOTICE='Основной расчёт включает I–IV кварталы и годовую премию. Годовая база и правила IV квартала сохранены; повторные доплаты за кварталы не начисляются.'
 MARKER='-- Portal pilot premiums: Q4 and annual only.'
 
 
@@ -75,3 +76,13 @@ def patch(definition):
     for start,end,value in sorted(edits,reverse=True):
         definition=definition[:start]+value+definition[end:]
     return definition
+
+
+def main_patch(definition):
+    """Restore Q1-Q3 money while preserving the approved Q4/year calculation."""
+    from .main_quarter_mode import enabled
+    changed=patch(definition)
+    if not enabled():return changed
+    changed,count=re.subn(r'WHERE 1=0 AND(?=\s+\[?Квартал\]?\s*(?:=|IN\b))','WHERE',changed,flags=re.I)
+    if count!=3:raise ValidationError('Не удалось включить три квартала основного расчёта.')
+    return changed.replace(MARKER,'-- Portal main premiums: quarters 1-4; existing annual rules; no catch-up.')

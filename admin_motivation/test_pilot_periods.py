@@ -30,13 +30,13 @@ class PilotPeriodTests(TestCase):
     def test_stale_or_tampered_quarters_are_normalized_without_restricting_years(self):
         for period in [None, '', '1 Квартал', '2 Квартал(1-2 кв)', '3 Квартал', 'anything']:
             values = scoped_values('manager', {**self.values(), 'qm': period}, self.scope)
-            self.assertEqual(values['qm'], PILOT_QUARTER)
+            self.assertEqual(values['qm'], period)
             self.assertEqual(values['Years'], ['2024', '2025'])
         for period in [PILOT_QUARTER, '4 кв.', 'Год']:
             self.assertEqual(scoped_values('manager', {**self.values(), 'qm': period}, self.scope)['qm'], period)
         query = scoped_query(QueryDict('quarter=1+Квартал&quarter=Год'), self.scope, 'manager')
-        self.assertEqual(query.getlist('quarter'), [PILOT_QUARTER])
-        self.assertEqual(scoped_values('manager', self.values(), {**self.scope, 'pilot_periods': False})['qm'], PILOT_QUARTER)
+        self.assertEqual(query.getlist('quarter'), ['1 Квартал'])
+        self.assertEqual(scoped_values('manager', self.values(), {**self.scope, 'pilot_periods': False})['qm'], '1 Квартал')
 
     def test_predicate_matches_actual_period_labels(self):
         import sqlite3
@@ -52,8 +52,8 @@ class PilotPeriodTests(TestCase):
         with patch('admin_motivation.services.personal_reports.connect_database', return_value=(Mock(), Mock())), patch(
                 'admin_motivation.services.personal_reports.fetch', return_value=[{'value': p} for p in self.periods]) as read:
             options = choices('manager', self.values(), access_scope=self.scope)
-            self.assertEqual([o['value'] for o in next(f for f in options if f['name'] == 'quarter')['options']], [PILOT_QUARTER, 'Год'])
-            self.assertTrue(all(PILOT_SQL in call.args[1] for call in read.call_args_list))
+            self.assertEqual([o['value'] for o in next(f for f in options if f['name'] == 'quarter')['options']], self.periods)
+            self.assertTrue(all(PILOT_SQL not in call.args[1] for call in read.call_args_list))
             read.reset_mock()
             choices('deals', {'TypeCoeff': 'Политики', 'Division': 'Own', 'ManagerName': 'Employee',
                              'StartDate': date(2024, 1, 1), 'EndDate': date(2024, 12, 31)}, access_scope=self.scope)
@@ -94,10 +94,9 @@ class PilotPeriodTests(TestCase):
             with patch('admin_motivation.services.reports.connect_database', return_value=(Mock(), Mock())), patch(
                     'admin_motivation.services.reports.fetch', side_effect=results) as read:
                 result = load_report(kind, self.values(), access_scope=self.scope)
-            self.assertTrue(all(PILOT_SQL in call.args[1] for call in read.call_args_list))
-            self.assertTrue(all('1 Квартал' not in call.args[2] for call in read.call_args_list))
+            self.assertTrue(all(PILOT_SQL not in call.args[1] for call in read.call_args_list))
             if kind == 'manager-detail':
-                self.assertEqual(result['periods'], [PILOT_QUARTER, 'Год'])
+                self.assertEqual(result['periods'], self.periods)
 
     def test_deal_rows_and_date_range_remain_unrestricted(self):
         values = {'TypeCoeff': 'Политики', 'Division': 'Own', 'ManagerName': 'Employee', 'GPSales': [],

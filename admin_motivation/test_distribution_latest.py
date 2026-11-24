@@ -15,7 +15,7 @@ class LatestDistributionTests(DistributionTests):
         self.assertNotContains(self.client.get(reverse('motivation_distributions')),'name="execution"')
 
     def test_period_selects_namespace_and_ignores_posted_execution(self):
-        for period,variant in ((1,'all_2026'),(4,'main'),(5,'main')):
+        for period,variant in ((1,'main'),(4,'main'),(5,'main')):
             with patch('admin_motivation.services.execution_tracking.latest_for_report',return_value=self.execution) as latest,patch('admin_motivation.services.premium_distribution.create',return_value=self.batch) as create:
                 response=self.client.post(reverse('motivation_distributions'),{'execution':'999999','period':period,'subdivision':self.branch.pk,'currency':'USD'})
                 self.assertEqual(response.status_code,302)

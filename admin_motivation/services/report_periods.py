@@ -5,7 +5,8 @@ PILOT_SQL = "(LOWER(LTRIM(RTRIM([КварталМотивации]))) = N'год
 
 def pilot_enabled(kind, scope):
     # Calculation policy applies to every role; source deals remain unrestricted.
-    return kind in ('manager', 'manager-detail', 'subdivisions')
+    from .main_quarter_mode import enabled
+    return not enabled() and kind in ('manager','manager-detail','subdivisions')
 
 
 def allowed_period(value):
