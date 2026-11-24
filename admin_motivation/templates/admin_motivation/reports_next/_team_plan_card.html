@@ -1,0 +1,5 @@
+{% load report_format %}
+<section class="nr-plan-card" aria-label="План-факт подразделения">
+<h4>{{ row.subdivision }} · {{ row.year }}</h4><small>План-факт всего подразделения · USD</small>
+<dl><div><dt>План</dt><dd>{{ performance.plan|report_cash }}</dd></div><div><dt>Факт</dt><dd>{{ performance.fact|report_cash }}</dd></div><div><dt>Выполнение</dt><dd>{{ performance.ratio|report_percent }}</dd></div></dl>
+</section>
