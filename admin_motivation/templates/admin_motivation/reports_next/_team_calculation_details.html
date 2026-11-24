@@ -1,0 +1,6 @@
+{% if presentation.period_cards or presentation.department_performance_matrix.rows %}
+<details class="nr-deep nr-team-calculation-details"><summary>Итоги и выполнение плана</summary><div class="nr-deep-body">
+{% include 'admin_motivation/reports_next/_report_period_cards.html' %}
+{% include 'admin_motivation/reports_next/_performance_sections.html' %}
+</div></details>
+{% endif %}

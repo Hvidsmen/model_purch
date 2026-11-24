@@ -29,8 +29,7 @@
 <div class="nr-filter-actions"><button class="btn btn-primary" name="run" value="1">Показать</button>{% if data != None %}<a href="{{ export_url }}">↓ Excel</a>{% if is_detail %}<a href="{{ summary_url }}">← К сводке</a>{% else %}<a class="btn btn-outline-primary" href="{{ detail_url }}">Детальный расчёт · K0–K4</a>{% endif %}{% endif %}</div></form>
 {% if data != None %}{% include 'admin_motivation/reports_next/_team_summary.html' %}
 {% include 'admin_motivation/reports_next/_subdivision_summary.html' %}
-{% include 'admin_motivation/reports_next/_report_period_cards.html' %}
-{% include 'admin_motivation/reports_next/_performance_sections.html' %}
+{% include 'admin_motivation/reports_next/_team_calculation_details.html' %}
 
 {% if detail %}<section class="nr-deep"><h2>Детальный расчёт · Все кварталы 2026</h2><p>Сценарий: {% if scenario == 'separate' %}Москва и Термотрейд раздельно{% else %}Москва и Термотрейд объединённо{% endif %}. Данные дополнительного расчёта; основной вариант не подставляется.</p>{% include 'admin_motivation/reports/manager_detail.html' with data=detail new_report_terms=True %}</section>{% else %}{% include 'admin_motivation/reports_next/_all_2026_tables.html' %}{% endif %}
 {% else %}<div class="nr-empty"><strong>Отдельные результаты ещё не загружены</strong>Дождитесь завершения дополнительного расчёта и нажмите «Показать». Основные суммы здесь не подставляются.</div>{% endif %}
