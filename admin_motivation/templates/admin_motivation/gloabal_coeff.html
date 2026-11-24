@@ -930,6 +930,7 @@
                             <th colspan="{{ segments|length }}" class="header-policies" data-coefficient-group="policies">Политики</th>
                             <th colspan="{{ segments|length }}" class="header-sales" data-coefficient-group="sales">Продажи</th>
                             <th colspan="5" class="header-directors" data-coefficient-group="directors">Директор</th>
+                            <th colspan="{{ segments|length }}" class="header-curators" data-coefficient-group="curators" style="background:#f3edff">Кураторы</th>
                         </tr>
                         <tr>
                             {% for segment in segments %}
@@ -939,6 +940,7 @@
                             <th scope="col" class="header-sales" data-coefficient-group="sales">{{ segment }}</th>
                             {% endfor %}
                             {% for i in '01234' %}<th class="header-directors" data-coefficient-group="directors">K{{ i }}</th>{% endfor %}
+                            {% for segment in segments %}<th class="header-curators" data-coefficient-group="curators" style="background:#f3edff">{{ segment }}</th>{% endfor %}
                         </tr>
                         </thead>
                         <tbody>
@@ -971,6 +973,7 @@
                                 {% endif %}
                             {% endfor %}
                             {% for cell in good.director_cells %}<td data-coefficient-group="directors" data-coefficient-segment="{{ cell.index }}" {% if forloop.first %}class="director-start"{% endif %}><input type="text" class="coeff-input director-input coeff-validate" name="director_coeff={{ good.pk }}={{ cell.index }}" data-rate-source="Глобальная" data-rate-exact="{% if cell.exists %}yes{% else %}no{% endif %}" data-global-value="{{ cell.global_value|default_if_none:''|unlocalize }}" data-value="{{ cell.value|unlocalize }}" required value="{{ cell.value|unlocalize }}" maxlength="25" data-type="percent" aria-label="Директор K{{ cell.index }}"></td>{% endfor %}
+                            {% for gb in good.curator_cells %}<td data-coefficient-group="curators" data-coefficient-segment="{{ forloop.counter0 }}" style="background:#fcfaff"><input type="text" class="coeff-input curator-input coeff-validate" {% if gb %}name="global_coeff={{ gb.id }}"{% else %}disabled placeholder="—" title="Добавьте K0–K4 через настройку кураторов"{% endif %} data-rate-source="Глобальная" data-rate-exact="{% if gb %}yes{% else %}no{% endif %}" data-value="{{ gb.motivation_coeff|unlocalize }}" value="{{ gb.motivation_coeff|unlocalize }}" maxlength="25" data-type="percent" aria-label="Кураторы K{{ forloop.counter0 }}">{% if gb %}{% include 'admin_motivation/_cell_formula.html' %}{% endif %}{% if forloop.first and not gb %}<a href="?version={{ selected_version.pk }}&amp;curator_goods={{ good.pk }}#global-curators">Задать K0–K4</a>{% endif %}</td>{% endfor %}
                         </tr>
                         {% endfor %}
                         {% endfor %}

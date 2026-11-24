@@ -41,9 +41,28 @@ class GlobalCuratorTests(TestCase):
     def test_global_page_has_curator_block_and_edit_form(self):
         self.save_rates()
         response=self.client.get(reverse('global_coeff_admin_motivation'),{'version':self.version.pk})
-        self.assertContains(response,'Глобальные коэффициенты кураторов')
+        self.assertContains(response,'data-coefficient-group-toggle="curators"')
+        self.assertContains(response,'class="header-curators"')
         self.assertContains(response,reverse('motivation_curator_global_rates'))
         self.assertContains(response,'CUR-GLOBAL')
+
+    def test_curator_cells_are_in_main_matrix_and_save_with_the_shared_table(self):
+        self.save_rates()
+        from .services.coefficient_groups import global_matrix
+        from .services.save_verification import SaveVerification
+        from .services.editor_patch import save_table
+        matrix = global_matrix(self.version)
+        good = next(iter(matrix['1. RAC']['Split']))
+        self.assertEqual(len(good.curator_cells), 5)
+        self.assertTrue(all(cell.type_coeff.type_coeff_name == 'Кураторы' for cell in good.curator_cells))
+        self.version.refresh_from_db()
+        cell = good.curator_cells[0]
+        data = {'revision':str(self.version.revision), f'global_coeff={cell.pk}':'3%'}
+        verification = SaveVerification(self.version, data)
+        save_table(self.version, data, verification)
+        cell.refresh_from_db()
+        self.assertEqual(Decimal(str(cell.motivation_coeff)), Decimal('.03'))
+        self.assertEqual(GlobalCoeff.objects.filter(version=self.version,type_coeff__type_coeff_name='Кураторы').count(), 5)
 
     def test_approved_rates_cannot_be_changed(self):
         self.save_rates()

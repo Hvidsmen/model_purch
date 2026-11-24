@@ -31,6 +31,7 @@ def coefficient_matrix(version, subdivision=None, employee=None):
             for good in goods:
                 # UI groups have fixed semantics, independent of reference insertion order.
                 core = {(cell.type_coeff.type_coeff_name.strip().casefold(),cell.segment_id):cell for cells in goods[good] for cell in cells if cell is not None}
+                good.curator_cells = [core.get(('кураторы', segment.pk)) for segment in segments] if not subdivision else []
                 goods[good] = [[core.get((name,segment.pk)) for segment in segments] for name in ('политики','продажи')]
                 present = [cell for cells in goods[good] for cell in cells if cell is not None]
                 good.editor_formula_id = present[0].variation_calculate_id if present else None
