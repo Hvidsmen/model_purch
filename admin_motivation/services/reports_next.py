@@ -306,11 +306,14 @@ def planned_budget(execution, scenario, query):
             curator_amounts=amounts_for('Директора',segments,pg,sources)
             staff=curator_index.by_employee(version.pk,original,pg,group,brand,curator_amounts)
             value=sum((amount for employee,amount in staff.items() if (employee,original.casefold()) in curator_bindings),Decimal(0))
-            # There is no global curator rate: the assigned branch rates are
-            # identical on both sides of the existing comparison.
-            for side in ('global','local'):bucket[side]['curators']+=value*share
-            parts['quarter']['curators']+=value*q_share
-            parts['annual']['curators']+=value*y_share
+            staff={employee:amount for employee,amount in staff.items() if (employee,original.casefold()) in curator_bindings}
+            if staff:
+                matrix,_=indexes['global'].coefficients(version.pk,'',pg,group,brand,kinds=['Кураторы'])
+                global_value=sum((rate*usd for rate,usd in zip(matrix[0],curator_amounts)),Decimal(0))*len(staff)
+                bucket['global']['curators']+=global_value*share
+                bucket['local']['curators']+=value*share
+                parts['quarter']['curators']+=global_value*q_share
+                parts['annual']['curators']+=global_value*y_share
         if 'directors' in included_kinds:
             from .motivation_exclusions import amounts_for
             director_amounts=amounts_for('Директора',segments,pg,sources)

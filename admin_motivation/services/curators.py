@@ -102,3 +102,35 @@ def personal_sections(sections):
 def enabled():
     from django.db.models import F
     return CuratorCoefficient.objects.filter(version__status='approved',employee__is_archived=False,employee__subdivisions=F('subdivision')).exists()
+
+
+@transaction.atomic
+def save_global_rates(version_id,goods_id,values,variation_id,revision):
+    from ..models import GlobalCoeff,TypeCoeff,SegmentCoeff,VariationCalculate
+    version=lock_editable(version_id)
+    if str(version.revision)!=str(revision):raise ValidationError('Версия изменилась. Обновите страницу.')
+    try:
+        goods_id=int(goods_id);variation_id=int(variation_id)
+        rates=[Decimal(str(values[key]).replace(',','.'))/100 for key in KEYS]
+        if any(not v.is_finite() or not -1<=v<=1 or v!=v.quantize(Decimal('.000001')) for v in rates):raise ValueError
+    except (KeyError,InvalidOperation,ValueError,TypeError):raise ValidationError('K0–K4: от −100 до 100%, до четырёх знаков после запятой.')
+    good=Goods.objects.filter(pk=goods_id).first()
+    variation=VariationCalculate.objects.filter(pk=variation_id).first()
+    segments={s.segment_name.upper().replace('O','K',1):s for s in SegmentCoeff.objects.all()}
+    if not good or not variation or any(k.upper() not in segments for k in KEYS):raise ValidationError('Выберите товарную матрицу, формулу и проверьте сегменты K0–K4.')
+    kind=TypeCoeff.objects.get(type_coeff_name=KIND)
+    for key,value in zip(KEYS,rates):
+        GlobalCoeff.objects.update_or_create(version=version,goods=good,type_coeff=kind,segment=segments[key.upper()],defaults={'motivation_coeff':float(value),'manager_coeff':1,'variation_calculate':variation})
+
+
+def global_context(version,selected_goods=None):
+    from ..models import GlobalCoeff
+    rows={}
+    for cell in GlobalCoeff.objects.filter(version=version,type_coeff__type_coeff_name=KIND).select_related('goods','segment','variation_calculate').order_by('goods_id'):
+        key=cell.segment.segment_name.upper().replace('O','K',1)
+        if key not in ('K0','K1','K2','K3','K4'):continue
+        row=rows.setdefault(cell.goods_id,{'goods':cell.goods,'variation':cell.variation_calculate,'variation_id':cell.variation_calculate_id,'values':[None]*5})
+        row['values'][int(key[1])]=cell.motivation_coeff
+    editing=rows.get(int(selected_goods)) if str(selected_goods).isdigit() else None
+    return {'global_curator_rows':list(rows.values()),'curator_goods':Goods.objects.order_by('pk'),'curator_editing':editing,
+        'curator_inputs':[{'key':key,'value':Decimal(str(editing['values'][i]))*100 if editing and editing['values'][i] is not None else ''} for i,key in enumerate(KEYS)]}

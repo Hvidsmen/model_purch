@@ -55,7 +55,7 @@ class Index:
         for row in rows:
             version, sub, pg, group, brand, kind, segment, value = row
             segment = segment.upper().replace('K', 'O', 1)
-            if kind not in KINDS or segment not in SEGMENTS:
+            if kind not in (*KINDS,'Кураторы') or segment not in SEGMENTS:
                 continue
             value = coefficient_input(value)
             key = (version, sub, pg, group, brand, kind, segment)
