@@ -237,10 +237,10 @@ def prepare(cursor, variant='main'):
     changed = include_director_subdivisions(changed)
     from .sales_participation import patch as include_sales_channels
     changed = include_sales_channels(changed,policy_heat_all_years=True)
-    from ..models import SubdivisionManagerCoeff
-    if SubdivisionManagerCoeff.objects.filter(version__status='approved').exists():
-        from .manager_correction import patch
-        changed = patch(changed)
+    # Manager templates and confirmed dated periods are applied once by the report layer.
+    from .pilot_formula import mask_sql
+    if '#portal_manager_correction' in mask_sql(changed).casefold():
+        raise ValidationError('Исходная процедура уже содержит поправку руководителя. Нужна проверка совместимости перед единым расчётом.')
     from .pilot_calculation import main_patch as pilot_patch
     from .transition_2026 import patch as transition_patch, separate_coefficients
     from .annual_accrual import patch_calculation as capture_annual_contributions

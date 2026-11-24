@@ -113,7 +113,7 @@ def execute(run,connector=None):
         cursor.execute('''CREATE TABLE #share_parameters(FactYear int,PlanVersion nvarchar(500),QuarterShare decimal(9,8),YearShare decimal(9,8),PayoutThreshold decimal(9,8),Cutoff date);''')
         config=run.configuration
         cursor.execute('INSERT INTO #share_parameters VALUES (?,?,?,?,?,?)',2026,config['plan_version'],str(Decimal(config['quarter_share'])/100),str(Decimal(config['year_share'])/100),config['payout_threshold'],run.as_of+timedelta(days=1))
-        metadata={'rule':RULE,'prepared_run':str(ready[0]),'prepared_at':str(ready[1]),'prepared_rows':ready[2],
+        metadata={'manager_correction_mode':'legacy' if any('#portal_manager_correction' in str(v).casefold() for v in definitions.values()) else 'period-unified-v1','rule':RULE,'prepared_run':str(ready[0]),'prepared_at':str(ready[1]),'prepared_rows':ready[2],
                   'procedure_hashes':{},'counts':{},'redistribution':'separate-original-subdivision-before-coefficients',
                   'turnover_basis':'Price - AmountUSDIt_ITW + BallsOuterUSD; signed; selected quarters through as_of',
                   'quarter_rule':'I–III separate if selected; IV and annual Moscow+TT combined'}

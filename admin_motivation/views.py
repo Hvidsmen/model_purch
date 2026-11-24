@@ -280,6 +280,8 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
     kinds = list(KindManagerCoeff.objects.order_by('pk'))
     existing = {row.kind_id: row for row in SubdivisionManagerCoeff.objects.filter(version=selected, subdivision=sub).select_related('kind')}
     managers = [existing.get(kind.pk) or SubdivisionManagerCoeff(version=selected, subdivision=sub, kind=kind, coeff=1) for kind in kinds]
+    from .services.manager_periods import context as manager_period_context
+    dated_managers=manager_period_context(request.user,selected,sub,managers,request.GET.get('manager_year'))
     from .services.coefficient_groups import coefficient_matrix
     from .services.edit_history import history_context
     from .director_forms import DirectorEmployeeForm
@@ -300,7 +302,7 @@ def coef_one_sub(request, subdivision, version_form=None, employee_form_override
         if not employee_bound:raise Http404('Действующий директор не выбран или не привязан к подразделению.')
         return _branch_director_coeff_export(request,selected,sub,employee)
     return render(request, 'admin_motivation/coef_one_sub.html', {
-        **context, **restore_context(request), 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
+        **context, **restore_context(request), **dated_managers, 'sub': sub, 'sub_coef_meneger': managers, 'kinds_mc': kinds, 'director_employees': employees, 'employee': employee,
         'director_editable': bool(context['version_editable'] and employee_bound),
         'director_export_available': employee_bound,
         'manager_approved_editable': bool(selected and selected.status == 'approved' and can_access(request.user, 'motivation_admin')),
@@ -329,7 +331,7 @@ def sub_act(request, subdivision):
                 raise ValidationError('Подтвердите изменение поправки в утверждённой версии.')
             changes = {key.split('=', 1)[1]: value for key, value in request.POST.items() if key.startswith('kind_coeff=')}
             update(request.user, version.pk, sub, request.POST.get('revision'), request.POST.get('manager_reason'), changes)
-            messages.success(request, 'Поправочные коэффициенты сохранены с журналом изменений. Выгрузите в MS SQL и выполните пересчёт для применения.')
+            messages.success(request, 'Шаблонные поправки версии сохранены. Подтверждённые коэффициенты конкретных периодов имеют приоритет.')
         except ValidationError as error:
             messages.error(request, ' '.join(error.messages))
         return redirect(reverse('coeff_subdivisions_admin_motivation', args=[sub.pk]) + f'?version={version.pk}')

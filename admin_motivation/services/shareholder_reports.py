@@ -81,7 +81,7 @@ def data_for(run,query):
     if run.state!='completed':raise ValidationError('Результаты доступны только после успешного завершения всего задания.')
     periods,kinds=selection(run,query);currency=query.get('currency','USD')
     from .closing_coefficient import ReportMultipliers
-    multipliers=ReportMultipliers(physical=True)
+    multipliers=ReportMultipliers(physical=True,mode=run.metadata.get('manager_correction_mode','legacy'))
     sections=[];rows=[];performance=[];department=[]
     for kind in kinds:
         tag=KINDS[kind]

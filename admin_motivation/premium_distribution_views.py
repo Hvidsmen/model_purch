@@ -62,6 +62,9 @@ def index(request):
                 from .services.closing_coefficient import confirm
                 confirm(request.user,**coefficient_form.cleaned_data)
                 messages.success(request,'Этап 1 завершён. Множитель применяется в отчётах и при фиксации фондов один раз.')
+                if str(request.POST.get('return_subdivision'))==str(coefficient_form.cleaned_data['subdivision'].pk):
+                    target=reverse('coeff_subdivisions_admin_motivation',args=[coefficient_form.cleaned_data['subdivision'].pk])
+                    return redirect(target+'?'+urlencode({'version':request.POST.get('return_version',''),'manager_year':coefficient_form.cleaned_data['year']})+'#manager-details')
                 return redirect('motivation_distributions')
             except ValidationError as exc:coefficient_form.add_error(None,exc)
     elif request.method=='POST':

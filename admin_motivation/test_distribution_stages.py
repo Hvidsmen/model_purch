@@ -20,7 +20,7 @@ class ClosingWorkflowTests(TestCase):
         self.admin=authorize_admin(self.client)
         channel=Chanel.objects.create(chanel_name='Закрытие этапы')
         self.branch=Subdivision.objects.create(subdivision_key='Closing',subdivision_name='Closing',subdivision_global='Closing',chanel=channel)
-        self.run=MotivationExecution.objects.create(run_id=uuid4(),job_key=uuid4(),state='completed',started_at=timezone.now(),parameters={'fact_year':2025,'variant':'main'})
+        self.run=MotivationExecution.objects.create(run_id=uuid4(),job_key=uuid4(),state='completed',started_at=timezone.now(),parameters={'fact_year':2025,'variant':'main','manager_correction_mode':'period-unified-v1'})
         self.ceo=User.objects.create_user('closing-ceo');self.ceo.groups.add(Group.objects.get(name=DIRECTOR))
         self.finance=User.objects.create_user('closing-finance');self.finance.groups.add(Group.objects.get(name=FINANCIER))
         self.people=[SalesEmployee.objects.create(full_name=name,subdivision=self.branch) for name in ('Alice','Bob','Carol')]
