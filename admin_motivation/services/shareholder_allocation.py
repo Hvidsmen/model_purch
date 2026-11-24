@@ -1,6 +1,6 @@
 """Reference implementation for the reviewed proportional allocation rule."""
 from collections import defaultdict
-from decimal import Decimal,localcontext
+from decimal import Decimal,localcontext,ROUND_DOWN
 from django.core.exceptions import ValidationError
 
 
@@ -25,7 +25,9 @@ def author_weights(turnovers,threshold_percent):
         with localcontext() as context:
             context.prec=38
             denominator=sum(recipients.values(),Decimal(0))
-            shares={name:recipients[name]/denominator for name in ordered[1:]}
+            # SQL stores decimal(38,24), not the 38 fractional digits of
+            # an unrestricted repeating division. Keep one exact residual.
+            shares={name:(recipients[name]/denominator).quantize(Decimal('1e-24'),rounding=ROUND_DOWN) for name in ordered[1:]}
             shares[ordered[0]]=Decimal(1)-sum(shares.values(),Decimal(0))
         for original in sorted(authors):
             for assigned,weight in ([(original,Decimal(1))] if original in recipients else [(name,shares[name]) for name in ordered]):

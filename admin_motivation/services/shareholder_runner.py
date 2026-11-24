@@ -82,7 +82,7 @@ def prepare_mapping(cursor,run):
     weights=author_weights(cursor.fetchall(),run.threshold_percent)
     cursor.execute('''CREATE TABLE #share_author_map(SourceBranch nvarchar(255) COLLATE DATABASE_DEFAULT,OriginalAuthor nvarchar(255) COLLATE DATABASE_DEFAULT,
  AssignedAuthor nvarchar(255) COLLATE DATABASE_DEFAULT,Weight_ decimal(38,24));''')
-    if weights:cursor.executemany('INSERT INTO #share_author_map VALUES (?,?,?,?)',[(v['branch'],v['original'],v['assigned'],str(v['weight'])) for v in weights])
+    if weights:cursor.executemany('INSERT INTO #share_author_map VALUES (?,?,?,?)',[(v['branch'],v['original'],v['assigned'],format(v['weight'],'.24f')) for v in weights])
     return weights
 
 
