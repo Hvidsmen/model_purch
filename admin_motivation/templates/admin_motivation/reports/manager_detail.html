@@ -1,4 +1,6 @@
-{% load report_format %}
+{% load report_format static %}
+<link rel="stylesheet" href="{% static 'admin_motivation/manager_report_headers.css' %}?v=1">
+<script src="{% static 'admin_motivation/manager_report_headers.js' %}?v=1" defer></script>
 <p class="report-filter-summary" aria-label="Выбранные параметры отчёта">{% for parameter in selected_parameters %}<span><strong>{{ parameter.label }}:</strong> {{ parameter.value }}</span>{% if not forloop.last %} · {% endif %}{% endfor %}</p>
 <div class="report-buttons"><a class="btn btn-primary" href="{{ data.excel_urls.all }}">Скачать весь отчёт Excel</a></div>
 {% if not data.nodes %}<p class="report-empty">Нет данных по выбранным параметрам.</p>{% endif %}
