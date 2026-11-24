@@ -77,10 +77,8 @@ def private_sql(definition,mode,run_id):
     source=re.sub(r'SELECT\s+[^;]*?\s+INTO\s+#portal_motivation_sales\s+FROM\s+DataWH\.motivation\.PortalPreparedSales', 'SELECT * INTO #portal_motivation_sales FROM DataWH.motivation.PortalPreparedSales', source, flags=re.I)
     source,count=re.subn(r'(FROM\s+DataWH\.motivation\.PortalPreparedSales\s+WHERE\s+)',r'\1ClosedDealDate<@ShareCutoff AND ',source,flags=re.I)
     if count!=1:raise ValidationError('Не найдена единственная граница даты подготовленного факта.')
-    # Fail closed if a newer installed procedure adds any persistent write.
-    targets=re.findall(r'\b(?:INTO|UPDATE|DELETE(?:\s+FROM)?|DROP\s+TABLE|CREATE\s+TABLE|ALTER\s+TABLE|TRUNCATE\s+TABLE)\s+([#@\w.\[\]]+)',mask_sql(source),re.I)
-    if any(not target.startswith('#') for target in targets):
-        raise ValidationError('Установленная процедура содержит запись вне временных таблиц. Нужна проверка совместимости.')
+    from .shareholder_write_guard import validate_private_writes
+    validate_private_writes(source)
     code=mask_sql(source)
     if re.search(r'\bMERGE\b',code,re.I):raise ValidationError('Неизвестная запись MERGE в установленной процедуре.')
     index_targets=re.findall(r'\bCREATE\s+(?:UNIQUE\s+)?(?:(?:CLUSTERED|NONCLUSTERED)\s+)?INDEX\s+\S+\s+ON\s+([#\w.\[\]]+)',code,re.I)
