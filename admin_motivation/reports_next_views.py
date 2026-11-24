@@ -160,6 +160,8 @@ def workbook(kind, data, metadata, query=None, title=None):
         notes.append(cells)
     # Explicit strings also protect parameter values from Excel formula evaluation.
     # WriteOnlyCell is required because write-only sheets do not expose cells.
+    from .services.distribution_reporting import excel_sheet
+    excel_sheet(book,data['rows'])
     output = TemporaryFile(suffix='.xlsx')
     try:
         book.save(output)
@@ -191,7 +193,7 @@ def report(request, kind):
     admin_preview = role_for(request.user, 'motivation') == ADMIN and kind in ('mine', 'detail')
     if admin_preview:
         from django.contrib.auth import get_user_model
-        candidates = get_user_model().objects.filter(Q(motivation_report_access__isnull=False)|Q(motivation_curator__isnull=False),is_active=True).select_related('motivation_report_access').prefetch_related('groups').order_by('last_name', 'first_name', 'username')
+        candidates = get_user_model().objects.filter(Q(motivation_report_access__isnull=False)|Q(motivation_curator__isnull=False)|Q(motivation_sales_employee__isnull=False),is_active=True).select_related('motivation_report_access').prefetch_related('groups').order_by('last_name', 'first_name', 'username')
         preview_scopes = {}
         for user in candidates:
             personal_scope = reports.preview_scope(user)
@@ -305,7 +307,7 @@ def report(request, kind):
             if query.get('export') == 'xlsx':
                 if kind == 'detail' and detail:
                     from .services.report_excel import report_excel
-                    output = report_excel(detail, {'Currency': query['currency'], 'Years': [query['year']], 'TypeCoeff_': query.getlist('type'), 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'), 'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand')}, query.get('table', 'all'), provenance=metadata)
+                    output = report_excel(detail, {'Currency': query['currency'], 'Years': [query['year']], 'TypeCoeff_': query.getlist('type'), 'Subdivision': query.getlist('subdivision'), 'DealAuthor': query.getlist('author'), 'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand')}, query.get('table', 'all'), provenance=metadata,allocation_rows=data['rows'])
                 else:
                     output = workbook(kind, data, metadata, query=query, title=reports.available(request.user)[kind][0])
                 return FileResponse(output, as_attachment=True, filename=f'motivation-next-{kind}.xlsx', content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')

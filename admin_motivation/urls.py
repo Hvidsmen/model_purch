@@ -8,7 +8,12 @@ from . import shareholder_views
 
 from . import curator_views
 
+from . import premium_distribution_views, sales_employee_views
+
 urlpatterns = [
+    path('sales-employees/',sales_employee_views.directory,name='motivation_sales_employees'),
+    path('distributions/',premium_distribution_views.index,name='motivation_distributions'),
+    path('distributions/<int:pk>/',premium_distribution_views.detail,name='motivation_distribution_detail'),
     path('curators/',curator_views.directory,name='motivation_curators'),
     path('curators/<int:pk>/rates/',curator_views.rates,name='motivation_curator_rates'),
     path('reports-next/shareholders/',shareholder_views.index,name='motivation_shareholders'),

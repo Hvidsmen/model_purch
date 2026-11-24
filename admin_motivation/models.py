@@ -1105,3 +1105,6 @@ class CuratorCoefficient(DirectorCoefficientBase):
             models.UniqueConstraint(fields=['version','employee','subdivision','goods'], name='unique_curator_coefficient'),
             models.CheckConstraint(condition=models.Q(**{f'k{i}__gte': -1 for i in range(5)}, **{f'k{i}__lte': 1 for i in range(5)}), name='curator_coefficient_range'),
         ]
+
+from .premium_distribution_models import PremiumDistribution, PremiumDistributionEvent
+from .premium_distribution_models import SalesEmployee

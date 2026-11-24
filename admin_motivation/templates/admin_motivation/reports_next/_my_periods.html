@@ -6,6 +6,7 @@
 <strong>{{ card.amount|report_cash }} {{ ledger.currency }}</strong>
 {% for item in card.type_totals %}{% if item.total != None %}<div class="nr-period-line"><span>{{ item.kind }}</span><b>{{ item.total|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% endfor %}
 <div class="nr-period-line" title="Премия по текущим отгрузкам до условий выполнения плана"><span>Возможная премия</span><b>{{ card.possible|report_cash }} {{ ledger.currency }}</b></div>
+{% if not shareholder_report %}<div class="nr-period-line"><span>После распределения</span><b>{% if card.distributed != None %}{{ card.distributed|report_cash }} {{ ledger.currency }}{% else %}Не распределено{% endif %}</b></div>{% if card.distributed_bonus != None %}<div class="nr-period-line"><span>Из них доплата за кварталы</span><b>{{ card.distributed_bonus|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% endif %}
 <div class="nr-period-actions">{% for type,url in card.links.items %}<a href="{{ url }}">Как рассчитано →{% if card.links|length > 1 %} {{ type }}{% endif %}</a>{% endfor %}
 {% if card.explanation %}<details class="nr-card-explanation"><summary>Почему премия равна нулю</summary><p>{{ card.explanation }}</p></details>{% endif %}</div></article>
 {% empty %}<div class="nr-empty"><strong>Начислений не найдено</strong>Проверьте период и параметры личного доступа.</div>{% endfor %}

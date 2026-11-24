@@ -30,6 +30,7 @@
 {% include 'admin_motivation/reports_next/_my_goals.html' %}{% include 'admin_motivation/reports_next/_my_products.html' %}
 <p class="nr-note">Показаны рассчитанные суммы. Согласование выплат и фактическое перечисление здесь пока не регистрируются.</p>
 {% elif kind == 'detail' %}
+{% include 'admin_motivation/reports_next/_distribution_result.html' %}
 <details class="nr-help nr-calculation-explainer"><summary>Как получилась сумма</summary>
 <div class="nr-steps"><div class="nr-step"><span>01 / БАЗА</span><strong>Фактические отгрузки</strong><p>Распределение по ступеням скидки O0–O4.</p></div><div class="nr-step"><span>02 / СТАВКИ</span><strong>Возможная премия</strong><p>Отгрузки каждой ступени × её коэффициент K0–K4.</p></div><div class="nr-step"><span>03 / УСЛОВИЯ</span><strong>Выполнение плана</strong><p>Применяются правила мотивации и порог выплаты выбранного расчёта.</p></div><div class="nr-step"><span>04 / ИТОГ</span><strong>Премия + годовая доплата</strong><p>Согласование и фактический перевод учитываются отдельно от расчёта.</p></div></div>
 </details>
