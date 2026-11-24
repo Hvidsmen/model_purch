@@ -167,6 +167,10 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             subdivision=subdivision, employee=employee, deleted=deleted if name == 'current' else None)
         curator_index=DirectorIndex([v.pk for v in versions],local=True,coefficient_model=CuratorCoefficient,merge_aliases=False) if 'curators' in selected and use_subdivision else None
         curator_versions={key[0] for key in index.cells if key[5]=='Кураторы'}
+        director_bases = {}
+        if not use_subdivision and 'directors' in selected:
+            from .plan_directors import global_comparison_bases
+            director_bases = global_comparison_bases(plan, versions, baseline=baseline if name == 'baseline' else None)
         results[name] = {'policies': Decimal(0), 'sales': Decimal(0), 'directors': Decimal(0), 'curators': Decimal(0), 'total': Decimal(0), 'fallbacks': 0}
         for on_date, sub, pg, group, brand, amounts in source_rows():
             if not included(sub, names):
@@ -201,7 +205,8 @@ def compare_plan(plan, current, baseline=None, subdivision=None, changes=None, d
             sales=values.get('Продажи',Decimal(0))
             results[name]['policies'] += policies
             results[name]['sales'] += sales
-            directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, director_usd) if 'directors' in selected else Decimal(0)
+            director_base = director_usd if use_subdivision else director_bases.get((on_date, pg, group, brand), [Decimal(0)] * 5)
+            directors = director_index.motivation(date_cache[date_key], sub, pg, group, brand, director_base) if 'directors' in selected else Decimal(0)
             results[name]['directors'] += directors
             curators=Decimal(0)
             if 'curators' in selected:

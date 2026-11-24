@@ -67,3 +67,27 @@ class ComparisonKindTests(TestCase):
         employee.assigned_subdivisions().remove(self.subs[0])
         result=compare_plan(self.plan,self.current,subdivision=self.subs[0],selected_kinds=['curators'])['variants']['current']
         self.assertEqual(Decimal(result['total']),0)
+
+    def test_global_directors_match_plan_snapshot_with_different_branch_staff_counts(self):
+        from .models import GlobalDirectorCoeff, SubdivisionDirectorCoeff, DirectorEmployee
+        from .services.plan_directors import PlanDirectors
+        good = self.current.coefficients.first().goods
+        rates = dict.fromkeys(('k0','k1','k2','k3','k4'), Decimal('.01'))
+        GlobalDirectorCoeff.objects.create(version=self.current, goods=good, **rates)
+        shared = DirectorEmployee.objects.create(full_name='Директор двух подразделений')
+        second = DirectorEmployee.objects.create(full_name='Второй директор')
+        for branch, employee in ((self.subs[0], shared), (self.subs[0], second), (self.subs[1], shared)):
+            employee.subdivisions.add(branch)
+            SubdivisionDirectorCoeff.objects.create(version=self.current, goods=good,
+                subdivision=branch, employee=employee, **rates)
+        snapshot = PlanDirectors([self.current])
+        for line in self.plan.lines.exclude(subdivision='').order_by('pk'):
+            snapshot.calculate(line, self.current.pk)
+        expected = sum((snapshot.calculate(line, self.current.pk)[0]
+                        for line in self.plan.lines.filter(subdivision='').order_by('pk')), Decimal(0))
+        self.assertEqual(expected, Decimal('75'))
+        result = compare_plan(self.plan, self.current, selected_kinds=['directors'])['variants']['current']
+        self.assertEqual(Decimal(result['directors']), expected)
+        edits = {f'{good.pk}:{i}': Decimal('.02') for i in range(5)}
+        result = compare_plan(self.plan, self.current, selected_kinds=['directors'], director_changes=edits)['variants']['current']
+        self.assertEqual(Decimal(result['directors']), expected * 2)
