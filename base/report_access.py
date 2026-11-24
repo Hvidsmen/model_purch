@@ -37,7 +37,7 @@ def _politician_scope(user):
         from admin_motivation.models import TypeCoeff
         groups = motivation_scopes(user.groups.all()).prefetch_related('subdivisions__merged_into')
         branches = sorted({(branch.merged_into or branch).subdivision_key for group in groups for branch in group.subdivisions.all()})
-        types = ['Политики'] if role == DEPUTY_DIRECTOR else sorted({name.strip() for name in TypeCoeff.objects.values_list('type_coeff_name', flat=True) if name and name.strip()})
+        types = ['Политики'] if role == DEPUTY_DIRECTOR else sorted({name.strip() for name in TypeCoeff.objects.values_list('type_coeff_name', flat=True) if name and name.strip() and name.strip() != 'Кураторы'})
         if not branches or not types:
             return None
         result = {'subdivision': branches, 'type': types, 'all_authors': True, 'reports': report_kinds(user)}
@@ -59,6 +59,9 @@ def _politician_scope(user):
         for group in groups:
             names = sorted({(branch.merged_into or branch).subdivision_key for branch in group.subdivisions.all()})
             worker = group.employee_type.type_coeff_name.strip() if group.employee_type_id else ('Продажи' if role == SALES else 'Политики')
+            # A report group must not grant politicians access to curator pay.
+            if role == POLITICIAN and worker == 'Кураторы':
+                continue
             if names and worker:
                 rules.append({'type': worker, 'subdivisions': names})
         if not rules:
