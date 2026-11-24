@@ -206,7 +206,7 @@ def performance_matrix(items, period_columns):
     return {'columns': columns, 'rows': rows, 'colspan': 4 + 3 * len(columns)}
 
 
-def personal_details(ledger, query):
+def personal_details(ledger, query, *, period_codes=None):
     """Expose existing goal bases and the product matrix, without recalculating pay."""
     from calendar import monthrange
     from datetime import date
@@ -258,7 +258,7 @@ def personal_details(ledger, query):
                     target.pop(key, None)
             detail_url = reverse('motivation_report_next', args=['detail']) + '?' + target.urlencode() + '#next-deep-calculation'
             year = int(query['year'])
-            codes = selected_periods(query)
+            codes = period_codes if period_codes is not None else selected_periods(query)
             code = codes[0] if len(codes) == 1 else 'all'
             first_month, last_month = (int(code) * 3 - 2, int(code) * 3) if code in ('1', '2', '3', '4') else (1, 12)
             deals = QueryDict(mutable=True)

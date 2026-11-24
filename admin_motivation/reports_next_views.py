@@ -21,9 +21,11 @@ def index(request):
     from .reports_2025 import can_view as can_view_2025
     can_2025=can_view_2025(request.user)
     can_all=can_view(request.user)
-    has_additional=can_2025 or can_all
+    from .services.shareholder_access import can_view as can_shareholder
+    shareholder=can_shareholder(request.user)
+    has_additional=can_2025 or can_all or shareholder
     return render(request, 'admin_motivation/reports_next/index.html', {
-        'catalog': reports.available(request.user), 'can_view_all_2026': can_all,
+        'catalog': reports.available(request.user), 'can_view_shareholders': shareholder, 'can_view_all_2026': can_all,
         'can_view_2025': can_2025, 'can_view_integral_2026': can_2025,
         'has_additional_reports': has_additional,
         'additional_reports': has_additional and request.GET.get('section')=='additional'})

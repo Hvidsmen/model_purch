@@ -4,7 +4,12 @@ from . import reports_director_scenarios, reports_integral_2026, reports_2025, e
 from django.urls import include, path
 from . import report_navigation_views,coefficient_iteration_views,coefficient_iteration_run_views
 
+from . import shareholder_views
+
 urlpatterns = [
+    path('reports-next/shareholders/',shareholder_views.index,name='motivation_shareholders'),
+    path('reports-next/shareholders/<uuid:pk>/status/',shareholder_views.status,name='motivation_shareholder_status'),
+    path('reports-next/shareholders/<uuid:pk>/<str:kind>/',shareholder_views.report,name='motivation_shareholder_report'),
     path('directories/exclusions/groups/',dimension_exclusion_views.directory,{'dimension':'groups'},name='motivation_groups_exclusion_directory'),
     path('directories/exclusions/channels/',dimension_exclusion_views.directory,{'dimension':'channels'},name='motivation_channels_exclusion_directory'),
     path('directories/exclusions/',exclusion_views.directory,name='motivation_exclusion_directory'),
