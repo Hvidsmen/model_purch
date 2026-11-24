@@ -375,12 +375,15 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
     if kind == 'manager':
         values = {'GPGoods': [], 'Brend': [], **values}
     from functools import partial
-    read_rows = partial(fetch, canonical_rows=calculation_variant != 'separate_2026')
+    from .closing_coefficient import ReportMultipliers
+    def read_rows(*args, **kwargs):
+        return multipliers.apply(fetch(*args, canonical_rows=calculation_variant != 'separate_2026', **kwargs))
     bind_report_sql = partial(bind_sql, expand_aliases=calculation_variant != 'separate_2026')
     if access_scope:
         from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
         access_scope = worker_scope(access_scope, kind, values)
+    multipliers = ReportMultipliers(physical=values.get('TypeCoeff_')=='Кураторы' or values.get('TypeCoeff')=='Кураторы')
     from .report_periods import pilot_enabled, PILOT_SQL
     if calculation_variant not in ('main', 'all_2026', 'separate_2026') or calculation_variant in ('all_2026', 'separate_2026') and (kind != 'manager-detail' or list(values.get('Years') or []) != ['2026']):
         raise ValidationError('Неизвестный источник дополнительного отчёта.')

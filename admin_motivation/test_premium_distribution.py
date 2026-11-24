@@ -24,8 +24,12 @@ class DistributionTests(TestCase):
         self.funds=[{'kind':'Продажи','payment':'quarter','amount':'100.00'},{'kind':'Политики','payment':'quarter','amount':'50.00'}]
         self.rows=[{'id':'sales','author':'Иванов','kind':'Продажи','payment':'quarter','original':'100.00','amount':'100.00','comment':''},
                    {'id':'pol','author':'Петров','kind':'Политики','payment':'quarter','original':'50.00','amount':'50.00','comment':''}]
+        from .services.closing_coefficient import confirm
+        confirm(self.user,self.branch,2025,4,1)
         with patch.object(service,'read_source',return_value=(self.funds,self.rows)):
             self.batch=service.create(self.user,self.execution,self.branch,4,'USD')
+        # Existing allocations retain their original amount-entry workflow.
+        self.batch.source.pop('workflow');self.batch.rows=self.rows;self.batch.save()
 
     def changes(self):return {r['id']:{'amount':r['amount'],'comment':r['comment']} for r in self.batch.rows}
 

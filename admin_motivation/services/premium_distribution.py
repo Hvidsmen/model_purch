@@ -95,10 +95,19 @@ def create(user,execution,subdivision,period,currency):
     month=12 if period==5 else period*3
     if date(year,month,monthrange(year,month)[1])>=timezone.localdate():raise ValidationError('Период ещё не закрыт.')
     if PremiumDistribution.objects.filter(subdivision=subdivision,year=year,period=period).exists():raise ValidationError('Распределение за этот период уже создано. Откройте его из списка.')
-    funds,rows=read_source(execution,subdivision,period,currency)
     with transaction.atomic():
+        from ..models import PeriodMotivationCoefficient
+        type(subdivision).all_objects.select_for_update().get(pk=subdivision.pk)
+        coefficient=PeriodMotivationCoefficient.objects.select_for_update().filter(subdivision=subdivision,year=year,period=period).first()
+        if not coefficient:raise ValidationError('Этап 1: гендиректор должен подтвердить общий множитель, в том числе 1,0.')
+        funds,rows=read_source(execution,subdivision,period,currency)
         batch=PremiumDistribution.objects.create(execution=execution,subdivision=subdivision,year=year,period=period,currency=currency,
             funds=funds,rows=rows,created_by=user,source={'run_id':str(execution.run_id),'parameters':execution.parameters,'export_snapshot':execution.export_snapshot})
+        batch.source={**batch.source,'workflow':{'stage':'sales','coefficient':str(coefficient.coefficient),
+            'coefficient_revision':coefficient.revision,'confirmed_by':coefficient.confirmed_by_id,
+            'confirmed_at':coefficient.confirmed_at.isoformat()}}
+        from .distribution_stages import initialize
+        initialize(batch);batch.save()
         event(batch,user,'created')
     return batch
 
@@ -108,10 +117,15 @@ def update(user,pk,revision,changes,*,action='save',addition=None,comment=''):
     batch=PremiumDistribution.objects.select_for_update().select_related('subdivision').get(pk=pk)
     authorize(user,batch.subdivision,write=True)
     if revision!=batch.revision:raise ValidationError('Распределение уже изменено. Обновите страницу перед сохранением.')
+    if batch.source.get('workflow') and action!='reopen':
+        from .distribution_stages import update as staged_update
+        return staged_update(batch,user,changes,action,addition,comment)
     if action=='reopen':
         if role_for(user,'motivation') not in (ADMIN,DIRECTOR):raise PermissionDenied
         if batch.state!='completed' or not comment.strip():raise ValidationError('Для повторного открытия укажите причину.')
         batch.state='draft';batch.completed_at=None;batch.completed_by=None
+        if batch.source.get('workflow'):
+            batch.source={**batch.source,'workflow':{**batch.source['workflow'],'stage':'sales'}}
     else:
         if batch.state!='draft':raise ValidationError('Распределение завершено. Изменения закрыты.')
         if action not in ('save','complete'):raise ValidationError('Неизвестное действие.')

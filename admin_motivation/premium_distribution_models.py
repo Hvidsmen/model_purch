@@ -62,3 +62,18 @@ class SalesEmployee(models.Model):
         constraints=[models.UniqueConstraint(fields=['subdivision','full_name'],name='unique_sales_employee_name')]
 
     def __str__(self):return self.full_name
+
+
+class PeriodMotivationCoefficient(models.Model):
+    subdivision = models.ForeignKey('admin_motivation.Subdivision', on_delete=models.PROTECT)
+    year = models.PositiveIntegerField()
+    period = models.PositiveSmallIntegerField(choices=PremiumDistribution._meta.get_field('period').choices)
+    coefficient = models.DecimalField(max_digits=12, decimal_places=4, default=1)
+    history = models.JSONField(default=list)
+    revision = models.PositiveIntegerField(default=1)
+    confirmed_by = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)
+    confirmed_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=['subdivision','year','period'], name='unique_period_motivation_coefficient'),
+                       models.CheckConstraint(condition=models.Q(coefficient__gte=0), name='period_motivation_coefficient_nonnegative')]
