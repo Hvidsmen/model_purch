@@ -274,7 +274,7 @@ def planned_budget(execution, scenario, query):
         y_share=annual_share if day.month>=10 and '5' in periods else Decimal(0)
         share=q_share+y_share
         sub = original if included_kinds==['curators'] else canonical(original, aliases)
-        if execution.parameters.get('transition_rule') and original not in ('Д-Москва', 'ТЕРМОТРЕЙД') and included_kinds!=['curators']:
+        if execution.parameters.get('transition_rule') and execution.parameters.get('calculation_subdivisions')!='all' and original not in ('Д-Москва', 'ТЕРМОТРЕЙД') and included_kinds!=['curators']:
             continue
         if not included(original, aliases) or selected_subdivisions and (sub.casefold() not in {v.casefold() for v in selected_subdivisions} if included_kinds==['curators'] else sub not in selected_subdivisions):
             continue

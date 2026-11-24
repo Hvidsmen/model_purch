@@ -1,7 +1,7 @@
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
-from django.test import TestCase
+from django.test import TestCase,override_settings
 from django.urls import reverse
 from django.core.exceptions import ValidationError
 from base.testing import authorize_test_case
@@ -11,6 +11,7 @@ from .operation_views import JobForm
 from .services import calculation_jobs as jobs
 
 
+@override_settings(MOTIVATION_MAIN_ALL_SUBDIVISIONS=False)
 class CalculationJobsTests(TestCase):
     def setUp(self):
         authorize_test_case(self)

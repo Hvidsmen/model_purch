@@ -1,8 +1,9 @@
 import sqlite3
-from django.test import SimpleTestCase
+from django.test import SimpleTestCase,override_settings
 from .services.calculation_scope import predicate
 
 
+@override_settings(MOTIVATION_MAIN_ALL_SUBDIVISIONS=False)
 class CalculationScopeTests(SimpleTestCase):
     def test_report_defaults_and_rejects_other_subdivisions(self):
         from unittest.mock import patch
