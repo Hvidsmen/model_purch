@@ -97,5 +97,6 @@ class DistributionTests(TestCase):
         url=reverse('motivation_distributions')
         self.assertContains(self.client.get(url),'Распределение премий')
         self.assertContains(self.client.get(reverse('motivation_distribution_detail',args=[self.batch.pk])),'Завершить распределение')
-        response=self.client.post(url,{'execution':self.execution.pk,'subdivision':self.branch.pk,'period':'4','currency':'USD'})
+        with patch('admin_motivation.services.execution_tracking.latest_for_report',return_value=self.execution):
+            response=self.client.post(url,{'subdivision':self.branch.pk,'period':'4','currency':'USD'})
         self.assertContains(response,'уже создано')
