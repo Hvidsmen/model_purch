@@ -1,5 +1,6 @@
 """Consistent SQLite snapshots, including committed WAL data."""
 import sqlite3
+import shutil
 import logging
 import re
 from contextlib import closing
@@ -43,10 +44,14 @@ def backup_sqlite(database, directory, notify=None):
         raise FileNotFoundError(f'База не найдена: {database}')
     directory = Path(directory).resolve()
     directory.mkdir(parents=True, exist_ok=True)
+    required = database.stat().st_size + (database.with_name(database.name + '-wal').stat().st_size if database.with_name(database.name + '-wal').is_file() else 0) + 64 * 1024 * 1024
+    if shutil.disk_usage(directory).free < required:
+        raise RuntimeError(f'Недостаточно места для резервной копии: нужно примерно {required / 1024**3:.2f} ГБ свободного места в {directory}.')
     stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%fZ')
     destination = directory / f'{database.stem}-{stamp}-{uuid4().hex[:8]}.sqlite3'
     started = monotonic()
     last_report = [float('-inf')]
+    check_started = [started]
 
     def emit(message):
         if notify is not None:
@@ -67,18 +72,23 @@ def backup_sqlite(database, directory, notify=None):
         now = monotonic()
         if now - last_report[0] >= 5:
             last_report[0] = now
-            emit(f'Backup integrity check running; elapsed {now - started:.0f}s')
+            emit(f'Backup integrity check running; check elapsed {now - check_started[0]:.0f}s; total elapsed {now - started:.0f}s')
         return 0
 
     emit(f'Backup destination: {destination}')
     try:
         with closing(sqlite3.connect(database.as_uri() + '?mode=ro', uri=True)) as source:
             with closing(sqlite3.connect(destination)) as target:
+                # Connection-local cache settings: retain the same complete quick_check.
+                # Bound memory use; mmap may be disabled by a platform's SQLite build.
+                target.execute('PRAGMA cache_size=-65536')
+                target.execute('PRAGMA mmap_size=268435456')
                 if notify is None:
                     source.backup(target)
                 else:
-                    source.backup(target, pages=256, progress=progress)
-                emit('Backup copy complete. Starting integrity check (this reads the whole copy).')
+                    source.backup(target, pages=2048, progress=progress)
+                check_started[0] = monotonic()
+                emit(f'Backup copy complete in {check_started[0] - started:.1f}s. Starting integrity check (this reads the whole copy).')
                 if notify is not None:
                     target.set_progress_handler(checking, 100000)
                 try:
@@ -88,6 +98,7 @@ def backup_sqlite(database, directory, notify=None):
                         target.set_progress_handler(None, 0)
                 if result != 'ok':
                     raise RuntimeError(f'Проверка резервной копии: {result}')
+                emit(f'Backup integrity check complete in {monotonic() - check_started[0]:.1f}s.')
     except Exception:
         try:
             destination.unlink(missing_ok=True)
