@@ -13,7 +13,7 @@ MONEY = '#,##0.00'
 PERCENT = '0.00%'
 
 
-def report_excel(data, parameters, scope='all', *, provenance=None):
+def report_excel(data, parameters, scope='all', *, provenance=None,allocation_rows=None):
     if scope not in ('all', 'summary', 'detail'):
         raise ValidationError('Неизвестная таблица для выгрузки.')
     book = Workbook(write_only=True)
@@ -122,6 +122,9 @@ def report_excel(data, parameters, scope='all', *, provenance=None):
             settings.extend((label, str(value)) for label, value in provenance or [])
             for index, row in enumerate(settings, 3):
                 append(target, row, ['text', 'text'], index=index)
+        if allocation_rows is not None:
+            from .distribution_reporting import excel_sheet
+            excel_sheet(book,allocation_rows)
         output = TemporaryFile(mode='w+b')
         try:
             book.save(output)

@@ -160,6 +160,9 @@ def present(kind, data, ledger=None, period='all'):
     for item in result['type_totals']:
         result['team_overview_rows'].append({'label':item['kind'],'values':[cards.get(code,{}).get('kind_totals',{}).get(item['kind']) for code in codes],'total':item['total'],'detail':True})
     result['team_overview_rows'].append({'label':'В годовую премию · до условий выплаты','values':[cards.get(code,{}).get('annual_accrual') if code!='5' else None for code in codes],'total':result.get('annual_accrual')})
+    if any('distributed_total' in row for row in ledger['rows']):
+        from .distribution_reporting import enrich
+        enrich(result,ledger)
     return result
 
 

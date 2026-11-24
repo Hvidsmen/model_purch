@@ -235,6 +235,7 @@
         </details>
     </li>
 {% endif %}
+    {% if portal_role_label == 'Администратор' or portal_role_label == 'Генеральный директор' or portal_role_label == 'Директор' or portal_role_label == 'Финансист' %}<li class="nav-item"><a class="nav-link" href="{% url 'motivation_distributions' %}">Распределение премий</a></li>{% endif %}
     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'motivation_plan_summary' or request.resolver_match.url_name == 'motivation_reports_next' or request.resolver_match.url_name == 'motivation_report_next' or request.resolver_match.url_name == 'motivation_report_director_scenarios' or request.resolver_match.url_name == 'motivation_report_integral_2026' or request.resolver_match.url_name == 'motivation_report_2025' or request.resolver_match.url_name == 'motivation_report_all_2026' or request.resolver_match.url_name == 'motivation_reports' or request.resolver_match.url_name == 'motivation_report' %}active{% endif %}" href="{% url 'motivation_reports' %}">Отчёты</a></li>
 {% if portal_can_administer_motivation %}
     <li class="nav-item"><a class="nav-link {% if request.resolver_match.url_name == 'loader_motive' %}active{% endif %}" href="{% url 'loader_motive' %}">Выгрузка в DWH</a></li>

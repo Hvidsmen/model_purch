@@ -21,6 +21,11 @@ def _politician_scope(user):
     role = role_for(user, 'motivation')
     if role not in REPORT_ROLES:
         return None
+    if role == SALES:
+        from admin_motivation.models import SalesEmployee
+        employee=SalesEmployee.objects.select_related('subdivision').filter(user=user).first()
+        if employee:
+            return {'subdivision':[employee.subdivision.subdivision_key],'author':employee.full_name,'type':['Продажи'],'reports':PERSONAL_REPORTS}
     if role == CURATOR:
         from admin_motivation.models import CuratorEmployee
         employee=CuratorEmployee.objects.filter(user=user,is_archived=False).first()

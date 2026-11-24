@@ -73,6 +73,9 @@ def preview_scope(user):
     if role_for(user, 'motivation') not in (*PERSONAL_ROLES, BRANCH_DIRECTOR):
         return None
     if role_for(user,'motivation')==CURATOR:return politician_scope(user)
+    if role_for(user,'motivation')=='Продажи':
+        from ..models import SalesEmployee
+        if SalesEmployee.objects.filter(user=user).exists():return politician_scope(user)
     access = getattr(user, 'motivation_report_access', None)
     if not access or not access.deal_author.strip():
         return None
@@ -179,6 +182,9 @@ def actual_reports(user, execution, query, *, detailed=False, access_scope=None,
                         Decimal(0) if snapshot_options and entry['code'] in ('1','2','3','4') else None)
                 ledger.append(entry)
             # Current Q4/year pilot has no catch-up payments, including exports.
+        from .distribution_reporting import apply
+        apply(ledger,execution,kind,values,selected_periods(query),product_filtered=any(query.getlist(f) for f in ('planning','goods','brand')))
+
     for item in ledger:
         item['total'] = item['amount'] + item['bonus']
     return {'payout_threshold': number(execution.parameters['payout_threshold']) if execution.parameters.get('payout_threshold') is not None else None, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in ledger), 'sections': results, 'rows': ledger, 'total': sum((item['total'] for item in ledger), Decimal(0)), 'currency': currency, 'plan_fact': plan_fact, 'department_plan_fact': department}
@@ -384,7 +390,12 @@ def employee_authors(user, branch, worker, year):
     try:
         connection.timeout = 30
         from .manager_detail import unallocated_author
-        return sorted({str(row['author']).strip() for row in fetch(cursor, sql, args) if row.get('author') and str(row['author']).strip() and not unallocated_author(row['author'])})
+        names={str(row['author']).strip() for row in fetch(cursor, sql, args) if row.get('author') and str(row['author']).strip() and not unallocated_author(row['author'])}
+        from ..models import SalesEmployee,PremiumDistribution
+        if worker=='Продажи':names.update(SalesEmployee.objects.filter(subdivision__subdivision_key=branch).values_list('full_name',flat=True))
+        for batch in PremiumDistribution.objects.filter(subdivision__subdivision_key=branch,year=year,state='completed'):
+            names.update(r['author'] for r in batch.rows if r['kind']==worker and r['author'])
+        return sorted(names)
     finally:
         connection.close()
 

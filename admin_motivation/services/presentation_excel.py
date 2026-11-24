@@ -196,6 +196,8 @@ def workbook(kind, data, metadata, query=None, title=None):
             filters.append((caption, ', '.join(query.getlist(key)) or 'Все доступные'))
     for label, value in [*metadata, *filters, ('Доплата за кварталы', PILOT_BONUS_NOTE)]:
         row(ws, [str(label), str(value)])
+    from .distribution_reporting import excel_sheet
+    excel_sheet(book,data['rows'])
     output = TemporaryFile(suffix='.xlsx')
     try:
         book.save(output)

@@ -95,6 +95,8 @@ def data_for(user, execution, query, *, detailed=False):
                     'annual_accrual': annual.get((item['subdivision'], item['author'], code),
                         Decimal(0) if snapshot_options and code in ('1','2','3','4') else None),
                     'detail_url': reverse('motivation_report_all_2026') + '?' + target.urlencode()})
+        from .services.distribution_reporting import apply
+        apply(rows,execution,kind,values,periods,product_filtered=any(query.getlist(f) for f in ('planning','goods','brand')))
     return {'rows': rows, 'sections':sections, 'plan_fact': plan_fact, 'department_plan_fact': department, 'kinds': kinds, 'has_unallocated': any(row['unallocated'] for row in rows),
             'total': sum((row['amount'] for row in rows), Decimal(0)), 'currency': query.get('currency', 'USD')}
 
@@ -211,7 +213,7 @@ def report(request):
                     output=report_excel(detail,{'Currency':data['currency'],'Years':['2026'],
                         'TypeCoeff_':query.getlist('type'),'Subdivision':query.getlist('subdivision'),
                         'DealAuthor':query.getlist('author'),'gp_sales':query.getlist('planning'),
-                        'GPGoods':query.getlist('goods'),'Brend':query.getlist('brand')},table,
+                        'GPGoods':query.getlist('goods'),'Brend':query.getlist('brand')},table,allocation_rows=data['rows'],
                         provenance=[('Вариант','Москва и ТТ раздельно' if variant=='separate_2026' else 'Москва + ТТ объединённо'),
                             ('Запуск',str(execution.run_id)),('Завершён',str(execution.completed_at)),
                             ('План',execution.parameters.get('plan_version','')),

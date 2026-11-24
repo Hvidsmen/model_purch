@@ -689,7 +689,7 @@ class ReportsNextTests(TestCase):
                 self.assertEqual(overview[1]['total'],0)
                 html=response.content.decode()
                 unified=html.split('class="nr-deep nr-team-calculation-details"',1)[1].split('</details>',1)[0]
-                self.assertEqual(unified.count('<table '),1)
+                self.assertIn('nr-team-period-card',unified)
                 self.assertNotIn('nr-report-period-card',unified)
                 self.assertEqual(presentation['possible'], expected)
                 self.assertEqual([item['possible'] for item in presentation['type_totals']], [expected / 3] * 3)
@@ -795,7 +795,8 @@ class ReportsNextTests(TestCase):
             response = self.client.get(reverse('motivation_report_next', args=['registry']), {'type':['Политики','Продажи','Директора'],'run': '1'})
         self.assertContains(response, '<table class="nr-table">', count=3)
         self.assertContains(response, 'nr-kpi-types', count=3)
-        self.assertContains(response, 'Не распределено', count=3)
+        self.assertContains(response, 'После распределения')
+        self.assertContains(response, 'Не распределено')
         self.assertNotContains(response, 'data-next-unallocated hidden')
         self.assertContains(response, 'ещё не подтверждены к выплате')
         sections = response.context['presentation']['team_sections']

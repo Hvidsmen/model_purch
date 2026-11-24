@@ -1,0 +1,7 @@
+{% extends 'admin_motivation/base.html' %}{% block content %}
+<section class="content"><h1>Распределение премий</h1><p><a href="{% url 'motivation_sales_employees' %}">Сотрудники продаж</a></p><p>Закрытие периода → коэффициенты → завершённый расчёт → распределение директором → Excel и отчёт финансистам.</p>
+<p>Сначала скорректируйте генеральские коэффициенты за период и запустите расчёт. Здесь фиксируется снимок рассчитанных фондов: последующий пересчёт их не изменяет. По одному распределению на подразделение и период, в выбранной валюте.</p>
+<p><a href="{% url 'motivation_calculations' %}">К расчётам</a> · <a href="{% url 'index_admin_motivation' %}">К коэффициентам</a></p>
+{% if form %}<details open><summary>Создать распределение закрытого периода</summary><form method="post">{% csrf_token %}{{ form.as_p }}<button class="btn btn-primary">Зафиксировать фонды из расчёта</button></form></details>{% endif %}
+<h2>Распределения</h2><div style="overflow-x:auto"><table class="table"><thead><tr><th>Подразделение</th><th>Год</th><th>Период</th><th>Статус</th><th>Валюта</th><th>Версия</th><th></th></tr></thead><tbody>{% for b in batches %}<tr><td>{{ b.subdivision }}</td><td>{{ b.year }}</td><td>{{ b.get_period_display }}</td><td>{{ b.get_state_display }}</td><td>{{ b.currency }}</td><td>{{ b.revision }}</td><td><a href="{% url 'motivation_distribution_detail' b.pk %}">Открыть</a></td></tr>{% empty %}<tr><td colspan="7">Распределения ещё не созданы.</td></tr>{% endfor %}</tbody></table></div></section>
+{% endblock %}
