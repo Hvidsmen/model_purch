@@ -19,7 +19,7 @@ IF OBJECT_ID(N'motivation.PortalMotivationRun',N'U') IS NULL
 
 def parameters(job):
     from .motivation_exclusions import rules
-    from .main_quarter_mode import periods as main_periods
+    from .main_quarter_mode import periods as main_periods,all_subdivisions
     from .calculation_variants import variant_of, ALL_2026
     variant = variant_of(job)
     from .transition_2026 import RULE_VERSION
@@ -49,7 +49,7 @@ def parameters(job):
             'q4_eligibility_quarters': [4] if transition else [1,2,3,4],
             'annual_amount_quarters': [] if variant == 'separate_2026' else [4] if transition or variant == 'main' else [1,2,3,4],
             'coefficient_exclusions':list(rules()),
-            'calculation_subdivisions': ['Д-Москва', 'ТЕРМОТРЕЙД'],
+            'calculation_subdivisions': 'all' if all_subdivisions() and variant!='separate_2026' else ['Д-Москва','ТЕРМОТРЕЙД'],
             'annual_accrual_source': SNAPSHOT_VERSION}
 
 

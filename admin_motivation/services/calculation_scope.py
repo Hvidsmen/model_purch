@@ -1,9 +1,11 @@
-"""The two portal calculations currently run for Moscow only."""
+"""Calculation coverage, with an independent switch for the temporary expansion."""
 SUBDIVISION = 'Д-Москва'
 VIEW = 'DataWH.motivation.PortalCalculationSubdivisions'
 
 
 def predicate(expression):
+    from .main_quarter_mode import all_subdivisions
+    if all_subdivisions():return '1=1'
     return expression + "=N'" + SUBDIVISION.replace("'", "''") + "'"
 
 

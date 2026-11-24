@@ -197,11 +197,12 @@ def prepare(cursor, variant='main'):
         projections = ['s.' + quote(column) for column in columns]
     from .subdivision_scope import sql_predicate
     from .calculation_scope import predicate as calculation_predicate
+    from .main_quarter_mode import all_subdivisions
     cursor.execute('ALTER VIEW motivation.' + view_name + ' AS SELECT ' + ','.join(projections) +
                    ' FROM dbo.Subdivisions s LEFT JOIN motivation.PortalSubdivisionMerge m ON m.SourceName=s.SubdivisionName WHERE ' +
                    sql_predicate('s.SubdivisionName') + ' AND ' + sql_predicate('COALESCE(m.TargetName,s.SubdivisionName)') +
                    ' AND ' + calculation_predicate('COALESCE(m.TargetName,s.SubdivisionName)') +
-                   " AND s.SubdivisionName IN (N'Д-Москва',N'ТЕРМОТРЕЙД');")
+                   (" AND s.SubdivisionName IN (N'Д-Москва',N'ТЕРМОТРЕЙД')" if variant==SEPARATE_2026 or not all_subdivisions() else '')+';')
     header = re.compile(r'\b(?:CREATE\s+(?:OR\s+ALTER\s+)?|ALTER\s+)PROC(?:EDURE)?\s+(?:\[?motivation\]?\s*\.\s*)?(?:\[sp_CalcBySub\]|sp_CalcBySub\b)', re.I)
     changed, count = header.subn(('ALTER' if existing else 'CREATE') + ' PROCEDURE ' + proc, definition, count=1)
     if count != 1:

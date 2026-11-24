@@ -234,7 +234,7 @@ def report(request, kind):
     query.setdefault('director_scope', 'active')
     query.setdefault('currency', 'USD')
     query.setdefault('period', 'all')
-    moscow_only = bool(selected and str(selected.parameters.get('transition_rule') or '').startswith('moscow-tt-q4-'))
+    moscow_only = bool(selected and selected.parameters.get('calculation_subdivisions')!='all' and str(selected.parameters.get('transition_rule') or '').startswith('moscow-tt-q4-'))
     if moscow_only and types!=['Кураторы'] and not (scope and scope.get('curator')):
         from .services.calculation_scope import restrict_report
         try:
