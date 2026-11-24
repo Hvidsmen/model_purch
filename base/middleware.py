@@ -34,10 +34,11 @@ class PortalAccessMiddleware:
             name = match.url_name if match else None
             account_pages = {'index_base', 'portal_login', 'portal_logout', 'portal_windows_login'}
             personal = name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next', 'motivation_report_all_2026') or (name == 'motivation_report_next' and (view_kwargs.get('kind') in ('mine', 'team', 'detail', 'deals') or view_kwargs.get('kind') == 'registry' and role_for(request.user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN))) or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
+            branch_tasks = role_for(request.user,'motivation') == BRANCH_DIRECTOR and name in {'motivation_distributions','motivation_distribution_detail','motivation_sales_employees'}
             static = module == 'django.views.static' and request.path.startswith(settings.STATIC_URL)
             if personal:
                 request.personal_report_scope = politician_scope(request.user)
-            if not (name in account_pages or static or (personal and request.method in ('GET', 'HEAD', 'OPTIONS') and request.personal_report_scope)):
+            if not (name in account_pages or static or branch_tasks or (personal and request.method in ('GET', 'HEAD', 'OPTIONS') and request.personal_report_scope)):
                 if '/api/' in request.path or 'application/json' in request.headers.get('Accept', ''):
                     return JsonResponse({'error': 'Доступны только отчёты в рамках назначенных подразделений и прав.'}, status=403)
                 return render(request, 'base/forbidden.html', status=403)
@@ -68,7 +69,7 @@ class PortalAccessMiddleware:
                     'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report', 'motivation_reports_next', 'motivation_report_next', 'motivation_report_all_2026', 'motivation_report_integral_2026', 'motivation_report_director_scenarios'}
                 if not decisions and name not in allowed:
                     return render(request, 'base/forbidden.html', status=403)
-            if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and name not in {'motivation_report_integral_2026', 'motivation_report_director_scenarios'} and not motivation_viewer_read_request(request):
+            if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and name not in {'motivation_report_integral_2026', 'motivation_report_director_scenarios'} and not (role == DIRECTOR and name in {'motivation_distributions','motivation_distribution_detail'}) and not motivation_viewer_read_request(request):
                 return JsonResponse({'error': 'Изменение модели недоступно. Решения принимаются на странице «На проверке».'}, status=403)
         if project == 'motivation' and role_for(request.user, 'motivation') == FINANCIER and not financier_read_request(request):
             if json_request:

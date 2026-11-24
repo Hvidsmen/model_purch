@@ -80,10 +80,12 @@ def filtered_performance(source,stored):
 def data_for(run,query):
     if run.state!='completed':raise ValidationError('Результаты доступны только после успешного завершения всего задания.')
     periods,kinds=selection(run,query);currency=query.get('currency','USD')
+    from .closing_coefficient import ReportMultipliers
+    multipliers=ReportMultipliers(physical=True)
     sections=[];rows=[];performance=[];department=[]
     for kind in kinds:
         tag=KINDS[kind]
-        source=[row for row in records(run,'report_'+tag) if period_code(row['КварталМотивации']) in periods]
+        source=multipliers.apply([row for row in records(run,'report_'+tag) if period_code(row['КварталМотивации']) in periods])
         search=query.get('search','').strip().casefold()
         filtered=[dict(row,ТипКоэф=kind) for row in source if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
         data=manager_detail_report(filtered,currency,performance_rows=source)
@@ -94,7 +96,7 @@ def data_for(run,query):
         performance.extend(presentation_rows(perf,kind));department.extend(presentation_rows(dept,DEPARTMENT))
         sections.append({'kind':kind,'data':data})
         annual=defaultdict(lambda:ZERO)
-        for row in records(run,'annual_'+tag):
+        for row in multipliers.apply(records(run,'annual_'+tag)):
             if matches(row,query):annual[(row.get('Подразделение') or '—',row.get('АвторСделки') or '—',str(row['Квартал']))]+=Decimal(str(row.get('AnnualRUB' if currency=='RUB' else 'AnnualUSD') or 0))
         summary=data['period_summary']
         for item in summary['rows']:

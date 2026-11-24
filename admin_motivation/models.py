@@ -1108,3 +1108,5 @@ class CuratorCoefficient(DirectorCoefficientBase):
 
 from .premium_distribution_models import PremiumDistribution, PremiumDistributionEvent
 from .premium_distribution_models import SalesEmployee
+
+from .premium_distribution_models import PeriodMotivationCoefficient
