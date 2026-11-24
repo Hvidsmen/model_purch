@@ -1,0 +1,11 @@
+/* Detail reports use the page's vertical scrollbar. */
+.content-wrapper .manager-period-summary>.report-scroll,
+.content-wrapper #manager-detail-scroll{height:auto;max-height:none;overflow-x:auto;overflow-y:hidden}
+.content-wrapper .manager-period-summary thead th,
+.content-wrapper #manager-detail-report .manager-sticky-header,
+.content-wrapper #manager-detail-report .report-total-row{position:static;top:auto}
+.manager-report-floating{position:fixed;z-index:45;overflow:hidden;background:#fff;box-shadow:0 3px 8px #25375526;margin:0;padding:0;box-sizing:border-box}
+.manager-report-floating[hidden]{display:none!important}
+@media print{.manager-report-floating{display:none!important}}
+
+.content-wrapper .manager-period-summary thead th:first-child{position:sticky;left:0;top:auto}
