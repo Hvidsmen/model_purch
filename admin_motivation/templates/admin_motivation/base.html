@@ -8,6 +8,12 @@
     <link rel="stylesheet" href="{% static 'css/main.css' %}">
 
     <style>
+/* Keep directory links visually subordinate to the section heading. */
+.motivation-directory-nav{margin-top:12px}
+.motivation-directory-nav>summary.nav-link{padding:10px 12px;background:#f5f2ff;border-radius:8px;color:#6551ae;font-weight:700}
+.motivation-directory-links{margin:8px 0 12px 12px;padding-left:8px;border-left:2px solid #e3dcf2}
+.motivation-directory-links>.nav-link{display:block;margin:3px 0;padding:8px 10px;line-height:1.4}
+
         body {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
@@ -245,13 +251,15 @@
 {% endblock %}
 {% block module_administration %}
 {% if not portal_reports_only and not portal_motivation_readonly %}
-<details class="portal-section-nav" {% if request.resolver_match.url_name == 'motivation_curators' or request.resolver_match.url_name == 'motivation_curator_rates' or request.resolver_match.url_name == 'motivation_director_directory' or request.resolver_match.url_name == 'motivation_exclusion_directory' or request.resolver_match.url_name == 'motivation_groups_exclusion_directory' or request.resolver_match.url_name == 'motivation_channels_exclusion_directory' %}open{% endif %}>
+<details class="portal-section-nav motivation-directory-nav" {% if request.resolver_match.url_name == 'motivation_curators' or request.resolver_match.url_name == 'motivation_curator_rates' or request.resolver_match.url_name == 'motivation_director_directory' or request.resolver_match.url_name == 'motivation_exclusion_directory' or request.resolver_match.url_name == 'motivation_groups_exclusion_directory' or request.resolver_match.url_name == 'motivation_channels_exclusion_directory' %}open{% endif %}>
 <summary class="nav-link">Справочники</summary>
+<div class="motivation-directory-links">
 <a class="nav-link {% if request.resolver_match.url_name == 'motivation_director_directory' %}active{% endif %}" href="{% url 'motivation_director_directory' %}">Справочник директоров</a>
-<a class="nav-link {% if request.resolver_match.url_name == 'motivation_curators' or request.resolver_match.url_name == 'motivation_curator_rates' %}active{% endif %}" href="{% url 'motivation_curators' %}">Кураторы</a>
+<a class="nav-link {% if request.resolver_match.url_name == 'motivation_curators' or request.resolver_match.url_name == 'motivation_curator_rates' %}active{% endif %}" href="{% url 'motivation_curators' %}">Справочник кураторов</a>
 <a class="nav-link {% if request.resolver_match.url_name == 'motivation_exclusion_directory' %}active{% endif %}" href="{% url 'motivation_exclusion_directory' %}">Справочник исключений</a>
 <a class="nav-link {% if request.resolver_match.url_name == 'motivation_groups_exclusion_directory' %}active{% endif %}" href="{% url 'motivation_groups_exclusion_directory' %}">Исключения групп планов продаж</a>
 <a class="nav-link {% if request.resolver_match.url_name == 'motivation_channels_exclusion_directory' %}active{% endif %}" href="{% url 'motivation_channels_exclusion_directory' %}">Исключения каналов</a>
+</div>
 </details>
 {% endif %}
 {% endblock %}
