@@ -152,6 +152,14 @@ def present(kind, data, ledger=None, period='all'):
                                         if row['title'] == 'По коэффициентам' and row['kind'] == section['kind']]
     from .annual_accrual import enrich
     enrich(result, ledger)
+    cards={card['code']:card for card in result['period_cards']}
+    result['team_overview_rows']=[
+        {'label':'Возможная премия','values':[cards.get(code,{}).get('possible') for code in codes],'total':result['possible']},
+        {'label':'Премия по расчёту','values':[cards.get(code,{}).get('total') for code in codes],'total':result['total'],'primary':True},
+    ]
+    for item in result['type_totals']:
+        result['team_overview_rows'].append({'label':item['kind'],'values':[cards.get(code,{}).get('kind_totals',{}).get(item['kind']) for code in codes],'total':item['total'],'detail':True})
+    result['team_overview_rows'].append({'label':'В годовую премию · до условий выплаты','values':[cards.get(code,{}).get('annual_accrual') if code!='5' else None for code in codes],'total':result.get('annual_accrual')})
     return result
 
 

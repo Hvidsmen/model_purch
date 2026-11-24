@@ -683,6 +683,14 @@ class ReportsNextTests(TestCase):
                 presentation = response.context['presentation']
                 self.assertEqual(presentation['total'], 0)
                 self.assertEqual(sum(card['possible'] for card in presentation['period_cards']), expected)
+                overview=presentation['team_overview_rows']
+                self.assertEqual(overview[0]['total'],expected)
+                self.assertEqual(sum(overview[0]['values']),expected)
+                self.assertEqual(overview[1]['total'],0)
+                html=response.content.decode()
+                unified=html.split('class="nr-deep nr-team-calculation-details"',1)[1].split('</details>',1)[0]
+                self.assertEqual(unified.count('<table '),1)
+                self.assertNotIn('nr-report-period-card',unified)
                 self.assertEqual(presentation['possible'], expected)
                 self.assertEqual([item['possible'] for item in presentation['type_totals']], [expected / 3] * 3)
                 self.assertEqual([section['kind'] for section in presentation['team_sections']], ['Политики', 'Продажи', 'Директора'])
