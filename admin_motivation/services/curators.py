@@ -132,7 +132,7 @@ def global_context(version,selected_goods=None):
         row=rows.setdefault(cell.goods_id,{'goods':cell.goods,'variation':cell.variation_calculate,'variation_id':cell.variation_calculate_id,'values':[None]*5})
         row['values'][int(key[1])]=cell.motivation_coeff
     editing=rows.get(int(selected_goods)) if str(selected_goods).isdigit() else None
-    return {'curator_copy_targets':global_copy_targets(),'global_curator_rows':list(rows.values()),'curator_goods':Goods.objects.order_by('pk'),'curator_editing':editing,
+    return {'curator_selected_goods':int(selected_goods) if str(selected_goods).isdigit() else (editing['goods'].pk if editing else None),'curator_copy_targets':global_copy_targets(),'global_curator_rows':list(rows.values()),'curator_goods':Goods.objects.order_by('pk'),'curator_editing':editing,
         'curator_inputs':[{'key':key,'value':Decimal(str(editing['values'][i]))*100 if editing and editing['values'][i] is not None else ''} for i,key in enumerate(KEYS)]}
 
 
