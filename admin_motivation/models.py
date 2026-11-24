@@ -1038,3 +1038,38 @@ class CoefficientIterationRun(models.Model):
     class Meta:
         ordering = ['-pk']
         constraints = [models.UniqueConstraint(fields=['iteration'], condition=models.Q(state='running'), name='one_running_coefficient_iteration')]
+
+
+class ShareholderCalculation(models.Model):
+    """Independent actuals-as-of scenario; no changes to ordinary payout runs."""
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    name = models.CharField(max_length=160)
+    as_of = models.DateField()
+    scenario = models.CharField(max_length=12, choices=[('combined','Москва + ТТ объединённо'),('separate','Москва и ТТ раздельно')])
+    quarters = models.JSONField(default=list)
+    threshold_percent = models.DecimalField(max_digits=7, decimal_places=4, default=1)
+    source_job = models.ForeignKey(MotivationCalculationSchedule, on_delete=models.PROTECT)
+    configuration = models.JSONField(default=dict)
+    state = models.CharField(max_length=16, default='queued')
+    stage = models.CharField(max_length=200, default='Ожидает запуска')
+    error = models.TextField(blank=True)
+    metadata = models.JSONField(default=dict)
+    created_by = models.ForeignKey('auth.User', on_delete=models.PROTECT)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True)
+    completed_at = models.DateTimeField(null=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+
+class ShareholderSnapshot(models.Model):
+    calculation = models.ForeignKey(ShareholderCalculation, on_delete=models.CASCADE, related_name='chunks')
+    mode = models.CharField(max_length=12)
+    dataset = models.CharField(max_length=20)
+    sequence = models.PositiveIntegerField()
+    payload = models.JSONField(default=list)
+
+    class Meta:
+        ordering = ['sequence']
+        constraints = [models.UniqueConstraint(fields=['calculation','mode','dataset','sequence'], name='share_snapshot_chunk_unique')]

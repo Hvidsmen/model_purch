@@ -1,0 +1,163 @@
+"""Five reports, one independently published scenario and common filter contract."""
+from io import BytesIO
+from urllib.parse import urlsplit
+from django.core.exceptions import PermissionDenied,ValidationError
+from django.core.paginator import Paginator
+from django.http import FileResponse,Http404,HttpResponseBadRequest,JsonResponse,QueryDict
+from django.shortcuts import get_object_or_404,redirect,render
+from django.urls import reverse
+from django.views.decorators.http import require_GET,require_http_methods
+from django.db import transaction
+from .models import ShareholderCalculation
+from .shareholder_forms import CalculationForm
+from .services import shareholder_reports as reports,shareholder_runner as runner
+from .services.shareholder_access import can_start,can_view
+from .services.reports_next_presenter import present,personal_details,new_detail_labels
+
+
+def allowed(request):
+    if not can_view(request.user):raise PermissionDenied
+
+
+def metadata(run):
+    return [('Сценарий','Для акционеров · перераспределение реальных отгрузок'),('Запуск',str(run.pk)),
+        ('Факт по дату включительно',str(run.as_of)),('Данные','Текущий подготовленный факт на момент запуска'),
+        ('Подразделения','Москва + ТТ' if run.scenario=='combined' else 'I–III раздельно; IV и год Москва + ТТ'),
+        ('Кварталы определения долей',', '.join(map(str,run.quarters))),('Порог авторов, %',str(run.threshold_percent)),
+        ('План',run.configuration['plan_version']),('Квартальная доля, %',run.configuration['quarter_share']),
+        ('Годовая доля, %',run.configuration['year_share']),('Порог выплаты',run.configuration['payout_threshold']),
+        ('Подготовленный набор',run.metadata.get('prepared_run','')),('Расчёт завершён',str(run.completed_at))]
+
+
+@require_http_methods(['GET','POST'])
+def index(request):
+    allowed(request)
+    form=CalculationForm(request.POST if request.method=='POST' else None)
+    if request.method=='POST':
+        if not can_start(request.user):raise PermissionDenied
+        if form.is_valid():
+            try:
+                run=runner.create(form.cleaned_data,request.user)
+                transaction.on_commit(lambda:runner.launch(run))
+                return redirect('motivation_shareholder_report',run.pk,'team')
+            except ValidationError as error:form.add_error(None,error)
+    return render(request,'admin_motivation/reports_next/shareholder_index.html',{'form':form,'can_start':can_start(request.user),
+        'runs':ShareholderCalculation.objects.select_related('created_by').order_by('-created_at')[:50]})
+
+
+@require_GET
+def status(request,pk):
+    allowed(request);run=get_object_or_404(ShareholderCalculation,pk=pk)
+    return JsonResponse({'state':run.state,'stage':run.stage,'error':run.error})
+
+
+def rewrite_links(value,run):
+    """All drilldowns must remain inside the immutable shareholder snapshot."""
+    if isinstance(value,list):return [rewrite_links(item,run) for item in value]
+    if isinstance(value,dict):return {key:rewrite_links(item,run) for key,item in value.items()}
+    if isinstance(value,str) and value.startswith('/') and 'reports-next/' in value and '?' in value:
+        parts=urlsplit(value);params=QueryDict(parts.query,mutable=True)
+        if '/deals/' in parts.path:params['audit']='1'
+        return reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+params.urlencode()+('#'+parts.fragment if parts.fragment else '')
+    return value
+
+
+def plain_excel(title,headers,rows,meta,extra_sheets=()):
+    from openpyxl import Workbook
+    from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
+    book=Workbook();sheet=book.active;sheet.title='Отчёт';sheet.append(headers)
+    for row in rows:sheet.append(row)
+    sheet.freeze_panes='A2';sheet.auto_filter.ref=sheet.dimensions
+    for name,columns,values in extra_sheets:
+        extra=book.create_sheet(name);extra.append(columns)
+        for value in values:extra.append(value)
+        extra.freeze_panes='A2';extra.auto_filter.ref=extra.dimensions
+    info=book.create_sheet('Источник');info.append([title]);
+    for label,value in meta:info.append([label,value])
+    for ws in book:
+        for line in ws:
+            for cell in line:
+                if isinstance(cell.value,str):cell.value=ILLEGAL_CHARACTERS_RE.sub('',cell.value);cell.data_type='s'
+        for column in ws.columns:ws.column_dimensions[column[0].column_letter].width=min(60,max(16,max(len(str(c.value or '')) for c in column)+2))
+    output=BytesIO();book.save(output);book.close();output.seek(0);return output
+
+
+@require_GET
+def report(request,pk,kind):
+    allowed(request)
+    if kind not in reports.TITLES:raise Http404
+    run=get_object_or_404(ShareholderCalculation,pk=pk)
+    query=request.GET.copy();query['year']='2026'
+    if request.GET.get('export'):query.pop('page',None)
+    if kind=='executive':query.pop('author',None);query.pop('search',None)
+    for field in ('subdivision','author','planning','goods','brand','type','period'):
+        query.setlist(field,[v for v in query.getlist(field) if v])
+    if not query.get('currency'):query['currency']='USD'
+    try:periods,kinds=reports.selection(run,query)
+    except ValidationError as error:return HttpResponseBadRequest(' '.join(error.messages))
+    title=reports.TITLES[kind];meta=metadata(run)
+    meta.extend((label,', '.join(query.getlist(field)) or 'Все доступные') for field,label in [('currency','Валюта премий'),('period','Периоды отчёта'),('type','Виды мотивации'),('subdivision','Отбор подразделений'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')])
+    context={'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
+        'status_url':reverse('motivation_shareholder_status',args=[run.pk]),'selected_types':kinds,
+        'period_options':[{'code':code,'label':'Год' if code=='5' else code+' квартал','selected':code in periods} for code in [*map(str,run.quarters),'5']]}
+    navigation=[]
+    for key,label in reports.TITLES.items():
+        target=query.copy();target.pop('export',None);target.pop('audit',None);target.pop('page',None)
+        if key=='executive':target.pop('author',None);target.pop('search',None)
+        navigation.append({'title':label,'active':key==kind,'url':reverse('motivation_shareholder_report',args=[run.pk,key])+'?'+target.urlencode()})
+    context['navigation']=navigation
+    if run.state=='completed':
+        available=reports.options(run)
+        context['filters']=[{'key':key,'label':label,'options':[{'value':v,'selected':v in query.getlist(key)} for v in available[key]]} for key,label in [('subdivision','Подразделения'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')]]
+        context['authors']=[{'value':v,'selected':v in query.getlist('author')} for v in available['author']]
+        context['type_options']=[{'value':v,'selected':v in kinds} for v in reports.KINDS]
+        context['needs_author']=kind=='mine' and len(query.getlist('author'))!=1
+        if not context['needs_author']:
+            data=reports.data_for(run,query)
+            display=present('team' if kind=='team' else 'registry',data,data,periods)
+            for section in display['team_sections']:section['page']=Paginator(section['rows'],50).get_page(query.get(section['page_parameter'],1))
+            context.update(ledger=data,presentation=display,page_query=query.urlencode(),
+                employee_page=Paginator(display['employees'],50).get_page(query.get('page',1)),ledger_page=Paginator(display['registry_rows'],50).get_page(query.get('page',1)))
+            if kind=='mine':
+                display.update(rewrite_links(personal_details(data,query,period_codes=periods),run))
+            if kind=='detail':
+                from .services.manager_detail import combine_reports
+                detail=new_detail_labels(combine_reports(data['sections'],data['currency']))
+                detail['excel_urls']={name:'?'+dict_query(query,export='xlsx',table=name).urlencode() for name in ('all','summary','detail')}
+                context['data']=detail
+            macro=reports.macro_rows(data,periods);context['macro_rows']=macro
+            from .services.reports_next_presenter import performance_matrix
+            global_bases=[r for r in data['plan_fact'] if r['formula']=='Подразделение(Глобально)']
+            context['macro_bases']=performance_matrix(global_bases,display['period_columns'])
+            context['macro_periods']=[('Год' if code=='5' else code+' квартал') for code in periods]
+            audit=kind=='detail' and query.get('audit')=='1';context['audit']=audit
+            if audit:context['audit_page']=Paginator(list(reports.audit_rows(run,query)),50).get_page(query.get('page',1))
+            if query.get('export')=='xlsx':
+                if audit:
+                    from decimal import Decimal
+                    trace=list(reports.audit_rows(run,query))
+                    output=plain_excel('Исходные авторы и перераспределение',['Дата','Подразделение','Документ','Товар','Исходный автор','Получатель','Доля','USD','RUB'],
+                        [[r['ClosedDate'],r['SourceBranch'],r['DocumentNumber'],r['ProductCode'],r['OriginalAuthor'],r['AssignedAuthor'],Decimal(str(r['Weight_'])),Decimal(str(r['AllocatedUSD'])),Decimal(str(r['AllocatedRUB']))] for r in trace],meta)
+                elif kind=='executive':
+                    output=plain_excel(title,['Подразделение','Мотивация',*[f'{label}: {metric}' for label in context['macro_periods'] for metric in ('Возможная премия','Премия по расчёту')],'Возможная премия, всего','Всего по расчёту'],
+                        [[r['subdivision'],r['kind'],*[v for cell in r['cells'] for v in (cell['possible'],cell['total'])],r['possible'],r['total']] for r in macro],meta,extra_sheets=[('Базы выполнения',['Подразделение','Вид базы','Период','План USD','Факт USD','Выполнение'],
+                            [[r['subdivision'],r['kind'],r['period'],r['plan'],r['fact'],r['ratio']] for r in { (r['subdivision'],r['kind'],r['period']):r for r in [*global_bases,*data['department_plan_fact']]}.values()])])
+                elif kind=='detail':
+                    from .services.report_excel import report_excel
+                    table=query.get('table','all')
+                    if table not in ('all','summary','detail'):return HttpResponseBadRequest('Неизвестная таблица.')
+                    output=report_excel(context['data'],{'Currency':data['currency'],'Years':['2026'],'TypeCoeff_':kinds},table,provenance=meta)
+                else:
+                    from .services.presentation_excel import workbook
+                    output=workbook('team' if kind=='team' else 'registry',data,meta,query,title)
+                return FileResponse(output,as_attachment=True,filename=f'shareholders-{run.pk}-{kind}.xlsx')
+    context['export_url']='?'+dict_query(query,export='xlsx').urlencode()
+    context['audit_url']=reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+dict_query(query,audit='1').urlencode()
+    context['detail_url']='?'+dict_query(query,audit='').urlencode()
+    return render(request,'admin_motivation/reports_next/shareholder_report.html',context)
+
+
+def dict_query(query,**values):
+    result=query.copy()
+    for key,value in values.items():result[key]=value
+    return result
