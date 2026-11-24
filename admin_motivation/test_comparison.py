@@ -49,13 +49,13 @@ class ComparisonTests(TestCase):
         good = current.coefficients.first().goods
         GlobalDirectorCoeff.objects.create(version=current, goods=good, **{f'k{i}': Decimal('.01') for i in range(5)})
         result = compare_plan(self.plan, current, self.first)
-        self.assertEqual(Decimal(result['variants']['current']['directors']), Decimal('45'))
-        self.assertEqual(Decimal(result['variants']['current']['total']), Decimal('1845'))
-        self.assertEqual(Decimal(result['variants']['current']['plan_percent']), Decimal('41'))
+        self.assertEqual(Decimal(result['variants']['current']['directors']), Decimal('0'))
+        self.assertEqual(Decimal(result['variants']['current']['total']), Decimal('1800'))
+        self.assertEqual(Decimal(result['variants']['current']['plan_percent']), Decimal('40'))
         self.assertEqual(Decimal(result['variants']['approved']['directors']), 0)
         edited = {f'{good.pk}:{i}': Decimal('.02') for i in range(5)}
         result = compare_plan(self.plan, current, self.first, director_changes=edited)
-        self.assertEqual(Decimal(result['variants']['current']['directors']), Decimal('90'))
+        self.assertEqual(Decimal(result['variants']['current']['directors']), Decimal('0'))
         self.assertTrue(result['unsaved'])
         staff = [DirectorEmployee.objects.create(full_name=name) for name in ['Директор1', 'Директор2']]
         for employee in staff:
@@ -70,7 +70,7 @@ class ComparisonTests(TestCase):
             'version': current.pk, 'plan': self.plan.pk, 'baseline': self.first.pk,
             'director_changes': {key: '2%' for key in edited}}, content_type='application/json')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(Decimal(response.json()['variants']['current']['directors']), Decimal('90'))
+        self.assertEqual(Decimal(response.json()['variants']['current']['directors']), Decimal('120'))
 
     def test_markup_uses_each_variant_motivation_and_missing_ddp(self):
         current = self.draft(date(2026, 1, 1), .2, True)

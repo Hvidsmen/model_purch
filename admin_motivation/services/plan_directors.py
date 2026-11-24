@@ -5,6 +5,36 @@ from .director_comparison import DirectorIndex
 from .sales_plans import SEGMENTS, number
 
 
+def global_comparison_bases(plan, versions, *, baseline=None):
+    """Rebuild the director-weighted base used by global plan snapshots."""
+    from ..models import SubdivisionDirectorCoeff
+    from .subdivision_aliases import mapping, canonical
+    from .subdivision_scope import excluded_plan_names, included
+    from .motivation_exclusions import amounts_for
+    aliases = mapping()
+    staff = {}
+    for version, branch, employee in SubdivisionDirectorCoeff.objects.filter(
+            version_id__in=[v.pk for v in versions]).order_by().values_list(
+                'version_id', 'subdivision__subdivision_key', 'employee_id').distinct().iterator(chunk_size=2000):
+        staff.setdefault((version, canonical(branch, aliases)), set()).add(employee)
+    rows = plan.lines.exclude(subdivision='').exclude(subdivision__in=excluded_plan_names(plan))
+    result = {}
+    for day, branch, pg, group, brand, segments, sources in rows.order_by().values_list(
+            'plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand',
+            'segment_amounts', 'source_subdivisions').iterator(chunk_size=2000):
+        if not included(branch, aliases):
+            continue
+        version = baseline or next((v for v in reversed(versions) if v.effective_from <= day), None)
+        count = len(staff.get((version.pk, canonical(branch, aliases)), ())) if version else 0
+        if not count:
+            continue
+        amounts = amounts_for('Директора', segments, pg, sources)
+        key = (day, pg, group, brand)
+        previous = result.get(key, [Decimal(0)] * 5)
+        result[key] = [old + value * count for old, value in zip(previous, amounts)]
+    return result
+
+
 class PlanDirectors:
     def __init__(self, versions):
         ids = [version.pk for version in versions]
