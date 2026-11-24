@@ -139,3 +139,10 @@
 .nr-page .nr-team-overview .nr-overview-primary :is(th,td){background:#f3efff;color:#55409c;font-weight:600}
 .nr-page .nr-team-overview .nr-overview-type th{padding-left:28px;font-weight:400}
 .nr-page .nr-team-overview .nr-overview-total{background:#faf8ff;font-weight:600}
+
+/* Separate the department execution basis from the monetary premium rows. */
+.content-wrapper .nr-page .nr-team-overview .nr-overview-performance-heading th{background:#e4edf9;color:#26466d;font-weight:700;border-top:3px solid #88a5ca;border-bottom:1px solid #c3d2e7;padding-top:14px;padding-bottom:14px}
+.content-wrapper .nr-page .nr-team-overview .nr-overview-performance :is(th,td){background:#f0f5fc;color:#2e4c70;border-bottom:1px solid #d5e0ef}
+.content-wrapper .nr-page .nr-team-overview .nr-overview-performance th{border-left:4px solid #88a5ca;font-weight:600}
+.content-wrapper .nr-page .nr-team-overview .nr-overview-performance .nr-overview-total{background:#e5eefb;color:#24476f;font-weight:700}
+.content-wrapper .nr-page .nr-team-overview .nr-overview-execution :is(th,td){font-weight:700;border-bottom:2px solid #b8cbe4}
