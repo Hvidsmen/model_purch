@@ -54,7 +54,7 @@ def period_coverage(context):
 def grouped_sql(source, coefficient_type=None, calculation_variant='all_2026'):
     # Policy inputs must not be substituted with sales inputs. Directors share
     # the unreplicated sales base; their channel/subdivision rules differ.
-    input_type = 'Политики' if str(coefficient_type or '').strip().casefold() == 'политики' else 'Продажи'
+    input_type = 'Политики' if str(coefficient_type or '').strip().casefold() == 'политики' else 'Кураторы' if str(coefficient_type or '').strip()=='Кураторы' else 'Продажи'
     input_filter = "LTRIM(RTRIM(pf.[ТипКоэф]))=N'" + input_type + "'"
     author = "CASE WHEN [VariationCalculate]=N'Подразделение(Глобально)' THEN N'' ELSE [АвторСделки] END"
     planning = "CASE WHEN [VariationCalculate] IN (N'Марка(Бренд)',N'Группа товаров',N'Группа планов продаж') THEN [ГруппаПлановПродаж] ELSE N'' END"

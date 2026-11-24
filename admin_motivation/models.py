@@ -1073,3 +1073,35 @@ class ShareholderSnapshot(models.Model):
     class Meta:
         ordering = ['sequence']
         constraints = [models.UniqueConstraint(fields=['calculation','mode','dataset','sequence'], name='share_snapshot_chunk_unique')]
+
+
+class CuratorEmployee(models.Model):
+    full_name = models.CharField('ФИО куратора', max_length=255, unique=True)
+    employee_code = models.CharField('Код куратора', max_length=64, unique=True, default=director_employee_code)
+    user = models.OneToOneField('auth.User', null=True, blank=True, on_delete=models.SET_NULL, related_name='motivation_curator')
+    is_archived = models.BooleanField('Архив', default=False)
+    subdivisions = models.ManyToManyField(Subdivision, related_name='curators', verbose_name='Подразделения')
+
+    def assigned_subdivisions(self):
+        # Curators retain physical branches even when the ordinary portal
+        # directory hides a branch merged into Moscow.
+        return self.subdivisions(manager='all_objects')
+
+    class Meta:
+        ordering = ['full_name']
+        verbose_name = 'Куратор'
+        verbose_name_plural = 'Кураторы'
+
+    def __str__(self):
+        return self.full_name
+
+
+class CuratorCoefficient(DirectorCoefficientBase):
+    employee = models.ForeignKey(CuratorEmployee, on_delete=models.PROTECT)
+    subdivision = models.ForeignKey(Subdivision, on_delete=models.PROTECT)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['version','employee','subdivision','goods'], name='unique_curator_coefficient'),
+            models.CheckConstraint(condition=models.Q(**{f'k{i}__gte': -1 for i in range(5)}, **{f'k{i}__lte': 1 for i in range(5)}), name='curator_coefficient_range'),
+        ]

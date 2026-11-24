@@ -227,9 +227,10 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
             execution.append(block)
     from .pilot_formula import GLOBAL_SUBDIVISION
     global_mode = any(str(row.get('VariationCalculate') or '').strip().casefold() == GLOBAL_SUBDIVISION.casefold() for row in rows)
-    return {'_source_rows': rows, '_performance_rows': performance_rows, 'has_unallocated': any(unallocated_author(row.get('АвторСделки')) for row in rows), 'global_subdivision_mode': global_mode, 'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
+    from .curators import finish_report
+    return finish_report({'_source_rows': rows, '_performance_rows': performance_rows, 'has_unallocated': any(unallocated_author(row.get('АвторСделки')) for row in rows), 'global_subdivision_mode': global_mode, 'periods': periods, 'nodes': nodes(rows), 'detail_totals': blocks(rows, True),
             'headers': [{'label': label, 'detail': index < 13, 'title': f'Средневзвешенный K{index}: Σ(K{index} × O{index}) / Σ(O{index})' if index < 5 else label} for index, label in enumerate(HEADERS)],
-            'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency, pilot=pilot)}
+            'cards': [card for card in cards if card['currency'] == currency], 'years': years, 'currency': currency, 'division_performance': performance, 'division_execution': execution, 'period_summary': period_motivation_summary(rows, currency, pilot=pilot)})
 
 
 def combine_reports(sections, currency='USD'):

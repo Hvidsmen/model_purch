@@ -3,7 +3,7 @@ from collections import defaultdict
 from contextlib import contextmanager
 from decimal import Decimal
 from django.core.exceptions import PermissionDenied, ValidationError
-from base.access import role_for, ADMIN, DIRECTOR, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN, PERSONAL_ROLES, REPORT_ROLES
+from base.access import role_for, ADMIN, DIRECTOR, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN, PERSONAL_ROLES, CURATOR, REPORT_ROLES
 from base.report_access import politician_scope, scoped_values
 from ..models import GlobalCoeffVersion, SalesPlanScenario, Goods, Subdivision, DirectorEmployee
 from .reports import load_report, number
@@ -26,7 +26,7 @@ def available(user):
         keys.insert(0, 'mine')
     if role not in PERSONAL_ROLES:
         keys.insert(0, 'team')
-    if role in (ADMIN, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN):
+    if role in (ADMIN, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN,CURATOR):
         keys.append('registry')
     if role not in REPORT_ROLES:
         keys.append('executive')
@@ -59,7 +59,7 @@ def period_label(query):
 
 
 def selected_types(query, allowed=None):
-    allowed = list(['Политики', 'Продажи', 'Директора'] if allowed is None else allowed)
+    allowed = list(['Политики', 'Продажи', 'Директора', 'Кураторы'] if allowed is None else allowed)
     if not allowed:
         raise PermissionDenied
     values = list(dict.fromkeys(value for value in query.getlist('type') if value))
@@ -72,6 +72,7 @@ def preview_scope(user):
     """Personal preview includes directors, without their team-wide author scope."""
     if role_for(user, 'motivation') not in (*PERSONAL_ROLES, BRANCH_DIRECTOR):
         return None
+    if role_for(user,'motivation')==CURATOR:return politician_scope(user)
     access = getattr(user, 'motivation_report_access', None)
     if not access or not access.deal_author.strip():
         return None
@@ -97,7 +98,7 @@ def restrict(user, query, *, access_scope=None):
         branches = scope['subdivision'] if isinstance(scope['subdivision'], list) else [scope['subdivision']]
         if any(value not in branches for value in query.getlist('subdivision')):
             raise PermissionDenied
-    allowed = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора']
+    allowed = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора', 'Кураторы']
     allowed = [allowed] if isinstance(allowed, str) else allowed
     selected = selected_types(query, allowed)
     explicit = list(dict.fromkeys(query.getlist('period')))
@@ -231,11 +232,14 @@ def planned_budget(execution, scenario, query):
     versions = frozen_versions(execution)
     year = int(query.get('year', execution.parameters['fact_year']))
     periods = selected_periods(query)
-    kinds = {'Политики': 'policies', 'Продажи': 'sales', 'Директора': 'directors'}
+    kinds = {'Политики': 'policies', 'Продажи': 'sales', 'Директора': 'directors','Кураторы':'curators'}
     included_kinds = [kinds[value] for value in selected_types(query, kinds)]
     ids = [version.pk for version in versions]
     indexes = {side: Index(coefficient_rows(ids, subdivision=local)) for side, local in [('global', False), ('local', True)]}
     directors = {side: DirectorIndex(ids, local=local) for side, local in [('global', False), ('local', True)]}
+    from ..models import CuratorCoefficient,CuratorEmployee
+    curator_index=DirectorIndex(ids,local=True,coefficient_model=CuratorCoefficient,merge_aliases=False)
+    curator_bindings={(employee,branch.casefold()) for employee,branch in CuratorEmployee.subdivisions.through.objects.filter(curatoremployee__is_archived=False).values_list('curatoremployee_id','subdivision__subdivision_key')}
     lines = scenario.lines.exclude(subdivision='').filter(plan_date__year=year).order_by()
     aliases, buckets = mapping(), {}
     director_scope = query.get('director_scope', 'active')
@@ -259,10 +263,10 @@ def planned_budget(execution, scenario, query):
         q_share=quarter_share if day.month>=10 and '4' in periods else Decimal(0)
         y_share=annual_share if day.month>=10 and '5' in periods else Decimal(0)
         share=q_share+y_share
-        sub = canonical(original, aliases)
-        if execution.parameters.get('transition_rule') and original not in ('Д-Москва', 'ТЕРМОТРЕЙД'):
+        sub = original if included_kinds==['curators'] else canonical(original, aliases)
+        if execution.parameters.get('transition_rule') and original not in ('Д-Москва', 'ТЕРМОТРЕЙД') and included_kinds!=['curators']:
             continue
-        if not included(original, aliases) or selected_subdivisions and sub not in selected_subdivisions:
+        if not included(original, aliases) or selected_subdivisions and (sub.casefold() not in {v.casefold() for v in selected_subdivisions} if included_kinds==['curators'] else sub not in selected_subdivisions):
             continue
         version = next((version for version in reversed(versions) if version.effective_from <= day), None)
         if version is None:
@@ -278,7 +282,7 @@ def planned_budget(execution, scenario, query):
             from .motivation_exclusions import amounts_for
             kind_amounts=amounts_for(kind,segments,pg,sources)
             if not any(kind_amounts):continue
-            if target not in included_kinds or target == 'directors':
+            if target not in included_kinds or target in ('directors','curators'):
                 continue
             for side in ('global', 'local'):
                 matrix, _ = indexes[side].coefficients(version.pk, sub if side == 'local' else '', pg, group, brand, kinds=[kind])
@@ -288,6 +292,15 @@ def planned_budget(execution, scenario, query):
                 if side=='global':
                     parts['quarter'][target]+=base_value*q_share
                     parts['annual'][target]+=base_value*y_share
+        if 'curators' in included_kinds and any((employee,original.casefold()) in curator_bindings for employee in curator_index.employees.get((version.pk,original.casefold()),())):
+            curator_amounts=amounts_for('Директора',segments,pg,sources)
+            staff=curator_index.by_employee(version.pk,original,pg,group,brand,curator_amounts)
+            value=sum((amount for employee,amount in staff.items() if (employee,original.casefold()) in curator_bindings),Decimal(0))
+            # There is no global curator rate: the assigned branch rates are
+            # identical on both sides of the existing comparison.
+            for side in ('global','local'):bucket[side]['curators']+=value*share
+            parts['quarter']['curators']+=value*q_share
+            parts['annual']['curators']+=value*y_share
         if 'directors' in included_kinds:
             from .motivation_exclusions import amounts_for
             director_amounts=amounts_for('Директора',segments,pg,sources)

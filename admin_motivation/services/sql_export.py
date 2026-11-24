@@ -21,6 +21,9 @@ def director_variation(good):
 
 
 def export_motivation(connector, manage_connection=True):
+    from .curator_sql import export_assignments
+    from .curators import enabled as curators_enabled
+    from ..models import CuratorCoefficient
     versions = list(GlobalCoeffVersion.objects.filter(status='approved').order_by('effective_from', 'pk'))
     if not versions:
         raise ValidationError('Нет утверждённых версий для выгрузки. Сначала утвердите версию коэффициентов.')
@@ -36,6 +39,7 @@ def export_motivation(connector, manage_connection=True):
  @Resource=N'PortalMotivationCalculation',@LockMode=N'Exclusive',@LockOwner=N'Session',@LockTimeout=0;
  IF @portalLock < 0 THROW 50001,N'Дождитесь завершения расчёта перед выгрузкой',1;""")
         cursor.execute(EMPLOYEE_COLUMNS_SQL)
+        export_assignments(cursor)
         # Parameters never become SQL text. The replacement and the full timeline are atomic.
         tables = ['SubdivisionManagerCoeff', 'SubdivisionMotiveCoeff', 'GoodsMotivation']
         if include_segments:
@@ -66,9 +70,13 @@ def export_motivation(connector, manage_connection=True):
                  row.employee.employee_code, row.employee.full_name)
                 for row in directors for i in range(5))
             coefficient_rows = list(merged_rows(coefficient_rows, 1, [0, 1, 2, 3, 4, 7]))
+            curators=list(CuratorCoefficient.objects.filter(version=version,employee__is_archived=False).select_related('employee','subdivision','goods','variation_calculate'))
+            for row in curators:
+                if not row.employee.assigned_subdivisions().filter(pk=row.subdivision_id).exists():continue
+                coefficient_rows.extend((date_from,row.subdivision.subdivision_key,row.goods.goods_key,'Кураторы',f'K{i}', (row.variation_calculate.variation_name if row.variation_calculate_id else version.fallback_variation or director_variation(row.goods)),getattr(row,f'k{i}'),row.employee.employee_code,row.employee.full_name) for i in range(5))
             if coefficient_rows:
                 cursor.executemany(COEFFICIENT_INSERT, coefficient_rows)
-            good_ids = {row.goods_id for row in coeffs} | {row.goods_id for row in directors} | set(version.coefficients.values_list('goods_id', flat=True))
+            good_ids = {row.goods_id for row in coeffs} | {row.goods_id for row in directors} | {row.goods_id for row in curators} | set(version.coefficients.values_list('goods_id', flat=True))
             good_rows = [(date_from, good.goods_key, good.planning_group_sales, good.group, good.brand) for good in Goods.objects.filter(pk__in=good_ids)]
             if good_rows:
                 cursor.executemany('INSERT INTO DataWH.motivation.GoodsMotivation (Date_, GoodsKey, PGSales, Group_, Brand) VALUES (?, ?, ?, ?, ?)', good_rows)
@@ -76,7 +84,7 @@ def export_motivation(connector, manage_connection=True):
             from .pilot_formula import GLOBAL_SUBDIVISION
             if (any(version.fallback_variation for version in versions) or SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
                     or SubdivisionDirectorCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
-                    or SubdivisionManagerCoeff.objects.filter(version__in=versions).exists()):
+                    or SubdivisionManagerCoeff.objects.filter(version__in=versions).exists() or curators_enabled()):
                 from .calculation_jobs import prepare
                 prepare(cursor)
             # Changes during a remote export must not be labelled as a current export.

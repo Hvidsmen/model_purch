@@ -31,6 +31,7 @@ def failure_message(error, reference):
         numbers = re.findall(r'\((\d{1,6})\)', ' '.join(str(arg) for arg in args[1:]))
         codes.extend('SQL ' + number for number in dict.fromkeys(numbers))
         known = {
+            '50081': 'Для куратора и подразделения не найдены выгруженные ставки. Проверьте назначения, утверждение версии и выгрузку коэффициентов.',
             '102': 'Ошибка синтаксиса SQL при подготовке процедуры или задания.',
             '207': 'SQL Server не распознал имя колонки в процедуре.',
             '319': 'Ошибка синтаксиса SQL рядом с WITH при подготовке процедуры.',
@@ -209,7 +210,7 @@ def prepare(cursor, variant='main'):
                                   'DataWH.motivation.' + view_name, changed, flags=re.I)
     if not references:
         raise ValidationError('В процедуре не найден справочник для ограничения расчёта подразделением Д-Москва. Расчёт не запущен.')
-    from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff, GlobalCoeffVersion, MotivationExportLog
+    from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff, CuratorCoefficient, GlobalCoeffVersion, MotivationExportLog
     from .formula_defaults import TABLE_SQL, patch_defaults
     from .pilot_formula import GLOBAL_SUBDIVISION, patch_calculation
     cursor.execute(TABLE_SQL)
@@ -222,9 +223,10 @@ def prepare(cursor, variant='main'):
     exported_defaults = [item.get('fallback_variation') for item in previous_export.snapshot.get('versions', [])] if previous_export else []
     configured_default = remote_mode > 0 or any(exported_defaults) or GlobalCoeffVersion.objects.filter(status='approved').exclude(fallback_variation='').exists()
     changed, _ = patch_defaults(changed, required=configured_default)
+    from .curators import enabled as curators_enabled
     global_default = remote_mode == 2 or GLOBAL_SUBDIVISION in exported_defaults or GlobalCoeffVersion.objects.filter(status='approved', fallback_variation=GLOBAL_SUBDIVISION).exists()
     if (global_default or SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
-            or SubdivisionDirectorCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()):
+            or SubdivisionDirectorCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists() or curators_enabled()):
         changed = patch_calculation(changed)
     from .first_quarter_inputs import patch as patch_first_quarter_inputs
     changed = patch_first_quarter_inputs(changed)
@@ -263,6 +265,8 @@ def prepare(cursor, variant='main'):
     changed = use_prepared_sales(changed,cursor=cursor)
     import logging
     logging.getLogger(__name__).info('Calculation preparation scoped to fact year: %s; variant: %s', performance_marker in changed, variant)
+    from .curator_sql import append_to_procedure
+    changed=append_to_procedure(changed,variant)
     cursor.execute(changed)
 
 

@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from decimal import Decimal
 import re
 
-KINDS=('Политики','Продажи','Директора')
+KINDS=('Политики','Продажи','Директора','Кураторы')
 DEFAULT_RULES=(('group','Политики','HEAT'),('channel','Политики','ДПП'))
 _current=ContextVar('motivation_dimension_exclusions',default=None)
 DIMENSION_MARKER='__MOTIVATION_DIMENSION_SCOPE__'
@@ -12,7 +12,7 @@ DIMENSION_MARKER='__MOTIVATION_DIMENSION_SCOPE__'
 
 def kind_name(value):
     normalized=str(value or '').strip().casefold()
-    return {'политика':'Политики','политики':'Политики','продажи':'Продажи','директор':'Директора','директора':'Директора'}.get(normalized,str(value or '').strip())
+    return {'политика':'Политики','политики':'Политики','продажи':'Продажи','директор':'Директора','директора':'Директора','куратор':'Кураторы','кураторы':'Кураторы'}.get(normalized,str(value or '').strip())
 
 
 def normalize(value,dimension):
@@ -39,6 +39,7 @@ def rule_scope():
 
 def allowed(kind,planning_group,channel=''):
     kind=kind_name(kind)
+    if kind=='Кураторы':kind='Директора'
     values={'group':normalize(planning_group,'group'),'channel':normalize(channel,'channel')}
     return not any(k==kind and values[dimension]==value for dimension,k,value in rules())
 
@@ -49,6 +50,8 @@ def group_sql(expression):
 
 
 def sql_allowed(kind=None,*,type_expression='[ТипКоэф]',group_expression='[ГруппаПлановПродаж]',channel_expression='[Канал]'):
+    if kind is not None and kind_name(kind)=='Кураторы':kind='Директора'
+    if kind is None:type_expression="CASE WHEN "+type_expression+"=N'Кураторы' THEN N'Директора' ELSE "+type_expression+" END"
     clauses=[]
     for dimension,rule_kind,value in sorted(set(rules())):
         if kind is not None and kind_name(kind)!=rule_kind:continue
@@ -62,6 +65,7 @@ def sql_allowed(kind=None,*,type_expression='[ТипКоэф]',group_expression=
 
 
 def channels_changed(kind=None):
+    if kind_name(kind)=='Кураторы':kind='Директора'
     selected=lambda rows:{(k,v) for dimension,k,v in rows if dimension=='channel' and (kind is None or k==kind_name(kind))}
     return selected(rules())!=selected(DEFAULT_RULES)
 

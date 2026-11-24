@@ -7,14 +7,14 @@ from django.core.serializers.json import DjangoJSONEncoder
 from django.db import models, transaction
 from base.access import role_for, ADMIN, MODELER, FINANCIER, DIRECTOR
 from ..models import (GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff,
-    GlobalDirectorCoeff, SubdivisionDirectorCoeff, DiscountSegment, MotivationReview,
+    GlobalDirectorCoeff, SubdivisionDirectorCoeff, CuratorCoefficient, DiscountSegment, MotivationReview,
     MotivationReviewEvent, SalesPlanScenario, Goods, TypeCoeff, SegmentCoeff, VariationCalculate,
-    Subdivision, DirectorEmployee, KindManagerCoeff)
+    Subdivision, DirectorEmployee, CuratorEmployee, KindManagerCoeff)
 from .approval import review_approval, approve_review
 
 PENDING = ('finance_review', 'director_review')
 COEFFICIENT_MODELS = (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff,
-                      GlobalDirectorCoeff, SubdivisionDirectorCoeff, DiscountSegment)
+                      GlobalDirectorCoeff, SubdivisionDirectorCoeff, CuratorCoefficient, DiscountSegment)
 
 
 def label(actor):
@@ -31,8 +31,9 @@ def snapshot(version):
         data[name] = [row for row in data[name] if included(branches.get(row['subdivision_id'], ''), aliases)]
     data['version'] = {'title': version.title, 'effective_from': version.effective_from, 'fallback_variation': version.fallback_variation}
     data['references'] = {model._meta.model_name: list(model.objects.order_by('pk').values()) for model in
-        (Goods, TypeCoeff, SegmentCoeff, VariationCalculate, Subdivision, DirectorEmployee, KindManagerCoeff)}
+        (Goods, TypeCoeff, SegmentCoeff, VariationCalculate, Subdivision, DirectorEmployee, CuratorEmployee, KindManagerCoeff)}
     data['bindings'] = list(DirectorEmployee.subdivisions.through.objects.order_by('pk').values())
+    data['curator_bindings']=list(CuratorEmployee.subdivisions.through.objects.order_by('pk').values())
     return json.loads(json.dumps(data, cls=DjangoJSONEncoder))
 
 
@@ -54,12 +55,12 @@ def cells(data):
     result = {('version_default',): {'scope': 'Вся версия', 'product': 'Формула по умолчанию', 'kind': 'Настройки версии', 'employee': '', 'field': 'Без точной настройки', 'value': data.get('version', {}).get('fallback_variation') or 'Прежнее правило по группе товара'}}
     titles = {'globalcoeff': 'Глобально', 'subdivisioncoeff': 'Подразделение',
               'subdivisionmanagercoeff': 'Поправка руководителя', 'globaldirectorcoeff': 'Директор · глобально',
-              'subdivisiondirectorcoeff': 'Директор', 'discountsegment': 'Сегменты скидок'}
+              'subdivisiondirectorcoeff': 'Директор', 'curatorcoefficient':'Куратор', 'discountsegment': 'Сегменты скидок'}
     for name, title in titles.items():
         for row in data.get(name, []):
             good = refs['goods'].get(row.get('goods_id'), {})
             sub = refs['subdivision'].get(row.get('subdivision_id'), {})
-            employee = refs['directoremployee'].get(row.get('employee_id'), {})
+            employee = refs.get('curatoremployee' if name=='curatorcoefficient' else 'directoremployee',{}).get(row.get('employee_id'), {})
             kind = refs['typecoeff'].get(row.get('type_coeff_id'), {}).get('type_coeff_name', '')
             segment = refs['segmentcoeff'].get(row.get('segment_id'), {}).get('segment_name', '')
             period = refs['kindmanagercoeff'].get(row.get('kind_id'), {}).get('name', '')
@@ -112,7 +113,7 @@ def submit(actor, version_id, plan_id, revision, comment=''):
         current = prepared['summary'].get(key, {}).get('variants', {}).get('current', {})
         if current.get('error'):
             raise ValidationError(f'Не удалось проверить плановую премию: {current["error"]}')
-    for name in ('globalcoeff', 'subdivisioncoeff', 'globaldirectorcoeff', 'subdivisiondirectorcoeff'):
+    for name in ('globalcoeff', 'subdivisioncoeff', 'globaldirectorcoeff', 'subdivisiondirectorcoeff','curatorcoefficient'):
         for row in data[name]:
             fields = ['motivation_coeff'] if 'motivation_coeff' in row else [f'k{i}' for i in range(5)]
             for field in fields:

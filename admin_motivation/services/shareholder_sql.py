@@ -58,6 +58,8 @@ IF EXISTS(
 
 
 def private_sql(definition,mode,run_id):
+    from .curator_sql import strip
+    definition=strip(definition) if definition else definition
     if mode not in ('combined','separate'):raise ValidationError('Неизвестный сценарий.')
     if not definition or MARKER not in definition:raise ValidationError('Сначала обновите существующее задание «Все кварталы 2026»: нужна процедура с подготовленным фактом.')
     suffix='All2026' if mode=='combined' else 'Separate2026'

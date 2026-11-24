@@ -31,7 +31,7 @@ def selection(user, query):
     scope = politician_scope(user)
     if role_for(user, 'motivation') in REPORT_ROLES and not scope:
         raise PermissionDenied
-    allowed = scope['type'] if scope else ['Политики', 'Продажи', 'Директора']
+    allowed = scope['type'] if scope else ['Политики', 'Продажи', 'Директора', 'Кураторы']
     allowed = [allowed] if isinstance(allowed, str) else allowed
     kinds = reports_next.selected_types(query, allowed)
     variant = selected_variant(query)
@@ -45,7 +45,7 @@ def selection(user, query):
         allowed_branches = scope['subdivision'] if isinstance(scope['subdivision'], list) else [scope['subdivision']]
         from .services.subdivision_aliases import mapping, canonical
         aliases = mapping()
-        if any(canonical(branch, aliases) not in allowed_branches for branch in query.getlist('subdivision')):
+        if any((str(branch).casefold() not in {str(v).casefold() for v in allowed_branches}) if scope.get('curator') else canonical(branch,aliases) not in allowed_branches for branch in query.getlist('subdivision')):
             raise PermissionDenied
     for field in ('planning','goods','brand','author','subdivision'):
         if len(query.getlist(field)) > 100 or any(len(value)>255 for value in query.getlist(field)):
@@ -56,7 +56,7 @@ def selection(user, query):
 def data_for(user, execution, query, *, detailed=False):
     scope, kinds, periods = selection(user, query)
     variant = selected_variant(query)
-    if scope and variant == 'separate_2026':
+    if scope and not scope.get('curator') and variant == 'separate_2026':
         from .services.subdivision_aliases import expand, mapping
         scope = {**scope, 'subdivision': expand(scope['subdivision'], mapping())}
     rows, plan_fact, department, sections = [], [], [], []
@@ -126,7 +126,7 @@ def report(request):
     # The combined scenario has one canonical subdivision, while the separate
     # scenario retains each selected original. Validate access before mapping.
     selected = query.getlist('subdivision')
-    if (selected_variant(query) == ALL_2026 and selected
+    if (not (scope and scope.get('curator')) and query.getlist('type')!=['Кураторы'] and selected_variant(query) == ALL_2026 and selected
             and all(value.strip().casefold() in ('д-москва','термотрейд') for value in selected)):
         query.setlist('subdivision', ['Д-Москва'])
     initial = {'name': 'Все кварталы 2026', 'variant': ALL_2026, 'fact_year': 2026, 'mode': 'manual',
@@ -236,12 +236,12 @@ def report(request):
     from .services.annual_accrual import SNAPSHOT_VERSION
     branches = scope['subdivision'] if scope else list(Subdivision.all_objects.values_list('subdivision_key', flat=True))
     branches = [branches] if isinstance(branches, str) else branches
-    if variant == 'separate_2026':
+    if variant == 'separate_2026' and not (scope and scope.get('curator')) and query.getlist('type')!=['Кураторы']:
         from .services.subdivision_aliases import expand, mapping
         branches = [name for name in expand(branches, mapping()) if name.strip().casefold() in ('д-москва','термотрейд')]
-    else:
+    elif not (scope and scope.get('curator')) and query.getlist('type')!=['Кураторы']:
         branches = [name for name in branches if name.strip().casefold() == 'д-москва']
-    kinds = scope['type'] if scope else ['Политики', 'Продажи', 'Директора']
+    kinds = scope['type'] if scope else ['Политики', 'Продажи', 'Директора', 'Кураторы']
     kinds = [kinds] if isinstance(kinds, str) else kinds
     params = query.copy(); params['run'] = '1'; params['export'] = 'xlsx'
     target=query.copy();target['run']='1';target['detail']='1';target.pop('export',None)

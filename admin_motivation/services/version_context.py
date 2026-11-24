@@ -1,4 +1,5 @@
 from datetime import timedelta
+from ..models import CuratorCoefficient
 from base.access import role_for, FINANCIER, can_access
 from django.db.models import Count
 from ..models import GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
@@ -24,9 +25,9 @@ def version_context(request, version_form=None):
     versions = list(GlobalCoeffVersion.objects.order_by('-effective_from', '-pk'))
     approved = sorted([v for v in versions if v.status == 'approved'], key=lambda v: v.effective_from)
     counts = {}
-    for model in (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff):
+    for model in (GlobalCoeff, SubdivisionCoeff, SubdivisionManagerCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff, CuratorCoefficient):
         for row in model.objects.order_by().values('version_id').annotate(n=Count('pk')):
-            counts[row['version_id']] = counts.get(row['version_id'], 0) + row['n'] * (5 if model in (GlobalDirectorCoeff, SubdivisionDirectorCoeff) else 1)
+            counts[row['version_id']] = counts.get(row['version_id'], 0) + row['n'] * (5 if model in (GlobalDirectorCoeff, SubdivisionDirectorCoeff,CuratorCoefficient) else 1)
     for i, version in enumerate(versions):
         next_version = next((v for v in approved if v.effective_from > version.effective_from), None)
         version.effective_until = next_version.effective_from - timedelta(days=1) if next_version and version.status == 'approved' else None

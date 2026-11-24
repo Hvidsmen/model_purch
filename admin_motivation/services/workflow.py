@@ -28,6 +28,8 @@ def export_snapshot():
         'formulas': list(VariationCalculate.objects.order_by('pk').values()),
         'periods': list(KindManagerCoeff.objects.order_by('pk').values()),
     }
+    from .curators import snapshot as curator_snapshot
+    payload['curators']=curator_snapshot()
     payload['fingerprint'] = hashlib.sha256(json.dumps(payload,sort_keys=True,ensure_ascii=False,default=str).encode()).hexdigest()
     return payload
 

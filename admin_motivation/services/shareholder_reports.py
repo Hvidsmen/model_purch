@@ -7,7 +7,7 @@ from .manager_detail import manager_detail_report
 from .motivation_performance import presentation_rows, DEPARTMENT
 from .reports_next import period_code
 
-KINDS={'Политики':'pol','Продажи':'sales','Директора':'dir'}
+KINDS={'Политики':'pol','Продажи':'sales','Директора':'dir','Кураторы':'cur'}
 TITLES={'team':'Премии команды','mine':'Моя премия','detail':'Детальный расчёт','registry':'Реестр','executive':'Обзор для генерального директора'}
 ZERO=Decimal(0)
 
@@ -18,7 +18,7 @@ def records(run,dataset):
             code=period_code(str(row.get('КварталМотивации','')))
             if dataset.startswith('annual_'):code=str(row.get('Квартал',''))
             mode='separate' if run.scenario=='separate' and code in '123' and code else 'combined'
-            if dataset in ('mapping','deals'):mode='combined'
+            if dataset in ('mapping','deals') or dataset.endswith('_cur'):mode='combined'
             if chunk.mode==mode:yield row
 
 
@@ -85,7 +85,7 @@ def data_for(run,query):
         tag=KINDS[kind]
         source=[row for row in records(run,'report_'+tag) if period_code(row['КварталМотивации']) in periods]
         search=query.get('search','').strip().casefold()
-        filtered=[row for row in source if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
+        filtered=[dict(row,ТипКоэф=kind) for row in source if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
         data=manager_detail_report(filtered,currency,performance_rows=source)
         perf=filtered_performance(filtered,records(run,'perf_'+tag))
         contexts={(r['Подразделение'],str(r['Год']),r['КварталМотивации']) for r in filtered}

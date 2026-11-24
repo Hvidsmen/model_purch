@@ -5,7 +5,7 @@ from django.core import signing
 from django.core.exceptions import ValidationError
 from django.db import models, transaction, connection
 from django.utils import timezone
-from ..models import GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff, SalesPlanScenario, MotivationApproval, Goods, Subdivision, TypeCoeff, SegmentCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff
+from ..models import GlobalCoeffVersion, GlobalCoeff, SubdivisionCoeff, SalesPlanScenario, MotivationApproval, Goods, Subdivision, TypeCoeff, SegmentCoeff, GlobalDirectorCoeff, SubdivisionDirectorCoeff, CuratorCoefficient
 from .comparison import compare_plan, proposed_changes
 
 SALT = 'motivation-approval-v1'
@@ -23,6 +23,8 @@ def state_digest(version, plan):
                    (Goods, ('pk', 'planning_group_sales', 'group', 'brand')),
                    (Subdivision, ('pk', 'subdivision_key')),
                    (TypeCoeff, ('pk', 'type_coeff_name')), (SegmentCoeff, ('pk', 'segment_name'))]}}
+    from .curators import snapshot as curator_snapshot
+    payload['curators']=curator_snapshot()
     return hashlib.sha256(json.dumps(payload, default=str, sort_keys=True).encode()).hexdigest()
 
 
@@ -34,7 +36,7 @@ def review_approval(version, plan=None, baseline=None, subdivision=None, changes
     if version.status not in ('draft', 'finance_review', 'director_review'):
         raise ValidationError('Утвердить можно только черновик или набор на проверке.')
     normalized, deleted = proposed_changes(version, subdivision, changes, deleted)
-    if not (version.coefficients.exists() or version.subdivision_coefficients.exists() or GlobalDirectorCoeff.objects.filter(version=version).exists() or SubdivisionDirectorCoeff.objects.filter(version=version).exists()):
+    if not (version.coefficients.exists() or version.subdivision_coefficients.exists() or GlobalDirectorCoeff.objects.filter(version=version).exists() or SubdivisionDirectorCoeff.objects.filter(version=version).exists() or CuratorCoefficient.objects.filter(version=version).exists()):
         raise ValidationError('Нельзя утвердить пустой набор коэффициентов.')
     before_state = state_digest(version, plan)
     summary = {'fallback_formula': version.fallback_variation or 'Прежнее правило по группе товара'}
