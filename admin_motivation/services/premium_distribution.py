@@ -151,7 +151,6 @@ def update(user,pk,revision,changes,*,action='save',addition=None,comment=''):
         if action=='complete':
             if any(b['remaining']!=0 for b in balances(batch.funds,rows)):raise ValidationError('Распределите каждый фонд полностью: остатки должны быть равны нулю.')
             if any(cash(r['amount'])!=0 and not r['author'] for r in rows):raise ValidationError('Нераспределённые суммы нужно назначить сотрудникам.')
-            if any(r['kind']=='Политики' and cash(r['amount'])!=cash(r['original']) and not r['comment'] for r in rows):raise ValidationError('Укажите комментарии к перераспределению политиков.')
             batch.state='completed';batch.completed_at=timezone.now();batch.completed_by=user
     batch.revision+=1;batch.save();event(batch,user,action,comment)
     return batch

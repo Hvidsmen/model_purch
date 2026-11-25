@@ -62,14 +62,16 @@ class DistributionTests(TestCase):
         self.assertEqual(self.client.get(url,{'export':'xlsx'}).status_code,403)
         self.assertEqual(complete.events.get(revision=2).snapshot['state'],'completed')
 
-    def test_new_person_and_comment_required_for_politicians(self):
+    def test_new_person_and_optional_comments_for_politicians(self):
         employee=SalesEmployee.objects.create(full_name='Сидоров',subdivision=self.branch)
         batch=service.update(self.user,self.batch.pk,1,self.changes(),addition={'employee':employee.pk,'kind':'Политики','payment':'quarter'})
         self.batch=batch; change=self.changes();change['pol']['amount']='40';new=batch.rows[-1]['id'];change[new]['amount']='10'
+        change['pol']['amount']='39'
         with self.assertRaises(ValidationError):service.update(self.user,batch.pk,2,change,action='complete')
-        change['pol']['comment']='Распределение обязанностей';change[new]['comment']='Распределение обязанностей'
+        change['pol']['amount']='40'
         completed=service.update(self.user,batch.pk,2,change,action='complete')
         self.assertEqual(completed.state,'completed')
+        self.assertTrue(all(not r['comment'] for r in completed.rows))
 
     def test_finite_cent_precision_and_negative_amounts(self):
         for value in ('NaN','Infinity','1.001','1e999','-1'):
