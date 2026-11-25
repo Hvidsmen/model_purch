@@ -184,13 +184,19 @@ def actual_reports(user, execution, query, *, detailed=False, access_scope=None,
                     'kind': kind, 'period': column['label'], 'code': period_code(column['label']), 'amount': amount,
                     'bonus': Decimal(0), 'currency': currency,
                     'possible': item.get('possible_values', [None] * len(summary['columns']))[index]}
-                if not detailed:
-                    entry['annual_accrual'] = annual.get((item['subdivision'], item['author'], entry['code']),
-                        Decimal(0) if snapshot_options and entry['code'] in ('1','2','3','4') else None)
                 ledger.append(entry)
             # Current Q4/year pilot has no catch-up payments, including exports.
         from .distribution_reporting import apply
         apply(ledger,execution,kind,values,selected_periods(query),product_filtered=any(query.getlist(f) for f in ('planning','goods','brand')))
+        # Distribution may add sales recipients absent from calculation rows.
+        # Enrich after the join so their missing contribution does not erase
+        # the known annual total of the rest of the team.
+        if not detailed:
+            for entry in ledger:
+                if entry['kind'] == kind:
+                    entry['annual_accrual'] = annual.get((entry['subdivision'], entry['author'], entry['code']),
+                        Decimal(0) if snapshot_options and entry['code'] in ('1','2','3','4') else None)
+
 
     for item in ledger:
         item['total'] = item['amount'] + item['bonus']

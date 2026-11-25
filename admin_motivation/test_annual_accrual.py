@@ -13,6 +13,11 @@ from .test_quarter_totals import premium
 
 
 class AnnualAccrualTests(SimpleTestCase):
+    def setUp(self):
+        # These unit tests isolate accrual sources from completed distributions.
+        distribution=patch('admin_motivation.services.distribution_reporting.apply')
+        distribution.start();self.addCleanup(distribution.stop)
+
     @patch('admin_motivation.reports_all_2026.reverse',return_value='/report/')
     @patch('admin_motivation.reports_all_2026.selection',return_value=(None,['Политики'],['2']))
     @patch('admin_motivation.reports_all_2026.reports_next.load_report')
@@ -261,3 +266,31 @@ class AnnualAccrualTests(SimpleTestCase):
         self.assertIn('<directors/>', annual[2])
         self.assertIn('.nodes(', annual[1])
         self.assertNotIn("LIKE N'1 кв%'", annual[1])
+
+
+class MainDistributionAnnualTests(SimpleTestCase):
+    def test_added_sales_recipient_does_not_erase_known_quarter_accrual(self):
+        from types import SimpleNamespace
+        from contextlib import nullcontext
+        from .services.reports_next import actual_reports
+        execution=SimpleNamespace(parameters={'fact_year':2026,'annual_accrual_source':SNAPSHOT_VERSION})
+        query=QueryDict('year=2026&period=1&type=Продажи')
+        data={'period_summary':{'columns':[{'label':'1 квартал'}], 'rows':[
+            {'subdivision':'Д-Москва','author':'Продажи','values':[100]}]},
+            'annual_accrual':[{'Подразделение':'Д-Москва','АвторСделки':'Продажи','Квартал':1,'AnnualAccrual':25}]}
+        def allocated(rows,*args,**kwargs):
+            rows.append({'subdivision':'Д-Москва','author':'Новый сотрудник','kind':'Продажи','code':'1',
+                'period':'1 квартал','amount':Decimal(0),'bonus':Decimal(0),'currency':'USD','unallocated':False})
+        with patch('admin_motivation.services.reports_next.restrict',return_value=(None,['Продажи'],'1')),patch(
+                'admin_motivation.services.reports_next.load_report',return_value=data),patch(
+                'admin_motivation.services.distribution_reporting.apply',side_effect=allocated):
+            ledger=actual_reports(Mock(),execution,query)
+        self.assertEqual(ledger['rows'][0]['annual_accrual'],25)
+        self.assertEqual(ledger['rows'][1]['annual_accrual'],0)
+        from .services.annual_accrual import total
+        self.assertEqual(total(ledger['rows']),25)
+        self.assertEqual(ledger['total'],100)
+
+    def test_legacy_missing_accrual_remains_unknown(self):
+        from .services.annual_accrual import total
+        self.assertIsNone(total([{'code':'1','annual_accrual':Decimal(25)},{'code':'1','annual_accrual':None}]))
