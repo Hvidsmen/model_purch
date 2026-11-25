@@ -8,7 +8,7 @@ class PremiumDistribution(models.Model):
     year = models.PositiveIntegerField()
     period = models.PositiveSmallIntegerField(choices=[(1,'1 квартал'),(2,'2 квартал'),(3,'3 квартал'),(4,'4 квартал'),(5,'Закрытие года')])
     currency = models.CharField(max_length=3, choices=[('USD','USD'),('RUB','RUB')])
-    state = models.CharField(max_length=12, default='draft', choices=[('draft','В работе'),('completed','Завершено')])
+    state = models.CharField(max_length=12, default='draft', choices=[('draft','В работе'),('completed','Завершено'),('archived','В архиве'),('deleted','Удалено')])
     revision = models.PositiveIntegerField(default=1)
     funds = models.JSONField(default=list)
     rows = models.JSONField(default=list)
@@ -19,7 +19,7 @@ class PremiumDistribution(models.Model):
     completed_at = models.DateTimeField(null=True)
 
     class Meta:
-        constraints = [models.UniqueConstraint(fields=['subdivision','year','period'], name='unique_distribution_period')]
+        constraints = [models.UniqueConstraint(fields=['subdivision','year','period'], condition=models.Q(state__in=['draft','completed']), name='unique_distribution_period')]
         ordering = ['-year','-period','subdivision_id']
 
 

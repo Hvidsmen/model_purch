@@ -43,7 +43,17 @@ def latest_calculation(variant):
 def index(request):
     allowed=service.branches(request.user)
     can_edit=role_for(request.user,'motivation') in (ADMIN,DIRECTOR,BRANCH_DIRECTOR)
-    batches=PremiumDistribution.objects.select_related('subdivision','execution')
+    is_admin=role_for(request.user,'motivation')==ADMIN
+    archived=request.GET.get('archive')=='1'
+    batches=PremiumDistribution.objects.select_related('subdivision','execution').filter(state='archived') if archived else PremiumDistribution.objects.select_related('subdivision','execution').filter(state__in=['draft','completed'])
+    if request.method=='POST' and request.POST.get('action') in ('delete_draft','archive'):
+        try:
+            batch=get_object_or_404(PremiumDistribution,pk=int(request.POST.get('batch','0')))
+            service.retire(request.user,batch.pk,int(request.POST.get('revision','0')),request.POST['action'],request.POST.get('reason',''))
+            messages.success(request,'Распределение перенесено в архив и больше не применяется.' if request.POST['action']=='archive' else 'Черновик удалён. Можно создать новое распределение за этот период.')
+        except (ValidationError,ValueError) as exc:
+            messages.error(request,'; '.join(exc.messages) if isinstance(exc,ValidationError) else 'Некорректная версия.')
+        return redirect('motivation_distributions')
     if allowed is not None:batches=batches.filter(subdivision__subdivision_key__in=allowed)
     form=StartForm(request.POST or None,user=request.user) if can_edit else None
     can_confirm=role_for(request.user,'motivation') in (ADMIN,DIRECTOR)
@@ -81,7 +91,7 @@ def index(request):
                 return redirect('motivation_distribution_detail',pk=batch.pk)
             except (ValidationError,IntegrityError) as exc:
                 form.add_error(None,'Распределение уже создано.' if isinstance(exc,IntegrityError) else exc)
-    return render(request,'admin_motivation/distribution/index.html',{'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
+    return render(request,'admin_motivation/distribution/index.html',{'can_edit_distributions':can_edit,'is_admin':is_admin,'archived':archived,'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
 
 
 def snapshot_for(batch,user,version):
@@ -105,6 +115,7 @@ def export(request,batch,snapshot,revision):
     sheet.append(['Распределение премий',batch.year,batch.get_period_display(),batch.subdivision.subdivision_key,snapshot['currency'],'Версия',revision])
     sheet.append(['Ссылка на зафиксированный отчёт',url])
     sheet.append(['Расчёт',snapshot['source']['run_id'],'Общий множитель',snapshot['source'].get('workflow',{}).get('coefficient','1')])
+    if batch.state in ('archived','deleted'):sheet.cell(1,9,'АРХИВ: распределение больше не применяется')
     headers=['Подразделение','Год','Период','Вид мотивации','Тип выплаты','Сотрудник','По расчёту','После распределения','Изменение','Валюта','Комментарий','Вес продаж']
     sheet.append(headers)
     for row in snapshot['rows']:
