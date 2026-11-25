@@ -83,11 +83,11 @@ class DistributionArchiveTests(TestCase):
     def test_index_post_and_archive_list(self):
         url=reverse('motivation_distributions')
         with patch('admin_motivation.premium_distribution_views.latest_calculation',return_value=None):
-            self.assertContains(self.client.get(url),'Подтвердить удаление')
+            self.assertContains(self.client.get(url,{'year':self.batch.year,'period':self.batch.period}),'Подтвердить удаление')
             response=self.client.post(url,{'action':'archive','batch':self.batch.pk,'revision':1,'reason':'Отмена'})
             self.assertEqual(response.status_code,302)
-            self.assertNotContains(self.client.get(url),'Подтвердить удаление')
-            self.assertContains(self.client.get(url,{'archive':1}),'В архиве')
+            self.assertNotContains(self.client.get(url,{'year':self.batch.year,'period':self.batch.period}),'Подтвердить удаление')
+            self.assertContains(self.client.get(url,{'archive':1,'year':self.batch.year,'period':self.batch.period}),'Архив')
             finance=User.objects.create_user('retire-finance');finance.groups.add(Group.objects.get(name=FINANCIER))
             self.client.force_login(finance)
             response=self.client.post(url,{'action':'delete_draft','batch':self.batch.pk,'revision':2,'reason':'Отмена'})

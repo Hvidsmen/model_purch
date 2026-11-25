@@ -47,18 +47,24 @@ def index(request):
     archived=request.GET.get('archive')=='1'
     batches=PremiumDistribution.objects.select_related('subdivision','execution').filter(state='archived') if archived else PremiumDistribution.objects.select_related('subdivision','execution').filter(state__in=['draft','completed'])
     if request.method=='POST' and request.POST.get('action') in ('delete_draft','archive'):
+        return_period={}
         try:
             batch=get_object_or_404(PremiumDistribution,pk=int(request.POST.get('batch','0')))
+            return_period={'year':batch.year,'period':batch.period}
             service.retire(request.user,batch.pk,int(request.POST.get('revision','0')),request.POST['action'],request.POST.get('reason',''))
             messages.success(request,'Распределение перенесено в архив и больше не применяется.' if request.POST['action']=='archive' else 'Черновик удалён. Можно создать новое распределение за этот период.')
         except (ValidationError,ValueError) as exc:
             messages.error(request,'; '.join(exc.messages) if isinstance(exc,ValidationError) else 'Некорректная версия.')
-        return redirect('motivation_distributions')
+        return redirect(reverse('motivation_distributions')+('?' + urlencode(return_period) if return_period else ''))
     if allowed is not None:batches=batches.filter(subdivision__subdivision_key__in=allowed)
-    form=StartForm(request.POST or None,user=request.user) if can_edit else None
+    form=StartForm(request.POST if request.method=='POST' and request.POST.get('action','') not in ('confirm_coefficients','confirm_coefficient') else None,user=request.user) if can_edit else None
     can_confirm=role_for(request.user,'motivation') in (ADMIN,DIRECTOR)
     from .services.closing_bulk import workspace
     closing=workspace(request,can_confirm)
+    selection=closing['closing_selection']
+    selected=selection.cleaned_data if selection.is_valid() else {}
+    selected_year=selected.get('year',timezone.localdate().year)
+    selected_period=selected.get('period',4)
     if closing['closing_count'] is not None:
         messages.success(request,f"Множители зафиксированы: {closing['closing_count']} подразделений.")
         return redirect(reverse('motivation_distributions')+'?'+urlencode({'year':closing['closing_year'],'period':closing['closing_period']})+'#closing-coefficients')
@@ -88,14 +94,27 @@ def index(request):
             try:
                 from .services.execution_tracking import latest_for_report
                 period=form.cleaned_data['period']
+                if 'year' in request.POST and int(request.POST['year'])!=selected_year:
+                    raise ValidationError('Период изменился. Обновите страницу.')
                 from .services.main_quarter_mode import enabled
                 variant='main' if enabled() or period in (4,5) else 'all_2026'
                 execution=latest_for_report(latest_calculation(variant),variant=variant,persist=True)
                 if execution is None or execution.state!='completed':raise ValidationError('Нет завершённого расчёта для этого периода. Сначала запустите расчёт.')
+                if 'year' in request.POST and execution.parameters.get('fact_year')!=selected_year:
+                    raise ValidationError('Нет завершённого расчёта за выбранный год.')
                 batch=service.create(request.user,execution=execution,**form.cleaned_data)
                 return redirect('motivation_distribution_detail',pk=batch.pk)
             except (ValidationError,IntegrityError) as exc:
                 form.add_error(None,'Распределение уже создано.' if isinstance(exc,IntegrityError) else exc)
+    from .services.distribution_workspace import registry
+    if role_for(request.user,'motivation')=='Финансист' and not archived:
+        batches=batches.filter(state='completed')
+    if closing.get('closing_grid'):
+        for name,field in closing['closing_grid'].fields.items():
+            if name.startswith('coefficient_'):field.widget.attrs['form']='pw-coefficients'
+    period_batches=list(batches.filter(year=selected_year,period=selected_period))
+    registry_rows,registry_counts=registry(request.user,selected_year,selected_period,period_batches,closing.get('closing_grid'),archived)
+    closing.update(registry_rows=registry_rows,registry_counts=registry_counts,selected_year=selected_year,selected_period=selected_period,skip_motivation_workflow=True)
     return render(request,'admin_motivation/distribution/index.html',{**closing,'can_edit_distributions':can_edit,'is_admin':is_admin,'archived':archived,'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
 
 
