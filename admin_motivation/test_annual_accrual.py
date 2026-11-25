@@ -294,3 +294,18 @@ class MainDistributionAnnualTests(SimpleTestCase):
     def test_legacy_missing_accrual_remains_unknown(self):
         from .services.annual_accrual import total
         self.assertIsNone(total([{'code':'1','annual_accrual':Decimal(25)},{'code':'1','annual_accrual':None}]))
+
+
+class OverviewQuarterAccrualTests(SimpleTestCase):
+    def test_overview_sums_accrual_by_kind_and_quarter_without_changing_payout(self):
+        from .services.shareholder_reports import macro_rows
+        rows=[{'subdivision':'Москва','kind':kind,'code':code,'possible':Decimal(100),'total':Decimal(80),'annual_accrual':value}
+              for kind,code,value in [('Политики','1',Decimal(20)),('Политики','1',Decimal(5)),('Политики','2',Decimal(7)),('Политики','5',None),('Продажи','1',Decimal(12))]]
+        result=macro_rows({'rows':rows},['1','2','5'])
+        policies=next(row for row in result if row['kind']=='Политики')
+        self.assertEqual([cell['annual_accrual'] for cell in policies['cells']],[Decimal(25),Decimal(7),None])
+        self.assertEqual(policies['total'],320)
+        self.assertEqual(next(row for row in result if row['kind']=='Продажи')['cells'][0]['annual_accrual'],12)
+        rows[0]['annual_accrual']=None
+        policies=next(row for row in macro_rows({'rows':rows},['1','2','5']) if row['kind']=='Политики')
+        self.assertIsNone(policies['cells'][0]['annual_accrual'])
