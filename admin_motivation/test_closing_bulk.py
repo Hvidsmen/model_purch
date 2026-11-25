@@ -33,7 +33,7 @@ class ClosingBulkTests(TestCase):
         with patch('admin_motivation.premium_distribution_views.latest_calculation',return_value=None):
             response=self.client.get(self.url,{'year':2025,'period':4})
         self.assertContains(response,'Other')
-        self.assertContains(response,'Зафиксировать множители всех подразделений')
+        self.assertContains(response,'Подтвердить множители подразделений')
         self.assertContains(response,'value="1"')
         self.assertEqual(self.client.post(self.url,self.post_data()).status_code,302)
         for branch in (self.branch,self.other):
