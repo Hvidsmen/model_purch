@@ -9,6 +9,7 @@ from ..models import GlobalCoeffVersion, SalesPlanScenario, Goods, Subdivision, 
 from .reports import load_report, number
 
 CATALOG = {
+    'overview': ('Обзор премий', 'Фактические премии по подразделениям и видам мотивации, план и выполнение.'),
     'mine': ('Моя премия', 'Своя премия, доплаты и объяснение расчёта.'),
     'team': ('Премии команды', 'Премии сотрудников доступных подразделений.'),
     'registry': ('Реестр премий к выплате', 'Рассчитанные суммы по сотрудникам и периодам для проверки финансистом.'),
@@ -34,6 +35,7 @@ def available(user):
         keys.append('registry')
     if role not in REPORT_ROLES:
         keys.append('executive')
+    if role in (ADMIN,DIRECTOR,FINANCIER):keys.append('overview')
     catalog = {key: CATALOG[key] for key in keys}
     if role in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
         catalog['mine'] = ('Премия сотрудника' if role == BRANCH_DIRECTOR else 'Моя премия/Премия сотрудников', 'Премия выбранного сотрудника в рамках доступных подразделений и видов мотивации.')

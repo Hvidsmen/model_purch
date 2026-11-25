@@ -42,7 +42,7 @@ def report_navigation(user, kind, query):
     if query.get('run') == '1':
         shared['run'] = '1'
     captions = {'mine': 'Моя премия', 'team': 'Команда', 'registry': 'Реестр',
-                'executive': 'Сравнение плана', 'detail': 'Детальный расчёт', 'deals': 'Сделки'}
+                'overview':'Обзор премий', 'executive': 'Сравнение плана', 'detail': 'Детальный расчёт', 'deals': 'Сделки'}
     if role_for(user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
         captions['mine'] = reports.available(user)['mine'][0]
     return [{'key': key, 'label': captions[key], 'active': key == kind,
@@ -51,6 +51,13 @@ def report_navigation(user, kind, query):
 
 
 def workbook(kind, data, metadata, query=None, title=None):
+    if kind=='overview':
+        from .services.shareholder_reports import macro_rows
+        from .shareholder_views import plain_excel
+        periods=reports.selected_periods(query)
+        rows=macro_rows(data,periods)
+        headers=['Подразделение','Вид мотивации',*[('Год' if code=='5' else code+' квартал')+' · '+metric for code in periods for metric in ('Возможная','По расчёту')],'Всего возможно','Всего по расчёту']
+        return plain_excel(title or 'Обзор премий',headers,[[row['subdivision'],row['kind'],*[value for cell in row['cells'] for value in (cell['possible'],cell['total'])],row['possible'],row['total']] for row in rows],metadata)
     if kind=='executive':
         from .services.executive_summary_excel import workbook as executive_table_workbook
         return executive_table_workbook(data,metadata,title=title)
@@ -287,7 +294,7 @@ def report(request, kind):
                 data = reports.planned_budget(selected, plan, query)
             else:
                 with reports.current_run(selected):
-                    data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'), access_scope=preview_scope, **({'period_authors_only':True} if kind=='team' else {}))
+                    data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'), access_scope=preview_scope, **({'period_authors_only':True} if kind in ('team','overview') else {}))
                 if kind in ('team', 'registry') and query.get('search', '').strip():
                     from decimal import Decimal
                     term = query['search'].strip().casefold().replace('ё', 'е')
@@ -346,6 +353,13 @@ def report(request, kind):
     branch_label = ', '.join(selected_subs) if len(selected_subs) <= 2 else f'Подразделений: {len(selected_subs)}'
     from .services.reports_next_presenter import present
     presentation = present(kind, data, data if kind != 'executive' else None, query.getlist('period') or ['all'])
+    overview={}
+    if kind=='overview' and data:
+        from .services.shareholder_reports import macro_rows
+        from .services.reports_next_presenter import performance_matrix
+        overview={'macro_rows':macro_rows(data,reports.selected_periods(query)),
+            'macro_bases':performance_matrix([row for row in data['plan_fact'] if row['formula']=='Подразделение(Глобально)'],presentation['period_columns'])}
+
     if kind == 'mine' and data:
         from .services.reports_next_presenter import personal_details
         presentation.update(personal_details(data, query))
@@ -363,7 +377,7 @@ def report(request, kind):
     all_types = scope.get('type', []) if scope else ['Политики', 'Продажи', 'Директора', 'Кураторы']
     all_types = [all_types] if isinstance(all_types, str) else all_types
     from .services.product_filters import fields as product_fields
-    return render(request, 'admin_motivation/reports_next/report.html', {'kind': kind, 'title': reports.available(request.user)[kind][0],
+    return render(request, 'admin_motivation/reports_next/report.html', {**overview,'kind': kind, 'title': reports.available(request.user)[kind][0],
         'premium_rule_outdated': bool(kind != 'executive' and selected and (selected.parameters.get('premium_amount_quarters') != [int(code) for code,label in reports.period_options() if code not in ('all','5')] or selected.parameters.get('transition_rule') != RULE_VERSION)),
         'employee_report': employee_report, 'employee_filters': employee_filters, 'employee_authors': employee_authors,
         'admin_preview': admin_preview, 'preview_accounts': preview_accounts, 'preview_user': preview_user, 'catalog': reports.available(request.user), 'data': detail if kind == 'detail' else data, 'ledger': data,
