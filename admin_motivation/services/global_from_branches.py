@@ -88,11 +88,13 @@ def preview(version,scenario,groups):
             rate=core.get((branch,item.planning_group_sales,item.group,item.brand,GROUPS[key],index))
             if rate is None:missing.add((GROUPS[key],branch,str(item),f'K{index}'));continue
         else:
-            # No assigned recipient/rate means no local fund, matching the local budget.
+            # Sum available recipients; absent matrices are not zero-valued rates.
             recipients,exact=staff_missing[key]
             if any((branch,person,good) not in exact for sub,person in recipients if sub==branch):
-                missing.add((GROUPS[key],branch,str(item),f'K{index} · не все ставки сотрудников'));continue
-            rate=staff[key].get((branch,good),[ZERO]*5)[index]
+                missing.add((GROUPS[key],branch,str(item),f'K{index} · пропущены отсутствующие ставки сотрудников'))
+            if (branch,good) not in staff[key]:
+                missing.add((GROUPS[key],branch,str(item),f'K{index}'));continue
+            rate=staff[key][(branch,good)][index]
         target=totals[(key,good,index)]
         target[0]+=weight*rate;target[1]+=weight
         target[2].append({'branch':branch,'weight':str(weight),'rate':str(rate),'rate_percent':rate*100})
@@ -103,9 +105,10 @@ def preview(version,scenario,groups):
         target=targets.get((key,good,index));before=Decimal(str(getattr(target,f'k{index}') if key=='directors' and target else target.motivation_coeff if target else 0)) if target else None
         after=(numerator/denominator).quantize(Decimal('.000001'),rounding=ROUND_HALF_UP) if denominator else None
         if after is not None and not -1<=after<=1:raise ValidationError('Суммарная ставка получателей превышает диапазон −100…100%. Сборка отменена.')
-        if denominator and target is None:missing_targets.append(f'{GROUPS[key]} · {goods[good]} · K{index}')
+        if denominator and target is None:
+            missing_targets.append(f'{GROUPS[key]} · {goods[good]} · K{index}');after=None
         rows.append({'kind':GROUPS[key],'group':key,'goods':good,'label':str(goods[good]),'segment':index,'target':target.pk if target else None,'before':str(before) if before is not None else None,'after':str(after) if after is not None else None,'before_percent':before*100 if before is not None else None,'after_percent':after*100 if after is not None else None,'weight':str(denominator),'parts':parts})
-    ready=any(value[1]>0 for value in totals.values()) and not (missing or unknown or negative or missing_targets)
+    ready=any(value[1]>0 for value in totals.values()) and not (unknown or negative) and any(r['after'] is not None for r in rows)
     digest=hashlib.sha256(json.dumps({'rows':rows,'policy':policy_signature(),'version':version.pk,'revision':version.revision,'scenario':scenario.pk,'groups':groups},sort_keys=True,default=str).encode()).hexdigest()
     return {'rows':rows,'missing':sorted(missing),'unknown':sorted(unknown),'negative':sorted(negative),'missing_targets':missing_targets,'ready':ready,'digest':digest,'line_count':line_count,'changed':sum(r['after'] is not None and (r['before'] is None or Decimal(r['after'])!=Decimal(r['before'])) for r in rows)}
 
