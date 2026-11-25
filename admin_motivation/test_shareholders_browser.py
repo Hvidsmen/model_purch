@@ -17,7 +17,7 @@ class ShareholderBrowserTests(TestCase):
         from playwright.sync_api import sync_playwright,expect
         static=Path(settings.BASE_DIR)/'admin_motivation/static/admin_motivation'
         css='\n'.join((static/name).read_text() for name in ('reports.css','motivation_ux.css','reports_next.css','reports_performance.css','shareholders.css','shareholder_cards.css','manager_report_headers.css'))
-        js='\n'.join((static/name).read_text() for name in ('reports_next.js','report_team_tabs.js','report_matrix_header.js','manager_detail.js','manager_report_headers.js'))
+        js='\n'.join((static/name).read_text() for name in ('reports_next.js','report_team_tabs.js','report_matrix_header.js','manager_detail.js','manager_report_headers.js','product_filters.js'))
         responses=[(kind,self.client.get(self.url(kind),{'type':'Политики','author':'Иванов','period':['1','5']})) for kind in ('team','mine','detail','deals','registry','executive')]
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None,headless=True)
@@ -33,6 +33,25 @@ class ShareholderBrowserTests(TestCase):
                     expect(page.locator('nav.sh-nav [aria-current=page]')).to_have_text(response.context['title'])
                     expect(page.locator('input[name=period][value="1"]')).to_be_checked()
                     expect(page.locator('input[name=period][value="5"]')).to_be_checked()
+                    expect(page.locator('.nr-filter-panel')).to_be_visible()
+                    expect(page.locator('select[name=subdivision]')).to_have_count(0)
+                    if kind=='team':
+                        periods=page.locator('.next-periods')
+                        periods.locator('summary').click()
+                        periods.locator('[data-period-clear]').click()
+                        expect(periods.locator('input:checked')).to_have_count(0)
+                        periods.locator('[data-period-all]').click()
+                        expect(periods.locator('input:checked')).to_have_count(5)
+                        periods.locator('summary').click()
+                        product=page.locator('.next-products').first
+                        product.locator('summary').click()
+                        product.locator('[data-product-search]').fill('Нет такого значения')
+                        self.assertTrue(product.locator('input[type=checkbox]').first.evaluate('el=>el.closest("label").hidden'))
+                        product.locator('[data-product-search]').fill('')
+                        product.locator('input[type=checkbox]').first.check()
+                        self.assertNotEqual(product.locator('summary').inner_text(),'Все доступные')
+                        product.locator('summary').click()
+
                     self.assertTrue(all(str(self.run.pk) in href for href in page.locator('nav.sh-nav a').evaluate_all('els=>els.map(el=>el.getAttribute("href"))')))
                     if kind=='executive':
                         expect(page.locator('select[name=author]')).to_have_count(0)
