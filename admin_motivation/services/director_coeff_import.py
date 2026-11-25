@@ -265,3 +265,37 @@ def director_coefficient_template(version):
     book.save(stream)
     book.close()
     return stream.getvalue()
+
+
+def director_coverage(version,blocks=None):
+    """Report every active director, missing assignments/rates and exact file matches."""
+    from .active_directors import bindings
+    from .subdivision_aliases import mapping,canonical
+    from django.db.models import Count
+    employees=list(DirectorEmployee.objects.filter(is_archived=False).order_by('full_name','pk'))
+    lookup=defaultdict(list)
+    for employee in employees:lookup[identity(employee.full_name)].append(employee)
+    assigned=defaultdict(set)
+    for item in bindings():assigned[item['employee_id']].add(item['subdivision'])
+    aliases=mapping();counts=defaultdict(int)
+    for employee,branch,count in SubdivisionDirectorCoeff.objects.filter(version=version).order_by().values_list('employee_id','subdivision__subdivision_key').annotate(count=Count('pk')):
+        counts[employee,canonical(branch,aliases)]+=count
+    mentioned=set();unmatched=[]
+    if blocks is not None:
+        names=sorted({name for names,entries in blocks for name in names},key=identity)
+        for name in names:
+            matches=lookup.get(identity(name),[])
+            if len(matches)==1:mentioned.add(matches[0].pk);continue
+            tokens=identity(name).replace('.','').split()
+            suggestions=[e.full_name for e in employees if identity(e.full_name).split() and identity(e.full_name).split()[0] in tokens]
+            unmatched.append({'name':name,'ambiguous':len(matches)>1,'suggestions':suggestions})
+    rows=[]
+    for employee in employees:
+        branches=sorted(assigned[employee.pk]);missing=[b for b in branches if not counts[employee.pk,b]]
+        rows.append({'employee':employee,'branches':branches,'missing_rates':missing,
+            'in_file':employee.pk in mentioned if blocks is not None else None})
+    return {'rows':rows,'total':len(rows),'assigned':sum(bool(row['branches']) for row in rows),
+        'without_assignments':[r for r in rows if not r['branches']],
+        'without_rates':[r for r in rows if r['missing_rates']],
+        'missing_from_file':[r for r in rows if r['in_file'] is False],
+        'unmatched':unmatched,'file_checked':blocks is not None}
