@@ -13,7 +13,7 @@ SALT='global-from-branches-v1'
 
 class SelectionForm(forms.Form):
     plan=forms.ModelChoiceField(queryset=SalesPlanScenario.objects.filter(is_deleted=False),label='План продаж для весов')
-    groups=forms.MultipleChoiceField(choices=list(service.GROUPS.items()),initial=['policies','sales'],widget=forms.CheckboxSelectMultiple,label='Виды коэффициентов')
+    groups=forms.MultipleChoiceField(choices=list(service.GROUPS.items()),initial=['policies','sales','curators'],widget=forms.CheckboxSelectMultiple,label='Виды коэффициентов')
     def __init__(self,*args,**kwargs):
         super().__init__(*args,**kwargs)
         self.fields['groups'].choices=[(key,label) for key,label in service.GROUPS.items()]
