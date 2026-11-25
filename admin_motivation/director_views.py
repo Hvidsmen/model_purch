@@ -248,7 +248,7 @@ def director_coefficients(request, local=False, version_form=None):
 @audit_request
 def director_coeff_import(request):
     from .models import GlobalCoeffVersion
-    from .services.director_coeff_import import import_director_coefficients
+    from .services.director_coeff_import import import_director_coefficients,read_director_blocks,director_coverage
     values = request.POST if request.method == 'POST' else request.GET
     try:
         version_id = int(values.get('version', ''))
@@ -270,9 +270,18 @@ def director_coeff_import(request):
         response['Content-Disposition'] = f'attachment; filename="director-coefficients-v{version.pk}.xlsx"'
         return response
     errors = []
+    coverage=director_coverage(version)
+    checked_only=False
     if request.method == 'POST':
         try:
-            result = import_director_coefficients(request.FILES.get('file'), version.pk)
+            upload=request.FILES.get('file')
+            blocks=read_director_blocks(upload)
+            coverage=director_coverage(version,blocks)
+            if request.POST.get('action_button')=='check_directors':
+                checked_only=True
+                return render(request,'admin_motivation/director_coeff_import.html',{'version':version,'errors':errors,'coverage':coverage,'checked_only':checked_only})
+            upload.seek(0)
+            result = import_director_coefficients(upload, version.pk)
         except ValidationError as error:
             errors = error.messages
         except Exception:
@@ -280,6 +289,8 @@ def director_coeff_import(request):
             logging.getLogger(__name__).exception('Director coefficient import failed for version %s', version.pk)
             errors = ['Не удалось сохранить коэффициенты. Изменения отменены. Проверьте журнал сервера.']
         else:
+            if coverage['missing_from_file']:
+                messages.warning(request,f"В файле отсутствуют активные директора: {len(coverage['missing_from_file'])}. Их прежние ставки сохранены. Полный список доступен при проверке файла.")
             messages.success(request, f'Коэффициенты директоров загружены в «{version}». Директоров: {result["directors"]}; создано: {result["created"]}; обновлено: {result["updated"]}; без изменений: {result["unchanged"]}.')
             return redirect(reverse('global_coeff_admin_motivation') + f'?version={version.pk}')
-    return render(request, 'admin_motivation/director_coeff_import.html', {'version': version, 'errors': errors})
+    return render(request, 'admin_motivation/director_coeff_import.html', {'version': version, 'errors': errors,'coverage':coverage,'checked_only':checked_only})
