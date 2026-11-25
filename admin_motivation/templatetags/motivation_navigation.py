@@ -1,5 +1,5 @@
 from django import template
-from ..models import Subdivision
+from ..services.navigation_subdivisions import navigation_subdivisions
 
 register = template.Library()
 
@@ -7,7 +7,7 @@ register = template.Library()
 @register.simple_tag
 def motivation_subdivisions():
     # Navigation must not depend on the current view's form/table context.
-    return Subdivision.objects.order_by('subdivision_name', 'pk')
+    return navigation_subdivisions()
 
 
 @register.simple_tag(takes_context=True)

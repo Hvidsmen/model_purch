@@ -14,7 +14,8 @@ class ClosingBulkTests(TestCase):
 
     def setUp(self):
         fixtures.ClosingWorkflowTests.setUp(self)
-        self.other=Subdivision.all_objects.create(subdivision_key='Closing Other',subdivision_name='Other',subdivision_global='Other',chanel=self.branch.chanel,merged_into=self.branch)
+        self.other=Subdivision.all_objects.create(subdivision_key='Closing Other',subdivision_name='Other',subdivision_global='Other',chanel=self.branch.chanel)
+        self.merged=Subdivision.all_objects.create(subdivision_key='Thermotrade',subdivision_name='Термотрейд',subdivision_global='TT',chanel=self.branch.chanel,merged_into=self.branch)
         self.client.force_login(self.ceo)
         self.url=reverse('motivation_distributions')
 
@@ -28,10 +29,10 @@ class ClosingBulkTests(TestCase):
         data.update({row['field'].name:'1.25' for row in grid.rows if not row['locked']})
         return data
 
-    def test_period_shows_every_physical_branch_and_confirms_together(self):
+    def test_period_shows_navigation_branches_and_confirms_together(self):
         with patch('admin_motivation.premium_distribution_views.latest_calculation',return_value=None):
             response=self.client.get(self.url,{'year':2025,'period':4})
-        self.assertContains(response,'Closing Other')
+        self.assertContains(response,'Other')
         self.assertContains(response,'Зафиксировать множители всех подразделений')
         self.assertContains(response,'value="1"')
         self.assertEqual(self.client.post(self.url,self.post_data()).status_code,302)
@@ -78,17 +79,15 @@ class ClosingBulkTests(TestCase):
         data=self.post_data();self.client.force_login(self.finance)
         self.assertEqual(self.client.post(self.url,data).status_code,403)
 
-    def test_merged_branch_only_in_collapsed_curator_section(self):
+    def test_list_matches_sidebar_source_and_excludes_merged_branches(self):
+        from .templatetags.motivation_navigation import motivation_subdivisions
         grid=self.grid()
-        self.assertIn(self.branch.pk,[r['branch'].pk for r in grid.main_rows])
-        self.assertNotIn(self.other.pk,[r['branch'].pk for r in grid.main_rows])
-        self.assertIn(self.other.pk,[r['branch'].pk for r in grid.physical_rows])
+        self.assertEqual([r['branch'].pk for r in grid.rows],list(motivation_subdivisions().values_list('pk',flat=True)))
+        self.assertNotIn(self.merged.pk,[r['branch'].pk for r in grid.rows])
         with patch('admin_motivation.premium_distribution_views.latest_calculation',return_value=None):
             response=self.client.get(self.url,{'year':2025,'period':4})
-        html=response.content.decode()
-        section=html[html.index('<h4>Подразделения основного расчёта</h4>'):]
-        main,physical=section.split('<details class="pd-physical-branches"',1)
-        self.assertNotIn('Closing Other',main)
-        self.assertIn('Closing Other',physical)
-        self.assertIn('В общем расчёте:',physical)
-        self.assertIn('style="margin:16px 0"><summary>',physical)
+        self.assertNotContains(response,'Термотрейд')
+        self.assertNotContains(response,'pd-physical-branches')
+        data=self.post_data();data[f'coefficient_{self.merged.pk}']='9'
+        self.assertEqual(self.client.post(self.url,data).status_code,302)
+        self.assertFalse(PeriodMotivationCoefficient.objects.filter(subdivision=self.merged).exists())
