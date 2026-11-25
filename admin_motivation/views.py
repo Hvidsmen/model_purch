@@ -134,6 +134,11 @@ def coefficient_return_route(request, subdivision=None):
 @audit_request
 def gloabal_coeff_action(request):
     action = request.POST.get('action_button')
+    if action=='file_load':
+        from .services.core_coeff_import import has_subdivision_blocks
+        if has_subdivision_blocks(request.FILES.get('myfile')):
+            from .core_coeff_import_views import action as core_action
+            return core_action(request)
     if action in ('preview_core_import','apply_core_import'):
         from .core_coeff_import_views import action as core_action
         return core_action(request)

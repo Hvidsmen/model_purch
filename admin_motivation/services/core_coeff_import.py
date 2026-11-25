@@ -23,7 +23,7 @@ def rate(value):
     except (ValueError,InvalidOperation):raise ValidationError('Ставка должна быть от −100% до 100%, до четырёх знаков в процентах.')
 
 
-def parse(upload):
+def parse(upload, *, with_scope=False):
     content=upload.read(10*1024*1024+1)
     if len(content)>10*1024*1024:raise ValidationError('Файл Excel должен быть не больше 10 МБ.')
     try:
@@ -32,7 +32,7 @@ def parse(upload):
         book=load_workbook(BytesIO(content),read_only=True,data_only=False,keep_links=False)
     except ValidationError:raise
     except Exception as exc:raise ValidationError('Не удалось открыть XLSX-файл.') from exc
-    result=[];found=False
+    result=[];found=False;scope=[]
     try:
         for sheet in book:
             if sheet.max_row>2000 or sheet.max_column>256:raise ValidationError('В шаблоне допускается до 2000 строк и 256 колонок.')
@@ -41,6 +41,7 @@ def parse(upload):
                 if len(row)>3 and norm(row[1])=='группаплановпродаж' and norm(row[2])=='группаerp':header=i;break
             if header is None:continue
             found=True
+            if header==0:raise ValidationError('В этом файле нет списков подразделений над ставками: это глобальный шаблон. Для сверки выберите файл ставок по подразделениям.')
             if header+1>=len(rows):raise ValidationError('Не найдена строка K0–K4.')
             blocks=[];assigned=set()
             for start,value in enumerate(rows[header]):
@@ -62,6 +63,7 @@ def parse(upload):
                     if key in assigned:raise ValidationError(f'Подразделение «{branch}» повторяется в блоках «{kind}».')
                     assigned.add(key)
                 blocks.append((start,kind,branches))
+                scope.append({'kind':kind,'branches':branches})
             if not blocks:raise ValidationError('Не найдены блоки «Политики» / «Продажи».')
             for index,row in enumerate(rows[header+2:],header+3):
                 if not any(v is not None for v in row):continue
@@ -73,20 +75,26 @@ def parse(upload):
                     if any(isinstance(v,str) and v.startswith('=') for v in values):raise ValidationError(f'Строка {index}: замените формулы коэффициентов их значениями.')
                     result.append({'sheet':sheet.title,'row':index,'classification':classification,'kind':kind,'branches':branches,'rates':[rate(v) for v in values]})
             if len(result)>12000:raise ValidationError('Слишком много матриц. Разделите файл.')
-        if not found or not result:raise ValidationError('В файле нет заполненных коэффициентов указанного шаблона.')
-        return result
+        if not found or not result and not with_scope:raise ValidationError('В файле нет заполненных коэффициентов указанного шаблона.')
+        return {'rows':result,'scope':scope} if with_scope else result
     except ValidationError:raise
     except Exception as exc:raise ValidationError('Не удалось прочитать ячейки XLSX. Проверьте структуру шаблона.') from exc
     finally:book.close()
 
 
-def resolve(rows,mappings=None):
+def resolve(rows,mappings=None,scope=None):
     mappings=mappings or {};goods=list(Goods.objects.order_by('pk'));branches=list(Subdivision.all_objects.order_by('subdivision_key'))
     good_map={};branch_map={}
     for good in goods:good_map.setdefault(tuple(norm(v) for v in (good.planning_group_sales,good.group,good.brand)),[]).append(good)
     for branch in branches:branch_map.setdefault(norm(branch.subdivision_key),[]).append(branch)
     resolved=[];errors=[];missing_goods={};missing_branches={};seen=set()
     identities={};branch_names={}
+    for block in scope or []:
+        for name in block['branches']:
+            if name not in branch_names:branch_names[name]=str(len(branch_names))
+            bid=branch_names[name];options=branch_map.get(norm(name),[]);chosen=mappings.get('branch_'+bid)
+            branch=next((b for b in branches if str(b.pk)==str(chosen)),None) if chosen else options[0] if len(options)==1 else None
+            if not branch:missing_branches[bid]=name
     for row in rows:
         key=' | '.join(row['classification'])
         if key not in identities:identities[key]=str(len(identities))
@@ -105,14 +113,15 @@ def resolve(rows,mappings=None):
             if identity in seen:errors.append(f'Повторная матрица: {branch.subdivision_key}, {good}, {row["kind"]}.');continue
             seen.add(identity)
             resolved.append({**row,'goods_id':good.pk,'branch_id':branch.pk,'branch':branch.subdivision_key,'goods_label':str(good)})
-    return {'rows':resolved,'errors':errors,'missing_goods':missing_goods,'missing_branches':missing_branches,'goods_options':goods,'branch_options':branches,'ready':bool(resolved) and not errors and not missing_goods and not missing_branches}
+    coverage=branch_coverage(scope if scope is not None else rows,branches,mappings,branch_names)
+    return {'coverage':coverage,'rows':resolved,'errors':errors,'missing_goods':missing_goods,'missing_branches':missing_branches,'goods_options':goods,'branch_options':branches,'ready':bool(resolved) and not errors and not missing_goods and not missing_branches}
 
 
 @transaction.atomic
-def apply(version_id,revision,rows,mappings,formula_id):
+def apply(version_id,revision,rows,mappings,formula_id,*,scope=None):
     version=lock_editable(version_id)
     if str(version.revision)!=str(revision):raise ValidationError('Версия изменилась после просмотра. Загрузите файл заново.')
-    plan=resolve(rows,mappings)
+    plan=resolve(rows,mappings,scope)
     if not plan['ready']:raise ValidationError('Сначала сопоставьте все подразделения и товарные матрицы; устраните повторения.')
     formula=VariationCalculate.objects.filter(pk=formula_id).first()
     if not formula:raise ValidationError('Выберите формулу для новых ячеек.')
@@ -142,3 +151,44 @@ def apply(version_id,revision,rows,mappings,formula_id):
     if created:SubdivisionCoeff.objects.bulk_create(created,batch_size=100)
     if updated:SubdivisionCoeff.objects.bulk_update(updated,['motivation_coeff'],batch_size=100)
     return {'created':len(created),'updated':len(updated),'matrices':len(plan['rows'])}
+
+
+
+def branch_coverage(scope,branches,mappings,branch_names):
+    known={}
+    for branch in branches:known.setdefault(norm(branch.subdivision_key),[]).append(branch)
+    present=set();unknown=set();by_kind={kind:set() for kind in ('Политики','Продажи')}
+    for block in scope:
+        for name in block['branches']:
+            candidates=known.get(norm(name),[])
+            branch=candidates[0] if len(candidates)==1 else None
+            bid=branch_names.get(name)
+            chosen=mappings.get('branch_'+str(bid)) if bid is not None else None
+            if chosen:branch=next((b for b in branches if str(b.pk)==str(chosen)),None)
+            if branch:
+                present.add(branch.pk);by_kind[block['kind']].add(branch.pk)
+            else:unknown.add(name)
+    return {'directory_count':len(branches),'file_count':len({norm(name) for block in scope for name in block['branches']}),
+        'matched':[b.subdivision_key for b in branches if b.pk in present],
+        'missing_from_file':[b.subdivision_key for b in branches if b.pk not in present],
+        'unknown_in_file':sorted(unknown),
+        'by_kind':[{'kind':kind,'missing':[b.subdivision_key for b in branches if b.pk not in ids]} for kind,ids in by_kind.items()]}
+
+
+def has_subdivision_blocks(upload):
+    if not upload or not str(upload.name).lower().endswith('.xlsx'):return False
+    book=None
+    try:
+        if upload.size>10*1024*1024:return True
+        content=upload.read()
+        with zipfile.ZipFile(BytesIO(content)) as archive:
+            if sum(item.file_size for item in archive.infolist())>100*1024*1024:return True
+        book=load_workbook(BytesIO(content),read_only=True,data_only=True,keep_links=False)
+        for sheet in book:
+            for index,row in enumerate(sheet.iter_rows(max_row=min(sheet.max_row,2000),max_col=256,values_only=True)):
+                if index>0 and len(row)>3 and norm(row[1])=='группаплановпродаж' and norm(row[2])=='группаerp' and any(norm(v) in ('политики','продажи') for v in row):return True
+        return False
+    except Exception:return False
+    finally:
+        if book:book.close()
+        upload.seek(0)
