@@ -27,7 +27,7 @@ class DistributionStageLayoutTests(TestCase):
         self.assertNotContains(response,'Политики · Квартальная премия')
         self.assertNotContains(response,'<th>Комментарий</th>')
         html=response.content.decode()
-        self.assertIn('<details open class="pd-fund"',html)
+        self.assertIn('<section class="pd-people"',html)
         self.assertLess(html.index('Добавить сотрудника продаж'),html.index('class="pd-grid"'))
         self.assertContains(response,'Зафиксировать премии продаж')
 

@@ -137,12 +137,14 @@ def detail(request,pk):
                 messages.success(request,'Множитель подтверждён. Открыт этап распределения продаж по весам.')
                 return redirect('motivation_distribution_detail',pk=pk)
             action=request.POST.get('action','save')
+            creating=action=='add_new_person'
+            if creating:action='save'
             if action=='add_person':
                 if not request.POST.get('new_employee'):raise ValidationError('Выберите сотрудника для добавления.')
                 action='save'
             changes={r['id']:{'amount':request.POST.get('amount_'+r['id'],''),'comment':request.POST.get('comment_'+r['id'],''),'weight':request.POST.get('weight_'+r['id'],r.get('weight','0'))} for r in batch.rows}
             batch=service.update(request.user,pk,int(request.POST.get('revision','0')),changes,action=action,
-                addition={'employee':request.POST.get('new_employee',''),'kind':request.POST.get('new_kind',''),'payment':request.POST.get('new_payment','')},comment=request.POST.get('reason',''))
+                addition={'employee':request.POST.get('new_employee','') if not creating else '', 'create':creating,'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':request.POST.get('new_weight','0'),'kind':request.POST.get('new_kind',''),'payment':request.POST.get('new_payment','')},comment=request.POST.get('reason',''))
             messages.success(request,'Распределение завершено. Excel и ссылка готовы для передачи финансистам.' if batch.state=='completed' else 'Изменения сохранены.')
             return redirect('motivation_distribution_detail',pk=pk)
         except (ValidationError,ValueError) as exc:
@@ -172,7 +174,7 @@ def detail(request,pk):
             if row['kind']=='Продажи' and row.get('employee_id'):existing.setdefault(row['employee_id'],set()).add(row['payment'])
         employees=[employee for employee in employees if not payments.issubset(existing.get(employee.pk,set()))]
     display_rows=[{**r,'edit_amount':editable and r['kind']=='Политики' and stage=='policies' or editable and stage=='legacy','edit_weight':editable and r['kind']=='Продажи' and stage=='sales'} for r in visible_rows]
-    return render(request,'admin_motivation/distribution/detail.html',{'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
+    return render(request,'admin_motivation/distribution/detail.html',{'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'person_input':{'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':request.POST.get('new_weight','0'),'employee':request.POST.get('new_employee',''),'payment':request.POST.get('new_payment','')},'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
         'can_reopen':not version and batch.state=='completed' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),
         'report_url':url,'mail_url':'mailto:?'+urlencode({'subject':f'Премии: {batch.subdivision} · {batch.year} · {batch.get_period_display()}', 'body':'Распределение премий завершено. Отчёт и Excel: '+url}),
         'employees':employees,'history':batch.events.select_related('actor'),'payments':service.PAYMENTS.items(),'kinds':service.KINDS})
