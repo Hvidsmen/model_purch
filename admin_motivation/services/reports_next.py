@@ -33,9 +33,9 @@ def available(user):
         keys.insert(0, 'team')
     if role in (ADMIN, FINANCIER, BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN,CURATOR):
         keys.append('registry')
+    if role in (ADMIN,DIRECTOR,FINANCIER):keys.append('overview')
     if role not in REPORT_ROLES:
         keys.append('executive')
-    if role in (ADMIN,DIRECTOR,FINANCIER):keys.append('overview')
     catalog = {key: CATALOG[key] for key in keys}
     if role in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR):
         catalog['mine'] = ('Премия сотрудника' if role == BRANCH_DIRECTOR else 'Моя премия/Премия сотрудников', 'Премия выбранного сотрудника в рамках доступных подразделений и видов мотивации.')
