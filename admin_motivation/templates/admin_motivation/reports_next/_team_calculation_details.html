@@ -14,6 +14,7 @@
 <details><summary>По видам мотивации</summary><div class="nr-period-types">{% for item in card.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.total|report_cash }} {{ ledger.currency }}</b></div>{% endfor %}</div></details>
 {% for row in presentation.department_performance_matrix.rows %}{% for cell in row.cells %}{% if forloop.counter == period_index %}{% include 'admin_motivation/reports_next/_team_plan_card.html' with performance=cell %}{% endif %}{% endfor %}{% endfor %}
 </article>{% endwith %}{% endfor %}
+{% if shareholder_report %}<article class="nr-team-period-card"><h3>Доплата за кварталы</h3><span class="nr-period-eyebrow">По расчёту · {{ ledger.currency }}</span><div class="nr-period-amount">{{ presentation.bonus|report_cash }}</div><p class="nr-muted">В акционерском сценарии доплата за предыдущие кварталы не начисляется.</p></article>{% endif %}
 <article class="nr-team-period-card nr-period-total">
 <h3>Итого за выбранные периоды</h3><span class="nr-period-eyebrow">Всего по расчёту · {{ ledger.currency }}</span><div class="nr-period-amount">{{ presentation.total|report_cash }}</div>
 <div class="nr-period-secondary"><div><span class="nr-period-eyebrow">Возможная премия</span><strong>{{ presentation.possible|report_cash }} {{ ledger.currency }}</strong></div><div><span class="nr-period-eyebrow">В годовую премию</span><strong>{{ presentation.annual_accrual|report_cash }} {{ ledger.currency }}</strong></div></div>
