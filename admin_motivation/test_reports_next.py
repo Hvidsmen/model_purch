@@ -36,6 +36,28 @@ class ReportsNextTests(TestCase):
             'plan_version': fixture.scenario.source_version, 'quarter_share': '80', 'year_share': '20', 'payout_threshold': '.8'},
             export_snapshot=export_snapshot())
 
+    def test_actual_overview_uses_cards_and_exports_same_total(self):
+        from contextlib import nullcontext
+        data=manager_detail_report(detail_rows())
+        url=reverse('motivation_report_next',args=['overview'])
+        with patch('admin_motivation.services.reports_next.current_run',return_value=nullcontext()),patch(
+                'admin_motivation.services.reports_next.load_report',return_value=data):
+            response=self.client.get(url,{'run':'1','period':'all','type':'Политики'})
+            self.assertEqual(response.status_code,200)
+            self.assertFalse(response.context['error'])
+            self.assertContains(response,'Обзор премий')
+            self.assertContains(response,'sh-premium-card')
+            self.assertContains(response,'sh-overview-total')
+            self.assertNotContains(response,'Два варианта плановой мотивации')
+            exported=self.client.get(url,{'run':'1','period':'all','type':'Политики','export':'xlsx'})
+            self.assertEqual(exported.status_code,200)
+            from openpyxl import load_workbook
+            from io import BytesIO
+            book=load_workbook(BytesIO(b''.join(exported.streaming_content)))
+            self.assertEqual(book['Отчёт'].cell(1,2).value,'Вид мотивации')
+            self.assertEqual(sum(row[-1] for row in book['Отчёт'].iter_rows(min_row=2,values_only=True)),float(response.context['ledger']['total']))
+            book.close();exported.close()
+
     def test_single_catalog_replaces_version_tabs(self):
         response = self.client.get(reverse('motivation_reports'))
         self.assertNotContains(response, 'Текущие отчёты')
