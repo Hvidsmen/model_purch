@@ -31,7 +31,23 @@ class PeriodAuthorSqlTests(SimpleTestCase):
     def test_current_q4_authors_not_q1_history_or_other_branch(self):
         self.assertEqual(self.query(['4','5'],'X'),{'Q4 zero paid','Zero net'})
         self.assertEqual(self.query(['5'],'X'),{'Q4 zero paid','Zero net'})
-        self.assertEqual(self.query(None,'X'),{'Q4 zero paid','Zero net'})
+        self.assertEqual(self.query(None,'X'),{'Q1 only','Q4 zero paid','Zero net'})
+
+    def test_main_early_quarters_keep_their_own_fact_authors(self):
+        self.assertEqual(self.query(['1'],'X'),{'Q1 only'})
+        self.assertEqual(self.query(['2'],'X'),set())
+        for quarter in (2,3):
+            self.db.execute('INSERT INTO fact VALUES (?,?,?,?,?,?,?,?,?)',('M','Q1 only','Политики',2026,quarter,'RAC','AC','X',0))
+            self.assertEqual(self.query([str(quarter)],'X'),{'Q1 only'})
+        self.assertEqual(quarters(['2'],'main'),[2])
+        self.assertEqual(quarters(['5'],'main'),[4])
+
+    def test_pilot_mode_still_limits_main_to_q4(self):
+        from django.test import override_settings
+        with override_settings(MOTIVATION_MAIN_ALL_QUARTERS=False):
+            self.assertEqual(self.query(['1'],'X'),set())
+            self.assertEqual(self.query(None,'X'),{'Q4 zero paid','Zero net'})
+            self.assertEqual(quarters(['2'],'main'),[])
 
     def test_cohort_respects_product_filters_and_any_physical_fact_presence(self):
         self.assertEqual(self.query(['4']),{'Q4 zero paid','Zero net','Other goods'})

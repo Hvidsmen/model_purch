@@ -7,13 +7,15 @@ TABLES={'main':'DataWH.motivation.Fact','all_2026':'DataWH.motivation.FactAll202
 
 def quarters(periods,variant='main'):
     if variant not in TABLES:raise ValidationError('Неизвестный источник авторов периода.')
-    codes=list(periods) if periods else (['4','5'] if variant=='main' else ['1','2','3'] if variant=='separate_2026' else ['1','2','3','4','5'])
+    from .main_quarter_mode import periods as main_periods
+    available=list(main_periods()) if variant=='main' else ['1','2','3'] if variant=='separate_2026' else list('12345')
+    codes=list(periods) if periods else available
     if any(code not in ('1','2','3','4','5') for code in codes):raise ValidationError('Неизвестный период авторов.')
     # These report namespaces use 2026 annual accrual from Q4 only. Q2's
     # cumulative eligibility check does not turn its author cohort into Q1+Q2.
     selected={int(code) for code in codes if code!='5'}
     if '5' in codes:selected.add(4)
-    if variant=='main':selected&={4}
+    if variant=='main':selected&={int(code) for code in available if code!='5'}
     if variant=='separate_2026':selected&={1,2,3}
     return sorted(selected)
 
