@@ -1,0 +1,12 @@
+{% extends 'admin_motivation/base.html' %}
+{% block content %}
+<section class="content">
+<h1>Справочник подразделений</h1>
+<p>Подразделения портала. Исходный ключ — SubdivisionKey; единица расчёта мотивации — SubdivisionName.</p>
+<form method="get" class="mb-3"><label for="subdivision-search">Поиск по ключу, названию или каналу</label><div class="d-flex gap-2"><input class="form-control" id="subdivision-search" name="q" value="{{ search }}"><button class="btn btn-primary">Найти</button><a class="btn btn-outline-primary" href="{% url 'motivation_subdivision_directory' %}">Сбросить</a></div></form>
+<p>Найдено: {{ subdivisions|length }}. <a href="{% url 'motivation_exclusion_directory' %}">Справочник исключений</a></p>
+<div style="overflow:auto"><table class="table table-bordered align-middle"><thead><tr><th>SubdivisionKey</th><th>SubdivisionName</th><th>Канал</th><th>Участие в мотивации</th><th>Объединено с</th></tr></thead><tbody>
+{% for subdivision in subdivisions %}<tr><td>{{ subdivision.subdivision_key }}</td><td>{{ subdivision.subdivision_name }}</td><td>{{ subdivision.chanel.chanel_name }}</td><td>{% if subdivision.excluded_from_motivation %}Исключено справочником{% else %}Участвует{% endif %}</td><td>{{ subdivision.merged_into.subdivision_name|default:'—' }}</td></tr>{% empty %}<tr><td colspan="5">Подразделения не найдены.</td></tr>{% endfor %}
+</tbody></table></div>
+</section>
+{% endblock %}
