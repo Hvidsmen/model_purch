@@ -67,7 +67,7 @@ def index(request):
     selected_period=selected.get('period',4)
     if closing['closing_count'] is not None:
         messages.success(request,f"Множители зафиксированы: {closing['closing_count']} подразделений.")
-        return redirect(reverse('motivation_distributions')+'?'+urlencode({'year':closing['closing_year'],'period':closing['closing_period']})+'#closing-coefficients')
+        return redirect(reverse('motivation_distributions')+'?'+urlencode({'year':closing['closing_year'],'period':closing['closing_period'],'branch_filter':request.POST.getlist('branch_filter')},doseq=True)+'#closing-coefficients')
     coefficients=PeriodMotivationCoefficient.objects.select_related('subdivision','confirmed_by').order_by('-year','-period')
     if allowed is not None:coefficients=coefficients.filter(subdivision__subdivision_key__in=allowed)
     initial={'year':timezone.localdate().year,'coefficient':1,'revision':0}
@@ -114,6 +114,17 @@ def index(request):
             if name.startswith('coefficient_'):field.widget.attrs['form']='pw-coefficients'
     period_batches=list(batches.filter(year=selected_year,period=selected_period))
     registry_rows,registry_counts=registry(request.user,selected_year,selected_period,period_batches,closing.get('closing_grid'),archived)
+    filter_source=request.POST if request.method=='POST' and request.POST.get('action')=='confirm_coefficients' else request.GET
+    selected_branches=list(dict.fromkeys(value for value in filter_source.getlist('branch_filter') if value.isdigit()))
+    options={str(row['branch'].pk):row['branch'].subdivision_name for row in registry_rows}
+    if selected_branches:
+        registry_rows=[row for row in registry_rows if str(row['branch'].pk) in selected_branches]
+        registry_counts={'waiting':sum(not row['record'] for row in registry_rows),
+            'working':sum(bool(row['batch'] and row['batch'].state=='draft') for row in registry_rows),
+            'completed':sum(bool(row['batch'] and row['batch'].state=='completed') for row in registry_rows)}
+    closing.update(branch_filter_options=[{'value':value,'label':label,'selected':value in selected_branches} for value,label in options.items()],
+        selected_branches=selected_branches,branch_filter_caption=', '.join(options[value] for value in selected_branches if value in options) if 0<len(selected_branches)<=2 else f'Выбрано: {len(selected_branches)}' if selected_branches else 'Все подразделения',
+        branch_filter_query=''.join('&branch_filter='+value for value in selected_branches))
     closing.update(registry_rows=registry_rows,registry_counts=registry_counts,selected_year=selected_year,selected_period=selected_period,skip_motivation_workflow=True)
     return render(request,'admin_motivation/distribution/index.html',{**closing,'can_edit_distributions':can_edit,'is_admin':is_admin,'archived':archived,'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
 

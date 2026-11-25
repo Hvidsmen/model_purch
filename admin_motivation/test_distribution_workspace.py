@@ -74,6 +74,17 @@ class DistributionWorkspaceTests(TestCase):
                 self.assertEqual(values['period'],'4')
                 self.assertTrue(values['token'])
                 self.assertEqual(page.locator('form[method=get] [name=period]').count(),1)
+                menu=page.locator('.pw-branch-filter')
+                menu.locator('summary').click()
+                menu.locator('[data-pw-branch-search]').fill('Несуществующее подразделение')
+                self.assertTrue(menu.locator('input[type=checkbox]').first.evaluate('el=>el.closest("label").hidden'))
+                menu.locator('[data-pw-branch-search]').fill('')
+                menu.locator('[data-pw-branch-all]').click()
+                self.assertGreater(menu.locator('input:checked').count(),0)
+                menu.locator('[data-pw-branch-clear]').click()
+                self.assertEqual(menu.locator('input:checked').count(),0)
+                menu.locator('summary').click()
+
                 page.locator('.pw-grid tbody').evaluate('body=>{const row=body.rows[0];for(let i=0;i<50;i++)body.append(row.cloneNode(true));}')
                 for position in (0,1800,100000):
                     page.evaluate('position=>window.scrollTo(0,position)',position)

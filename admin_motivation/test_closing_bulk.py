@@ -91,3 +91,18 @@ class ClosingBulkTests(TestCase):
         data=self.post_data();data[f'coefficient_{self.merged.pk}']='9'
         self.assertEqual(self.client.post(self.url,data).status_code,302)
         self.assertFalse(PeriodMotivationCoefficient.objects.filter(subdivision=self.merged).exists())
+
+    def test_branch_filter_limits_rows_counters_and_confirmation(self):
+        with patch('admin_motivation.premium_distribution_views.latest_calculation',return_value=None):
+            response=self.client.get(self.url,{'year':2025,'period':4,'branch_filter':[str(self.other.pk)]})
+        self.assertEqual([row['branch'].pk for row in response.context['registry_rows']],[self.other.pk])
+        self.assertEqual(response.context['registry_counts']['waiting'],1)
+        self.assertEqual(len(response.context['branch_filter_options']),2)
+        grid=response.context['closing_grid']
+        data={'year':2025,'period':4,'branch_filter':[str(self.other.pk)],'action':'confirm_coefficients',
+              'token':grid.initial['token'],f'coefficient_{self.other.pk}':'0.9'}
+        response=self.client.post(self.url,data)
+        self.assertEqual(response.status_code,302)
+        self.assertIn('branch_filter='+str(self.other.pk),response.url)
+        self.assertEqual(str(PeriodMotivationCoefficient.objects.get(subdivision=self.other).coefficient),'0.9000')
+        self.assertFalse(PeriodMotivationCoefficient.objects.filter(subdivision=self.branch).exists())
