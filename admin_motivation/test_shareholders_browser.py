@@ -17,8 +17,11 @@ class ShareholderBrowserTests(TestCase):
         from playwright.sync_api import sync_playwright,expect
         static=Path(settings.BASE_DIR)/'admin_motivation/static/admin_motivation'
         css='\n'.join((static/name).read_text() for name in ('reports.css','motivation_ux.css','reports_next.css','reports_performance.css','shareholders.css','shareholder_cards.css','manager_report_headers.css'))
-        js='\n'.join((static/name).read_text() for name in ('reports_next.js','report_team_tabs.js','report_matrix_header.js','manager_detail.js','manager_report_headers.js','product_filters.js'))
-        responses=[(kind,self.client.get(self.url(kind),{'type':'Политики','author':'Иванов','period':['1','5']})) for kind in ('team','mine','detail','deals','registry','executive')]
+        js='\n'.join((static/name).read_text() for name in ('reports_next.js','report_team_tabs.js','report_matrix_header.js','manager_detail.js','manager_report_headers.js','product_filters.js','premium_overview.js'))
+        from .models import ShareholderSnapshot
+        source=self.run.chunks.get(dataset='report_pol').payload
+        ShareholderSnapshot.objects.create(calculation=self.run,dataset='report_dir',mode='combined',sequence=0,payload=source)
+        responses=[(kind,self.client.get(self.url(kind),{'type':['Политики','Директора'] if kind=='executive' else ['Политики'],'author':'Иванов','period':['1','5']})) for kind in ('team','mine','detail','deals','registry','executive')]
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None,headless=True)
             try:
@@ -57,8 +60,14 @@ class ShareholderBrowserTests(TestCase):
                         expect(page.locator('select[name=author]')).to_have_count(0)
                         self.assertGreater(page.locator('.sh-premium-card').count(),0)
                         expect(page.locator('.sh-executive table')).to_have_count(0)
-                        page.locator('.sh-premium-card summary').first.click()
-                        expect(page.locator('.sh-premium-period').first).to_be_visible()
+                        expect(page.locator('[data-overview-tab][aria-selected=true]')).to_have_text('Политики')
+                        expect(page.locator('[data-overview-kind="Политики"] .sh-premium-card').first).to_be_visible()
+                        total=page.locator('.sh-overview-total').inner_text()
+                        page.locator('[data-overview-tab="Директора"]').click()
+                        expect(page.locator('[data-overview-kind="Директора"]')).to_be_visible()
+                        expect(page.locator('[data-overview-kind="Политики"]')).to_be_hidden()
+                        self.assertEqual(page.locator('.sh-overview-total').inner_text(),total)
+                        self.assertEqual(page.locator('.sh-premium-card details').count(),0)
                         page.set_viewport_size({'width':390,'height':844})
                         self.assertTrue(page.locator('.sh-executive').evaluate('el=>el.scrollWidth<=el.clientWidth+1'))
                         page.screenshot(path='/tmp/shareholders-cards-mobile.png',full_page=True)
