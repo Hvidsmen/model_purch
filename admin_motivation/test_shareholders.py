@@ -92,6 +92,7 @@ class SnapshotTests(TestCase):
         with patch('admin_motivation.conns.connect_database',side_effect=AssertionError('No live SQL')):
             totals=[]
             for kind in reports.TITLES:
+                if kind=='deals':continue
                 response=self.client.get(self.url(kind),{'type':'Политики','author':'Иванов','period':['1','5']})
                 self.assertEqual(response.status_code,200)
                 totals.append(response.context['ledger']['total'])
@@ -100,6 +101,26 @@ class SnapshotTests(TestCase):
                 self.assertEqual(export.status_code,200)
                 book=load_workbook(BytesIO(b''.join(export.streaming_content)));self.assertGreater(len(book.sheetnames),1);book.close();export.close()
             self.assertEqual(totals,[Decimal(180)]*5)
+
+    def test_closed_deals_uses_snapshot_filters_totals_and_excel(self):
+        deal={'ClosedDate':'2026-04-05','SourceBranch':'Д-Москва','SourceRow':'1','DocumentNumber':'DOC-1','ProductCode':'ERP-1',
+              'OriginalAuthor':'Исходный автор','AssignedAuthor':'Иванов','Weight_':'0.25','AllocatedUSD':'25.50','AllocatedRUB':'2550',
+              'ГруппаПлановПродаж':'RAC','ГруппаТоваров':'AC','Марка':'Brand'}
+        ShareholderSnapshot.objects.create(calculation=self.run,dataset='deals',mode='combined',sequence=0,payload=[deal])
+        with patch('admin_motivation.services.shareholder_reports.data_for',side_effect=AssertionError('Deals must not rebuild premiums')):
+            response=self.client.get(self.url('deals'),{'period':'2','author':'Иванов'})
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(response.context['deals_usd'],Decimal('25.50'))
+            self.assertEqual(response.context['deals_rub'],Decimal('2550'))
+            self.assertContains(response,'DOC-1')
+            self.assertContains(response,'Исходный автор')
+            self.assertNotContains(response,'name="type"')
+            self.assertEqual(self.client.get(self.url('deals'),{'period':'1'}).context['deals_page'].paginator.count,0)
+            self.assertEqual(self.client.get(self.url('deals'),{'author':'Другой'}).context['deals_page'].paginator.count,0)
+            exported=self.client.get(self.url('deals'),{'period':'2','export':'xlsx'})
+            book=load_workbook(BytesIO(b''.join(exported.streaming_content)))
+            self.assertEqual(book['Отчёт'].cell(2,8).value,25.5)
+            book.close();exported.close()
 
     def test_macro_removes_author_dimension_but_other_filters_remain(self):
         response=self.client.get(self.url('executive'),{'author':'someone else','type':'Политики','period':'1'})

@@ -18,7 +18,7 @@ class ShareholderBrowserTests(TestCase):
         static=Path(settings.BASE_DIR)/'admin_motivation/static/admin_motivation'
         css='\n'.join((static/name).read_text() for name in ('reports.css','motivation_ux.css','reports_next.css','reports_performance.css','shareholders.css','shareholder_cards.css','manager_report_headers.css'))
         js='\n'.join((static/name).read_text() for name in ('reports_next.js','report_team_tabs.js','report_matrix_header.js','manager_detail.js','manager_report_headers.js'))
-        responses=[(kind,self.client.get(self.url(kind),{'type':'Политики','author':'Иванов','period':['1','5']})) for kind in ('team','mine','detail','registry','executive')]
+        responses=[(kind,self.client.get(self.url(kind),{'type':'Политики','author':'Иванов','period':['1','5']})) for kind in ('team','mine','detail','deals','registry','executive')]
         with sync_playwright() as pw:
             browser=pw.chromium.launch(executable_path=os.environ.get('PLAYWRIGHT_CHROMIUM_EXECUTABLE') or None,headless=True)
             try:
@@ -29,7 +29,7 @@ class ShareholderBrowserTests(TestCase):
                     page.set_content(html)
                     feature=page.locator('.sh-page').evaluate('el=>el.outerHTML')
                     page.set_content('<style>body{font:14px system-ui,sans-serif;background:#f5f6fa;color:#243650;margin:20px}a{color:#6551ae}.btn{display:inline-block;padding:8px 12px;border:1px solid #6551ae;border-radius:5px}'+css+'</style>'+feature+'<script>'+js+'</script>')
-                    expect(page.locator('nav.sh-nav a')).to_have_count(5)
+                    expect(page.locator('nav.sh-nav a')).to_have_count(6)
                     expect(page.locator('nav.sh-nav [aria-current=page]')).to_have_text(response.context['title'])
                     expect(page.locator('input[name=period][value="1"]')).to_be_checked()
                     expect(page.locator('input[name=period][value="5"]')).to_be_checked()
