@@ -1,0 +1,10 @@
+<nav class="pd-actions" aria-label="Разделы распределения">
+{% if stage == 'sales' %}
+<button type="button" class="btn btn-primary" aria-current="page">Продажи</button>
+<button name="action" value="sales_complete" class="btn btn-outline-primary">Политики → зафиксировать продажи и перейти</button>
+{% else %}
+<button name="action" value="return_sales" class="btn btn-outline-primary">← Продажи</button>
+<button type="button" class="btn btn-primary" aria-current="page">Политики</button>
+{% endif %}
+</nav>
+<p class="pd-source">При переходе введённые данные сохраняются. После изменения продаж зафиксируйте их повторно. Ребаланс политиков сохранится.</p>
