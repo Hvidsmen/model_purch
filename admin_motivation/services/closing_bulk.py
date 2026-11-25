@@ -17,7 +17,7 @@ class PeriodForm(forms.Form):
 
 
 def records(year,period):
-    branches=list(Subdivision.all_objects.order_by('subdivision_key','pk'))
+    branches=list(Subdivision.all_objects.select_related('merged_into').order_by('subdivision_key','pk'))
     values={r.subdivision_id:r for r in PeriodMotivationCoefficient.objects.select_related('confirmed_by').filter(year=year,period=period)}
     locked=set(PremiumDistribution.objects.filter(year=year,period=period,state__in=['draft','completed']).values_list('subdivision_id',flat=True))
     return branches,values,locked
@@ -33,6 +33,13 @@ class GridForm(forms.Form):
             record=values.get(branch.pk);name=f'coefficient_{branch.pk}'
             self.fields[name]=forms.DecimalField(min_value=0,max_digits=12,decimal_places=4,initial=record.coefficient if record else Decimal(1),disabled=branch.pk in locked,label=str(branch),widget=forms.TextInput(attrs={'inputmode':'decimal','aria-label':f'Множитель {branch}'}))
             self.rows.append({'branch':branch,'record':record,'locked':branch.pk in locked,'field':self[name]})
+        active=set(Subdivision.objects.values_list('pk',flat=True))
+        self.main_rows=[row for row in self.rows if row['branch'].pk in active]
+        self.physical_rows=[row for row in self.rows if row['branch'].pk not in active]
+
+
+    @property
+    def physical_errors(self):return any(row['field'].errors for row in self.physical_rows)
 
 
 @transaction.atomic
