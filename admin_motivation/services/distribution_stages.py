@@ -53,6 +53,8 @@ def update(batch,user,changes,action,addition,comment):
     from .premium_distribution import cash,balances,eligible_employees,event
     if batch.state!='draft':raise ValidationError('Распределение завершено. Изменения закрыты.')
     workflow=deepcopy(batch.source['workflow']);stage=workflow['stage']
+    if addition and (addition.get('employee') or addition.get('create')) and (stage!='sales' or addition.get('kind')!='Продажи'):
+        raise ValidationError('Добавление сотрудников доступно на этапе продаж.')
     if action not in ('save','sales_complete','complete'):raise ValidationError('Неизвестный переход этапа.')
     if action=='sales_complete' and stage!='sales' or action=='complete' and stage!='policies':
         raise ValidationError('Сначала завершите предыдущий этап.')
@@ -68,13 +70,29 @@ def update(batch,user,changes,action,addition,comment):
             fund=next(f for f in batch.funds if f['kind']==row['kind'] and f['payment']==row['payment'])
             if cash(fund['amount'])>=0 and amount<0:raise ValidationError('Сумма не может быть отрицательной.')
             row.update(amount=str(amount),comment=note)
-    if addition and addition.get('employee'):
+    if addition and (addition.get('employee') or addition.get('create')):
         if stage!='sales' or addition.get('kind')!='Продажи':raise ValidationError('Добавление сотрудников доступно на этапе продаж.')
-        employee=eligible_employees(batch).filter(pk=addition['employee']).first()
         payment=addition.get('payment')
-        if not employee or not any(f['kind']=='Продажи' and f['payment']==payment for f in batch.funds):raise ValidationError('Выберите сотрудника и фонд продаж.')
+        if not any(f['kind']=='Продажи' and f['payment']==payment for f in batch.funds):raise ValidationError('Выберите фонд продаж.')
+        if addition.get('create'):
+            from ..models import SalesEmployee
+            from django.db import IntegrityError,transaction
+            name=' '.join(str(addition.get('full_name','')).split())
+            personnel=str(addition.get('personnel_number','')).strip()
+            if not name or len(name)>255:raise ValidationError('Укажите ФИО сотрудника (до 255 знаков).')
+            if len(personnel)>64:raise ValidationError('Табельный номер: до 64 знаков.')
+            names=SalesEmployee.objects.filter(subdivision=batch.subdivision).values_list('full_name',flat=True)
+            if any(' '.join(value.split()).casefold()==name.casefold() for value in names):
+                raise ValidationError('Такой сотрудник уже есть в подразделении. Выберите его из справочника; архивного сотрудника сначала восстановите.')
+            employee=SalesEmployee(full_name=name,personnel_number=personnel,subdivision=batch.subdivision)
+            try:
+                with transaction.atomic():
+                    employee.full_clean();employee.save()
+            except IntegrityError:raise ValidationError('Сотрудник уже создан. Обновите страницу и выберите его из списка.')
+        else:employee=eligible_employees(batch).filter(pk=addition['employee']).first()
+        if not employee:raise ValidationError('Выберите сотрудника подразделения, работавшего в этом периоде.')
         if any(r.get('employee_id')==employee.pk and r['kind']=='Продажи' and r['payment']==payment for r in rows):raise ValidationError('Сотрудник уже есть в этом фонде.')
-        rows.append({'id':uuid.uuid4().hex,'employee_id':employee.pk,'author':employee.full_name,'kind':'Продажи','payment':payment,'original':'0.00','amount':'0.00','weight':'0','comment':''})
+        rows.append({'id':uuid.uuid4().hex,'employee_id':employee.pk,'author':employee.full_name,'kind':'Продажи','payment':payment,'original':'0.00','amount':'0.00','weight':str(weight(addition.get('weight','0'))),'comment':''})
     if stage=='sales':
         allocate(batch.funds,rows,require_complete=action=='sales_complete')
         if action=='sales_complete':workflow.update(stage='policies',sales_by=user.pk,sales_at=timezone.now().isoformat())
