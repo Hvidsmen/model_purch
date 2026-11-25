@@ -1,0 +1,18 @@
+<section class="pd-step" id="closing-coefficients"><h2>1. Общий множитель мотивации</h2>
+{% if coefficient_form %}{{ coefficient_form.errors }}
+<p>Выберите период, укажите множители подразделений и зафиксируйте всю таблицу одной кнопкой. Для новых значений предлагается 1,0. Множитель применяется ко всем четырём видам мотивации.</p>
+<form method="get">{{ closing_selection.as_p }}<button class="btn btn-outline-primary">Показать подразделения</button></form>
+{% if closing_grid %}
+<h3 style="margin-top:20px">{{ closing_year }} · {% if closing_period == 5 %}Закрытие года{% else %}{{ closing_period }} квартал{% endif %}</h3>
+<p>Включены все физические подразделения, в том числе объединённые: для кураторов множитель применяется по месту работы.</p>
+{% if closing_error %}<div class="alert alert-danger" role="alert">{{ closing_error }}</div>{% endif %}
+{% if not closing_closed %}<div class="alert alert-warning">Период ещё не закрыт. Фиксация станет доступна после его окончания.</div>{% endif %}
+<form method="post" style="display:block">{% csrf_token %}{{ closing_grid.token }}{{ closing_grid.non_field_errors }}{{ closing_grid.token.errors }}<input type="hidden" name="year" value="{{ closing_year }}"><input type="hidden" name="period" value="{{ closing_period }}">
+<div style="overflow-x:auto; margin:16px 0"><table class="table"><thead><tr><th>Подразделение</th><th>Множитель</th><th>Статус</th><th>Подтвердил</th></tr></thead><tbody>
+{% for row in closing_grid.rows %}<tr><td>{{ row.branch }}{% if row.branch.merged_into_id %}<small style="display:block">Объединённое подразделение</small>{% endif %}</td><td>{{ row.field }}{{ row.field.errors }}</td><td>{% if row.locked %}Фонды зафиксированы · изменение закрыто{% elif row.record %}Подтверждён · можно изменить{% else %}Не подтверждён · по умолчанию 1,0{% endif %}</td><td>{{ row.record.confirmed_by|default:'—' }}</td></tr>{% empty %}<tr><td colspan="4">В справочнике нет подразделений.</td></tr>{% endfor %}
+</tbody></table></div>
+{% if closing_closed and closing_editable_count %}<button name="action" value="confirm_coefficients" class="btn btn-primary">Зафиксировать множители всех подразделений</button>{% endif %}
+<p style="margin-top:12px">Зафиксированные фонды сохраняют свой множитель. При ошибке ни одно значение не будет сохранено.</p>
+</form>{% endif %}
+{% else %}<p>Множители всех подразделений за выбранный период подтверждает генеральный директор.</p>{% endif %}
+</section>
