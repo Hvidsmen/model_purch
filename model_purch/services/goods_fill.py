@@ -88,8 +88,9 @@ def preview(scenario,source,mode,ids,connector=None):
                     if float(value)!=getattr(good,field):values[field]=float(value)
             else:
                 if mode=='missing' and good.exw_usd!=0:continue
-                quantity=getattr(good,source+'_quantity');target=getattr(good,source+'_ddp_usd')
-                if quantity is None or quantity<=0 or target is None or target<=0:raise ValidationError('Нет положительного DDP и количества выбранного источника.')
+                target=getattr(good,source+'_ddp_usd')
+                if target is None:raise ValidationError('DDP выбранного источника не загружен для этой группы.')
+                number(target,'DDP выбранного источника',positive=True)
                 values['exw_usd']=reverse_exw(good,target,freight,suppliers.get(planning_group_key(good.purch or '')))
                 if values['exw_usd']==good.exw_usd:values={}
             if values:
