@@ -11,7 +11,7 @@ from ..goods_identity import planning_group_key
 from .erp_plan_parameters import attached_sources
 from ..models import GoodsGroup, KindPurch, PGGoods, ScenarioModel
 
-FIELDS = ('planning_sales', 'group_goods', 'brand', 'source_code')
+FIELDS = ('planning_sales', 'group_goods', 'brand')
 REBUILD_SQL = (Path(__file__).resolve().parents[1] / 'sql' / 'refresh_goods_directory.sql').read_text(encoding='utf-8')
 NEW_GOODS_SQL = (Path(__file__).resolve().parents[1] / 'sql' / 'new_directory_goods.sql').read_text(encoding='utf-8')
 SQL = '''
@@ -37,14 +37,14 @@ def refresh_goods_directory(scenario, connector=None):
         cursor.execute(SQL)
         source, ranks = {}, {}
         for group, sales, goods_group, brand, planning_key in cursor.fetchall():
-            raw = (sales, goods_group, brand, planning_key)
+            raw = (sales, goods_group, brand)
             key = planning_group_key(group)
             if key not in keys:
                 continue
             values = tuple(str(value).strip() if value is not None else '' for value in raw)
             if len(values) != len(FIELDS) or any(len(value) > 255 for value in values):
                 raise ValidationError(f'Некорректные поля справочника для группы «{group}». Обновление отменено.')
-            values = (*values[:2], values[2] or None, values[3])
+            values = (*values[:2], values[2] or None)
             # Match the portal's exact Unicode identity as well as SQL's grouping.
             # Choose a whole representative row; never combine unrelated fields.
             code = unicodedata.normalize('NFC', str(planning_key or '').strip())
@@ -82,7 +82,7 @@ def refresh_goods_directory(scenario, connector=None):
                     new_ranks[key] = rank
                     new_goods[key] = {'planning_group': group, 'planning_sales': values[0],
                                       'group_goods': values[1], 'brand': values[2] or None,
-                                      'purch': values[3] or None, 'volume': volume, 'source_code': code}
+                                      'purch': values[3] or None, 'volume': volume}
         connection.commit()
     except Exception:
         connection.rollback()
@@ -104,7 +104,6 @@ def refresh_goods_directory(scenario, connector=None):
             if values is None:
                 counts['missing'] += 1
                 continue
-            values = (*values[:3],values[3] or good.source_code)
             if tuple(getattr(good, field) for field in FIELDS) == values:
                 counts['unchanged'] += 1
                 continue

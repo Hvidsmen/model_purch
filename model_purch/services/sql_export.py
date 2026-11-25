@@ -4,7 +4,7 @@ from django.contrib import messages
 from django.db import transaction
 from ..models import ScenarioModel, ScenarioPlanSales, Purch, PurchPay, PGGoods, KindLagPay, Freight, ScenarioExport
 from ..sql_goods import prepare_sql_goods
-from ..goods_identity import planning_group_key, source_goods_key
+from ..goods_identity import planning_group_key
 from ..sql_export_fields import ensure_model_columns, ensure_column, export_additional_fields
 
 from .preflight import snapshot, fingerprint
@@ -24,10 +24,6 @@ def export_scenario(request, scenario, connection_string):
             messages.error(request, f'«{scenario.name}»: {error}')
         return False
 
-    codes=[source_goods_key(value) for value in PGGoods.objects.filter(scenario_plan=scenario).values_list('source_code',flat=True) if (value or '').strip()]
-    if len(codes)!=len(set(codes)):
-        messages.error(request,'В сценарии повторяется PlanningKey. Уточните коды товаров перед выгрузкой.')
-        return False
     if not connection_string:
         messages.error(request, "Не настроено подключение к MS SQL Server")
         return False
@@ -301,14 +297,6 @@ def export_scenario(request, scenario, connection_string):
             pggoods_list = PGGoods.objects.filter(scenario_plan=scenario)
 
             for pg in pggoods_list:
-                code=(pg.source_code or '').strip()
-                export_key=source_goods_key(code) if code else pg.planning_group_key
-                if code and (pg.planning_group or '').strip():
-                    cursor.execute("""
-                        IF NOT EXISTS (SELECT 1 FROM portal.PGGoods WHERE scenario_name=? AND planning_group_key=?)
-                            UPDATE portal.PGGoods SET PlanningKey=?,source_code=?,planning_group_key=?
-                            WHERE scenario_name=? AND planning_group_key=? AND NULLIF(LTRIM(RTRIM(PlanningKey)),N'') IS NULL
-                    """,scenario.name,export_key,code,code,export_key,scenario.name,planning_group_key(pg.planning_group))
                 cursor.execute("""
                     MERGE INTO portal.PGGoods AS target
                     USING (
@@ -326,14 +314,12 @@ def export_scenario(request, scenario, connection_string):
                             ? AS percent_stock_end,
                             ? AS scenario_name,
                             ? AS kind_purch,
-                            ? AS PlanningKey,
                             ? AS planning_group_key
                     ) AS source
                     ON target.planning_group_key = source.planning_group_key
                        AND target.scenario_name = source.scenario_name
                     WHEN MATCHED THEN
                         UPDATE SET
-                            PlanningKey = source.PlanningKey,
                             planning_group = source.planning_group,
                             planning_sales = source.planning_sales,
                             group_goods = source.group_goods,
@@ -349,20 +335,20 @@ def export_scenario(request, scenario, connection_string):
                     WHEN NOT MATCHED THEN
                         INSERT (planning_group, planning_sales, group_goods, brand, purch,
                                 volume, exw_usd, ddp_usd, kddp, stock_cnt_day,
-                                percent_stock_end, scenario_name, kind_purch, PlanningKey, planning_group_key)
+                                percent_stock_end, scenario_name, kind_purch, planning_group_key)
                         VALUES (source.planning_group, source.planning_sales, source.group_goods,
                                 source.brand, source.purch, source.volume, source.exw_usd,
                                 source.ddp_usd, source.kddp, source.stock_cnt_day,
-                                source.percent_stock_end, source.scenario_name, source.kind_purch, source.PlanningKey, source.planning_group_key);
+                                source.percent_stock_end, source.scenario_name, source.kind_purch, source.planning_group_key);
                 """,
                                pg.planning_group, pg.planning_sales, pg.group_goods,
                                pg.brand, pg.purch, pg.volume, pg.exw_usd, pg.ddp_usd,
-                               pg.kddp, pg.stock_cnt_day, pg.percent_stock_end, scenario.name, pg.kind_purch.name, code or None, export_key
+                               pg.kddp, pg.stock_cnt_day, pg.percent_stock_end, scenario.name, pg.kind_purch.name, pg.planning_group_key
                                )
                 export_additional_fields(cursor, 'PGGoods', pg, {
                     'planning_group', 'planning_sales', 'group_goods', 'brand', 'purch', 'volume',
                     'exw_usd', 'ddp_usd', 'kddp', 'stock_cnt_day', 'percent_stock_end', 'planning_group_key',
-                }, {'planning_group_key': export_key, 'scenario_name': scenario.name})
+                }, {'planning_group_key': pg.planning_group_key, 'scenario_name': scenario.name})
                 exported_count['pggoods'] += 1
                 # if pg.planning_group == 'ВЕНТ Канальная':
                 #     print('ВЕНТ Канальная')
