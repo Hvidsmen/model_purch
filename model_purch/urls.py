@@ -1,4 +1,5 @@
 from django.urls import path
+from . import views_goods_fill
 from . import views_model_ddp
 from . import views_warning_reviews
 from . import views, views_freight
@@ -7,6 +8,7 @@ from . import views_plan_parameters
 from . import views_goods_directory, views_goods_presence, views_scenario_setup
 from . import views_purchase_excel
 urlpatterns = [
+    path('pggoods/<int:scenario_id>/fill/', views_goods_fill.fill, name='goods_fill'),
     path('model-ddp/<int:pk>/load-stream/', views_model_ddp.load_stream, name='model_ddp_load_stream'),
     path('model-ddp/', views_model_ddp.index, name='model_ddp_index'),
     path('model-ddp/<int:pk>/', views_model_ddp.detail, name='model_ddp_detail'),

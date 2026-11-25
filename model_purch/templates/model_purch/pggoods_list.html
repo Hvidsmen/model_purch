@@ -124,6 +124,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
             </form>
             {% endif %}
             {% if current_scenario and not portal_purchases_readonly %}<a class="btn btn-outline-primary" href="{% url 'goods_plan_parameters' current_scenario.pk %}">Обновить параметры из плана</a>{% endif %}<a class="btn btn-outline-secondary" href="{% url 'goods_groups' %}">Группы и пошлины</a>
+            {% if current_scenario and not portal_purchases_readonly %}<form method="get" action="{% url 'goods_fill' current_scenario.pk %}" id="goodsFillForm" class="d-flex flex-wrap gap-1 align-items-center"><select name="mode" class="form-select form-select-sm" style="width:auto" aria-label="Режим заполнения параметров" title="Видимые: отмеченные галочками; если отметок нет — все товары текущей страницы"><option value="all">Все товары</option><option value="visible">Только видимые / отмеченные</option><option value="missing">Только нули</option></select><div data-fill-selection></div><button name="source" value="physical" class="btn btn-outline-primary">Обновить объём и массу</button><button name="source" value="plan" class="btn btn-outline-primary">Заполнить EXW из плана</button><button name="source" value="fact" class="btn btn-outline-primary">Заполнить EXW из факта</button></form>{% endif %}
             <span class="badge bg-secondary fs-6 me-2">
                 <i aria-hidden="true" class="bi bi-collection"></i> Всего: {{ page_obj.paginator.count }}
             </span>
@@ -335,7 +336,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
             <colgroup><col style="width:42px"><col style="width:220px"><col style="width:320px"><col style="width:150px"><col style="width:110px"><col style="width:100px"><col class="ddp-detail" style="width:160px"><col style="width:160px"><col class="goods-advanced" style="width:170px"><col style="width:150px"><col style="width:64px"></colgroup>
             <thead>
                 <tr>
-                    <th style="width: 50px;">#</th>
+                    <th style="width: 50px;">{% if not portal_purchases_readonly %}<input type="checkbox" id="goodsFillSelectAll" aria-label="Отметить все товары текущей страницы">{% endif %} #</th>
                     <th class="product-planning-group">План. группа</th>
                     <th>Классификация</th>
                     <th class="text-end editable-number-heading" title="Объём товара и контейнера{% if not portal_purchases_readonly %} можно менять{% endif %}">Объём, м³ / вес, кг</th>
@@ -357,7 +358,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
     <input {% if portal_purchases_readonly %}disabled{% endif %} type="hidden" name="scenario" value="{{ current_scenario.id }}">
     <input {% if portal_purchases_readonly %}disabled{% endif %} type="hidden" name="query_string" value="{{ clean_query_string }}">
                         </form>
-                        <td class="text-muted">{{ item.id }}</td>
+                        <td class="text-muted">{% if not portal_purchases_readonly %}<input type="checkbox" class="goods-fill-check" value="{{ item.id }}" aria-label="Выбрать {{ item.planning_group }}">{% endif %}{{ item.id }}</td>
                         <td class="product-planning-group"><input {% if portal_purchases_readonly %}disabled{% endif %} type="text" class="inline-input" value="{{ item.planning_group }}" title="{{ item.planning_group }}" readonly>
                         <a class="small d-block mt-1" href="{% url 'goods_presence' item.id %}?check=1">Проверить источники →</a>
                         {% for warning in item.warning_details %}<div class="small mt-1 px-2 py-1 rounded border {% if warning.reviewed %}bg-light text-secondary{% else %}bg-warning-subtle text-warning-emphasis border-warning-subtle{% endif %}" data-plan-warning="{{ warning.kind }}">{% if warning.reviewed %}✓ Проверено{% else %}⚠{% endif %} {{ warning.message }}{% if warning.reviewed %}<br><small>{{ warning.review.reviewed_by.get_full_name|default:warning.review.reviewed_by.username }} · {{ warning.review.reviewed_at|date:"d.m.Y H:i" }}</small>{% endif %}{% if not portal_purchases_readonly %}<form method="post" action="{% url 'review_goods_warning' item.pk %}" data-warning-review>{% csrf_token %}<input type="hidden" name="scenario" value="{{ current_scenario.pk }}"><input type="hidden" name="kind" value="{{ warning.kind }}"><input type="hidden" name="token" value="{{ warning.token }}"><input type="hidden" name="query" value="{{ clean_query_string }}"><button type="submit" name="action" value="{% if warning.reviewed %}reset{% else %}review{% endif %}" class="btn btn-sm btn-link p-0">{% if warning.reviewed %}Снять отметку{% else %}Проверено, всё верно{% endif %}</button></form>{% endif %}</div>{% endfor %}</td>
@@ -466,6 +467,17 @@ document.addEventListener('DOMContentLoaded', function () {
     const saveAllText = document.getElementById('saveAllText');
     if (!saveAllBtn) return;
     const changes = {};
+    document.getElementById('goodsFillSelectAll')?.addEventListener('change', event => document.querySelectorAll('.goods-fill-check').forEach(box => {box.checked=event.target.checked;}));
+    document.getElementById('goodsFillForm')?.addEventListener('submit', event => {
+        if (Object.keys(changes).length) {event.preventDefault();alert('Сначала сохраните или отмените изменения товаров.');return;}
+        const form=event.currentTarget, holder=form.querySelector('[data-fill-selection]');holder.replaceChildren();
+        if (form.elements.mode.value==='visible') {
+            const all=[...document.querySelectorAll('.goods-fill-check')];const checked=all.filter(box=>box.checked);const selected=checked.length?checked:all;
+            if (!selected.length) {event.preventDefault();alert('На странице нет товаров для заполнения.');return;}
+            selected.forEach(box=>{const input=document.createElement('input');input.type='hidden';input.name='selected_ids';input.value=box.value;holder.append(input);});
+        }
+    });
+
     const refreshDirectoryBtn = document.getElementById('refreshGoodsDirectoryBtn');
     const refreshDirectoryTitle = refreshDirectoryBtn?.title;
     const setupRefreshBtn = document.querySelector('[data-setup-refresh]');

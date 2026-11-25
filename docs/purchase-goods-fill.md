@@ -1,0 +1,11 @@
+# Fill purchasing physical parameters and reverse-priced EXW
+
+The goods toolbar offers three actions: refresh volume/mass from ERP, fill EXW from saved plan DDP, and fill EXW from saved fact DDP. Each action supports all current-scenario goods, visible/checked goods, or zero fields only. Visible means checked rows on the current filtered/paginated page; with no check marks, every row on that page is passed. Nonzero fields are preserved individually in zero-only mode. The classification refresh remains separate.
+
+Physical values are averages of positive ERP nomenclature values per exact normalized planning-group identity. The reader discovers available volume and mass columns; absent columns/values are shown as skips, never zeros to overwrite existing inputs. EXW is retained, while DDP is repriced when volume changes. The ERP schema reader is covered with mocked metadata; a live corporate ERP connection is not available in the cloud checks.
+
+EXW uses the current loaded plan_ddp_usd or fact_ddp_usd, with positive corresponding quantities required. Load these via the existing plan-parameters page first. The existing loader may use stock fallback for plan parameters; groups without positive plan quantity are excluded from plan EXW filling. Fact parameters cover the scenario-start year and two preceding years, as in the existing loader.
+
+The solver probes the existing unit-price calculation at EXW 0 and 1 to invert its affine DDP relation, then verifies the result with a forward calculation. Shipping, customs/duty, container ratio and warehouse delivery follow the same formula. Foreign delivery outside DDP and customs VAT overhead remain outside DDP. Russian supply has EXW = DDP. Missing DDP, missing freight, zero non-Russian volume, impossible negative EXW or a failed numerical check skip the affected good with an explanation.
+
+Preview performs no portal writes. The signed 30-minute confirmation contains the editor/scenario/source/mode, proposed values and a digest of goods, dates, loaded parameter timestamp, freight and supplier types. Apply rechecks current inputs under a transaction and updates only the proposed physical fields or EXW; calculated pricing follows model save. Changed inputs require a fresh preview. Access is limited to purchasing administrators and logisticians. No migration is needed.
