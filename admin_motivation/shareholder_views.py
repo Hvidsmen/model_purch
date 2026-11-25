@@ -113,6 +113,17 @@ def report(request,pk,kind):
         context['authors']=[{'value':v,'selected':v in query.getlist('author')} for v in available['author']]
         context['type_options']=[{'value':v,'selected':v in kinds} for v in reports.KINDS]
         context['needs_author']=kind=='mine' and len(query.getlist('author'))!=1
+        def caption(values,all_caption):
+            return ', '.join(values) if values and len(values)<=2 else f'Выбрано: {len(values)}' if values else all_caption
+        context.update(branches=[{'name':item['value'],'selected':item['selected']} for item in context['filters'][0]['options']],
+            branch_label=caption(query.getlist('subdivision'),'Все доступные подразделения'),
+            type_choices=context['type_options'],type_label=caption(query.getlist('type'),'Все доступные виды'),
+            period_choices=[{'value':item['code'],'label':item['label'],'selected':item['selected']} for item in context['period_options']],
+            period_label='Все доступные периоды' if len(periods)==len(context['period_options']) else ', '.join(item['label'] for item in context['period_options'] if item['selected']),
+            product_filter_fields=[{'name':item['key'],'label':item['label'],'caption':caption(query.getlist(item['key']),'Все доступные'),'options':item['options']} for item in context['filters'][1:]])
+        if kind not in ('mine','executive'):
+            context['product_filter_fields'].append({'name':'author','label':'Сотрудники','caption':caption(query.getlist('author'),'Все сотрудники'),'options':context['authors']})
+
         if kind=='deals':
             from decimal import Decimal
             rows=list(reports.audit_rows(run,query))
