@@ -57,7 +57,7 @@ IF EXISTS(
 """
 
 
-def private_sql(definition,mode,run_id):
+def private_sql(definition,mode,run_id,*,original_rules=False):
     from .curator_sql import strip
     definition=strip(definition) if definition else definition
     if mode not in ('combined','separate'):raise ValidationError('Неизвестный сценарий.')
@@ -100,6 +100,9 @@ SELECT @FactYear=FactYear,@PlanVersion=PlanVersion,@QuarterShare=QuarterShare,@Y
 SELECT * INTO #share_subdivisions FROM dbo.Subdivisions WHERE SubdivisionName IN(N'Д-Москва',N'ТЕРМОТРЕЙД');
 '''
     if mode=='combined':prefix+="UPDATE #share_subdivisions SET SubdivisionName=N'Д-Москва' WHERE SubdivisionName=N'ТЕРМОТРЕЙД';\n"
+    if original_rules:
+        from .shareholder_original_rules import restore
+        source=restore(source)
     source=prefix+source+"\nSELECT @PortalPreparedRun AS SharePreparedRun;"
     return source
 

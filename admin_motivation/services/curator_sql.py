@@ -27,7 +27,7 @@ def export_assignments(cursor):
     if values:cursor.executemany(f'INSERT INTO {TABLE} VALUES(?,?,?)',values)
 
 
-def pair_batch(definition,variant='all_2026'):
+def pair_batch(definition,variant='all_2026',*,original_rules=False):
     source=strip(definition)
     if 'Директора' not in source or not re.search(r'Employee(?:Name|Code)',source,re.I):raise ValidationError('Нужна SQL-процедура с персональным расчётом директоров для подключения кураторов.')
     if variant=='main':
@@ -37,7 +37,7 @@ def pair_batch(definition,variant='all_2026'):
         source=source.replace('Separate2026','All2026').replace('PortalSeparateSubdivisions','PortalCalculationSubdivisions')
         # Undo the transition-only Moscow rate lookup for the curator's own rates.
         source=re.sub(r"COALESCE\(\(SELECT TOP \(1\) m.TargetName FROM DataWH.motivation.PortalSubdivisionMerge m WHERE m.SourceName=(\w+\.SubdivisionName)\),\1\)",r'\1',source,flags=re.I)
-    batch=private_sql(source,'combined',uuid4())
+    batch=private_sql(source,'combined',uuid4(),original_rules=original_rules)
     batch=batch.replace(ALLOCATION_SQL,'SELECT * INTO #share_transformed FROM #portal_motivation_sales;\n')
     batch=batch.replace("SELECT * INTO #share_subdivisions FROM dbo.Subdivisions WHERE SubdivisionName IN(N'Д-Москва',N'ТЕРМОТРЕЙД');",
         'SELECT s.* INTO #share_subdivisions FROM dbo.Subdivisions s JOIN #curator_request r ON r.Subdivision=s.SubdivisionName;')
@@ -66,7 +66,7 @@ UPDATE #curator_coeff SET TypeCoeff=N'Директора' WHERE LTRIM(RTRIM(Type
     from .shareholder_sql import temporary_tables
     cleanup='\n'.join("IF OBJECT_ID('tempdb.."+name+"') IS NOT NULL DROP TABLE "+name+';' for name in temporary_tables(batch) if name not in ('#share_parameters','#curator_request','#curator_coeff'))
     suffix=''
-    for table in ('#share_report','#share_annual','#share_fact'):
+    for table in ('#share_report','#share_annual','#share_fact',*(['#share_eligibility'] if original_rules else [])):
         suffix+=f"\nDELETE FROM {table} WHERE LTRIM(RTRIM([ТипКоэф]))<>N'Директора' OR NOT EXISTS(SELECT 1 FROM #curator_request r WHERE LTRIM(RTRIM(r.FullName))=LTRIM(RTRIM([АвторСделки])));\nUPDATE {table} SET [ТипКоэф]=N'Кураторы';"
     # Reusing native SQL must not overwrite the parent Agent stage timings.
     body=prefix+cleanup+'\n'+batch+'\n'+suffix
@@ -149,7 +149,8 @@ def shareholder_snapshots(run,cursor,definition,save_query):
  ELSE SELECT CAST(NULL AS nvarchar(64)),CAST(NULL AS nvarchar(255)),CAST(NULL AS nvarchar(255)) WHERE 1=0;''')
     pairs=cursor.fetchall()
     if not pairs:return 0
-    batch=pair_batch(definition)
+    from .shareholder_original_rules import enabled,performance_sql as original_performance_sql
+    batch=pair_batch(definition,original_rules=enabled(run))
     cursor.execute('CREATE TABLE #curator_request(EmployeeCode nvarchar(64) COLLATE DATABASE_DEFAULT,Subdivision nvarchar(255) COLLATE DATABASE_DEFAULT,FullName nvarchar(255) COLLATE DATABASE_DEFAULT);')
     from .manager_detail import grouped_sql
     from .motivation_performance import grouped_sql as performance_sql,department_sql
@@ -161,9 +162,16 @@ def shareholder_snapshots(run,cursor,definition,save_query):
         cursor.execute(batch)
         while cursor.nextset():pass
         source="SELECT * FROM #share_report WHERE [ТипКоэф]=N'Кураторы'"
-        total+=save_query(run,cursor,'combined','report_cur',grouped_sql(source),kind='Кураторы')
-        save_query(run,cursor,'combined','perf_cur',performance_sql(source,coefficient_type='Директора').replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact'),kind='Кураторы')
-        save_query(run,cursor,'combined','dept_cur',department_sql(source).replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact'),kind='Кураторы')
+        report_count=save_query(run,cursor,'combined','report_cur',grouped_sql(source),kind='Кураторы')
+        total+=report_count
+        perf=performance_sql(source,coefficient_type='Директора').replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
+        dept=department_sql(source).replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
+        if enabled(run):
+            perf=original_performance_sql(perf);dept=original_performance_sql(dept)
+            eligibility_count=save_query(run,cursor,'combined','eligibility_cur','SELECT * FROM #share_eligibility')
+            if report_count and not eligibility_count:raise ValidationError('Не сохранено годовое условие выплаты куратора. Результаты не опубликованы.')
+        save_query(run,cursor,'combined','perf_cur',perf,kind='Кураторы')
+        save_query(run,cursor,'combined','dept_cur',dept,kind='Кураторы')
         save_query(run,cursor,'combined','annual_cur','SELECT * FROM #share_annual')
     cursor.execute('DROP TABLE #curator_request')
     return total
