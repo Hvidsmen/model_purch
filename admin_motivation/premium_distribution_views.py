@@ -57,6 +57,11 @@ def index(request):
     if allowed is not None:batches=batches.filter(subdivision__subdivision_key__in=allowed)
     form=StartForm(request.POST or None,user=request.user) if can_edit else None
     can_confirm=role_for(request.user,'motivation') in (ADMIN,DIRECTOR)
+    from .services.closing_bulk import workspace
+    closing=workspace(request,can_confirm)
+    if closing['closing_count'] is not None:
+        messages.success(request,f"Множители зафиксированы: {closing['closing_count']} подразделений.")
+        return redirect(reverse('motivation_distributions')+'?'+urlencode({'year':closing['closing_year'],'period':closing['closing_period']})+'#closing-coefficients')
     coefficients=PeriodMotivationCoefficient.objects.select_related('subdivision','confirmed_by').order_by('-year','-period')
     if allowed is not None:coefficients=coefficients.filter(subdivision__subdivision_key__in=allowed)
     initial={'year':timezone.localdate().year,'coefficient':1,'revision':0}
@@ -77,7 +82,7 @@ def index(request):
                     return redirect(target+'?'+urlencode({'version':request.POST.get('return_version',''),'manager_year':coefficient_form.cleaned_data['year']})+'#manager-details')
                 return redirect('motivation_distributions')
             except ValidationError as exc:coefficient_form.add_error(None,exc)
-    elif request.method=='POST':
+    elif request.method=='POST' and request.POST.get('action')!='confirm_coefficients':
         if not can_edit:raise PermissionDenied
         if form.is_valid():
             try:
@@ -91,7 +96,7 @@ def index(request):
                 return redirect('motivation_distribution_detail',pk=batch.pk)
             except (ValidationError,IntegrityError) as exc:
                 form.add_error(None,'Распределение уже создано.' if isinstance(exc,IntegrityError) else exc)
-    return render(request,'admin_motivation/distribution/index.html',{'can_edit_distributions':can_edit,'is_admin':is_admin,'archived':archived,'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
+    return render(request,'admin_motivation/distribution/index.html',{**closing,'can_edit_distributions':can_edit,'is_admin':is_admin,'archived':archived,'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
 
 
 def snapshot_for(batch,user,version):
