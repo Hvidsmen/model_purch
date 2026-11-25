@@ -12,7 +12,7 @@ def context(user,version,subdivision,managers,year=None):
     if not 2000<=year<=2100:year=timezone.localdate().year
     templates={period_code(row.kind.name):row.coeff for row in managers}
     confirmed={str(row.period):row for row in PeriodMotivationCoefficient.objects.filter(subdivision=subdivision,year=year)}
-    locked=set(PremiumDistribution.objects.filter(subdivision=subdivision,year=year).values_list('period',flat=True))
+    locked=set(PremiumDistribution.objects.filter(subdivision=subdivision,year=year,state__in=['draft','completed']).values_list('period',flat=True))
     rows=[]
     for period in range(1,6):
         row=confirmed.get(str(period));template=templates.get(str(period),1)

@@ -94,7 +94,7 @@ def create(user,execution,subdivision,period,currency):
     if not 2000<=year<=2100:raise ValidationError('Некорректный год расчёта.')
     month=12 if period==5 else period*3
     if date(year,month,monthrange(year,month)[1])>=timezone.localdate():raise ValidationError('Период ещё не закрыт.')
-    if PremiumDistribution.objects.filter(subdivision=subdivision,year=year,period=period).exists():raise ValidationError('Распределение за этот период уже создано. Откройте его из списка.')
+    if PremiumDistribution.objects.filter(subdivision=subdivision,year=year,period=period,state__in=['draft','completed']).exists():raise ValidationError('Распределение за этот период уже создано. Откройте его из списка.')
     with transaction.atomic():
         from ..models import PeriodMotivationCoefficient
         type(subdivision).all_objects.select_for_update().get(pk=subdivision.pk)
@@ -164,3 +164,23 @@ def eligible_employees(batch):
     last=12 if batch.period==5 else batch.period*3
     start=date(batch.year,first,1);end=date(batch.year,last,monthrange(batch.year,last)[1])
     return SalesEmployee.objects.filter(subdivision=batch.subdivision).filter(Q(started_on__isnull=True)|Q(started_on__lte=end)).filter(Q(ended_on__isnull=True)|Q(ended_on__gte=start)).filter(Q(is_archived=False)|Q(ended_on__isnull=False))
+
+
+@transaction.atomic
+def retire(user, pk, revision, action, reason):
+    """Remove drafts from work or archive allocations without losing audit history."""
+    branch_id=PremiumDistribution.objects.values_list('subdivision_id',flat=True).get(pk=pk)
+    from ..models import Subdivision
+    Subdivision.all_objects.select_for_update().get(pk=branch_id)
+    batch=PremiumDistribution.objects.select_for_update().select_related('subdivision').get(pk=pk)
+    authorize(user,batch.subdivision,write=True)
+    if action not in ('delete_draft','archive'):raise ValidationError('Неизвестное действие.')
+    if action=='archive' and role_for(user,'motivation')!=ADMIN:raise PermissionDenied
+    if batch.revision!=revision:raise ValidationError('Распределение изменилось. Обновите страницу.')
+    if batch.state not in ('draft','completed'):raise ValidationError('Распределение уже удалено или находится в архиве.')
+    if action=='delete_draft' and batch.state!='draft':raise ValidationError('Удалить можно только черновое распределение. Завершённое может архивировать администратор.')
+    reason=str(reason).strip()
+    if not reason or len(reason)>2000:raise ValidationError('Укажите причину (до 2000 знаков).')
+    batch.state='archived' if action=='archive' else 'deleted'
+    batch.revision+=1;batch.save();event(batch,user,action,reason)
+    return batch
