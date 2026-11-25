@@ -135,10 +135,15 @@ def macro_rows(ledger,periods):
     groups={}
     for row in ledger['rows']:
         key=(row['subdivision'],row['kind'])
-        item=groups.setdefault(key,{'subdivision':key[0],'kind':key[1],'values':{code:{'possible':ZERO,'total':ZERO,'label':'Год' if code=='5' else code+' квартал'} for code in periods},'possible':ZERO,'total':ZERO})
+        item=groups.setdefault(key,{'subdivision':key[0],'kind':key[1],'values':{code:{'possible':ZERO,'total':ZERO,'label':'Год' if code=='5' else code+' квартал','code':code,'_annual_rows':[]} for code in periods},'possible':ZERO,'total':ZERO})
         item['values'][row['code']]['possible']+=row['possible'] or ZERO;item['values'][row['code']]['total']+=row['total']
+        item['values'][row['code']]['_annual_rows'].append(row)
         item['possible']+=row['possible'] or ZERO;item['total']+=row['total']
-    for item in groups.values():item['cells']=[item['values'][code] for code in periods]
+    from .annual_accrual import total as annual_total
+    for item in groups.values():
+        item['cells']=[item['values'][code] for code in periods]
+        for cell in item['cells']:
+            cell['annual_accrual']=annual_total(cell.pop('_annual_rows'))
     return sorted(groups.values(),key=lambda v:(v['subdivision'],v['kind']))
 
 
