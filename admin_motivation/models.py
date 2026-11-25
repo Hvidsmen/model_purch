@@ -1058,6 +1058,7 @@ class ShareholderCalculation(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True)
     completed_at = models.DateTimeField(null=True)
+    is_archived = models.BooleanField('В архиве', default=False, db_index=True)
 
     class Meta:
         ordering = ['-created_at']
