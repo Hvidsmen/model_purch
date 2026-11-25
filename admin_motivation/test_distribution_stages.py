@@ -102,7 +102,7 @@ class ClosingWorkflowTests(TestCase):
         self.assertEqual(response.status_code,302)
         with patch.object(distribution,'read_source',return_value=(deepcopy(self.funds),deepcopy(self.rows))):batch=distribution.create(self.admin,self.run,self.branch,4,'USD')
         response=self.client.get(reverse('motivation_distribution_detail',args=[batch.pk]))
-        self.assertContains(response,'Продажи распределены → перейти к политикам')
+        self.assertContains(response,'Зафиксировать премии продаж → перейти к политикам')
         self.assertNotContains(response,'name="amount_pol"')
         self.assertContains(response,'name="weight_')
 

@@ -136,8 +136,12 @@ def detail(request,pk):
                 begin_legacy(request.user,pk,int(request.POST.get('revision','0')),request.POST.get('closing_coefficient','1'),request.POST.get('transition_reason',''))
                 messages.success(request,'Множитель подтверждён. Открыт этап распределения продаж по весам.')
                 return redirect('motivation_distribution_detail',pk=pk)
+            action=request.POST.get('action','save')
+            if action=='add_person':
+                if not request.POST.get('new_employee'):raise ValidationError('Выберите сотрудника для добавления.')
+                action='save'
             changes={r['id']:{'amount':request.POST.get('amount_'+r['id'],''),'comment':request.POST.get('comment_'+r['id'],''),'weight':request.POST.get('weight_'+r['id'],r.get('weight','0'))} for r in batch.rows}
-            batch=service.update(request.user,pk,int(request.POST.get('revision','0')),changes,action=request.POST.get('action','save'),
+            batch=service.update(request.user,pk,int(request.POST.get('revision','0')),changes,action=action,
                 addition={'employee':request.POST.get('new_employee',''),'kind':request.POST.get('new_kind',''),'payment':request.POST.get('new_payment','')},comment=request.POST.get('reason',''))
             messages.success(request,'Распределение завершено. Excel и ссылка готовы для передачи финансистам.' if batch.state=='completed' else 'Изменения сохранены.')
             return redirect('motivation_distribution_detail',pk=pk)
@@ -157,8 +161,18 @@ def detail(request,pk):
     editable=can_edit and batch.state=='draft' and not version
     workflow=snapshot.get('source',{}).get('workflow') or {}
     stage=workflow.get('stage','legacy')
-    display_rows=[{**r,'edit_amount':editable and r['kind']=='Политики' and stage=='policies' or editable and stage=='legacy','edit_weight':editable and r['kind']=='Продажи' and stage=='sales'} for r in snapshot['rows']]
+    visible_kind={'sales':'Продажи','policies':'Политики'}.get(stage) if snapshot['state']=='draft' else None
+    visible_rows=[r for r in snapshot['rows'] if visible_kind is None or r['kind']==visible_kind]
+    if visible_kind:funds=[f for f in funds if f['kind']==visible_kind]
+    employees=service.eligible_employees(batch)
+    if stage=='sales':
+        payments={f['payment'] for f in snapshot['funds'] if f['kind']=='Продажи'}
+        existing={}
+        for row in snapshot['rows']:
+            if row['kind']=='Продажи' and row.get('employee_id'):existing.setdefault(row['employee_id'],set()).add(row['payment'])
+        employees=[employee for employee in employees if not payments.issubset(existing.get(employee.pk,set()))]
+    display_rows=[{**r,'edit_amount':editable and r['kind']=='Политики' and stage=='policies' or editable and stage=='legacy','edit_weight':editable and r['kind']=='Продажи' and stage=='sales'} for r in visible_rows]
     return render(request,'admin_motivation/distribution/detail.html',{'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
         'can_reopen':not version and batch.state=='completed' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),
         'report_url':url,'mail_url':'mailto:?'+urlencode({'subject':f'Премии: {batch.subdivision} · {batch.year} · {batch.get_period_display()}', 'body':'Распределение премий завершено. Отчёт и Excel: '+url}),
-        'employees':service.eligible_employees(batch),'history':batch.events.select_related('actor'),'payments':service.PAYMENTS.items(),'kinds':service.KINDS})
+        'employees':employees,'history':batch.events.select_related('actor'),'payments':service.PAYMENTS.items(),'kinds':service.KINDS})
