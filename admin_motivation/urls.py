@@ -22,6 +22,7 @@ urlpatterns = [
     path('curators/',curator_views.directory,name='motivation_curators'),
     path('curators/<int:pk>/rates/',curator_views.rates,name='motivation_curator_rates'),
     path('reports-next/shareholders/',shareholder_views.index,name='motivation_shareholders'),
+    path('reports-next/shareholders/<uuid:pk>/archive/',shareholder_views.archive,name='motivation_shareholder_archive'),
     path('reports-next/shareholders/<uuid:pk>/status/',shareholder_views.status,name='motivation_shareholder_status'),
     path('reports-next/shareholders/<uuid:pk>/<str:kind>/',shareholder_views.report,name='motivation_shareholder_report'),
     path('directories/exclusions/groups/',dimension_exclusion_views.directory,{'dimension':'groups'},name='motivation_groups_exclusion_directory'),

@@ -6,7 +6,7 @@ from django.core.paginator import Paginator
 from django.http import FileResponse,Http404,HttpResponseBadRequest,JsonResponse,QueryDict
 from django.shortcuts import get_object_or_404,redirect,render
 from django.urls import reverse
-from django.views.decorators.http import require_GET,require_http_methods
+from django.views.decorators.http import require_GET,require_POST,require_http_methods
 from django.db import transaction
 from .models import ShareholderCalculation
 from .shareholder_forms import CalculationForm
@@ -42,8 +42,23 @@ def index(request):
                 transaction.on_commit(lambda:runner.launch(run))
                 return redirect('motivation_shareholder_report',run.pk,'team')
             except ValidationError as error:form.add_error(None,error)
+    archived=request.GET.get('archive')=='1'
+    runs=ShareholderCalculation.objects.filter(is_archived=archived).only('id','name','as_of','scenario','threshold_percent','state','stage','created_at').order_by('-created_at','-pk')
     return render(request,'admin_motivation/reports_next/shareholder_index.html',{'form':form,'can_start':can_start(request.user),'skip_motivation_workflow':True,
-        'runs':ShareholderCalculation.objects.only('id','name','as_of','scenario','threshold_percent','state','stage','created_at').order_by('-created_at')[:50]})
+        'archived':archived,'runs':Paginator(runs,50).get_page(request.GET.get('page'))})
+
+
+@require_POST
+def archive(request,pk):
+    allowed(request)
+    if not can_start(request.user):raise PermissionDenied
+    action=request.POST.get('action')
+    if action not in ('archive','restore'):return HttpResponseBadRequest('Неизвестное действие.')
+    run=get_object_or_404(ShareholderCalculation.objects.only('pk'),pk=pk)
+    # Keep worker state, immutable snapshots and direct report links intact.
+    ShareholderCalculation.objects.filter(pk=run.pk).update(is_archived=action=='archive')
+    url=reverse('motivation_shareholders')
+    return redirect(url+'?archive=1' if request.POST.get('archive')=='1' else url)
 
 
 @require_GET
