@@ -29,14 +29,20 @@ def physical_source(connector=None):
             return '['+found.replace(']',']]')+']' if found else None
         group=field('Даичи_ГруппаПланирования');volume=field('ОбъемЧислитель');weight=field('ВесЧислитель','Вес','Weight')
         if not group:raise ValidationError('В ERP не найдено поле плановой группы.')
-        def average(name):return f'AVG(CASE WHEN TRY_CONVERT(float,{name})>0 THEN TRY_CONVERT(float,{name}) END)' if name else 'NULL'
-        cursor.execute(f'SELECT {group},{average(volume)},{average(weight)} FROM erp.[Справочники.Номенклатура] WHERE {group} IS NOT NULL GROUP BY {group}')
-        result={}
-        for name,v,w in cursor.fetchall():
+        def aggregates(name):
+            value=f'TRY_CONVERT(float,{name})' if name else None
+            return f'SUM(CASE WHEN {value}>0 THEN {value} END),COUNT_BIG(CASE WHEN {value}>0 THEN 1 END)' if value else 'NULL,CAST(0 AS bigint)'
+        cursor.execute(f'SELECT {group},{aggregates(volume)},{aggregates(weight)} FROM erp.[Справочники.Номенклатура] WHERE {group} IS NOT NULL GROUP BY {group}')
+        totals={}
+        for name,v,vc,w,wc in cursor.fetchall():
+            if not str(name or '').strip():continue
             key=planning_group_key(name)
-            if key in result:raise ValidationError('Неоднозначные названия групп в ERP. Уточните справочник.')
-            result[key]={'volume':v,'weight_kg':w}
-        return result
+            total=totals.setdefault(key,{'volume':[Decimal(0),0],'weight_kg':[Decimal(0),0]})
+            for field,value,count in (('volume',v,vc),('weight_kg',w,wc)):
+                if value is not None and count:
+                    total[field][0]+=number(value,field)
+                    total[field][1]+=int(count)
+        return {key:{field:float(total/count) if count else None for field,(total,count) in fields.items()} for key,fields in totals.items()}
     finally:connection.close()
 
 
