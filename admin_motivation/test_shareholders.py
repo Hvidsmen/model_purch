@@ -278,3 +278,24 @@ class ShareholderReadPerformanceTests(TestCase):
         selects=[q['sql'] for q in queries if table in q['sql'] and q['sql'].lstrip().upper().startswith('SELECT')]
         self.assertTrue(selects)
         self.assertTrue(all('configuration' not in sql and 'metadata' not in sql for sql in selects))
+
+
+    def test_shareholder_team_explicitly_shows_zero_quarter_catchup(self):
+        url=reverse('motivation_shareholder_report',args=[self.run.pk,'team'])
+        response=self.client.get(url,{'period':['1','5'],'type':'Политики'})
+        self.assertEqual(response.status_code,200)
+        self.assertContains(response,'Доплата за кварталы, USD')
+        self.assertContains(response,'Доплата за кварталы',count=3)
+        self.assertEqual(response.context['presentation']['bonus'],0)
+        for section in response.context['presentation']['team_sections']:
+            self.assertEqual(section['bonus'],0)
+            for row in section['rows']:self.assertEqual(row['bonus'],0)
+        exported=self.client.get(url,{'period':['1','5'],'type':'Политики','export':'xlsx'})
+        book=load_workbook(BytesIO(b''.join(exported.streaming_content)))
+        values=list(book['Сводка'].values)
+        index=next(i for i,row in enumerate(values) if 'Годовая доплата' in row)
+        column=values[index].index('Годовая доплата')
+        bonuses=[row[column] for row in values[index+1:] if isinstance(row[column],(int,float))]
+        self.assertTrue(bonuses)
+        self.assertTrue(all(value==0 for value in bonuses))
+        book.close();exported.close()

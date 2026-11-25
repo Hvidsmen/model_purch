@@ -20,4 +20,4 @@ class DistributionColumnVisibilityTests(SimpleTestCase):
     def test_shareholder_still_has_no_distribution_column(self):
         html=render_to_string('admin_motivation/reports_next/_team_tables.html',{'kind':'team','shareholder_report':True,'ledger':{'currency':'USD'},'presentation':{'team_sections':[{'kind':'Продажи','page':[]}],'period_columns':[]}})
         self.assertNotIn('После распределения',html)
-        self.assertIn('colspan="3"',html)
+        self.assertIn('colspan="4"',html)
