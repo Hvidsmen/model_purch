@@ -60,6 +60,27 @@ class ReportsNextTests(TestCase):
         with self.assertRaises(ValidationError):
             reports_next.planned_budget(self.run, self.fixture.scenario, query)
 
+    def test_plan_comparison_early_quarters_have_premiums_without_annual_part(self):
+        from datetime import date
+        source=self.fixture.scenario.lines.filter(subdivision='A').first()
+        # Reuse the same products and segment amounts at each plan quarter.
+        from .models import SalesPlanLine
+        for quarter in (1,2,3):
+            SalesPlanLine.objects.create(scenario=self.fixture.scenario,plan_date=date(2026,quarter*3-1,1),
+                subdivision=source.subdivision,planning_group_sales=source.planning_group_sales,
+                group=source.group,brand=source.brand,amount_usd=source.amount_usd,
+                amount_ddp_usd=source.amount_ddp_usd,segment_amounts=source.segment_amounts)
+        for quarter in (1,2,3):
+            result=reports_next.planned_budget(self.run,self.fixture.scenario,QueryDict('period='+str(quarter)))[0]
+            self.assertGreater(result['global'],0)
+            self.assertGreater(result['local'],0)
+            self.assertEqual(result['global'],Decimal(120))
+            self.assertEqual(result['global_annual'],0)
+        together=reports_next.planned_budget(self.run,self.fixture.scenario,QueryDict('period=1&period=2'))[0]
+        self.assertEqual(together['global'],Decimal(240))
+        annual=reports_next.planned_budget(self.run,self.fixture.scenario,QueryDict('period=5'))[0]
+        self.assertEqual(annual['global'],Decimal(45))
+
     def test_global_premium_parts_respect_selected_periods_at_every_level(self):
         def check(nodes):
             for node in nodes:
@@ -78,7 +99,7 @@ class ReportsNextTests(TestCase):
         response=self.client.get(reverse('motivation_report_next',args=['executive']),{'run':'1','period':'all'})
         self.assertContains(response,'data-global-premium-toggle aria-expanded="false"')
         self.assertContains(response,'data-global-premium-part hidden')
-        self.assertContains(response,'Глобальная: IV квартал, USD')
+        self.assertContains(response,'Глобальная: квартальные премии, USD')
         self.assertContains(response,'Глобальная: годовая часть из IV квартала, USD')
 
     def test_executive_page_uses_plan_selection_and_excel_numbers(self):

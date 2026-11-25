@@ -279,7 +279,7 @@ def planned_budget(execution, scenario, query):
         if query.getlist(field):
             lines = lines.filter(**{model_field + '__in': query.getlist(field)})
     for day, original, pg, group, brand, amount, ddp, segments, sources in lines.values_list('plan_date', 'subdivision', 'planning_group_sales', 'group', 'brand', 'amount_usd', 'amount_ddp_usd', 'segment_amounts','source_subdivisions').iterator(chunk_size=2000):
-        q_share=quarter_share if day.month>=10 and '4' in periods else Decimal(0)
+        q_share=quarter_share if str((day.month-1)//3+1) in periods else Decimal(0)
         y_share=annual_share if day.month>=10 and '5' in periods else Decimal(0)
         share=q_share+y_share
         sub = original if included_kinds==['curators'] else canonical(original, aliases)
