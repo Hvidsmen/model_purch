@@ -74,6 +74,7 @@ def update_parameters(scenario, sources=None, connector=None):
         goods = list(PGGoods.objects.filter(scenario_plan=locked))
         matched = 0
         for good in goods:
+            if not (good.planning_group or '').strip():continue
             pair = values.get(good.planning_group_key)
             for field, value in zip(fields, pair if pair else [None] * len(fields)):
                 setattr(good, field, value)

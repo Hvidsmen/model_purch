@@ -13,6 +13,9 @@ def copy_goods(source, target):
         ScenarioModel.objects.select_for_update().get(pk=target.pk)
         targets = {row.planning_group_key: row for row in PGGoods.objects.select_for_update().filter(scenario_plan=target)}
         for sg in source_goods:
+            if not (sg.planning_group or '').strip():
+                skipped_count += 1
+                continue
             obj = targets.get(planning_group_key(sg.planning_group))
             if obj is None:
                 skipped_count += 1

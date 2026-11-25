@@ -19,7 +19,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
 from .models import PGGoods, KindPurch, ScenarioModel, ScenarioPlanSales, Purch, PurchPay, KindLagPay
-from .goods_identity import planning_group_key
+from .goods_identity import planning_group_key, source_goods_key
 from .sql_goods import prepare_sql_goods
 from .sql_export_fields import ensure_model_columns, ensure_column, export_additional_fields
 from .conns import connect_database
@@ -655,6 +655,9 @@ INNER JOIN (
             for row in raw_data:
                 planning_sales = str(row.get('PlanningGroupSalesERP') or '').strip()
                 planning_group = str(row.get('PlanningGroupOZP') or '').strip()
+                if not planning_group:
+                    skipped_count += 1
+                    continue  # No stable ERP product identity is returned by this group-level feed.
                 group_goods = str(row.get('Group_1') or '').strip()
                 brand = str(row.get('BrandName') or '').strip() or None
                 purch_name = str(row.get('Purch') or '').strip() or None
@@ -1100,7 +1103,7 @@ def bulk_update_pggoods(request):
                     from .services.pricing import INPUT_FIELDS, CALCULATED_FIELDS
                     saved_rows.append({'id': goods.pk, 'values': {
                         name: (goods.kind_purch_id if name == 'kind_purch' else getattr(goods, name))
-                        for name in (*INPUT_FIELDS, *CALCULATED_FIELDS)
+                        for name in ('source_code', *INPUT_FIELDS, *CALCULATED_FIELDS)
                     }})
 
                 except PGGoods.DoesNotExist:
@@ -1181,7 +1184,7 @@ def export_to_excel(request):
     headers = [
         'ID', 'Сценарий', 'План. группа', 'План. продажи', 'Группа товаров',
         'Бренд', 'Закупка', 'Вид закупки', 'Объём',
-        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD', 'Вес за единицу, кг'
+        'EXW USD', 'DDP USD', 'KDDP', 'Запас (дни)', '% запаса', 'Объём контейнера, м³', 'Пошлина, %', 'Фрахт за товар, USD', 'CIF, USD', 'Таможенный платёж, USD', 'Доставка за товар, USD', 'Загран доставка без DDP за товар, USD', 'НР_Таможенный НДС за товар, USD', 'Ср. взв. DDP, USD', 'Вес за единицу, кг', 'Код товара ERP'
     ]
 
     for col_num, header in enumerate(headers, 1):
@@ -1224,6 +1227,7 @@ def export_to_excel(request):
             item.freight_usd, item.cif_usd, item.customs_payment_usd, item.warehouse_delivery_usd, item.foreign_delivery_usd, item.nr_customs_vat_usd,
             item.weighted_ddp_usd,
             item.weight_kg,
+            item.source_code,
         ]
 
         for col_num, value in enumerate(data, 1):
@@ -1306,23 +1310,29 @@ def import_from_excel(request):
                         container_volume = row[14] if len(row) > 14 else None
                         duty_rate = row[15] if len(row) > 15 else None
 
-                        if not planning_group and not planning_sales and not group_goods:
-                            continue
-
-                        if not planning_group or not str(planning_group).strip():
-                            raise ValueError('Не заполнена плановая группа')
-                        group_name = str(planning_group).strip()
-                        identity = planning_group_key(group_name)
+                        source_code = str(row[24] or '').strip() if len(row)>24 else ''
+                        if len(source_code)>255:raise ValueError('Код товара ERP: не более 255 знаков.')
+                        if not any(value is not None and str(value).strip() for value in row):continue
+                        group_name = str(planning_group or '').strip()
+                        if not group_name and not item_id and not source_code:
+                            raise ValueError('Для товара без плановой группы укажите ID записи текущего сценария или код товара ERP.')
+                        identity = planning_group_key(group_name) if group_name else source_goods_key(source_code) if source_code else None
                         kind_purch = None
                         if kind_purch_name:
                             kind_purch, _ = KindPurch.objects.get_or_create(name=str(kind_purch_name).strip())
 
                         # A savepoint keeps one invalid row from breaking the entire workbook.
                         with transaction.atomic():
-                            # Workbook IDs belong to their source scenario; names identify imports.
-                            goods = PGGoods.objects.filter(
-                                scenario_plan=current_scenario, planning_group_key=identity,
-                            ).first()
+                            # Names identify grouped goods; unnamed goods require an explicit identity.
+                            goods = PGGoods.objects.filter(scenario_plan=current_scenario,planning_group_key=identity).first() if identity else None
+                            if not group_name and goods is None and item_id:
+                                goods = PGGoods.objects.filter(pk=int(item_id),scenario_plan=current_scenario).first()
+                                if goods is None or (goods.planning_group or '').strip():
+                                    raise ValueError('ID не указывает на товар без плановой группы в текущем сценарии.')
+                            if not group_name and goods is None and not source_code:
+                                raise ValueError('Товар без группы не найден по ID; создание без кода ERP запрещено.')
+                            if not group_name and source_code and goods and goods.source_code and planning_group_key(goods.source_code)!=planning_group_key(source_code):
+                                raise ValueError('Код ERP не совпадает с кодом записи по ID. Проверьте товар.')
                             if kind_purch is None:
                                 existing = goods or PGGoods.objects.filter(
                                     scenario_plan=current_scenario, planning_group_key=identity,
@@ -1330,6 +1340,7 @@ def import_from_excel(request):
                                 kind_purch = existing.kind_purch if existing else KindPurch.objects.get_or_create(name='Закупается')[0]
                             defaults = {
                                 'planning_group': goods.planning_group if goods else group_name,
+                                'source_code': source_code or (goods.source_code if goods else ''),
                                 'planning_sales': str(planning_sales).strip() if planning_sales else '',
                                 'group_goods': str(group_goods).strip() if group_goods else '',
                                 'brand': str(brand).strip() if brand else None,
