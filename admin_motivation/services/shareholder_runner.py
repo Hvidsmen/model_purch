@@ -13,7 +13,7 @@ from .shareholder_allocation import author_weights
 from .shareholder_sql import private_sql,temporary_tables,fingerprint
 
 logger=logging.getLogger(__name__)
-RULE='shareholder-asof-2026-v1'
+from .shareholder_original_rules import RULE,enabled,performance_sql as original_performance_sql
 
 
 def serial(value):
@@ -113,12 +113,12 @@ def execute(run,connector=None):
         cursor.execute('''CREATE TABLE #share_parameters(FactYear int,PlanVersion nvarchar(500),QuarterShare decimal(9,8),YearShare decimal(9,8),PayoutThreshold decimal(9,8),Cutoff date);''')
         config=run.configuration
         cursor.execute('INSERT INTO #share_parameters VALUES (?,?,?,?,?,?)',2026,config['plan_version'],str(Decimal(config['quarter_share'])/100),str(Decimal(config['year_share'])/100),config['payout_threshold'],run.as_of+timedelta(days=1))
-        metadata={'manager_correction_mode':'legacy' if any('#portal_manager_correction' in str(v).casefold() for v in definitions.values()) else 'period-unified-v1','rule':RULE,'prepared_run':str(ready[0]),'prepared_at':str(ready[1]),'prepared_rows':ready[2],
+        metadata={'manager_correction_mode':'legacy' if any('#portal_manager_correction' in str(v).casefold() for v in definitions.values()) else 'period-unified-v1','rule':config.get('rule','shareholder-asof-2026-v1'),'prepared_run':str(ready[0]),'prepared_at':str(ready[1]),'prepared_rows':ready[2],
                   'procedure_hashes':{},'counts':{},'redistribution':'separate-original-subdivision-before-coefficients',
                   'turnover_basis':'Price - AmountUSDIt_ITW + BallsOuterUSD; signed; selected quarters through as_of',
-                  'quarter_rule':'I–III separate if selected; IV and annual Moscow+TT combined'}
+                  'quarter_rule':('Q1 always paid; Q2 eligibility Q1+Q2; Q3 Q3; Q4 and year Q1–Q4; annual contributions Q1–Q4; year-end catch-up' if enabled(run) else 'I–III separate if selected; IV and annual Moscow+TT combined')}
         for mode,definition in definitions.items():
-            batch=private_sql(definition,mode,run.pk)
+            batch=private_sql(definition,mode,run.pk,original_rules=enabled(run))
             for name in temporary_tables(batch):
                 if name in ('#share_parameters','#share_author_map'):continue
                 cursor.execute("IF OBJECT_ID('tempdb.."+name+"') IS NOT NULL DROP TABLE "+name)
@@ -132,16 +132,24 @@ def execute(run,connector=None):
             metadata['procedure_hashes'][mode]=fingerprint(definition)
             progress(run,'Сохранение согласованных снимков пяти отчётов · '+mode)
             counts={}
-            for dataset in ('report','performance','department','annual'):counts[dataset]=0
+            for dataset in ('report','performance','department','annual','eligibility'):counts[dataset]=0
             # Store all coefficient kinds without multiplying different bases together.
             for kind in ('Политики','Продажи','Директора'):
                 source="SELECT * FROM #share_report WHERE LTRIM(RTRIM([ТипКоэф]))=N'"+kind+"'"
                 # Sequence keys are per dataset, so each kind has its own named dataset.
                 tag={'Политики':'pol','Продажи':'sales','Директора':'dir'}[kind]
-                counts['report']+=save_query(run,cursor,mode,'report_'+tag,grouped_sql(source),kind=kind)
+                eligibility_count=0
+                if enabled(run):
+                    eligibility_count=save_query(run,cursor,mode,'eligibility_'+tag,"SELECT * FROM #share_eligibility WHERE LTRIM(RTRIM([ТипКоэф]))=N'"+kind+"'")
+                report_count=save_query(run,cursor,mode,'report_'+tag,grouped_sql(source),kind=kind)
+                if enabled(run) and report_count and not eligibility_count:
+                    raise ValidationError('Не сохранено годовое условие выплаты акционеров. Результаты не опубликованы.')
+                counts['report']+=report_count;counts['eligibility']+=eligibility_count
                 query=performance_sql(source,coefficient_type=kind).replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
+                if enabled(run):query=original_performance_sql(query)
                 counts['performance']+=save_query(run,cursor,mode,'perf_'+tag,query,kind=kind)
                 query=department_sql(source).replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
+                if enabled(run):query=original_performance_sql(query)
                 counts['department']+=save_query(run,cursor,mode,'dept_'+tag,query,kind=kind)
                 counts['annual']+=save_query(run,cursor,mode,'annual_'+tag,"SELECT * FROM #share_annual WHERE LTRIM(RTRIM([ТипКоэф]))=N'"+kind+"'")
             # Redistribution is identical in both modes; keep one transaction audit.

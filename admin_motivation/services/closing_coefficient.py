@@ -105,7 +105,7 @@ class ReportMultipliers:
             branch=str((row.get('_source_subdivision') if self.physical else None) or row.get('Подразделение') or '').casefold();year=str(row.get('Год') or '')
             code=period_code(row.get('КварталМотивации'))
             value=self.multiplier(branch,year,code)
-            for field in MONEY_FIELDS:
+            for field in (*MONEY_FIELDS,'PotentialCatchupUSD','PotentialCatchupRUB'):
                 if row.get(field) is not None:row[field]=Decimal(str(row[field]))*value
             annual=self.multiplier(branch,year,'5')
             for field in ('AnnualUSD','AnnualRUB','AnnualAccrual'):

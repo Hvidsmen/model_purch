@@ -183,10 +183,10 @@ PILOT_BONUS_NOTE = 'Основной расчёт включает I–IV ква
 
 
 def total(rows, key):
-    # Presentation policy for the current pilot, including old reports and exports.
-    # Preserve the saved DWH results; never include catch-up amounts in displayed totals.
+    # Ordinary/legacy reports suppress catch-up. Only rows explicitly prepared
+    # from a versioned original shareholder snapshot may include this payment.
     if key in ('Остаток', 'ОстатокRUR'):
-        return Decimal(0)
+        return sum((number(row.get(key)) for row in rows if row.get('_shareholder_original_rules')), Decimal(0))
     return sum((number(row.get(key)) for row in rows), Decimal(0))
 
 

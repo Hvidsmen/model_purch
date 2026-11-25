@@ -20,7 +20,8 @@ def allowed(request):
 
 
 def metadata(run):
-    return [('Сценарий','Для акционеров · перераспределение реальных отгрузок'),('Запуск',str(run.pk)),
+    from .services.shareholder_original_rules import enabled
+    return [('Правила расчёта','Исходная схема: годовая база I–IV, доплаты при закрытии года' if enabled(run) else 'Прежняя схема: IV квартал и год по IV кварталу, без доплат'),('Сценарий','Для акционеров · перераспределение реальных отгрузок'),('Запуск',str(run.pk)),
         ('Факт по дату включительно',str(run.as_of)),('Данные','Текущий подготовленный факт на момент запуска'),
         ('Подразделения','Москва + ТТ' if run.scenario=='combined' else 'I–III раздельно; IV и год Москва + ТТ'),
         ('Кварталы определения долей',', '.join(map(str,run.quarters))),('Порог авторов, %',str(run.threshold_percent)),
@@ -98,7 +99,8 @@ def report(request,pk,kind):
     except ValidationError as error:return HttpResponseBadRequest(' '.join(error.messages))
     title=reports.TITLES[kind];meta=metadata(run)
     meta.extend((label,', '.join(query.getlist(field)) or 'Все доступные') for field,label in [('currency','Валюта премий'),('period','Периоды отчёта'),('type','Виды мотивации'),('subdivision','Отбор подразделений'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')])
-    context={'skip_motivation_workflow':True,'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
+    from .services.shareholder_original_rules import enabled,enrich
+    context={'shareholder_original_rules':enabled(run),'skip_motivation_workflow':True,'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
         'status_url':reverse('motivation_shareholder_status',args=[run.pk]),'selected_types':kinds,
         'period_options':[{'code':code,'label':'Год' if code=='5' else code+' квартал','selected':code in periods} for code in [*map(str,run.quarters),'5']]}
     navigation=[]
@@ -141,6 +143,7 @@ def report(request,pk,kind):
         if not context['needs_author']:
             data=reports.data_for(run,query,detailed=kind in ('mine','detail'))
             display=present('team' if kind=='team' else 'registry',data,data,periods)
+            enrich(display,data)
             for section in display['team_sections']:section['page']=Paginator(section['rows'],50).get_page(query.get(section['page_parameter'],1))
             context.update(ledger=data,presentation=display,page_query=query.urlencode(),
                 employee_page=Paginator(display['employees'],50).get_page(query.get('page',1)),ledger_page=Paginator(display['registry_rows'],50).get_page(query.get('page',1)))
@@ -176,6 +179,8 @@ def report(request,pk,kind):
                 else:
                     from .services.presentation_excel import workbook
                     output=workbook('team' if kind=='team' else 'registry',data,meta,query,title)
+                if enabled(run) and not audit:
+                    output=catchup_excel(output,data)
                 return FileResponse(output,as_attachment=True,filename=f'shareholders-{run.pk}-{kind}.xlsx')
     context['export_url']='?'+dict_query(query,export='xlsx').urlencode()
     context['audit_url']=reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+dict_query(query,audit='1').urlencode()
@@ -187,3 +192,37 @@ def dict_query(query,**values):
     result=query.copy()
     for key,value in values.items():result[key]=value
     return result
+
+
+def catchup_excel(output, ledger):
+    """Identical breakdown for all new-scheme exports; potential is never a payout."""
+    from openpyxl import load_workbook
+    book=load_workbook(output)
+    output.close()
+    from .services.reports import PILOT_BONUS_NOTE
+    from openpyxl.comments import Comment
+    note='Исходная схема акционеров: невыплаченные квартальные премии доплачиваются при выполнении годового условия I–IV кварталов. Возможные доплаты в итог не включены.'
+    for existing in book:
+        for line in existing:
+            for cell in line:
+                if cell.value==PILOT_BONUS_NOTE:cell.value=note
+                if cell.comment and cell.comment.text==PILOT_BONUS_NOTE:cell.comment=Comment(note,'Портал')
+    sheet=book.create_sheet('Доплаты и годовая часть')
+    sheet.append(['Подразделение','Сотрудник','Вид мотивации','Период','Валюта',
+        'Возможная премия','Премия по расчёту','В годовую премию',
+        'Возможная доплата за кварталы','Доплата к выплате','Всего к выплате'])
+    for row in ledger['rows']:
+        sheet.append([row['subdivision'],row['author'],row['kind'],row['period'],ledger['currency'],
+            row['possible'],row['amount'],row['annual_accrual'],row['potential_bonus'],row['bonus'],row['total']])
+    sheet.freeze_panes='F2';sheet.auto_filter.ref=sheet.dimensions
+    for line in sheet.iter_rows(min_row=2):
+        for cell in line:
+            if isinstance(cell.value,str):cell.data_type='s'
+            elif cell.column>=6:cell.number_format='#,##0.00'
+    for column in sheet.columns:sheet.column_dimensions[column[0].column_letter].width=28
+    info=book.create_sheet('Правила доплат')
+    info.append(['Возможная доплата','Невыплаченная квартальная премия; не входит в итог к выплате.'])
+    info.append(['Годовая строка','Возможные доплаты кварталов свёрнуты в годовой строке: повторно не складывать.'])
+    info.append(['Доплата к выплате','Только при выполнении годового условия I–IV кварталов.'])
+    info.append(['В годовую премию','Отдельные годовые доли кварталов; не входят в квартальные доплаты.'])
+    result=BytesIO();book.save(result);book.close();result.seek(0);return result

@@ -92,10 +92,14 @@ def data_for(run,query,*,detailed=True):
     periods,kinds=selection(run,query);currency=query.get('currency','USD')
     from .closing_coefficient import ReportMultipliers
     multipliers=ReportMultipliers(physical=True,mode=run.metadata.get('manager_correction_mode','legacy'))
+    from .shareholder_original_rules import enabled,attach
+    original_rules=enabled(run)
     sections=[];rows=[];performance=[];department=[]
     for kind in kinds:
         tag=KINDS[kind]
-        source=multipliers.apply([row for row in records(run,'report_'+tag) if period_code(row['КварталМотивации']) in periods])
+        raw=list(records(run,'report_'+tag))
+        if original_rules:raw=attach(raw,records(run,'eligibility_'+tag),curator=tag=='cur')
+        source=multipliers.apply([row for row in raw if period_code(row['КварталМотивации']) in periods])
         search=query.get('search','').strip().casefold()
         filtered=[dict(row,ТипКоэф=kind) for row in source if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
         if detailed:
@@ -113,6 +117,9 @@ def data_for(run,query,*,detailed=True):
         annual=defaultdict(lambda:ZERO)
         for row in multipliers.apply(records(run,'annual_'+tag)):
             if matches(row,query):annual[(row.get('Подразделение') or '—',row.get('АвторСделки') or '—',str(row['Квартал']))]+=Decimal(str(row.get('AnnualRUB' if currency=='RUB' else 'AnnualUSD') or 0))
+        potential=defaultdict(lambda:ZERO)
+        for row in filtered:
+            potential[(row.get('Подразделение') or '—',row.get('АвторСделки') or '—',period_code(row['КварталМотивации']))]+=Decimal(str(row.get('PotentialCatchup'+currency) or 0))
         summary=data['period_summary']
         for item in summary['rows']:
             for index,column in enumerate(summary['columns']):
@@ -121,12 +128,14 @@ def data_for(run,query,*,detailed=True):
                 code=period_code(column['label'])
                 target=query.copy();target.pop('export',None);target.pop('audit',None)
                 target.setlist('period',[code]);target.setlist('type',[kind]);target.setlist('author',[item['author']]);target.setlist('subdivision',[item['subdivision']])
+                bonus=item['remainder'] if original_rules and code=='5' else ZERO
                 rows.append({'subdivision':item['subdivision'],'author':item['author'],'unallocated':item.get('unallocated',False),
-                    'kind':kind,'period':column['label'],'code':code,'amount':amount,'bonus':ZERO,'total':amount,'currency':currency,
+                    'kind':kind,'period':column['label'],'code':code,'amount':amount,'bonus':bonus,'total':amount+bonus,'currency':currency,
+                    'potential_bonus':potential[(item['subdivision'],item['author'],code)],
                     'possible':item.get('possible_values',[None]*len(summary['columns']))[index],
                     'annual_accrual':annual[(item['subdivision'],item['author'],code)] if code in '1234' else None,
                     'detail_url':reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+target.urlencode()})
-    return {'rows':rows,'sections':sections,'plan_fact':performance,'department_plan_fact':department,'kinds':kinds,
+    return {'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'department_plan_fact':department,'kinds':kinds,
         'has_unallocated':any(row['unallocated'] for row in rows),'total':sum((row['total'] for row in rows),ZERO),
         'currency':currency,'payout_threshold':Decimal(run.configuration['payout_threshold'])}
 
@@ -135,8 +144,9 @@ def macro_rows(ledger,periods):
     groups={}
     for row in ledger['rows']:
         key=(row['subdivision'],row['kind'])
-        item=groups.setdefault(key,{'subdivision':key[0],'kind':key[1],'values':{code:{'possible':ZERO,'total':ZERO,'label':'Год' if code=='5' else code+' квартал','code':code,'_annual_rows':[]} for code in periods},'possible':ZERO,'total':ZERO})
+        item=groups.setdefault(key,{'subdivision':key[0],'kind':key[1],'values':{code:{'possible':ZERO,'total':ZERO,'bonus':ZERO,'potential_bonus':ZERO,'amount':ZERO,'label':'Год' if code=='5' else code+' квартал','code':code,'_annual_rows':[]} for code in periods},'possible':ZERO,'total':ZERO})
         item['values'][row['code']]['possible']+=row['possible'] or ZERO;item['values'][row['code']]['total']+=row['total']
+        for field in ('amount','bonus','potential_bonus'):item['values'][row['code']][field]+=row.get(field,ZERO)
         item['values'][row['code']]['_annual_rows'].append(row)
         item['possible']+=row['possible'] or ZERO;item['total']+=row['total']
     from .annual_accrual import total as annual_total
