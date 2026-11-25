@@ -55,8 +55,8 @@ def update(batch,user,changes,action,addition,comment):
     workflow=deepcopy(batch.source['workflow']);stage=workflow['stage']
     if addition and (addition.get('employee') or addition.get('create')) and (stage!='sales' or addition.get('kind')!='Продажи'):
         raise ValidationError('Добавление сотрудников доступно на этапе продаж.')
-    if action not in ('save','sales_complete','complete'):raise ValidationError('Неизвестный переход этапа.')
-    if action=='sales_complete' and stage!='sales' or action=='complete' and stage!='policies':
+    if action not in ('save','sales_complete','return_sales','complete'):raise ValidationError('Неизвестный переход этапа.')
+    if action in ('return_sales','complete') and stage!='policies' or action=='sales_complete' and stage!='sales':
         raise ValidationError('Сначала завершите предыдущий этап.')
     rows=deepcopy(batch.rows)
     if set(changes)!={r['id'] for r in rows}:raise ValidationError('Состав строк изменился. Обновите страницу.')
@@ -94,9 +94,13 @@ def update(batch,user,changes,action,addition,comment):
         if any(r.get('employee_id')==employee.pk and r['kind']=='Продажи' and r['payment']==payment for r in rows):raise ValidationError('Сотрудник уже есть в этом фонде.')
         rows.append({'id':uuid.uuid4().hex,'employee_id':employee.pk,'author':employee.full_name,'kind':'Продажи','payment':payment,'original':'0.00','amount':'0.00','weight':str(weight(addition.get('weight','0'))),'comment':''})
     if stage=='sales':
+        if rows!=batch.rows:
+            workflow.pop('sales_by',None);workflow.pop('sales_at',None)
         allocate(batch.funds,rows,require_complete=action=='sales_complete')
         if action=='sales_complete':workflow.update(stage='policies',sales_by=user.pk,sales_at=timezone.now().isoformat())
+    if action=='return_sales':workflow['stage']='sales'
     if action=='complete':
+        if not workflow.get('sales_at'):raise ValidationError('Сначала зафиксируйте премии продаж.')
         if any(f['remaining']!=0 for f in balances(batch.funds,rows)):raise ValidationError('Каждый фонд должен быть распределён полностью.')
         if any(cash(r['amount']) and not r['author'] for r in rows):raise ValidationError('Назначьте все суммы сотрудникам.')
         if any(r['kind']=='Политики' and cash(r['amount'])!=cash(r['original']) and not r['comment'] for r in rows):raise ValidationError('Укажите комментарии к ребалансу политиков.')
