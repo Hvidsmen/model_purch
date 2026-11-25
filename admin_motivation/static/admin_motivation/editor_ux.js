@@ -13,7 +13,7 @@
   const key=`${row.dataset.pg}\u0000${row.dataset.group}`;
   if(key!==lastKey){
    header=document.createElement('tr');header.className='coefficient-group-heading';
-   const cell=document.createElement('td');cell.colSpan=[...row.cells].reduce((sum,td)=>sum+td.colSpan,0);
+   const cell=document.createElement('td');cell.colSpan=[...row.cells].filter(td=>!td.hidden).reduce((sum,td)=>sum+td.colSpan,0);
    const button=document.createElement('button');button.type='button';button.setAttribute('aria-expanded','true');
    button.textContent=`▾ ${row.dataset.pg} · ${row.dataset.group}`;
    header.dataset.groupKey=key;cell.append(button);header.append(cell);row.before(header);lastKey=key;
