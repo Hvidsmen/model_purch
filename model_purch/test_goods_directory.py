@@ -25,7 +25,7 @@ class GoodsDirectoryTests(TestCase):
     def refresh(self):
         return refresh_goods_directory(self.scenario, connector=self.connector)
 
-    def test_only_three_fields_update_and_only_in_selected_scenario(self):
+    def test_classification_and_planning_key_update_only_selected_scenario(self):
         other_good = PGGoods.objects.get(pk=self.good.pk)
         other_good.pk = None
         other_good.scenario_plan = self.other
@@ -33,7 +33,7 @@ class GoodsDirectoryTests(TestCase):
         before = PGGoods.objects.values().get(pk=self.good.pk)
         self.assertEqual(self.refresh(), {'added': 0, 'updated': 1, 'unchanged': 0, 'missing': 0})
         after = PGGoods.objects.values().get(pk=self.good.pk)
-        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand'})
+        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand', 'source_code'})
         self.assertEqual((after['planning_sales'], after['group_goods'], after['brand'], after['purch']),
                          ('New sales', 'New goods', 'New brand', 'Supplier'))
         other_good.refresh_from_db()
@@ -134,7 +134,7 @@ class GoodsDirectoryTests(TestCase):
         before = PGGoods.objects.values().get(pk=self.good.pk)
         self.refresh()
         after = PGGoods.objects.values().get(pk=self.good.pk)
-        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand'})
+        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales', 'group_goods', 'brand', 'source_code'})
         self.assertEqual(after['purch'], 'Supplier')
         self.assertNotIn('[Purch]', SQL)
 
@@ -195,7 +195,7 @@ class GoodsDirectoryTests(TestCase):
         self.assertEqual((new.exw_usd, new.volume, new.purch, new.duty_rate, new.container_volume), (0, 1.25, 'Supplier 2', .1, 54))
         self.assertEqual(new.kind_purch.name, 'Закупается')
         after = PGGoods.objects.values().get(pk=self.good.pk)
-        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales','group_goods','brand'})
+        self.assertEqual({key for key in before if before[key] != after[key]}, {'planning_sales','group_goods','brand','source_code'})
         query = self.cursor.execute.call_args_list[-1].args
         self.assertEqual(query[1:], (self.scenario.date_start_plan.isoformat(), self.scenario.date_end_plan.isoformat(), plan.name))
         self.assertNotIn(plan.name, query[0])
@@ -255,6 +255,7 @@ class GoodsDirectoryTests(TestCase):
         self.assertEqual(PGGoods.objects.count(), 1)
 
     def test_invalid_creation_defaults_for_existing_goods_do_not_overwrite_or_block_refresh(self):
+        self.good.source_code='PG1';self.good.save()
         self.attach_plan()
         self.cursor.fetchall.side_effect = [[('Group', 'Sales', 'Goods', 'Brand', 'PG1')],
             [('Group', 'Sales', 'Goods', 'Brand', 'PG1', 'Other supplier', -10)]]
