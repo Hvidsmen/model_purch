@@ -223,3 +223,37 @@ class FilteredPerformanceTests(SimpleTestCase):
         stored={**global_row,'ScopeAuthor':'','Plan_':'50000','Fact_':'25000'}
         self.assertEqual(reports.filtered_performance([global_row],[stored])[0]['Plan_'],'50000')
         self.assertEqual(reports.filtered_performance([], [stored]),[])
+
+
+class ShareholderReadPerformanceTests(TestCase):
+    setUp=SnapshotTests.setUp
+
+    def test_summary_matches_full_details_for_both_currencies(self):
+        for currency in ('USD','RUB'):
+            query=QueryDict('type=Политики&period=1&period=5&currency='+currency)
+            full=reports.data_for(self.run,query)
+            with patch('admin_motivation.services.shareholder_reports.manager_detail_report',side_effect=AssertionError('Summary must not build product details')):
+                summary=reports.data_for(self.run,query,detailed=False)
+            for key in ('rows','total','plan_fact','department_plan_fact'):
+                self.assertEqual(summary[key],full[key])
+
+    def test_completed_filter_options_are_cached_without_snapshot_queries(self):
+        from django.utils import timezone
+        from django.test import override_settings
+        self.run.completed_at=timezone.now()
+        with override_settings(CACHES={'default':{'BACKEND':'django.core.cache.backends.locmem.LocMemCache','LOCATION':'shareholder-filter-test'}}):
+            first=reports.options(self.run)
+            with self.assertNumQueries(0):
+                self.assertEqual(reports.options(self.run),first)
+
+    def test_index_only_loads_list_fields_and_omits_workflow(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        with CaptureQueriesContext(connection) as queries:
+            response=self.client.get(reverse('motivation_shareholders'))
+        self.assertEqual(response.status_code,200)
+        self.assertTrue(response.context['skip_motivation_workflow'])
+        table=ShareholderCalculation._meta.db_table
+        selects=[q['sql'] for q in queries if table in q['sql'] and q['sql'].lstrip().upper().startswith('SELECT')]
+        self.assertTrue(selects)
+        self.assertTrue(all('configuration' not in sql and 'metadata' not in sql for sql in selects))

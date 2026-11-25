@@ -41,13 +41,13 @@ def index(request):
                 transaction.on_commit(lambda:runner.launch(run))
                 return redirect('motivation_shareholder_report',run.pk,'team')
             except ValidationError as error:form.add_error(None,error)
-    return render(request,'admin_motivation/reports_next/shareholder_index.html',{'form':form,'can_start':can_start(request.user),
-        'runs':ShareholderCalculation.objects.select_related('created_by').order_by('-created_at')[:50]})
+    return render(request,'admin_motivation/reports_next/shareholder_index.html',{'form':form,'can_start':can_start(request.user),'skip_motivation_workflow':True,
+        'runs':ShareholderCalculation.objects.only('id','name','as_of','scenario','threshold_percent','state','stage','created_at').order_by('-created_at')[:50]})
 
 
 @require_GET
 def status(request,pk):
-    allowed(request);run=get_object_or_404(ShareholderCalculation,pk=pk)
+    allowed(request);run=get_object_or_404(ShareholderCalculation.objects.only('state','stage','error'),pk=pk)
     return JsonResponse({'state':run.state,'stage':run.stage,'error':run.error})
 
 
@@ -97,7 +97,7 @@ def report(request,pk,kind):
     except ValidationError as error:return HttpResponseBadRequest(' '.join(error.messages))
     title=reports.TITLES[kind];meta=metadata(run)
     meta.extend((label,', '.join(query.getlist(field)) or 'Все доступные') for field,label in [('currency','Валюта премий'),('period','Периоды отчёта'),('type','Виды мотивации'),('subdivision','Отбор подразделений'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')])
-    context={'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
+    context={'skip_motivation_workflow':True,'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
         'status_url':reverse('motivation_shareholder_status',args=[run.pk]),'selected_types':kinds,
         'period_options':[{'code':code,'label':'Год' if code=='5' else code+' квартал','selected':code in periods} for code in [*map(str,run.quarters),'5']]}
     navigation=[]
@@ -113,7 +113,7 @@ def report(request,pk,kind):
         context['type_options']=[{'value':v,'selected':v in kinds} for v in reports.KINDS]
         context['needs_author']=kind=='mine' and len(query.getlist('author'))!=1
         if not context['needs_author']:
-            data=reports.data_for(run,query)
+            data=reports.data_for(run,query,detailed=kind in ('mine','detail'))
             display=present('team' if kind=='team' else 'registry',data,data,periods)
             for section in display['team_sections']:section['page']=Paginator(section['rows'],50).get_page(query.get(section['page_parameter'],1))
             context.update(ledger=data,presentation=display,page_query=query.urlencode(),
