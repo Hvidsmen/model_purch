@@ -5,7 +5,7 @@ from django.db import models
 from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from .goods_identity import planning_group_key, source_goods_key
+from .goods_identity import planning_group_key
 from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -183,7 +183,6 @@ class PGGoods(models.Model):
     planning_group_key = models.CharField(max_length=64, editable=False, default='')
     id = models.AutoField(primary_key = True)
     planning_group = models.CharField(max_length=255, blank=True)
-    source_code = models.CharField('Код товара ERP', max_length=255, blank=True, default='')
     planning_sales = models.CharField(max_length=255)
     group_goods = models.CharField(max_length=255)
     brand = models.CharField(max_length=255, null=True)
@@ -263,7 +262,6 @@ class PGGoods(models.Model):
 
     def refresh_identity(self):
         if (self.planning_group or '').strip():self.planning_group_key=planning_group_key(self.planning_group)
-        elif (self.source_code or '').strip():self.planning_group_key=source_goods_key(self.source_code)
         elif not self.planning_group_key.startswith('ungrouped:'):
             import uuid
             self.planning_group_key='ungrouped:'+uuid.uuid4().hex
@@ -285,11 +283,11 @@ class PGGoods(models.Model):
             scenario_plan_id=self.scenario_plan_id, planning_group_key=self.planning_group_key,
         ).exclude(pk=self.pk).exists()
         if duplicate:
-            raise ValidationError('В этом сценарии уже есть такая плановая группа (без учёта регистра).' if (self.planning_group or '').strip() else 'В этом сценарии уже есть товар с таким кодом ERP.')
+            raise ValidationError('В этом сценарии уже есть такая плановая группа (без учёта регистра).' if (self.planning_group or '').strip() else 'В этом сценарии уже есть такая отдельная запись товара.')
 
     def save(self, *args, **kwargs):
         self.refresh_identity()
-        if kwargs.get('update_fields') is not None and {'planning_group','source_code'} & set(kwargs['update_fields']):
+        if kwargs.get('update_fields') is not None and 'planning_group' in kwargs['update_fields']:
             kwargs['update_fields'] = set(kwargs['update_fields']) | {'planning_group_key'}
         group_name = (self.group_goods or '').strip()
         if group_name:

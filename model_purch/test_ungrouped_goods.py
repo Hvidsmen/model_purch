@@ -25,15 +25,7 @@ class UngroupedGoodsTests(TestCase):
         self.assertEqual(first.exw_usd,12);self.assertEqual(second.exw_usd,2)
         self.assertIn(str(first.pk),first.display_name)
 
-    def test_source_code_is_stable_identity_for_unnamed_import(self):
-        target=self.make(source_code='ERP-1')
-        row=self.excel_row('',pk=None)+[None]*10+['ERP-1']
-        response=self.client.post(reverse('import_from_excel')+f'?scenario={self.scenario.pk}',{'excel_file':self.workbook([row])})
-        self.assertEqual(response.status_code,302)
-        target.refresh_from_db();self.assertEqual(target.planning_sales,'Imported sales')
-        self.assertEqual(PGGoods.objects.filter(scenario_plan=self.scenario).count(),1)
-
-    def test_blank_group_import_requires_local_id_or_code(self):
+    def test_blank_group_import_requires_local_id(self):
         target=self.make();other=self.make()
         row=self.excel_row('',pk=target.pk)
         self.client.post(reverse('import_from_excel')+f'?scenario={self.scenario.pk}',{'excel_file':self.workbook([row,self.excel_row('',pk=None)])})
@@ -72,10 +64,28 @@ class UngroupedGoodsTests(TestCase):
         good.save();good.refresh_from_db();self.assertEqual(good.planning_group_key,key)
         self.assertEqual(good.exw_usd,2)
 
-    def test_goods_list_labels_unnamed_and_source_code_can_be_saved(self):
+    def test_goods_list_labels_unnamed_without_erp_code_field(self):
         good=self.make()
         response=self.client.get(reverse('pggoods_list'),{'scenario':self.scenario.pk})
         self.assertContains(response,f'Без плановой группы · ID {good.pk}')
-        response=self.client.post(reverse('bulk_update_pggoods')+f'?scenario={self.scenario.pk}',{'updates':[{'id':good.pk,'source_code':'ERP-SAVED'}]},content_type='application/json')
-        self.assertEqual(response.json()['updated'],1,response.content)
-        good.refresh_from_db();self.assertEqual(good.source_code,'ERP-SAVED')
+        self.assertNotContains(response,'name="source_code"')
+        self.assertNotContains(response,'PlanningKey:')
+
+    def test_erp_field_removed_and_legacy_code_key_becomes_private(self):
+        from django.core.exceptions import FieldDoesNotExist
+        from django.apps import apps
+        from django.db import connection
+        from types import SimpleNamespace
+        from importlib import import_module
+        with self.assertRaises(FieldDoesNotExist):PGGoods._meta.get_field('source_code')
+        good=self.make()
+        PGGoods.objects.filter(pk=good.pk).update(planning_group_key='erp:'+'a'*60)
+        migration=import_module('model_purch.migrations.0037_remove_goods_erp_code')
+        migration.restore_unnamed_identity(apps,SimpleNamespace(connection=connection))
+        good.refresh_from_db();self.assertEqual(good.planning_group_key,f'ungrouped:legacy:{good.pk}')
+        response=self.client.get(reverse('export_pggoods'),{'scenario':self.scenario.pk})
+        from io import BytesIO
+        from openpyxl import load_workbook
+        sheet=load_workbook(BytesIO(response.content)).active
+        self.assertEqual(sheet.max_column,24)
+        self.assertNotIn('Код товара ERP',[cell.value for cell in sheet[1]])
