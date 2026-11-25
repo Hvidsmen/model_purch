@@ -16,7 +16,7 @@ class ShareholderBrowserTests(TestCase):
     def test_five_screen_navigation_filters_and_single_table_scroll(self):
         from playwright.sync_api import sync_playwright,expect
         static=Path(settings.BASE_DIR)/'admin_motivation/static/admin_motivation'
-        css='\n'.join((static/name).read_text() for name in ('reports.css','motivation_ux.css','reports_next.css','reports_performance.css','shareholders.css','manager_report_headers.css'))
+        css='\n'.join((static/name).read_text() for name in ('reports.css','motivation_ux.css','reports_next.css','reports_performance.css','shareholders.css','shareholder_cards.css','manager_report_headers.css'))
         js='\n'.join((static/name).read_text() for name in ('reports_next.js','report_team_tabs.js','report_matrix_header.js','manager_detail.js','manager_report_headers.js'))
         responses=[(kind,self.client.get(self.url(kind),{'type':'Политики','author':'Иванов','period':['1','5']})) for kind in ('team','mine','detail','registry','executive')]
         with sync_playwright() as pw:
@@ -34,7 +34,16 @@ class ShareholderBrowserTests(TestCase):
                     expect(page.locator('input[name=period][value="1"]')).to_be_checked()
                     expect(page.locator('input[name=period][value="5"]')).to_be_checked()
                     self.assertTrue(all(str(self.run.pk) in href for href in page.locator('nav.sh-nav a').evaluate_all('els=>els.map(el=>el.getAttribute("href"))')))
-                    if kind=='executive':expect(page.locator('select[name=author]')).to_have_count(0)
+                    if kind=='executive':
+                        expect(page.locator('select[name=author]')).to_have_count(0)
+                        self.assertGreater(page.locator('.sh-premium-card').count(),0)
+                        expect(page.locator('.sh-executive table')).to_have_count(0)
+                        page.locator('.sh-premium-card summary').first.click()
+                        expect(page.locator('.sh-premium-period').first).to_be_visible()
+                        page.set_viewport_size({'width':390,'height':844})
+                        self.assertTrue(page.locator('.sh-executive').evaluate('el=>el.scrollWidth<=el.clientWidth+1'))
+                        page.screenshot(path='/tmp/shareholders-cards-mobile.png',full_page=True)
+                        page.set_viewport_size({'width':1440,'height':900})
                     if kind=='detail':
                         for frame in page.locator('.manager-period-summary>.report-scroll,#manager-detail-scroll').all():self.assertTrue(frame.evaluate('el=>el.scrollHeight<=el.clientHeight+1'))
                     page.screenshot(path='/tmp/shareholders-'+kind+'.png',full_page=True)
