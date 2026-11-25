@@ -29,6 +29,7 @@ SOURCES = {
 
 
 def check_goods_presence(good, connector=None, include_cost=True):
+    if not (good.planning_group or '').strip():raise ValidationError('Нет плановой группы для сопоставления. Товар сохраняется отдельно по ID; проверка по группе пропущена.')
     scenario = good.scenario_plan
     sources = attached_sources(scenario)
     if len(sources) > 100 or any(len(name) > 255 for name in sources):

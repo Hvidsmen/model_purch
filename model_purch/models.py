@@ -5,7 +5,7 @@ from django.db import models
 from django.db import models
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from .goods_identity import planning_group_key
+from .goods_identity import planning_group_key, source_goods_key
 from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
 
@@ -162,13 +162,14 @@ class PGGoodsQuerySet(models.QuerySet):
         if 'planning_group' in kwargs:
             if not isinstance(kwargs['planning_group'], str):
                 raise ValueError('Update planning_group with a string or use instance.save().')
+            if not kwargs['planning_group'].strip():raise ValueError('Use instance.save() for goods without planning group.')
             kwargs['planning_group_key'] = planning_group_key(kwargs['planning_group'])
         return super().update(**kwargs)
 
     def bulk_create(self, objs, *args, **kwargs):
         objs = list(objs)
         for obj in objs:
-            obj.planning_group_key = planning_group_key(obj.planning_group)
+            obj.refresh_identity()
         return super().bulk_create(objs, *args, **kwargs)
 
     def bulk_update(self, objs, fields, *args, **kwargs):
@@ -181,7 +182,8 @@ class PGGoods(models.Model):
     objects = PGGoodsQuerySet.as_manager()
     planning_group_key = models.CharField(max_length=64, editable=False, default='')
     id = models.AutoField(primary_key = True)
-    planning_group = models.CharField(max_length=255)
+    planning_group = models.CharField(max_length=255, blank=True)
+    source_code = models.CharField('Код товара ERP', max_length=255, blank=True, default='')
     planning_sales = models.CharField(max_length=255)
     group_goods = models.CharField(max_length=255)
     brand = models.CharField(max_length=255, null=True)
@@ -255,11 +257,20 @@ class PGGoods(models.Model):
         self._duty_supplied = 'duty_rate' in kwargs or bool(args)
         super().__init__(*args, **kwargs)
 
+    @property
+    def display_name(self):
+        return self.planning_group.strip() or f'Без плановой группы · ID {self.pk or "новый"}'
+
+    def refresh_identity(self):
+        if (self.planning_group or '').strip():self.planning_group_key=planning_group_key(self.planning_group)
+        elif (self.source_code or '').strip():self.planning_group_key=source_goods_key(self.source_code)
+        elif not self.planning_group_key.startswith('ungrouped:'):
+            import uuid
+            self.planning_group_key='ungrouped:'+uuid.uuid4().hex
+
     def clean(self):
         super().clean()
-        self.planning_group_key = planning_group_key(self.planning_group)
-        if not (self.planning_group or '').strip():
-            raise ValidationError('Плановая группа должна быть задана при загрузке товара.')
+        self.refresh_identity()
         from .services.pricing import number
         errors = {}
         for name, label, positive in [('volume', 'Объём', True), ('container_volume', 'Объём контейнера', True),
@@ -274,11 +285,11 @@ class PGGoods(models.Model):
             scenario_plan_id=self.scenario_plan_id, planning_group_key=self.planning_group_key,
         ).exclude(pk=self.pk).exists()
         if duplicate:
-            raise ValidationError('В этом сценарии уже есть такая плановая группа (без учёта регистра).')
+            raise ValidationError('В этом сценарии уже есть такая плановая группа (без учёта регистра).' if (self.planning_group or '').strip() else 'В этом сценарии уже есть товар с таким кодом ERP.')
 
     def save(self, *args, **kwargs):
-        self.planning_group_key = planning_group_key(self.planning_group)
-        if kwargs.get('update_fields') is not None and 'planning_group' in kwargs['update_fields']:
+        self.refresh_identity()
+        if kwargs.get('update_fields') is not None and {'planning_group','source_code'} & set(kwargs['update_fields']):
             kwargs['update_fields'] = set(kwargs['update_fields']) | {'planning_group_key'}
         group_name = (self.group_goods or '').strip()
         if group_name:
@@ -292,7 +303,7 @@ class PGGoods(models.Model):
         return super().save(*args, **kwargs)
 
     def __str__(self):
-        return self.planning_group
+        return self.display_name
 
 class PGGoodsDuplicateArchive(models.Model):
     original_id = models.PositiveIntegerField()

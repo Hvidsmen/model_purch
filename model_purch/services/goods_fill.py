@@ -85,6 +85,7 @@ def preview(scenario,source,mode,ids,connector=None):
     for good in goods.order_by('pk'):
         values={};notes=[];target=None;ddp_after=None
         try:
+            if not (good.planning_group or '').strip():raise ValidationError('Нет плановой группы для сопоставления; параметры можно заполнить вручную.')
             if source=='physical':
                 found=physical.get(good.planning_group_key,{})
                 for field,label in (('volume','Объём'),('weight_kg','Масса')):
@@ -107,7 +108,7 @@ def preview(scenario,source,mode,ids,connector=None):
                 updates.append({'id':good.pk,'values':values})
         except ValidationError as exc:notes.extend(exc.messages);values={}
         if values or notes:
-            rows.append({'id':good.pk,'name':good.planning_group,'old_volume':good.volume,'new_volume':values.get('volume',good.volume),'old_weight':good.weight_kg,'new_weight':values.get('weight_kg',good.weight_kg),'old_exw':good.exw_usd,'new_exw':values.get('exw_usd',good.exw_usd),'target':target,'ddp_after':ddp_after,'notes':notes})
+            rows.append({'id':good.pk,'name':good.display_name,'old_volume':good.volume,'new_volume':values.get('volume',good.volume),'old_weight':good.weight_kg,'new_weight':values.get('weight_kg',good.weight_kg),'old_exw':good.exw_usd,'new_exw':values.get('exw_usd',good.exw_usd),'target':target,'ddp_after':ddp_after,'notes':notes})
     return {'rows':rows,'updates':updates,'digest':digest,'ids':list(goods.order_by('pk').values_list('pk',flat=True))}
 
 

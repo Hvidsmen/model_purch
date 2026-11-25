@@ -29,7 +29,7 @@ class PGGoodsCopyForm(forms.Form):
 class PGGoodsEditForm(forms.ModelForm):
     class Meta:
         model = PGGoods
-        fields = ['purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch',
+        fields = ['source_code', 'purch', 'planning_sales', 'group_goods', 'brand', 'kind_purch',
                   'volume', 'weight_kg', 'container_volume', 'duty_rate', 'exw_usd', 'stock_cnt_day']
         labels = {'purch': _('Закупка'), 'planning_sales': _('Группа планов продаж'),
                   'group_goods': _('Группа товаров'), 'brand': _('Бренд'), 'kind_purch': _('Вид закупки'),
