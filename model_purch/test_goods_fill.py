@@ -48,10 +48,11 @@ class GoodsFillTests(TestCase):
         self.assertIn(other.pk,[r['id'] for r in result['updates']])
         with self.assertRaises(ValidationError):fill.preview(self.scenario,'fact','visible',[999999])
 
-    def test_invalid_targets_skip_and_never_use_stock_fallback(self):
+    def test_ddp_without_quantity_is_used_and_invalid_targets_skip(self):
         PGGoods.objects.filter(pk=self.good.pk).update(plan_quantity=None)
         result=fill.preview(self.scenario,'plan','all',[])
-        self.assertFalse(result['updates']);self.assertTrue(result['rows'][0]['notes'])
+        self.assertEqual(len(result['updates']),1)
+        self.assertAlmostEqual(result['updates'][0]['values']['exw_usd'],150)
         PGGoods.objects.filter(pk=self.good.pk).update(plan_quantity=1,plan_ddp_usd=1)
         result=fill.preview(self.scenario,'plan','all',[])
         self.assertFalse(result['updates']);self.assertIn('неотрицательный EXW',result['rows'][0]['notes'][0])
@@ -106,3 +107,13 @@ class GoodsFillTests(TestCase):
         self.client.force_login(User.objects.create_user('cannot-fill'))
         self.assertEqual(self.client.get(self.url).status_code,403)
         self.assertEqual(self.client.post(self.url,{'source':'plan','action':'apply'}).status_code,403)
+
+    def test_fact_ddp_without_quantity_is_used_and_missing_ddp_is_clear(self):
+        PGGoods.objects.filter(pk=self.good.pk).update(fact_quantity=None)
+        result=fill.preview(self.scenario,'fact','all',[])
+        self.assertEqual(len(result['updates']),1)
+        self.assertAlmostEqual(result['rows'][0]['ddp_after'],300)
+        PGGoods.objects.filter(pk=self.good.pk).update(fact_ddp_usd=None)
+        result=fill.preview(self.scenario,'fact','all',[])
+        self.assertFalse(result['updates'])
+        self.assertIn('не загружен',result['rows'][0]['notes'][0])
