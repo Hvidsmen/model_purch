@@ -73,10 +73,10 @@ class GoodsFillTests(TestCase):
 
     def test_erp_reader_uses_available_columns_and_positive_averages(self):
         connection,cursor=Mock(),Mock()
-        cursor.fetchall.side_effect=[[('Даичи_ГруппаПланирования',),('ОбъемЧислитель',),('ВесЧислитель',)],[('Daikin SENSIRA',2,3)]]
+        cursor.fetchall.side_effect=[[('Даичи_ГруппаПланирования',),('ОбъемЧислитель',),('ВесЧислитель',)],[('Daikin SENSIRA',2,1,3,1)]]
         rows=fill.physical_source(lambda *args:(connection,cursor))
         self.assertEqual(rows[self.good.planning_group_key],{'volume':2,'weight_kg':3})
-        self.assertIn('AVG(CASE WHEN TRY_CONVERT',cursor.execute.call_args[0][0])
+        self.assertIn('COUNT_BIG(CASE WHEN TRY_CONVERT',cursor.execute.call_args[0][0])
         connection.close.assert_called_once()
 
     def test_http_preview_confirmation_and_apply(self):
@@ -117,3 +117,13 @@ class GoodsFillTests(TestCase):
         result=fill.preview(self.scenario,'fact','all',[])
         self.assertFalse(result['updates'])
         self.assertIn('не загружен',result['rows'][0]['notes'][0])
+
+    def test_erp_name_variants_merge_weighted_by_valid_measurement_counts(self):
+        connection,cursor=Mock(),Mock()
+        cursor.fetchall.side_effect=[[('Даичи_ГруппаПланирования',),('ОбъемЧислитель',),('ВесЧислитель',)],
+            [(' Daikin SENSIRA ',6,3,2,1),('DAIKIN SENSIRA',6,1,12,3),('Other',None,0,4,2)]]
+        rows=fill.physical_source(lambda *args:(connection,cursor))
+        self.assertEqual(rows[self.good.planning_group_key],{'volume':3,'weight_kg':3.5})
+        from .goods_identity import planning_group_key
+        self.assertEqual(rows[planning_group_key('Other')],{'volume':None,'weight_kg':2})
+        connection.close.assert_called_once()
