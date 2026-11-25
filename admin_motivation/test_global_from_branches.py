@@ -102,13 +102,16 @@ class GlobalFromBranchesTests(TestCase):
         self.client.force_login(User.objects.create_user('weighted-no-access'))
         self.assertEqual(self.client.get(url,{'version':self.version.pk}).status_code,403)
 
-    def test_unknown_plan_product_and_missing_global_cell_block_apply(self):
+    def test_unknown_plan_product_and_missing_global_cell_are_skipped(self):
         GlobalCoeff.objects.filter(segment=self.segments[0]).delete()
         result=self.preview();self.assertTrue(result['ready']);self.assertTrue(result['missing_targets'])
         self.apply(result)
         self.assertFalse(GlobalCoeff.objects.filter(version=self.version,segment=self.segments[0]).exists())
         self.plan.lines.filter(subdivision='WB').update(brand='Not in directory')
-        result=self.preview();self.assertFalse(result['ready']);self.assertTrue(result['unknown'])
+        result=self.preview();self.assertTrue(result['ready']);self.assertTrue(result['unknown'])
+        self.assertEqual({row['weight'] for row in result['rows'] if row['after'] is not None},{'100'})
+        self.apply(result)
+        self.assertEqual(GlobalCoeff.objects.get(version=self.version,segment=self.segments[1]).motivation_coeff,.01)
 
     def test_excluded_group_has_no_weight_and_does_not_zero_global(self):
         from .models import MotivationPlanningGroupExclusion

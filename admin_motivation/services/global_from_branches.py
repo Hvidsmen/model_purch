@@ -108,7 +108,7 @@ def preview(version,scenario,groups):
         if denominator and target is None:
             missing_targets.append(f'{GROUPS[key]} · {goods[good]} · K{index}');after=None
         rows.append({'kind':GROUPS[key],'group':key,'goods':good,'label':str(goods[good]),'segment':index,'target':target.pk if target else None,'before':str(before) if before is not None else None,'after':str(after) if after is not None else None,'before_percent':before*100 if before is not None else None,'after_percent':after*100 if after is not None else None,'weight':str(denominator),'parts':parts})
-    ready=any(value[1]>0 for value in totals.values()) and not (unknown or negative) and any(r['after'] is not None for r in rows)
+    ready=any(value[1]>0 for value in totals.values()) and not negative and any(r['after'] is not None for r in rows)
     digest=hashlib.sha256(json.dumps({'rows':rows,'policy':policy_signature(),'version':version.pk,'revision':version.revision,'scenario':scenario.pk,'groups':groups},sort_keys=True,default=str).encode()).hexdigest()
     return {'rows':rows,'missing':sorted(missing),'unknown':sorted(unknown),'negative':sorted(negative),'missing_targets':missing_targets,'ready':ready,'digest':digest,'line_count':line_count,'changed':sum(r['after'] is not None and (r['before'] is None or Decimal(r['after'])!=Decimal(r['before'])) for r in rows)}
 
