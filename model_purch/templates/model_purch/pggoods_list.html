@@ -1,5 +1,5 @@
 {% extends 'model_purch/base.html' %}
-{% load custom_filters l10n %}
+{% load custom_filters l10n static %}
 
 {% block title %}Товары · параметры и стоимость{% endblock %}
 
@@ -51,7 +51,10 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
 </style>
 <style>
     .table thead th { position: sticky; top: 0; z-index: 10; background: #f8f9fa; white-space: nowrap; border-bottom: 2px solid #dee2e6; box-shadow: 0 2px 4px rgba(0,0,0,0.08); }
-    .table-responsive { max-height: calc(100vh - 280px); overflow-y: auto; }
+    .goods-table-scroll { max-height: none; overflow-x: auto; }
+    .goods-fixed-heading { position:fixed; top:0; z-index:100; overflow:hidden; background:#f8f9fa; box-shadow:0 2px 4px #0f172a22; }
+    .goods-fixed-heading[hidden] { display:none; }
+    .goods-fixed-heading table { margin:0!important; }
     .inline-input { border: 1px solid transparent; background: transparent; width: 100%; padding: 4px 6px; border-radius: 4px; transition: all 0.15s ease; }
     .inline-input:focus { outline: none; border-color: #0d6efd; background: #fff; box-shadow: 0 0 0 2px rgba(13,110,253,0.15); }
     .inline-input.changed { background: #fff9c4 !important; border-color: #f0ad4e; }
@@ -331,7 +334,7 @@ body .product-table .product-ddp .product-classification-field>span{flex-basis:8
     <div class="goods-guide" id="goods-editor-table"><span><strong>Ввод:</strong> зелёные поля</span><span><strong>Расчёт:</strong> значения без рамки</span><span><strong>Пошлина:</strong> введите 10 для 10%</span><span><strong>Стоимость:</strong> USD за единицу товара</span></div>
     <div id="goods-save-status" role="status" aria-live="polite" class="small text-muted mb-2"></div>
     {% if not portal_purchases_readonly %}<button type="button" id="discard-goods-changes" class="btn btn-sm btn-outline-secondary mb-2" hidden>Отменить изменения</button>{% endif %}
-    <div class="table-responsive">
+    <div class="table-responsive goods-table-scroll">
         <table class="table table-hover align-middle mb-0 product-table">
             <colgroup><col style="width:42px"><col style="width:220px"><col style="width:320px"><col style="width:150px"><col style="width:110px"><col style="width:100px"><col class="ddp-detail" style="width:160px"><col style="width:160px"><col class="goods-advanced" style="width:170px"><col style="width:150px"><col style="width:64px"></colgroup>
             <thead>
@@ -676,4 +679,5 @@ const scenarioId = document.querySelector('input[name="scenario"]')?.value ||
     });
 });
 </script>
+<script src="{% static 'model_purch/goods_table_header.js' %}" defer></script>
 {% endblock %}
