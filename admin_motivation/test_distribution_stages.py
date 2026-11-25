@@ -104,7 +104,8 @@ class ClosingWorkflowTests(TestCase):
         response=self.client.get(reverse('motivation_distribution_detail',args=[batch.pk]))
         self.assertContains(response,'Зафиксировать премии продаж → перейти к политикам')
         self.assertNotContains(response,'name="amount_pol"')
-        self.assertContains(response,'name="weight_')
+        self.assertNotContains(response,'name="weight_')
+        self.assertContains(response,'name="sales_amounts"')
 
     def test_branch_director_has_stage_access_but_cannot_confirm(self):
         from base.models import PortalReportGroup

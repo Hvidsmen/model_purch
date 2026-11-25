@@ -66,3 +66,26 @@ class DistributionStageLayoutTests(TestCase):
         response=self.client.get(reverse('motivation_distribution_detail',args=[batch.pk]))
         self.assertEqual({r['kind'] for r in response.context['display_rows']},{'Продажи','Политики'})
         self.assertContains(response,'Скачать Excel для финансистов')
+
+    def test_sales_amounts_save_without_weight_recalculation_and_require_full_fund(self):
+        batch=self.create()
+        url=reverse('motivation_distribution_detail',args=[batch.pk])
+        sales=[r for r in batch.rows if r['kind']=='Продажи']
+        fields={'revision':batch.revision,'action':'save','sales_amounts':'1',
+                **{'amount_'+r['id']:r['amount'] for r in batch.rows}}
+        fields['amount_'+sales[0]['id']]='70.01'
+        fields['amount_'+sales[1]['id']]='20.00'
+        self.assertEqual(self.client.post(url,fields).status_code,302)
+        batch.refresh_from_db()
+        self.assertEqual([r['amount'] for r in batch.rows if r['kind']=='Продажи'],['70.01','20.00','0.00'])
+        fields.update(revision=batch.revision,action='sales_complete')
+        self.assertContains(self.client.post(url,fields),'Распределите каждый фонд продаж полностью')
+        fields['amount_'+sales[1]['id']]='30.00'
+        fields['action']='save'
+        self.assertContains(self.client.post(url,fields),'Нельзя распределить больше фонда')
+        fields['amount_'+sales[1]['id']]='29.99'
+        fields['action']='sales_complete'
+        self.assertEqual(self.client.post(url,fields).status_code,302)
+        batch.refresh_from_db()
+        self.assertEqual(batch.source['workflow']['stage'],'policies')
+        self.assertEqual([r['amount'] for r in batch.rows if r['kind']=='Продажи'],['70.01','29.99','0.00'])

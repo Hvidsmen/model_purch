@@ -3,10 +3,10 @@
   'use strict';
   const cents = value => Math.round(Number(String(value).replace(/\s/g, '').replace(',', '.')) * 100);
   const money = value => (value / 100).toLocaleString('ru-RU', {minimumFractionDigits: 2, maximumFractionDigits: 2});
-  document.querySelectorAll('[data-fund-kind="Политики"]').forEach(card => {
+  document.querySelectorAll('[data-fund-kind]').forEach(card => {
     const budget = cents(card.dataset.fundAmount);
-    const inputs = Array.from(document.querySelectorAll('input[data-rebalance-kind="Политики"]'))
-      .filter(input => input.dataset.rebalancePayment === card.dataset.fundPayment);
+    const inputs = Array.from(document.querySelectorAll('input[data-rebalance-kind]'))
+      .filter(input => input.dataset.rebalanceKind === card.dataset.fundKind && input.dataset.rebalancePayment === card.dataset.fundPayment);
     // Preserve the existing editor for historical negative adjustments.
     if (!inputs.length || !Number.isSafeInteger(budget) || budget < 0 ||
         inputs.some(input => !Number.isSafeInteger(cents(input.value)) || cents(input.value) < 0)) return;
