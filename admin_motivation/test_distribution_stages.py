@@ -123,15 +123,19 @@ class ClosingWorkflowTests(TestCase):
         batch=distribution.update(user,batch.pk,batch.revision,changes,action='sales_complete')
         self.assertEqual(batch.source['workflow']['stage'],'policies')
 
-    def test_politician_rebalance_preserves_fund_and_requires_comments(self):
+    def test_politician_rebalance_preserves_fund_with_optional_comments(self):
         self.rows.append({'id':'pol2','kind':'Политики','payment':'quarter','author':'Second Policy','original':'0.00','amount':'0.00','comment':''})
         batch=self.create()
         batch=distribution.update(self.admin,batch.pk,batch.revision,self.changes(batch),action='sales_complete')
         changes=self.changes(batch);changes['pol']['amount']='40';changes['pol2']['amount']='10'
+        changes['pol']['amount']='39'
         with self.assertRaises(ValidationError):distribution.update(self.admin,batch.pk,batch.revision,changes,action='complete')
-        changes['pol']['comment']='Перераспределено';changes['pol2']['comment']='Получатель'
+        changes['pol']['amount']='40'
+        changes['pol']['comment']='Перераспределено'
         batch=distribution.update(self.admin,batch.pk,batch.revision,changes,action='complete')
         self.assertEqual(sum(Decimal(r['amount']) for r in batch.rows if r['kind']=='Политики'),50)
+        self.assertEqual(next(r for r in batch.rows if r['id']=='pol2')['comment'],'')
+        self.assertEqual(next(r for r in batch.rows if r['id']=='pol')['comment'],'Перераспределено')
 
     def test_annual_factor_is_separate_from_quarter_and_scales_accrual_once(self):
         confirm(self.ceo,self.branch,2025,4,'1.2');confirm(self.ceo,self.branch,2025,5,'0.5')

@@ -103,7 +103,6 @@ def update(batch,user,changes,action,addition,comment):
         if not workflow.get('sales_at'):raise ValidationError('Сначала зафиксируйте премии продаж.')
         if any(f['remaining']!=0 for f in balances(batch.funds,rows)):raise ValidationError('Каждый фонд должен быть распределён полностью.')
         if any(cash(r['amount']) and not r['author'] for r in rows):raise ValidationError('Назначьте все суммы сотрудникам.')
-        if any(r['kind']=='Политики' and cash(r['amount'])!=cash(r['original']) and not r['comment'] for r in rows):raise ValidationError('Укажите комментарии к ребалансу политиков.')
         batch.state='completed';batch.completed_at=timezone.now();batch.completed_by=user
         workflow.update(stage='completed',policies_by=user.pk,policies_at=timezone.now().isoformat())
     batch.rows=rows;batch.source={**batch.source,'workflow':workflow};batch.revision+=1;batch.save();event(batch,user,action,comment)
