@@ -5,8 +5,8 @@ from django.db import transaction
 from ..models import (GlobalCoeffVersion,GlobalCoeff,SubdivisionCoeff,GlobalDirectorCoeff,SubdivisionDirectorCoeff,SubdivisionManagerCoeff,CoefficientEditLog,Goods,TypeCoeff,SegmentCoeff,Subdivision,DirectorEmployee)
 
 MODELS=(GlobalCoeff,SubdivisionCoeff,GlobalDirectorCoeff,SubdivisionDirectorCoeff,SubdivisionManagerCoeff)
-ACTIONS={'file_load','apply_sub','copy_version','copy_from_global','copy_to_director','fill_coeff','add_product'}
-LABELS={'balancing':'Балансировка премии','file_load':'Импорт файла','apply_sub':'Копирование в подразделения','copy_version':'Копирование версии','copy_from_global':'Копирование глобальных ставок','copy_to_director':'Копирование директору','fill_coeff':'Заполнение матрицы','add_product':'Добавление товара','coefficient_group_copy':'Копирование групп','director_coeff_import':'Импорт директоров','coverage':'Создание отсутствующих ставок'}
+ACTIONS={'apply_core_import','file_load','apply_sub','copy_version','copy_from_global','copy_to_director','fill_coeff','add_product'}
+LABELS={'apply_core_import':'Импорт политиков и продаж по подразделениям','balancing':'Балансировка премии','file_load':'Импорт файла','apply_sub':'Копирование в подразделения','copy_version':'Копирование версии','copy_from_global':'Копирование глобальных ставок','copy_to_director':'Копирование директору','fill_coeff':'Заполнение матрицы','add_product':'Добавление товара','coefficient_group_copy':'Копирование групп','director_coeff_import':'Импорт директоров','coverage':'Создание отсутствующих ставок'}
 
 
 def snapshot(version):

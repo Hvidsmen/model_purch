@@ -44,6 +44,17 @@ from .services.operation_audit import audit_request
 def gloabal_coeff(request, version_form=None):
     context = version_context(request, version_form)
     selected = context['selected_version']
+    if request.method=='GET' and request.GET.get('core_import')=='1':
+        from .core_coeff_import_views import page
+        return page(request,selected)
+    if request.method=='GET' and request.GET.get('export')=='subdivisions_xlsx':
+        from base.access import role_for,ADMIN,MODELER,DIRECTOR,MOTIVATION_VIEWER
+        from django.core.exceptions import PermissionDenied
+        from django.http import FileResponse,Http404
+        from .services.subdivision_coeff_export import workbook
+        if role_for(request.user,'motivation') not in (ADMIN,MODELER,DIRECTOR,MOTIVATION_VIEWER):raise PermissionDenied
+        if selected is None:raise Http404('Нет версии для выгрузки.')
+        return FileResponse(workbook(selected),as_attachment=True,filename=f'motivation-all-subdivisions-v{selected.pk}.xlsx')
     if request.method == 'GET' and request.GET.get('export') == 'directors_xlsx':
         from base.access import role_for, ADMIN, MODELER, DIRECTOR, MOTIVATION_VIEWER
         from django.core.exceptions import PermissionDenied
@@ -123,6 +134,9 @@ def coefficient_return_route(request, subdivision=None):
 @audit_request
 def gloabal_coeff_action(request):
     action = request.POST.get('action_button')
+    if action in ('preview_core_import','apply_core_import'):
+        from .core_coeff_import_views import action as core_action
+        return core_action(request)
     if action == 'copy_version':
         from .services.versions import copy_from_version
         destination = get_object_or_404(GlobalCoeffVersion, pk=request.POST.get('version'))
