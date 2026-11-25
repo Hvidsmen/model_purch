@@ -59,11 +59,18 @@ def update(batch,user,changes,action,addition,comment):
     if action in ('return_sales','complete') and stage!='policies' or action=='sales_complete' and stage!='sales':
         raise ValidationError('Сначала завершите предыдущий этап.')
     rows=deepcopy(batch.rows)
+    direct_sales=stage=='sales' and (bool(addition and addition.get('direct_amount')) or any(change.get('direct_amount') for change in changes.values()))
     if set(changes)!={r['id'] for r in rows}:raise ValidationError('Состав строк изменился. Обновите страницу.')
     for row in rows:
         change=changes[row['id']]
         if stage=='sales' and row['kind']=='Продажи':
-            row['weight']=str(weight(change.get('weight',row.get('weight','0'))))
+            if direct_sales:
+                amount=cash(change['amount'])
+                fund=next(f for f in batch.funds if f['kind']=='Продажи' and f['payment']==row['payment'])
+                if cash(fund['amount'])>=0 and amount<0:raise ValidationError('Сумма не может быть отрицательной.')
+                row['amount']=str(amount)
+            else:
+                row['weight']=str(weight(change.get('weight',row.get('weight','0'))))
         elif stage=='policies' and row['kind']=='Политики':
             amount=cash(change['amount']);note=str(change.get('comment','')).strip()
             if len(note)>2000:raise ValidationError('Комментарий слишком длинный.')
@@ -78,7 +85,7 @@ def update(batch,user,changes,action,addition,comment):
             from ..models import SalesEmployee
             from django.db import IntegrityError,transaction
             name=' '.join(str(addition.get('full_name','')).split())
-            personnel=str(addition.get('personnel_number','')).strip()
+            personnel='AUTO-'+uuid.uuid4().hex
             if not name or len(name)>255:raise ValidationError('Укажите ФИО сотрудника (до 255 знаков).')
             if len(personnel)>64:raise ValidationError('Табельный номер: до 64 знаков.')
             names=SalesEmployee.objects.filter(subdivision=batch.subdivision).values_list('full_name',flat=True)
@@ -92,11 +99,19 @@ def update(batch,user,changes,action,addition,comment):
         else:employee=eligible_employees(batch).filter(pk=addition['employee']).first()
         if not employee:raise ValidationError('Выберите сотрудника подразделения, работавшего в этом периоде.')
         if any(r.get('employee_id')==employee.pk and r['kind']=='Продажи' and r['payment']==payment for r in rows):raise ValidationError('Сотрудник уже есть в этом фонде.')
-        rows.append({'id':uuid.uuid4().hex,'employee_id':employee.pk,'author':employee.full_name,'kind':'Продажи','payment':payment,'original':'0.00','amount':'0.00','weight':str(weight(addition.get('weight','0'))),'comment':''})
+        rows.append({'id':uuid.uuid4().hex,'employee_id':employee.pk,'author':employee.full_name,'kind':'Продажи','payment':payment,'original':'0.00','amount':'0.00','weight':'0' if direct_sales else str(weight(addition.get('weight','0'))),'comment':''})
     if stage=='sales':
         if rows!=batch.rows:
             workflow.pop('sales_by',None);workflow.pop('sales_at',None)
-        allocate(batch.funds,rows,require_complete=action=='sales_complete')
+        if direct_sales:
+            sales_balances=[f for f in balances(batch.funds,rows) if f['kind']=='Продажи']
+            if any(cash(f['amount'])>=0 and f['remaining']<0 for f in sales_balances):
+                raise ValidationError('Нельзя распределить больше фонда. Сначала уменьшите другую премию.')
+            if action=='sales_complete' and any(f['remaining']!=0 for f in sales_balances):
+                raise ValidationError('Распределите каждый фонд продаж полностью.')
+            workflow['sales_mode']='amounts'
+        else:
+            allocate(batch.funds,rows,require_complete=action=='sales_complete')
         if action=='sales_complete':workflow.update(stage='policies',sales_by=user.pk,sales_at=timezone.now().isoformat())
     if stage=='policies' and any(f['kind']=='Политики' and cash(f['amount'])>=0 and f['remaining']<0 for f in balances(batch.funds,rows)):
         raise ValidationError('Нельзя распределить больше фонда. Сначала уменьшите другую премию.')

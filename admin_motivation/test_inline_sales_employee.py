@@ -14,25 +14,27 @@ class InlineSalesEmployeeTests(TestCase):
 
     def fields(self,**extra):
         return {'action':'add_new_person','revision':self.batch.revision,'new_kind':'Продажи','new_payment':'quarter',
-                'new_full_name':'  Новый   Сотрудник  ','new_personnel_number':'123','new_weight':'1',
-                **{'weight_'+row['id']:'1' for row in self.batch.rows if row['kind']=='Продажи'},**extra}
+                'new_full_name':'  Новый   Сотрудник  ','sales_amounts':'1',
+                **{'amount_'+row['id']:('100.00' if row['id']==self.batch.rows[0]['id'] else row['amount']) for row in self.batch.rows},**extra}
 
     def test_creates_directory_employee_and_allocation_on_same_page(self):
         response=self.client.post(self.url,self.fields(new_user=self.admin.pk,new_subdivision=999999))
         self.assertRedirects(response,self.url)
         employee=SalesEmployee.objects.get(full_name='Новый Сотрудник')
         self.assertEqual(employee.subdivision_id,self.branch.pk)
-        self.assertEqual(employee.personnel_number,'123')
+        self.assertTrue(employee.personnel_number.startswith('AUTO-'))
         self.assertIsNone(employee.user_id)
         self.batch.refresh_from_db()
         sales=[r for r in self.batch.rows if r['kind']=='Продажи']
         self.assertEqual(len(sales),4)
         self.assertEqual(sum(Decimal(r['amount']) for r in sales),100)
-        self.assertTrue(all(Decimal(r['amount'])==25 for r in sales))
+        self.assertEqual(Decimal(sales[0]['amount']),100)
+        self.assertEqual(Decimal(sales[-1]['amount']),0)
+        self.assertEqual(sales[-1]['weight'],'0')
         self.assertEqual(self.batch.source['workflow']['stage'],'sales')
 
-    def test_invalid_weight_rolls_back_employee_rows_and_revision(self):
-        response=self.client.post(self.url,self.fields(new_weight='-1'))
+    def test_invalid_amount_rolls_back_employee_rows_and_revision(self):
+        response=self.client.post(self.url,self.fields(**{'amount_'+self.batch.rows[0]['id']:'-1'}))
         self.assertEqual(response.status_code,200)
         self.assertFalse(SalesEmployee.objects.filter(full_name='Новый Сотрудник').exists())
         self.batch.refresh_from_db();self.assertEqual(self.batch.revision,1)
@@ -65,3 +67,5 @@ class InlineSalesEmployeeTests(TestCase):
         self.assertContains(response,'class="pd-person-card pd-person-card-new"')
         fragment=response.content.decode().split('<section class="pd-people"',1)[1].split('<div class="pd-grid"',1)[0]
         self.assertNotIn('target="_blank"',fragment)
+        self.assertNotIn('name="new_weight"',fragment)
+        self.assertNotIn('name="new_personnel_number"',fragment)
