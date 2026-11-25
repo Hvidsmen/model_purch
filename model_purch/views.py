@@ -1319,17 +1319,10 @@ def import_from_excel(request):
 
                         # A savepoint keeps one invalid row from breaking the entire workbook.
                         with transaction.atomic():
-                            goods = None
-                            if item_id:
-                                goods = PGGoods.objects.filter(pk=int(item_id), scenario_plan=current_scenario).first()
-                            if goods and PGGoods.objects.filter(
+                            # Workbook IDs belong to their source scenario; names identify imports.
+                            goods = PGGoods.objects.filter(
                                 scenario_plan=current_scenario, planning_group_key=identity,
-                            ).exclude(pk=goods.pk).exists():
-                                raise ValueError('Плановая группа уже существует в этом сценарии с другим ID')
-                            if goods is None:
-                                goods = PGGoods.objects.filter(
-                                    scenario_plan=current_scenario, planning_group_key=identity,
-                                ).first()
+                            ).first()
                             if kind_purch is None:
                                 existing = goods or PGGoods.objects.filter(
                                     scenario_plan=current_scenario, planning_group_key=identity,

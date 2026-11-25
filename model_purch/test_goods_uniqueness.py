@@ -100,7 +100,7 @@ class GoodsUniquenessTests(TestCase):
         self.assertEqual(target.planning_sales, 'Imported sales')
         self.assertEqual(PGGoods.objects.count(), 1)
 
-    def test_conflicting_excel_rename_does_not_break_remaining_rows(self):
+    def test_excel_id_conflict_updates_name_match_and_continues(self):
         target = PGGoods.objects.create(**self.fields())
         other = PGGoods.objects.create(**self.fields(planning_group='Another'))
         response = self.client.post(f'{reverse("import_from_excel")}?scenario={self.scenario.pk}', {'excel_file': self.workbook([
@@ -111,6 +111,8 @@ class GoodsUniquenessTests(TestCase):
         other.refresh_from_db()
         self.assertEqual(target.ddp_usd, 2)
         self.assertEqual(other.planning_group, 'Another')
+        self.assertEqual(target.planning_sales, 'Imported sales')
+        self.assertEqual(other.planning_sales, 'Sales')
         self.assertEqual(PGGoods.objects.get(planning_group='New group').ddp_usd, 2)
 
     def sql_source(self):
