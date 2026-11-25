@@ -58,11 +58,13 @@ class GlobalFromBranchesTests(TestCase):
         self.apply(result)
         self.assertEqual(GlobalCoeff.objects.get(version=self.version,segment=self.segments[4]).motivation_coeff,.04)
 
-    def test_missing_source_or_target_blocks_entire_apply(self):
+    def test_missing_source_skips_only_its_weight_and_applies_others(self):
         SubdivisionCoeff.objects.filter(subdivision=self.branches[1],segment=self.segments[3]).delete()
-        result=self.preview();self.assertFalse(result['ready']);self.assertTrue(result['missing'])
-        with self.assertRaises(ValidationError):self.apply(result)
-        self.assertEqual(set(GlobalCoeff.objects.filter(version=self.version).values_list('motivation_coeff',flat=True)),{.04})
+        result=self.preview();self.assertTrue(result['ready']);self.assertTrue(result['missing'])
+        row=next(r for r in result['rows'] if r['segment']==3)
+        self.assertEqual(row['after'],'0.010000');self.assertEqual(row['weight'],'100')
+        self.apply(result)
+        self.assertEqual(GlobalCoeff.objects.get(version=self.version,segment=self.segments[3]).motivation_coeff,.01)
 
     def test_changed_plan_stale_revision_and_negative_weight_are_rejected(self):
         result=self.preview()
@@ -102,7 +104,9 @@ class GlobalFromBranchesTests(TestCase):
 
     def test_unknown_plan_product_and_missing_global_cell_block_apply(self):
         GlobalCoeff.objects.filter(segment=self.segments[0]).delete()
-        result=self.preview();self.assertFalse(result['ready']);self.assertTrue(result['missing_targets'])
+        result=self.preview();self.assertTrue(result['ready']);self.assertTrue(result['missing_targets'])
+        self.apply(result)
+        self.assertFalse(GlobalCoeff.objects.filter(version=self.version,segment=self.segments[0]).exists())
         self.plan.lines.filter(subdivision='WB').update(brand='Not in directory')
         result=self.preview();self.assertFalse(result['ready']);self.assertTrue(result['unknown'])
 
@@ -124,3 +128,24 @@ class GlobalFromBranchesTests(TestCase):
     def test_global_plan_rows_are_not_double_counted(self):
         SalesPlanLine.objects.create(scenario=self.plan,plan_date=date(2026,1,1),subdivision='',planning_group_sales='RAC',group='Split',brand='X',amount_usd=2000,segment_amounts={f'O{i}':'400' for i in range(5)})
         result=self.preview();self.assertEqual({row['weight'] for row in result['rows']},{'400'})
+
+    def test_no_source_keeps_existing_global_and_zero_rate_is_included(self):
+        SubdivisionCoeff.objects.filter(segment=self.segments[2]).delete()
+        SubdivisionCoeff.objects.filter(subdivision=self.branches[0],segment=self.segments[1]).update(motivation_coeff=0)
+        result=self.preview();self.assertTrue(result['ready'])
+        self.assertIsNone(next(r for r in result['rows'] if r['segment']==2)['after'])
+        self.assertEqual(next(r for r in result['rows'] if r['segment']==1)['after'],'0.022500')
+        self.apply(result)
+        self.assertEqual(GlobalCoeff.objects.get(version=self.version,segment=self.segments[2]).motivation_coeff,.04)
+
+    def test_partial_director_matrix_uses_available_recipient_only(self):
+        other_good=Goods.objects.create(goods_key='OTHER',planning_group_sales='Other',group='Other',brand='Other')
+        GlobalDirectorCoeff.objects.create(version=self.version,goods=self.good,**{f'k{i}':'.04' for i in range(5)})
+        for index,good in enumerate((self.good,other_good)):
+            person=DirectorEmployee.objects.create(full_name=f'Partial {index}')
+            person.subdivisions.add(self.branches[0])
+            SubdivisionDirectorCoeff.objects.create(version=self.version,goods=good,employee=person,subdivision=self.branches[0],**{f'k{i}':'.01' for i in range(5)})
+        result=self.preview(['directors']);self.assertTrue(result['ready']);self.assertTrue(result['missing'])
+        self.assertEqual({r['after'] for r in result['rows']},{'0.010000'})
+        self.assertEqual({r['weight'] for r in result['rows']},{'100'})
+        self.apply(result,['directors'])
