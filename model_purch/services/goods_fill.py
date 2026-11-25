@@ -85,7 +85,7 @@ def preview(scenario,source,mode,ids,connector=None):
     for good in goods.order_by('pk'):
         values={};notes=[];target=None;ddp_after=None
         try:
-            if not (good.planning_group or '').strip():raise ValidationError('Нет плановой группы для сопоставления; параметры можно заполнить вручную.')
+            if source=='physical' and not (good.planning_group or '').strip():raise ValidationError('Нет плановой группы для сопоставления с ERP; объём и массу можно заполнить вручную.')
             if source=='physical':
                 found=physical.get(good.planning_group_key,{})
                 for field,label in (('volume','Объём'),('weight_kg','Масса')):

@@ -67,7 +67,8 @@ class UngroupedGoodsTests(TestCase):
     def test_goods_list_labels_unnamed_without_erp_code_field(self):
         good=self.make()
         response=self.client.get(reverse('pggoods_list'),{'scenario':self.scenario.pk})
-        self.assertContains(response,f'Без плановой группы · ID {good.pk}')
+        self.assertNotContains(response,f'value="Без плановой группы · ID {good.pk}"')
+        good.refresh_from_db();self.assertEqual(good.planning_group,'')
         self.assertNotContains(response,'name="source_code"')
         self.assertNotContains(response,'PlanningKey:')
 
@@ -89,3 +90,22 @@ class UngroupedGoodsTests(TestCase):
         sheet=load_workbook(BytesIO(response.content)).active
         self.assertEqual(sheet.max_column,24)
         self.assertNotIn('Код товара ERP',[cell.value for cell in sheet[1]])
+
+    def test_empty_group_alone_does_not_block_preflight(self):
+        from .services.preflight import validation_errors
+        good=self.make()
+        with patch('model_purch.services.purchases.coverage_errors',return_value=[]):
+            errors=validation_errors(self.scenario)
+        self.assertFalse(any('плановой группы' in value for value in errors),errors)
+        good.refresh_from_db();self.assertEqual(good.planning_group,'')
+
+    def test_unnamed_exw_can_use_its_own_saved_ddp(self):
+        from .models import Freight
+        from django.utils import timezone
+        good=self.make()
+        self.scenario.plan_parameters_loaded_at=timezone.now();self.scenario.save()
+        Freight.objects.create(scenario=self.scenario,price_per_container=0)
+        PGGoods.objects.filter(pk=good.pk).update(plan_ddp_usd=100)
+        result=preview(self.scenario,'plan','all',[])
+        self.assertEqual(result['updates'][0]['values']['exw_usd'],100)
+        good.refresh_from_db();self.assertEqual(good.planning_group,'')

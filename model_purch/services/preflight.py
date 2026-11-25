@@ -48,8 +48,6 @@ def validation_errors(scenario):
     if not goods:
         errors.append('В сценарии нет товаров для расчёта.')
     for good in goods:
-        if not (good.planning_group or '').strip():
-            errors.append(f'Товар ID {good.pk} без плановой группы: сохранение параметров разрешено, но сопоставление в расчёте MS SQL не настроено.')
         for name, label in [('container_volume', 'Объём контейнера'), ('volume', 'Объём'), ('exw_usd', 'EXW'), ('weight_kg', 'Вес'), ('ddp_usd', 'DDP'), ('kddp', 'KDDP')]:
             if not valid_number(getattr(good, name), strictly_positive=(name in {'volume', 'container_volume', 'exw_usd'})):
                 errors.append(f'{good.planning_group}: {label} должен быть конечным числом {"больше нуля" if name in {"volume", "container_volume", "exw_usd"} else "не меньше нуля"}.')
