@@ -8,6 +8,11 @@
    visible[toggle.dataset.coefficientGroupToggle] = toggle.checked;
    table?.querySelectorAll(`[data-coefficient-group="${toggle.dataset.coefficientGroupToggle}"]`).forEach(cell => cell.hidden = !toggle.checked);
   });
+  // A full-width section row must span only the columns still displayed.
+  // Otherwise its old colspan creates empty columns after a group is hidden.
+  const head = table?.tHead;
+  const columns = head ? [...head.rows].reduce((total, row, index) => total + [...row.cells].filter(cell => !cell.hidden && (cell.rowSpan > 1 || index === head.rows.length - 1)).reduce((sum, cell) => sum + cell.colSpan, 0), 0) : 0;
+  if (columns) table.querySelectorAll('.coefficient-group-heading > td').forEach(cell => cell.colSpan = columns);
   try { localStorage.setItem(key, JSON.stringify(visible)); } catch (_) {}
  };
  let saved = {};
