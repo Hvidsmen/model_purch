@@ -13,7 +13,10 @@ ZERO=Decimal(0)
 
 
 def records(run,dataset):
-    for chunk in run.chunks.filter(dataset=dataset).order_by('mode','sequence').iterator():
+    chunks=run.chunks.filter(dataset=dataset)
+    if run.scenario=='combined' or dataset in ('mapping','deals') or dataset.endswith('_cur'):
+        chunks=chunks.filter(mode='combined')
+    for chunk in chunks.only('mode','payload').order_by('mode','sequence').iterator(chunk_size=16):
         for row in chunk.payload:
             code=period_code(str(row.get('КварталМотивации','')))
             if dataset.startswith('annual_'):code=str(row.get('Квартал',''))
@@ -23,6 +26,11 @@ def records(run,dataset):
 
 
 def options(run):
+    from django.core.cache import cache
+    cache_key=f'shareholder-options-v1:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at else None
+    if cache_key:
+        saved=cache.get(cache_key)
+        if saved is not None:return saved
     values={key:set() for key in ('subdivision','author','planning','goods','brand')}
     fields=dict(subdivision='Подразделение',author='АвторСделки',planning='ГруппаПлановПродаж',goods='ГруппаТоваров',brand='Марка')
     for tag in KINDS.values():
@@ -30,7 +38,9 @@ def options(run):
             if period_code(row['КварталМотивации']) not in [*map(str,run.quarters),'5']:continue
             for key,field in fields.items():
                 if row.get(field):values[key].add(row[field])
-    return {key:sorted(value) for key,value in values.items()}
+    result={field:sorted(value) for field,value in values.items()}
+    if cache_key:cache.set(cache_key,result,3600)
+    return result
 
 
 def selection(run,query):
@@ -77,7 +87,7 @@ def filtered_performance(source,stored):
     return result
 
 
-def data_for(run,query):
+def data_for(run,query,*,detailed=True):
     if run.state!='completed':raise ValidationError('Результаты доступны только после успешного завершения всего задания.')
     periods,kinds=selection(run,query);currency=query.get('currency','USD')
     from .closing_coefficient import ReportMultipliers
@@ -88,7 +98,12 @@ def data_for(run,query):
         source=multipliers.apply([row for row in records(run,'report_'+tag) if period_code(row['КварталМотивации']) in periods])
         search=query.get('search','').strip().casefold()
         filtered=[dict(row,ТипКоэф=kind) for row in source if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
-        data=manager_detail_report(filtered,currency,performance_rows=source)
+        if detailed:
+            data=manager_detail_report(filtered,currency,performance_rows=source)
+        else:
+            from .first_quarter_inputs import normalize
+            from .manager_detail import period_motivation_summary
+            data={'period_summary':period_motivation_summary(normalize(filtered),currency),'currency':currency}
         perf=filtered_performance(filtered,records(run,'perf_'+tag))
         contexts={(r['Подразделение'],str(r['Год']),r['КварталМотивации']) for r in filtered}
         dept=[row for row in records(run,'dept_'+tag) if (row['Подразделение'],str(row['Год']),row['КварталМотивации']) in contexts]
