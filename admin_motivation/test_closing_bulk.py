@@ -77,3 +77,18 @@ class ClosingBulkTests(TestCase):
     def test_financier_cannot_confirm(self):
         data=self.post_data();self.client.force_login(self.finance)
         self.assertEqual(self.client.post(self.url,data).status_code,403)
+
+    def test_merged_branch_only_in_collapsed_curator_section(self):
+        grid=self.grid()
+        self.assertIn(self.branch.pk,[r['branch'].pk for r in grid.main_rows])
+        self.assertNotIn(self.other.pk,[r['branch'].pk for r in grid.main_rows])
+        self.assertIn(self.other.pk,[r['branch'].pk for r in grid.physical_rows])
+        with patch('admin_motivation.premium_distribution_views.latest_calculation',return_value=None):
+            response=self.client.get(self.url,{'year':2025,'period':4})
+        html=response.content.decode()
+        section=html[html.index('<h4>Подразделения основного расчёта</h4>'):]
+        main,physical=section.split('<details class="pd-physical-branches"',1)
+        self.assertNotIn('Closing Other',main)
+        self.assertIn('Closing Other',physical)
+        self.assertIn('В общем расчёте:',physical)
+        self.assertIn('style="margin:16px 0"><summary>',physical)
