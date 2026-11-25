@@ -147,6 +147,8 @@ def update(user,pk,revision,changes,*,action='save',addition=None,comment=''):
             if not any((f['kind'],f['payment'])==key for f in batch.funds):raise ValidationError('Такого фонда нет в распределении.')
             if any((r['author'].casefold(),r['kind'],r['payment'])==(author.casefold(),*key) for r in rows):raise ValidationError('Сотрудник уже есть в этом фонде.')
             rows.append({'id':uuid.uuid4().hex,'employee_id':employee.pk,'author':author,'kind':key[0],'payment':key[1],'original':'0.00','amount':'0.00','comment':''})
+        if any(f['kind']=='Политики' and cash(f['amount'])>=0 and f['remaining']<0 for f in balances(batch.funds,rows)):
+            raise ValidationError('Нельзя распределить больше фонда. Сначала уменьшите другую премию.')
         batch.rows=rows
         if action=='complete':
             if any(b['remaining']!=0 for b in balances(batch.funds,rows)):raise ValidationError('Распределите каждый фонд полностью: остатки должны быть равны нулю.')
