@@ -98,6 +98,8 @@ def update(batch,user,changes,action,addition,comment):
             workflow.pop('sales_by',None);workflow.pop('sales_at',None)
         allocate(batch.funds,rows,require_complete=action=='sales_complete')
         if action=='sales_complete':workflow.update(stage='policies',sales_by=user.pk,sales_at=timezone.now().isoformat())
+    if stage=='policies' and any(f['kind']=='Политики' and cash(f['amount'])>=0 and f['remaining']<0 for f in balances(batch.funds,rows)):
+        raise ValidationError('Нельзя распределить больше фонда. Сначала уменьшите другую премию.')
     if action=='return_sales':workflow['stage']='sales'
     if action=='complete':
         if not workflow.get('sales_at'):raise ValidationError('Сначала зафиксируйте премии продаж.')

@@ -128,7 +128,11 @@ class ClosingWorkflowTests(TestCase):
         batch=self.create()
         batch=distribution.update(self.admin,batch.pk,batch.revision,self.changes(batch),action='sales_complete')
         changes=self.changes(batch);changes['pol']['amount']='40';changes['pol2']['amount']='10'
+        changes['pol']['amount']='41'
+        with self.assertRaisesMessage(ValidationError,'Нельзя распределить больше фонда'):
+            distribution.update(self.admin,batch.pk,batch.revision,changes,action='save')
         changes['pol']['amount']='39'
+        batch=distribution.update(self.admin,batch.pk,batch.revision,changes,action='save')
         with self.assertRaises(ValidationError):distribution.update(self.admin,batch.pk,batch.revision,changes,action='complete')
         changes['pol']['amount']='40'
         changes['pol']['comment']='Перераспределено'
