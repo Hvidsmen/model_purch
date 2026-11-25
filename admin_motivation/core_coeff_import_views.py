@@ -27,23 +27,23 @@ def page(request,version):
             if payload and (payload['actor']!=request.user.pk or payload['version']!=version.pk):raise PermissionDenied
             if action=='apply_core_import':
                 if not payload or request.POST.get('confirm_import')!='yes':raise ValidationError('Подтвердите замену ставок после предварительного просмотра.')
-                current=service.resolve(payload['rows'],payload['mappings'])
+                current=service.resolve(payload['rows'],payload['mappings'],payload.get('scope'))
                 if [list(v) for v in targets(current)]!=payload['targets']:raise ValidationError('Справочники изменились. Повторите предварительный просмотр.')
-                result=service.apply(version.pk,payload['revision'],payload['rows'],payload['mappings'],request.POST.get('formula'))
+                result=service.apply(version.pk,payload['revision'],payload['rows'],payload['mappings'],request.POST.get('formula'),scope=payload.get('scope'))
                 messages.success(request,f"Импорт завершён: новых ячеек {result['created']}, изменено {result['updated']}. Политики и продажи по подразделениям.")
                 return redirect(reverse('global_coeff_admin_motivation')+'?version='+str(version.pk))
             if payload:
                 if str(payload['revision'])!=str(version.revision):raise ValidationError('Версия изменилась. Загрузите файл заново.')
-                rows=payload['rows'];mappings=payload['mappings']
+                rows=payload['rows'];mappings=payload['mappings'];scope=payload.get('scope',rows)
             else:
-                upload=request.FILES.get('coefficient_file')
+                upload=request.FILES.get('coefficient_file') or request.FILES.get('myfile')
                 if not upload:raise ValidationError('Выберите файл XLSX.')
-                rows=service.parse(upload);mappings={}
+                parsed=service.parse(upload,with_scope=True);rows=parsed['rows'];scope=parsed['scope'];mappings={}
             mappings={**mappings,**{k:v for k,v in request.POST.items() if k.startswith(('goods_','branch_')) and v}}
-            plan=service.resolve(rows,mappings)
+            plan=service.resolve(rows,mappings,scope)
             existing={(r.subdivision_id,r.goods_id,r.type_coeff.type_coeff_name,r.segment.segment_name.upper().replace('O','K')):r.motivation_coeff for r in SubdivisionCoeff.objects.filter(version=version).select_related('type_coeff','segment')}
             for row in plan['rows']:row['before']=[existing.get((row['branch_id'],row['goods_id'],row['kind'],'K'+str(i))) for i in range(5)]
-            payload={'actor':request.user.pk,'version':version.pk,'revision':version.revision,'rows':rows,'mappings':mappings,'targets':targets(plan)}
+            payload={'actor':request.user.pk,'version':version.pk,'revision':version.revision,'rows':rows,'scope':scope,'mappings':mappings,'targets':targets(plan)}
             data.update(plan,preview_token=signing.dumps(payload,salt=SALT,compress=True),preview=True)
     except (ValidationError,signing.BadSignature,ValueError) as exc:
         data['error']='; '.join(exc.messages) if isinstance(exc,ValidationError) else 'Предварительный просмотр устарел или повреждён. Загрузите файл заново.'
