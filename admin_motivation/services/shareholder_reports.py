@@ -8,7 +8,7 @@ from .motivation_performance import presentation_rows, DEPARTMENT
 from .reports_next import period_code
 
 KINDS={'Политики':'pol','Продажи':'sales','Директора':'dir','Кураторы':'cur'}
-TITLES={'team':'Премии команды','mine':'Моя премия','detail':'Детальный расчёт','registry':'Реестр','executive':'Обзор для генерального директора'}
+TITLES={'team':'Премии команды','mine':'Моя премия','detail':'Детальный расчёт','deals':'Факт закрытых сделок','registry':'Реестр','executive':'Обзор для генерального директора'}
 ZERO=Decimal(0)
 
 

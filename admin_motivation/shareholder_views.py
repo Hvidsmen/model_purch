@@ -88,6 +88,7 @@ def report(request,pk,kind):
     if kind not in reports.TITLES:raise Http404
     run=get_object_or_404(ShareholderCalculation,pk=pk)
     query=request.GET.copy();query['year']='2026'
+    if kind=='deals':query.pop('type',None)
     if request.GET.get('export'):query.pop('page',None)
     if kind=='executive':query.pop('author',None);query.pop('search',None)
     for field in ('subdivision','author','planning','goods','brand','type','period'):
@@ -112,6 +113,20 @@ def report(request,pk,kind):
         context['authors']=[{'value':v,'selected':v in query.getlist('author')} for v in available['author']]
         context['type_options']=[{'value':v,'selected':v in kinds} for v in reports.KINDS]
         context['needs_author']=kind=='mine' and len(query.getlist('author'))!=1
+        if kind=='deals':
+            from decimal import Decimal
+            rows=list(reports.audit_rows(run,query))
+            context.update(deals_page=Paginator(rows,50).get_page(query.get('page',1)),
+                deals_usd=sum((Decimal(str(row.get('AllocatedUSD') or 0)) for row in rows),Decimal(0)),
+                deals_rub=sum((Decimal(str(row.get('AllocatedRUB') or 0)) for row in rows),Decimal(0)),
+                ledger={'currency':query['currency']},page_query=dict_query(query).urlencode(),
+                export_url='?'+dict_query(query,export='xlsx').urlencode())
+            if query.get('export')=='xlsx':
+                output=plain_excel(title,['Дата','Подразделение источника','Документ','Код товара','Исходный автор','Получатель','Доля','Оборот USD','Оборот RUB'],
+                    [[row['ClosedDate'],row['SourceBranch'],row['DocumentNumber'],row['ProductCode'],row['OriginalAuthor'],row['AssignedAuthor'],Decimal(str(row['Weight_'])),Decimal(str(row['AllocatedUSD'])),Decimal(str(row['AllocatedRUB']))] for row in rows],meta)
+                return FileResponse(output,as_attachment=True,filename=f'shareholder-deals-{run.pk}.xlsx')
+            return render(request,'admin_motivation/reports_next/shareholder_report.html',context)
+
         if not context['needs_author']:
             data=reports.data_for(run,query,detailed=kind in ('mine','detail'))
             display=present('team' if kind=='team' else 'registry',data,data,periods)
