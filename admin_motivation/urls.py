@@ -6,11 +6,13 @@ from . import report_navigation_views,coefficient_iteration_views,coefficient_it
 
 from . import shareholder_views
 
+from . import global_from_branches_views
 from . import curator_views
 
 from . import premium_distribution_views, sales_employee_views
 
 urlpatterns = [
+    path('coefficients/from-subdivisions/',global_from_branches_views.page,name='motivation_global_from_subdivisions'),
     path('curator-coefficients/copy-global/',curator_views.copy_global,name='motivation_curator_copy_global'),
     path('curator-coefficients/global/',curator_views.global_rates,name='motivation_curator_global_rates'),
     path('curator-coefficients/',curator_views.coefficient_workspace,name='motivation_curator_coefficients'),
