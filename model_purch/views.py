@@ -669,6 +669,7 @@ INNER JOIN (
 
                 defaults = {
                     'planning_group': planning_group, 'planning_sales': planning_sales, 'group_goods': group_goods,
+                    'source_code': str(row.get('PlanningKey') or '').strip(),
                     'brand': brand, 'purch': purch_name, 'kind_purch': kind_purch_obj,
                     'volume': volume, 'exw_usd': 0.0,
                     'stock_cnt_day': 0, 'percent_stock_end': 0.0,

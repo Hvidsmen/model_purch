@@ -25,7 +25,7 @@ class SqlGoodsPreparationTests(SimpleTestCase):
         calls = cursor.execute.call_args_list
         inserts = [call for call in calls if call.args[0].startswith('INSERT INTO portal.PGGoodsDuplicateArchive')]
         deletes = [call for call in calls if call.args[0].startswith('DELETE FROM portal.PGGoods')]
-        updates = [call for call in calls if call.args[0].startswith('UPDATE portal.PGGoods')]
+        updates = [call for call in calls if call.args[0].startswith('UPDATE portal.PGGoods SET planning_group_key')]
         self.assertEqual([call.args[1] for call in inserts], [2245, 2496])
         self.assertEqual([json.loads(call.args[4])['ddp_usd'] for call in inserts], [10, 20])
         self.assertTrue(all(call.args[2] == 2496 for call in inserts))
@@ -34,7 +34,7 @@ class SqlGoodsPreparationTests(SimpleTestCase):
         self.assertEqual([call.args[2] for call in updates], [2496, 3000])
         self.assertTrue(all(call.args[1] == planning_group_key('Daikin SENSIRA') for call in updates))
         self.assertIn('CREATE UNIQUE INDEX', calls[-1].args[0])
-        self.assertIn('ON portal.PGGoods (scenario_name, planning_group);', calls[-1].args[0])
+        self.assertNotIn('ON portal.PGGoods (scenario_name, planning_group);', calls[-1].args[0])
 
 
 class SqlGoodsExportTests(TestCase):
