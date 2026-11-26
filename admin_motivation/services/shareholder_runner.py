@@ -122,7 +122,10 @@ def execute(run,connector=None):
             cursor.execute('SELECT OBJECT_DEFINITION(OBJECT_ID(?))','motivation.'+name)
             row=cursor.fetchone();definitions[mode]=row[0] if row else None
         if not definitions['combined']:raise ValidationError('Не установлено задание «Все кварталы 2026». Обновите его через Центр расчётов.')
-        if regions.enabled(run):regions.install_rates(cursor,run)
+        if regions.enabled(run):
+            profiles={regions.uses_native_key_functions(value) for value in definitions.values()}
+            if len(profiles)!=1:raise ValidationError('Установленные процедуры используют разные ключи коэффициентов. Обновите задания расчёта 2026 перед новым запуском.')
+            regions.install_rates(cursor,run,definitions['combined'])
         progress(run,'Определение долей авторов по исходным подразделениям')
         weights=prepare_mapping(cursor,run)
         cursor.execute('''CREATE TABLE #share_parameters(FactYear int,PlanVersion nvarchar(500),QuarterShare decimal(9,8),YearShare decimal(9,8),PayoutThreshold decimal(9,8),Cutoff date);''')

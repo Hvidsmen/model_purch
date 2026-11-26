@@ -6,6 +6,7 @@ from django.core.exceptions import ValidationError
 from .pilot_formula import mask_sql
 
 RULE='rostov-piter-policy-plans-2026-v1'
+KEY_FORMAT='portal-goods-v2'
 REGIONS=('Д-Ростов','Д-Питер')
 BRANCHES=('Д-Москва','ТЕРМОТРЕЙД',*REGIONS)
 REGION_SQL="N'Д-Ростов',N'Д-Питер'"
@@ -27,8 +28,8 @@ def approved_rates():
         if cell.variation_calculate.variation_name not in supported:raise ValidationError('Неизвестная формула политиков: '+cell.variation_calculate.variation_name)
         key=(cell.version_id,cell.subdivision_id,cell.goods_id)
         item=grouped.setdefault(key,{'DateFrom':cell.version.effective_from.isoformat(),'DateTo':'9999-12-31',
-            'Subdivision':cell.subdivision.subdivision_key,'PGSales':cell.goods.planning_group_sales,'Group_':cell.goods.group if cell.goods.planning_group_sales in ('1. RAC','2. VRF','3. PROF') else '*',
-            'Brand':cell.goods.brand if cell.goods.group in ('Бытовые кондиционеры','Полупромышленные кондиционеры','Системы мульти-сплит','Системы VRF') else '','TypeCoeff':'Политики','VariationCalculate':cell.variation_calculate.variation_name})
+            'Subdivision':cell.subdivision.subdivision_key,'PGSales':cell.goods.planning_group_sales,'Group_':cell.goods.group,
+            'Brand':cell.goods.brand,'TypeCoeff':'Политики','VariationCalculate':cell.variation_calculate.variation_name})
         segment=cell.segment.segment_name
         if segment not in ('K0','K1','K2','K3','K4'):raise ValidationError('Неизвестный сегмент коэффициента '+segment)
         if item['VariationCalculate']!=cell.variation_calculate.variation_name:raise ValidationError('У сегментов товара разные формулы: '+cell.goods.goods_key)
@@ -48,15 +49,22 @@ def approved_rates():
         for previous,current in zip(items,items[1:]):
             if previous['DateFrom']==current['DateFrom']:raise ValidationError('Повтор настройки региона для одной товарной группы и даты.')
             previous['DateTo']=(date.fromisoformat(current['DateFrom'])-timedelta(days=1)).isoformat()
-    return {'versions':[{'id':v.pk,'from':v.effective_from.isoformat(),'revision':v.revision,'fallback_variation':v.fallback_variation or 'Подразделение(Глобально)'} for v in versions],
-            'defaults':[{'Date_':v.effective_from.isoformat(),'DefaultFormula':v.fallback_variation or 'Подразделение(Глобально)'} for v in versions],
+    return {'key_format':KEY_FORMAT,'versions':[{'id':v.pk,'from':v.effective_from.isoformat(),'revision':v.revision,'fallback_variation':v.fallback_variation} for v in versions],
+            'defaults':[{'Date_':v.effective_from.isoformat(),'DefaultFormula':v.fallback_variation or None} for v in versions],
             'coefficients':sorted(result,key=lambda x:tuple(x[k] for k in ('DateFrom','Subdivision','PGSales','Group_','Brand')))}
 
 
-def install_rates(cursor,run):
+def uses_native_key_functions(source):
+    code=mask_sql(source or '')
+    return all(re.search(r'\b'+name+r'\b',code,re.I) for name in ('fn_CoeffGroupERP','fn_CoeffBrand'))
+
+
+def install_rates(cursor,run,definition=None):
     rows=run.configuration.get('regional_rates',{}).get('coefficients',[])
     defaults=run.configuration.get('regional_rates',{}).get('defaults',[])
     if not defaults:raise ValidationError('Нет утверждённой версии с формулой по умолчанию в запуске. Создайте новый расчёт после утверждения настроек.')
+    if run.configuration.get('regional_rates',{}).get('key_format')!=KEY_FORMAT:
+        raise ValidationError('В запуске сохранён прежний формат ключей коэффициентов. Создайте новый акционерский расчёт после обновления портала.')
     cursor.execute('CREATE TABLE #share_region_defaults(Date_ date,DefaultFormula nvarchar(255) COLLATE DATABASE_DEFAULT);')
     cursor.executemany('INSERT INTO #share_region_defaults VALUES(?,?)',[(r['Date_'],r['DefaultFormula']) for r in defaults])
     cursor.execute('''CREATE TABLE #share_region_coefficients(
@@ -66,6 +74,15 @@ def install_rates(cursor,run):
  K0 float,K1 float,K2 float,K3 float,K4 float,VariationCalculate nvarchar(255) COLLATE DATABASE_DEFAULT);''')
     if rows:cursor.executemany('INSERT INTO #share_region_coefficients VALUES('+','.join('?' for _ in FIELDS)+')',
         [tuple(row[field]+'T23:59:59.9999999' if field=='DateTo' else row[field] for field in FIELDS) for row in rows])
+    # Freeze portal goods verbatim, then obtain the join keys using the same
+    # classification as the actual procedure (including wildcard/empty brands).
+    group="CASE WHEN PGSales IN(N'1. RAC',N'2. VRF',N'3. PROF') THEN Group_ ELSE N'*' END"
+    brand="CASE WHEN Group_ IN(N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN Brand ELSE N'' END"
+    if uses_native_key_functions(definition):
+        group='DataWH.motivation.fn_CoeffGroupERP(PGSales,Group_)'
+        brand='DataWH.motivation.fn_CoeffBrand(Group_,Brand)'
+    cursor.execute('UPDATE #share_region_coefficients SET Group_='+group+',Brand='+brand+';')
+
 
 
 # Shares use all valid 2026 transactions through the cutoff, after reassignment.
@@ -251,11 +268,18 @@ IF EXISTS(SELECT 1 FROM #share_transformed s JOIN dbo.Subdivisions b ON b.Subdiv
  AND c.Brand=CASE WHEN p.GroupERP IN(N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE N'' END)>1)
  THROW 50083,N'Для факта Ростова/Питера найдены повторяющиеся утверждённые настройки коэффициентов.',1;
 '''
+    optimized_keys=uses_native_key_functions(source)
+    if optimized_keys:
+        validation=validation.replace("CASE WHEN p.PlanningGroupSalesErp IN(N'1. RAC',N'2. VRF',N'3. PROF') THEN p.GroupERP ELSE N'*' END",'DataWH.motivation.fn_CoeffGroupERP(p.PlanningGroupSalesErp,p.GroupERP)')
+        validation=validation.replace("CASE WHEN p.GroupERP IN(N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.BrandName ELSE N'' END",'DataWH.motivation.fn_CoeffBrand(p.GroupERP,p.BrandName)')
     source=source[:at]+WEIGHTS_SQL+validation+source[at:]
     # Split after #plan is built, before either public-style temporary output.
     point=re.search(r"IF\s+OBJECT_ID\(N?'tempdb\.\.#share_plan_fact'\)",source,re.I)
     if not point:raise ValidationError('Не найдена граница сохранения план-факта.')
     split_sql=re.sub(r'#plan\b',lambda _:plan_start['table'],SPLIT_SQL)
+    if optimized_keys:
+        split_sql=split_sql.replace("CASE WHEN p.[ГруппаПлановПродаж] IN(N'1. RAC',N'2. VRF',N'3. PROF') THEN p.[ГруппаТоваров] ELSE N'*' END",'DataWH.motivation.fn_CoeffGroupERP(p.[ГруппаПлановПродаж],p.[ГруппаТоваров])')
+        split_sql=split_sql.replace("CASE WHEN p.[ГруппаТоваров] IN(N'Бытовые кондиционеры',N'Полупромышленные кондиционеры',N'Системы мульти-сплит',N'Системы VRF') THEN p.[Марка] ELSE N'' END",'DataWH.motivation.fn_CoeffBrand(p.[ГруппаТоваров],p.[Марка])')
     source=source[:point.start()]+split_sql+source[point.start():]
     return triple_gates(fallback_formulas(source))
 
@@ -337,10 +361,23 @@ def fallback_formulas(source):
         branch='sub.SubdivisionName' if is_fact else 's.SubdivisionName'
         shared_type=re.search(r'\[?sc\]?\s*\.\s*\[?NormalizedTypeCoeff\]?\s*=\s*([\w\[\].]+)',code[end:stop],re.I)
         policy_guard=" AND LTRIM(RTRIM("+shared_type[1]+"))=N'Политики'" if shared_type else ''
-        fallback='CASE WHEN '+branch+' IN ('+REGION_SQL+')'+policy_guard+' THEN (SELECT TOP(1) DefaultFormula FROM #share_region_defaults WHERE Date_<='+date_+' ORDER BY Date_ DESC) END,'
-        edits.append((match.end(),fallback))
+        fallback='CASE WHEN '+branch+' IN ('+REGION_SQL+')'+policy_guard+" THEN (SELECT TOP(1) NULLIF(DefaultFormula,N'') FROM #share_region_defaults WHERE Date_<="+date_+' ORDER BY Date_ DESC) END,'
+        edits.append((match.end(),match.end(),fallback))
+        # A regional blank default must fall through to the native CASE rather
+        # than reading today's mutable PortalFormulaDefaults after the snapshot.
+        region=branch+' IN ('+REGION_SQL+')'+policy_guard
+        start=match.end();depth=0
+        for at in range(start,end+1):
+            char=code[at] if at<end else ','
+            if char=='(':depth+=1
+            elif char==')':depth-=1
+            elif char==',' and depth==0:
+                argument=source[start:at]
+                if re.search(r'\bPortalFormulaDefaults\b',code[start:at],re.I):
+                    edits.append((start,at,'CASE WHEN NOT ('+region+') THEN ('+argument+') END'))
+                start=at+1
     if contexts!={'fact','plan'}:raise ValidationError('Не найдены формулы факта и плана для регионов.')
-    for point,value in reversed(edits):source=source[:point]+value+source[point:]
+    for start,end,value in sorted(edits,reverse=True):source=source[:start]+value+source[end:]
     return source
 
 
