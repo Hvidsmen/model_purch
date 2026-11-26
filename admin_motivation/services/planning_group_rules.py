@@ -7,7 +7,7 @@ from django.db import transaction
 from .pilot_formula import mask_sql,closing
 
 FORMULAS=('Группа планов продаж','Группа товаров','Марка(Бренд)','Подразделение','Подразделение(Глобально)')
-KINDS=('Политики','Продажи','Директора')
+KINDS=('Политики','Продажи','Директора','Кураторы')
 METHODS=(('auto','Текущий автоматический подбор'),('minimum','Минимум внутри группы'),('fixed','Заданные K0–K4'),('error','Не рассчитывать без точной ставки'))
 TABLE='motivation.PortalPlanningGroupRules'
 TABLE_SQL='''IF OBJECT_ID(N'motivation.PortalPlanningGroupRules',N'U') IS NULL
@@ -15,6 +15,17 @@ CREATE TABLE motivation.PortalPlanningGroupRules(Date_ date NOT NULL,Subdivision
 TypeCoeff nvarchar(40) NOT NULL,PGSales nvarchar(255) NOT NULL,Formula nvarchar(64) NULL,Missing nvarchar(16) NOT NULL,
 K0 float NULL,K1 float NULL,K2 float NULL,K3 float NULL,K4 float NULL);'''
 FIELDS=('Date_','Subdivision','TypeCoeff','PGSales','Formula','Missing','K0','K1','K2','K3','K4')
+
+
+def for_curator(source):
+    """Director SQL is reused internally; group rules must still be curator rules.
+
+    Rate rows in #curator_coeff have already been renamed to Директора. Only
+    the group-rule lookup changes type; its minimum stays on those own rates.
+    """
+    pattern=r"\bgr\.TypeCoeff=(N?'[^']*'|[\w\[\].]+)(?=\s+AND\s+gr\.Subdivision)"
+    source=re.sub(pattern,lambda m:"gr.TypeCoeff=CASE WHEN ("+m[1]+")=N'Директора' THEN N'Кураторы' ELSE ("+m[1]+") END",source,flags=re.I)
+    return source.replace('SELECT TOP(1) gr.TypeCoeff',"SELECT TOP(1) CASE WHEN gr.TypeCoeff=N'Кураторы' THEN N'Директора' ELSE gr.TypeCoeff END")
 
 
 def validate(rows):

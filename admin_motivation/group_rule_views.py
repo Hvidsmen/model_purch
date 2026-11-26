@@ -13,7 +13,7 @@ from .services import planning_group_rules as rules
 
 class RuleForm(forms.Form):
     subdivision=forms.ChoiceField(label='Подразделение',required=False)
-    kind=forms.ChoiceField(label='Вид коэффициента',choices=[*[(v,v) for v in rules.KINDS],('all','Все виды (политики, продажи, директора)')])
+    kind=forms.ChoiceField(label='Вид коэффициента',choices=[*[(v,v) for v in rules.KINDS],('all','Все виды (политики, продажи, директора, кураторы)')])
     planning=forms.CharField(label='Группа планов продаж',max_length=255,widget=forms.TextInput(attrs={'list':'planning-groups'}))
     formula=forms.ChoiceField(label='Формула для всех товаров группы',required=False,initial='Группа планов продаж',choices=[('','Не переопределять формулы товаров'),*[(v,v) for v in rules.FORMULAS]])
     missing=forms.ChoiceField(label='При отсутствии точной ставки',choices=rules.METHODS)
