@@ -271,10 +271,10 @@ GROUP BY p.[Подразделение],p.[Год],w.Period_;
 '''
 
 
-def triple_failure(period):
+def triple_failure(period, qualifier='#pf_base'):
     """Whole branch AND employee total AND configured formula must all pass."""
     if str(period) not in ('2','3','4','5'):raise ValueError('Q1 is unconditional')
-    department="COALESCE((SELECT MAX(d.Execution_) FROM #share_region_department d WHERE d.[Подразделение]=#pf_base.[Подразделение] AND d.[Год]=#pf_base.[Год] AND d.Period_="+str(period)+'),0)'
+    department="COALESCE((SELECT MAX(d.Execution_) FROM #share_region_department d WHERE d.[Подразделение]="+qualifier+".[Подразделение] AND d.[Год]="+qualifier+".[Год] AND d.Period_="+str(period)+'),0)'
     def ratio(extra=()):
         window='PARTITION BY '+','.join(('Подразделение','АвторСделки','Год','ТипКоэф',*extra))
         return 'COALESCE(SUM(СуммаОтгрузокUSD) OVER('+window+')/NULLIF(SUM(СуммаПланUSD) OVER('+window+'),0),0)'
@@ -311,7 +311,9 @@ def triple_gates(source):
                 elif mask[at]==',' and depth==0:comma=at;break
             if comma is None:raise ValidationError('Не найдена граница условия выплаты.')
             original=source[opening+1:comma]
-            replacement='(('+region+' AND '+triple_failure(index+1)+') OR (NOT '+region+' AND ('+original+')))'
+            from .shareholder_original_rules import payout_relation
+            _,qualifier=payout_relation(source,stop+1)
+            replacement='(('+region+' AND '+triple_failure(index+1,qualifier)+') OR (NOT '+region+' AND ('+original+')))'
             edits.append((opening+1,comma,replacement));found+=1
         if found!=2:raise ValidationError('Не найдены две валюты выплаты для тройной проверки периода '+str(index+1))
     for start,end,value in sorted(edits,reverse=True):source=source[:start]+value+source[end:]

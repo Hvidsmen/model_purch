@@ -16,6 +16,28 @@ def enabled(run):
     return run.configuration.get('rule') == RULE
 
 
+def payout_relation(source, after):
+    """Resolve the outer payout FROM, preserving a derived eligibility window."""
+    from .pilot_formula import closing
+    code=mask_sql(source);depth=0;start=None
+    for token in re.finditer(r'\(|\)|\bFROM\b',code[after:],re.I):
+        value=token[0].upper()
+        if value=='(':depth+=1
+        elif value==')':depth-=1
+        elif depth==0:
+            start=after+token.end();break
+    if start is None:raise ValidationError('Не найден источник строк условия выплаты.')
+    opening=re.match(r'\s*\(',code[start:])
+    if opening:
+        end=closing(code,start+opening.end()-1)
+        alias=re.match(r'\s+(?:AS\s+)?(?P<name>\[?\w+\]?)',code[end+1:],re.I)
+        if not alias:raise ValidationError('Не найден псевдоним источника условия выплаты.')
+        return 'FROM'+source[start:end+1+alias.end()],alias['name']
+    table=re.match(r'\s*#pf_base\b',code[start:],re.I)
+    if not table:raise ValidationError('Неизвестный источник строк условия выплаты.')
+    return 'FROM #pf_base','#pf_base'
+
+
 def restore(source):
     """Undo just the transition's two Q4-only windows, before window evaluation."""
     source, count = re.subn(
@@ -27,7 +49,7 @@ def restore(source):
     # personal/global gates. Never infer eligibility from a positive annual amount:
     # the configured annual share may legitimately be zero.
     code = mask_sql(source)
-    predicates = []
+    predicates = []; annual_input = None
     for match in re.finditer(r'\bIIF\s*\(', code, re.I):
         start = match.end(); depth = 1; parts = []; point = start
         for at in range(start, len(code)):
@@ -43,12 +65,14 @@ def restore(source):
                 parts.append(source[point:at].strip()); point = at + 1
         if len(parts) == 3 and parts[1] == '0' and parts[2].strip('[]') == 'СуммаМотивацииUSDГод':
             predicates.append(parts[0])
-    if len(predicates) != 1 or '@PayoutThreshold' not in predicates[0]:
+            annual_input, qualifier = payout_relation(source, at+1)
+            if qualifier=='#pf_base':annual_input+=' WHERE Квартал IN (1,2,3,4)'
+    if len(predicates) != 1 or '@PayoutThreshold' not in predicates[0]+(annual_input or ''):
         raise ValidationError('Не распознано единственное годовое условие выплаты акционеров.')
     fields = ','.join('[' + field + ']' for field in DIMENSIONS)
     source += ('\nSELECT DISTINCT ' + fields + ',CASE WHEN (' + predicates[0] +
                ') THEN 0 ELSE 1 END AS YearEligible INTO #share_eligibility '
-               'FROM #pf_base WHERE Квартал IN (1,2,3,4);\n')
+               + annual_input + ';\n')
     return source
 
 
