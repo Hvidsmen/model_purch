@@ -156,3 +156,33 @@ class GroupRuleVersionTests(TestCase):
             with self.subTest(variant=variant):
                 compiled=RegionalSQLTests.compiled(self,variant)
                 self.assertIn('__PORTAL_GROUP_RULES__',compiled)
+
+class BulkGroupRuleTests(TestCase):
+    setUp = GroupRuleVersionTests.setUp
+    def test_bulk_changes_only_selected_and_preserves_rates(self):
+        self.version=rules.save(self.actor,self.version.pk,self.version.revision,{**RULE,'kind':'all','missing':'fixed',**{'k'+str(i):'.005' for i in range(5)}})
+        before=[dict(row) for row in self.version.planning_rules]
+        response=self.client.post(reverse('motivation_planning_group_rules'),{'version':self.version.pk,'revision':self.version.revision,'action':'bulk','selected_rules':['0','2'],'formula':'Подразделение','missing':'keep'})
+        self.assertEqual(response.status_code,302)
+        self.version.refresh_from_db()
+        for i,row in enumerate(self.version.planning_rules):
+            self.assertEqual(row,{**before[i],**({'formula':'Подразделение'} if i in (0,2) else {})})
+        self.assertContains(self.client.get(reverse('motivation_planning_group_rules'),{'version':self.version.pk}),'id="pgr-bulk"')
+
+    def test_bulk_invalid_selection_and_stale_revision_are_atomic(self):
+        self.version=rules.save(self.actor,self.version.pk,self.version.revision,RULE)
+        for selected,revision in [([],self.version.revision),(['0','99'],self.version.revision),(['0'],self.version.revision-1)]:
+            with self.assertRaises(ValidationError):rules.bulk_save(self.actor,self.version.pk,revision,selected,{'missing':'error'})
+            self.version.refresh_from_db()
+            self.assertEqual(self.version.planning_rules,[RULE])
+
+    def test_bulk_fixed_requires_all_rates(self):
+        self.version=rules.save(self.actor,self.version.pk,self.version.revision,RULE)
+        response=self.client.post(reverse('motivation_planning_group_rules'),{'version':self.version.pk,'revision':self.version.revision,'action':'bulk','selected_rules':['0'],'formula':'keep','missing':'fixed','k0':'0.5'})
+        self.assertEqual(response.status_code,200)
+        self.version.refresh_from_db()
+        self.assertEqual(self.version.planning_rules,[RULE])
+        data={'version':self.version.pk,'revision':self.version.revision,'action':'bulk','selected_rules':['0'],'formula':'keep','missing':'fixed',**{'k'+str(i):'0.5' for i in range(5)}}
+        self.assertEqual(self.client.post(reverse('motivation_planning_group_rules'),data).status_code,302)
+        self.version.refresh_from_db()
+        self.assertEqual(Decimal(self.version.planning_rules[0]['k4']),Decimal('.005'))
