@@ -1,0 +1,22 @@
+{% extends 'admin_motivation/base.html' %}{% load static %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'admin_motivation/planning_group_rules.css' %}?v=2"><style>.removal-products{max-height:320px;overflow:auto;padding:12px;border:1px solid #e0e1ed;border-radius:8px;margin-bottom:18px}.removal-products label,.removal-local{display:flex;gap:8px;align-items:center;padding:7px}.removal-products input,.removal-local input{width:auto!important}.removal-preview{margin-top:24px;padding-top:20px;border-top:1px solid #e0e1ed}</style>{% endblock %}
+{% block content %}<section class="content pgr-page">
+<a class="pgr-back" href="{% url 'global_coeff_admin_motivation' %}?version={{ selected_version.pk }}">← Коэффициенты</a>
+<header class="pgr-heading"><div><h1>{% if orphan_only %}Очистка оставшихся ставок подразделений{% else %}Удаление товаров из коэффициентов{% endif %}</h1><p>{{ selected_version }} · {{ selected_version.get_status_display }}</p></div></header>
+{% for message in messages %}<p class="pgr-message" role="status">{{ message }}</p>{% endfor %}
+<p>{% if orphan_only %}Показаны только товары, у которых в этом черновике нет глобальных ставок, но остались местные. Выберите нужные товары явно.{% else %}Выберите товары и область удаления. Перед подтверждением будет показано, какие ставки затронет операция.{% endif %} Старые версии, результаты расчётов и справочник товаров сохраняются.</p>
+<p><a class="pgr-button" href="?version={{ selected_version.pk }}{% if not orphan_only %}&amp;orphan_only=1{% endif %}">{% if orphan_only %}Все товары со ставками{% else %}Очистить оставшиеся ставки подразделений{% endif %}</a></p>
+<section class="pgr-card pgr-editor"><form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="revision" value="{{ selected_version.revision }}"><input type="hidden" name="orphan_only" value="{% if orphan_only %}1{% else %}0{% endif %}">
+{% if form.errors %}<div class="pgr-error" role="alert">{{ form.errors }}</div>{% endif %}
+<strong>{{ form.goods.label }}</strong><div class="removal-products">{{ form.goods }}</div>
+<label class="removal-local">{{ form.include_local }} {{ form.include_local.label }}</label>
+<p>Удаление ставки не запрещает расчёт товара: при отсутствии точной ставки применяется настроенный способ подбора. Правила групп сохраняются.</p>
+<button class="pgr-button" name="action" value="preview">Проверить удаление</button>
+{% if plan %}<div class="removal-preview"><h2>Будет удалено ставок: {{ plan.total }}</h2>
+<ul>{% for good in plan.goods %}<li>{{ good.planning_group_sales }} · {{ good.group }} · {{ good.brand }}</li>{% endfor %}</ul>
+<p>Область: {% if plan.include_local %}глобальные ставки и все подразделения{% else %}только глобальные ставки{% endif %}.</p>
+<p>{% for kind,count in plan.kinds %}{{ kind }} — {{ count }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>
+<ul>{% for row in plan.counts %}<li>{{ row.label }}: {{ row.count }}</li>{% endfor %}</ul>
+{% if plan.scopes %}<details open><summary>Подразделения</summary><ul>{% for row in plan.scopes %}<li>{{ row.subdivision }} · {{ row.label }}: {{ row.count }}</li>{% endfor %}</ul></details>{% endif %}
+<input type="hidden" name="preview_token" value="{{ preview_token }}"><button class="pgr-button pgr-button-primary" name="action" value="apply">Подтвердить удаление выбранных ставок</button></div>{% endif %}
+</form></section></section>{% endblock %}

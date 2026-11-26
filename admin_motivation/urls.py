@@ -1,5 +1,5 @@
 from . import dimension_exclusion_views
-from . import group_rule_views, planning_group_rename_views
+from . import group_rule_views, planning_group_rename_views, product_removal_views
 from . import exclusion_views,subdivision_directory_views
 from . import reports_director_scenarios, reports_integral_2026, reports_2025, editor_views, reports_next_views, reports_all_2026, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
@@ -13,6 +13,7 @@ from . import curator_views
 from . import premium_distribution_views, sales_employee_views
 
 urlpatterns = [
+    path('versions/products/remove/',product_removal_views.page,name='motivation_product_removal'),
     path('versions/planning-groups/rename/',planning_group_rename_views.page,name='motivation_planning_group_rename'),
     path('coefficients/from-subdivisions/',global_from_branches_views.page,name='motivation_global_from_subdivisions'),
     path('curator-coefficients/copy-global/',curator_views.copy_global,name='motivation_curator_copy_global'),
