@@ -150,7 +150,7 @@ def current_run(execution, connector=None):
                 connection.close()
 
 
-def actual_reports(user, execution, query, *, detailed=False, access_scope=None, period_authors_only=False):
+def actual_reports(user, execution, query, *, detailed=False, access_scope=None, period_authors_only=False, compact_summary=False):
     scope, kinds, period = restrict(user, query, access_scope=access_scope)
     expected_year = str(execution.parameters.get('fact_year', ''))
     year = query.get('year', expected_year)
@@ -168,7 +168,7 @@ def actual_reports(user, execution, query, *, detailed=False, access_scope=None,
                   'gp_sales': query.getlist('planning'), 'GPGoods': query.getlist('goods'), 'Brend': query.getlist('brand'), 'Years': [year], 'Currency': currency}
         if scope:
             values = scoped_values('manager-detail', values, scope)
-        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed, include_performance=True, **snapshot_options, **({'period_authors_only':True} if period_authors_only else {}))
+        data = load_report('manager-detail', values, access_scope=scope, premium_period=period, summary_only=not detailed, include_performance=True, **snapshot_options, **({'period_authors_only':True} if period_authors_only else {}), **({'compact_summary':True} if compact_summary and not detailed else {}))
         from .motivation_performance import presentation_rows, DEPARTMENT
         plan_fact.extend(presentation_rows(data.get('motivation_performance', []), kind))
         department.extend(presentation_rows(data.get('department_performance', []), DEPARTMENT))

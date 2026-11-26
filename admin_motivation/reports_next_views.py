@@ -294,7 +294,7 @@ def report(request, kind):
                 data = reports.planned_budget(selected, plan, query)
             else:
                 with reports.current_run(selected):
-                    data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'), access_scope=preview_scope, **({'period_authors_only':True} if kind in ('team','overview') else {}))
+                    data = reports.actual_reports(report_user, selected, query, detailed=kind in ('detail', 'mine'), access_scope=preview_scope, **({'period_authors_only':True} if kind in ('team','overview') else {}), **({'compact_summary':True} if kind=='overview' else {}))
                 if kind in ('team', 'registry') and query.get('search', '').strip():
                     from decimal import Decimal
                     term = query['search'].strip().casefold().replace('ё', 'е')
