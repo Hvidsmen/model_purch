@@ -114,10 +114,11 @@ def present(kind, data, ledger=None, period='all'):
         card['type_totals'] = [{'kind': item['kind'], 'total': card['kind_totals'].get(item['kind'])}
                                for item in result['type_totals']]
     if 'plan_fact' in ledger:
-        result['performance_matrix'] = performance_matrix(ledger['plan_fact'], result['period_columns'])
+        performance_items=ledger['plan_fact'] if kind in ('mine','detail') else summary_performance(ledger['plan_fact'])
+        result['performance_matrix'] = performance_matrix(performance_items, result['period_columns'])
         for section in result['team_sections']:
             section['performance_matrix'] = performance_matrix(
-                [item for item in ledger['plan_fact'] if item.get('kind') == section['kind']],
+                [item for item in performance_items if item.get('kind') == section['kind']],
                 result['period_columns'])
     if 'department_plan_fact' in ledger:
         result['department_performance_matrix'] = performance_matrix(ledger['department_plan_fact'], result['period_columns'])
@@ -165,6 +166,31 @@ def present(kind, data, ledger=None, period='all'):
     if any('distributed_total' in row for row in ledger['rows']):
         from .distribution_reporting import enrich
         enrich(result,ledger)
+    return result
+
+
+def summary_performance(items):
+    """Combine employee slices within one formula, never different bases/periods."""
+    from .reports import number, ratio
+    result=[];groups={}
+    for item in items:
+        author=str(item.get('scope_author') or '').strip()
+        if not author or author=='Всё подразделение' or item.get('formula')=='Подразделение(Глобально)':
+            result.append(item);continue
+        key=tuple(str(item.get(field) or '').strip().casefold()
+                  for field in ('subdivision','year','kind','formula','period'))
+        if key not in groups:
+            groups[key]=[]
+            result.append(groups[key])
+        groups[key].append(item)
+    for index,item in enumerate(result):
+        if not isinstance(item,list):continue
+        merged={**item[0],'scope_author':'Всё подразделение'}
+        for field in ('plan','fact'):
+            values=[number(row[field]) if row.get(field) is not None else None for row in item]
+            merged[field]=sum(values,ZERO) if all(v is not None for v in values) else None
+        merged['ratio']=ratio(merged['fact'],merged['plan']) if merged['fact'] is not None else None
+        result[index]=merged
     return result
 
 
