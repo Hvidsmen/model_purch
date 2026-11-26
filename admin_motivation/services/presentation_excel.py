@@ -6,7 +6,7 @@ from openpyxl.cell import WriteOnlyCell
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
-from .reports_next_presenter import present
+from .reports_next_presenter import present, summary_performance
 
 NAVY = '243650'
 PURPLE = '6850C8'
@@ -180,7 +180,8 @@ def workbook(kind, data, metadata, query=None, title=None):
         ws = sheet('План-факт', ['Подразделение', 'Вид мотивации', 'База мотивации', 'Сотрудник / область', 'Период',
                    'План мотивации, USD', 'Факт мотивации, USD', 'Выполнение мотивации'],
                    [28, 24, 34, 44, 30, 27, 27, 27], 'Базы мотивации по видам · Разные базы не складываются · USD')
-        for index, item in enumerate(data['plan_fact']):
+        performance_items=data['plan_fact'] if kind in ('mine','detail') else summary_performance(data['plan_fact'])
+        for index, item in enumerate(performance_items):
             row(ws, [item['subdivision'], item['kind'], item.get('formula', 'Подразделение'), item.get('scope_author', 'Всё подразделение'), item['period'],
                      item['plan'], item['fact'], item['ratio']],
                 'alternate' if index % 2 else 'body', percent_columns=(7,))
