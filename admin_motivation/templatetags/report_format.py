@@ -34,3 +34,10 @@ def report_cash(value):
         return f'{amount:,.2f}'.replace(',', '\u00a0').replace('.', ',')
     except (InvalidOperation, ValueError):
         return '—'
+
+
+@register.filter
+def report_kind_order(rows):
+    """Keep premium tabs and execution bases in the same business order."""
+    order = {name: index for index, name in enumerate(('Политики', 'Продажи', 'Директора', 'Кураторы'))}
+    return sorted(rows or [], key=lambda row: (order.get(row.get('kind'), len(order)), str(row.get('kind') or '')))
