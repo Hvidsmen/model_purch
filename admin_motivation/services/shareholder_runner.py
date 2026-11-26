@@ -220,8 +220,11 @@ def run_calculation(pk,connector=None):
         logger.exception('Shareholder calculation %s failed, reference %s',run.pk,reference)
         reason=' '.join(error.messages) if isinstance(error,ValidationError) else 'Подробности в журнале отдельного задания.'
         if not isinstance(error,ValidationError):
+            from .planning_group_rules import missing_rate_message
+            rate_reason=missing_rate_message(error)
             group_error=re.search(r"Не задан коэффициент группы:\s*([^'\"\r\n]{1,255})",str(error))
-            if group_error:reason='Не задан коэффициент группы: '+group_error[1]+'. Заполните ставки или выберите другой способ подбора.'
+            if rate_reason:reason=rate_reason
+            elif group_error:reason='Не задан коэффициент группы: '+group_error[1]+'. Заполните ставки или выберите другой способ подбора.'
             elif re.search(r'\(50071\)',str(error)):reason='Перераспределение не сохранило оборот USD/RUB. Результаты не опубликованы.'
             elif re.search(r'\(5008[234]\)',str(error)):reason='Не удалось проверить доли, сохранность плана или утверждённые коэффициенты Ростова/Питера. Результаты не опубликованы.'
             elif re.search(r'\(50081\)',str(error)):reason='Не найдены выгруженные ставки куратора. Проверьте назначения и выгрузку утверждённой версии.'

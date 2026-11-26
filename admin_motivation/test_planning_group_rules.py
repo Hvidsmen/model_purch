@@ -52,7 +52,8 @@ CREATE TABLE group_rules(Date_,Subdivision,TypeCoeff,PGSales,Formula,Missing,K0 
     def test_no_group_rates_and_explicit_error_fail_without_cross_branch_fallback(self):
         for method,rates in [('minimum',False),('error',True)]:
             db,sql=self.query(method,rates=rates)
-            with self.assertRaises(sqlite3.OperationalError):db.execute(sql).fetchone()
+            self.assertEqual(db.execute(sql).fetchone()[:2],(None,None))
+            self.assertNotIn('CONVERT(float',sql)
 
     def test_unrelated_branch_keeps_native_formula_and_rates(self):
         db,sql=self.query(branch='Д-Москва')
@@ -88,6 +89,29 @@ CREATE TABLE group_rules(Date_,Subdivision,TypeCoeff,PGSales,Formula,Missing,K0 
         sql=pair_batch(source)
         self.assertIn("gr.TypeCoeff=CASE WHEN (N'Директора')=N'Директора' THEN N'Кураторы'",sql)
         self.assertIn("UPDATE #curator_coeff SET TypeCoeff=N'Директора'",sql)
+
+
+    def test_old_installed_group_sql_requires_job_refresh(self):
+        legacy="-- __PORTAL_GROUP_RULES__\nSELECT CONVERT(float,N'Не задан коэффициент группы: '+gr.PGSales)"
+        with self.assertRaisesMessage(ValidationError,'Все кварталы 2026'):rules.patch(legacy)
+        updated=rules.patch(SOURCE)
+        self.assertEqual(rules.patch(updated),updated)
+
+    def test_missing_rate_error_is_explicit_and_readable_with_driver_encoding(self):
+        message='PG_RULE_RATE_MISSING: subdivision=Д-Питер; kind=Политики; group=3. PROF; product=Гидромодули; brand=*'
+        for text in (message,message.encode('utf-8').decode('cp1251')):
+            reason=rules.missing_rate_message(Exception('42000 [SQL Server]'+text+' (50087) (SQLMoreResults)'))
+            self.assertIn('Д-Питер',reason)
+            self.assertIn('Гидромодули',reason)
+            self.assertNotIn('SQLMoreResults',reason)
+        self.assertIsNone(rules.missing_rate_message(Exception('8114')))
+
+    def test_missing_minimum_does_not_fall_back_to_native_but_exact_zero_survives(self):
+        db,sql=self.query('minimum',rates=False)
+        self.assertEqual(db.execute(sql).fetchone()[:2],(None,None))
+        db,sql=self.query('error',brand='Fan')
+        db.execute("UPDATE rates SET K0=0,K1=0 WHERE Brand='Fan'")
+        self.assertEqual(db.execute(sql).fetchone()[:2],(0,0))
 
 
 class GroupRuleVersionTests(TestCase):
@@ -141,6 +165,8 @@ class GroupRuleVersionTests(TestCase):
         from .services.main_formula_scope import shareholder_source
         patched=rules.patch(shareholder_source(compiled))
         self.assertIn('gr.Formula',patched)
+        self.assertIn('THROW 50087',patched)
+        self.assertLess(patched.index('THROW 50087'),patched.index('DELETE FROM #pf_base'))
         private=private_sql(patched,'combined','groups',original_rules=True,regional_policy=True,planning_groups=True)
         self.assertIn('#share_group_rules',private)
         self.assertNotIn(rules.TABLE,private)
