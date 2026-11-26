@@ -138,14 +138,15 @@ class GroupRuleVersionTests(TestCase):
         from .test_shareholder_regions import RegionalSQLTests
         from .services.shareholder_sql import private_sql
         compiled=RegionalSQLTests.compiled(self,'all_2026')
-        patched=rules.patch(compiled)
+        from .services.main_formula_scope import shareholder_source
+        patched=rules.patch(shareholder_source(compiled))
         self.assertIn('gr.Formula',patched)
         private=private_sql(patched,'combined','groups',original_rules=True,regional_policy=True,planning_groups=True)
         self.assertIn('#share_group_rules',private)
         self.assertNotIn(rules.TABLE,private)
         self.assertIn('FROM #share_region_coefficients) grc',private)
 
-    def test_approved_rules_are_immutable_and_enable_compiler(self):
+    def test_approved_rules_are_immutable_and_excluded_from_ordinary_compiler(self):
         from django.db.models import QuerySet
         from .test_shareholder_regions import RegionalSQLTests
         self.version.planning_rules=[RULE];self.version.save()
@@ -155,7 +156,8 @@ class GroupRuleVersionTests(TestCase):
         for variant in ['main','all_2026','separate_2026']:
             with self.subTest(variant=variant):
                 compiled=RegionalSQLTests.compiled(self,variant)
-                self.assertIn('__PORTAL_GROUP_RULES__',compiled)
+                self.assertNotIn('__PORTAL_GROUP_RULES__',compiled)
+                self.assertIn('__PORTAL_MAIN_GLOBAL_FORMULA__',compiled)
 
 class BulkGroupRuleTests(TestCase):
     setUp = GroupRuleVersionTests.setUp

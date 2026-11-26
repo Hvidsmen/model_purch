@@ -211,9 +211,9 @@ def prepare(cursor, variant='main'):
                                   'DataWH.motivation.' + view_name, changed, flags=re.I)
     if not references:
         raise ValidationError('В процедуре не найден справочник для ограничения расчёта подразделением Д-Москва. Расчёт не запущен.')
-    from ..models import SubdivisionCoeff, SubdivisionDirectorCoeff, CuratorCoefficient, GlobalCoeffVersion, MotivationExportLog
+    from ..models import GlobalCoeffVersion, MotivationExportLog
     from .formula_defaults import TABLE_SQL, patch_defaults
-    from .pilot_formula import GLOBAL_SUBDIVISION, patch_calculation
+    from .pilot_formula import patch_calculation
     cursor.execute(TABLE_SQL)
     # Read the committed DWH configuration as well as the local receipt: a local
     # log failure or reopening a version must not erase already-exported rules.
@@ -224,16 +224,12 @@ def prepare(cursor, variant='main'):
     exported_defaults = [item.get('fallback_variation') for item in previous_export.snapshot.get('versions', [])] if previous_export else []
     configured_default = remote_mode > 0 or any(exported_defaults) or GlobalCoeffVersion.objects.filter(status='approved').exclude(fallback_variation='').exists()
     changed, _ = patch_defaults(changed, required=configured_default)
-    group_versions=list(GlobalCoeffVersion.objects.filter(status='approved'))
-    from .planning_group_rules import TABLE_SQL as GROUP_TABLE_SQL,patch as patch_groups
-    cursor.execute(GROUP_TABLE_SQL)
-    group_configured=any(v.planning_rules for v in group_versions) or bool(previous_export and any(v.get('planning_rules') for v in previous_export.snapshot.get('versions',[])))
-    if group_configured:changed=patch_groups(changed)
-    from .curators import enabled as curators_enabled
-    global_default = remote_mode == 2 or GLOBAL_SUBDIVISION in exported_defaults or GlobalCoeffVersion.objects.filter(status='approved', fallback_variation=GLOBAL_SUBDIVISION).exists() or any(r.get('formula')==GLOBAL_SUBDIVISION for v in group_versions for r in v.planning_rules)
-    if (global_default or SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
-            or SubdivisionDirectorCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists() or curators_enabled()):
-        changed = patch_calculation(changed)
+    # Ordinary portal copies use one mandatory execution scope. Group rules
+    # (including missing-rate policies) belong to the private shareholder batch.
+    # Keep native K0-K4 fallback expressions intact.
+    changed = patch_calculation(changed)
+    from .main_formula_scope import force as force_main_formula
+    changed = force_main_formula(changed)
     from .first_quarter_inputs import patch as patch_first_quarter_inputs
     changed = patch_first_quarter_inputs(changed)
     from .payout_threshold import parameterize
