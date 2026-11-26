@@ -112,3 +112,35 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\sqlserver_tria
 загруженную SQL-базу и не очищает её. Если назначение уже непустое, запуск
 остановится прежней защитой. Наличие verified.json также блокирует Resume.
 Запускайте только один процесс переноса для выбранной папки.
+
+## Продолжение после ошибки индекса мощности (1919)
+
+Миграция `base.0009` создаёт ключ `(group_id, power)` в SQL Server с типом
+`nvarchar(255)` для мощности вместо неиндексируемого `nvarchar(max)`.
+Адаптируется только приватная копия состояния миграции SQL Server; модель Django,
+состояние миграций и схема рабочей SQLite не меняются. Перед созданием назначения
+скрипт проверяет мощности в готовой копии: значения длиннее 255 кодовых единиц
+UTF-16 останавливают перенос без обрезания.
+
+После неуспешной миграции прежняя `Portal_Test` уже может содержать таблицы.
+Для повторной попытки используйте новый тестовый адрес назначения; прежняя база
+не удаляется. Готовые `source-original.sqlite3` и `source.sqlite3` используются
+повторно, без создания ещё одной полной копии рабочей базы:
+
+```powershell
+Set-Location 'C:\Users\ETLadmin\Desktop\Python\PortalComp\pythonProject1\model_purch'
+$trial = Join-Path (Get-Location) '.local\sqlserver-trial\20261123-223404-392a14'
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+    -File '.\scripts\sqlserver_trial.ps1' `
+    -Mode Resume `
+    -Workspace $trial `
+    -RetryDatabase 'Portal_Test_powerfix20261126' `
+    -TrustServerCertificate `
+    -Launch
+```
+
+Флаг `-RetryDatabase` доступен только для `Resume`. Выберите ещё не использованное
+имя `Portal_Test_<суффикс>` из букв и цифр. Предыдущие параметры запуска сохраняются
+в `run-<идентификатор>.json`; новый `run.json` получает новое имя базы и идентификатор.
+Последующие продолжения этой попытки используют тот же workspace без повторного
+`-RetryDatabase`. Проверенный запуск перенаправлять нельзя.

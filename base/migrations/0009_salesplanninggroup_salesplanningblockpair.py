@@ -2,6 +2,7 @@
 
 import django.db.models.deletion
 from django.db import migrations, models
+from portal.sqlserver_trial_migrations import CreateBlockPairModel
 
 
 class Migration(migrations.Migration):
@@ -27,7 +28,7 @@ class Migration(migrations.Migration):
                 'ordering': ['name', 'pk'],
             },
         ),
-        migrations.CreateModel(
+        CreateBlockPairModel(
             name='SalesPlanningBlockPair',
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),

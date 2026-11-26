@@ -7,7 +7,8 @@
     [ValidateSet("Prepare","Resume","Run")][string]$Mode = "Prepare",
     [int]$Port = 8010,
     [switch]$Launch,
-    [switch]$TrustServerCertificate
+    [switch]$TrustServerCertificate,
+    [string]$RetryDatabase = ""
 )
 $ErrorActionPreference = "Stop"
 $projectRoot = Split-Path -Parent $PSScriptRoot
@@ -36,6 +37,7 @@ if ($TrustServerCertificate) { $env:PORTAL_TRIAL_TRUST_CERTIFICATE = "1" }
 $trialArgs = @((Join-Path $PSScriptRoot "sqlserver_trial.py"), "--server", $Server, "--database", $Database, "--port", "$Port")
 if ($Source) { $trialArgs += @("--source", $Source) }
 if ($Workspace) { $trialArgs += @("--workspace", $Workspace) }
+if ($RetryDatabase) { $trialArgs += @("--retry-database", $RetryDatabase) }
 if ($Mode -eq "Run") { $trialArgs += "--run-prepared" }
 elseif ($Mode -eq "Resume") { $trialArgs += "--resume-snapshot" }
 if ($Launch -and $Mode -ne "Run") { $trialArgs += "--serve" }
