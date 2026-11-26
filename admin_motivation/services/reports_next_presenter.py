@@ -147,6 +147,10 @@ def present(kind, data, ledger=None, period='all'):
                 else:
                     display_targets.append(display)
             result['remaining_targets'].append({**row, 'title': title, 'targets': targets, 'display_targets': display_targets})
+    if kind not in ('mine','detail'):
+        from .team_target_layout import coefficient_cards
+        result['remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] != 'По коэффициентам'] + coefficient_cards(
+            [row for row in result['remaining_targets'] if row['title'] == 'По коэффициентам'])
     result['department_remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] == 'Всё подразделение']
     for section in result['team_sections']:
         section['remaining_targets'] = [row for row in result['remaining_targets']
