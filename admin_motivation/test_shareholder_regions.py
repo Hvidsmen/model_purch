@@ -65,6 +65,44 @@ class RegionalSQLTests(TestCase):
         self.assertIn('1=(SELECT 1) AND',sql)
         self.assertIn('FROM #share_region_coefficients',sql)
 
+    def test_one_qualified_reference_and_unqualified_fact_plan_joins(self):
+        definition=self.compiled('all_2026')
+        view='DataWH.motivation.vSubdivisionMotiveCoeffTo'
+        self.assertEqual(definition.count(view),4)
+        first=definition.index(view)+len(view)
+        definition=definition[:first]+definition[first:].replace(view,'[vSubdivisionMotiveCoeffTo]')
+        self.assertEqual(definition.count(view),1)
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertEqual(sql.count('UNION ALL SELECT '+','.join(regions.FIELDS)+' FROM #share_region_coefficients'),4)
+        self.assertIn('d.Period_=5',sql)
+
+    def test_single_view_read_into_cache_still_patches_fact_and_plan(self):
+        definition=self.compiled('all_2026')
+        view='DataWH.motivation.vSubdivisionMotiveCoeffTo'
+        definition=definition.replace(view,'#native_coeff')
+        point=re.search(r';\s*WITH\s+fact\s+AS',definition,re.I).start()
+        definition=definition[:point]+';SELECT sc.* INTO #native_coeff FROM '+view+' sc;\n'+definition[point:]
+        self.assertEqual(definition.count(view),1)
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertIn('SELECT sc.* INTO #native_coeff FROM '+view,sql)
+        self.assertEqual(sql.count('FROM #native_coeff WHERE Subdivision NOT IN ('),4)
+        self.assertEqual(sql.count('FROM #share_region_coefficients)'),4)
+        self.assertIn('#native_coeff',temporary_tables(sql))
+
+    def test_unknown_fact_or_plan_source_fails_even_with_multiple_view_mentions(self):
+        definition=self.compiled('all_2026')
+        view='DataWH.motivation.vSubdivisionMotiveCoeffTo'
+        first_plan=definition.index('INTO #plan')
+        for changed in (definition[:first_plan]+definition[first_plan:].replace(view,'#unknown_coeff'),
+                        definition[:first_plan].replace(view,'#unknown_coeff')+definition[first_plan:]):
+            with self.assertRaisesMessage(ValidationError,'соединения коэффициентов факта и плана'):
+                private_sql(changed,'combined','new',original_rules=True,regional_policy=True)
+
+    def test_cte_coefficient_provenance_and_unrelated_tables(self):
+        source='WITH rates AS (SELECT * FROM motivation.vSubdivisionMotiveCoeffTo), other AS (SELECT * FROM unrelated) SELECT * FROM fact LEFT JOIN rates AS [sc] ON 1=1; SELECT * FROM plan LEFT JOIN other sc ON 1=1;'
+        matches=regions.coefficient_joins(source)
+        self.assertEqual([m['relation'] for m in matches],['rates'])
+
     def test_generated_relation_overrides_only_regional_policies(self):
         sql=private_sql(self.compiled('all_2026'),'combined','new',original_rules=True,regional_policy=True)
         relation=re.search(r'\(SELECT DateFrom,DateTo,Subdivision,[\s\S]*?FROM #share_region_coefficients\)',sql)[0]
