@@ -8,12 +8,13 @@
 <div class="nr-target-condition">
 <div class="nr-target-progress-label"><span>{{ condition.formula }}</span><strong>{{ condition.ratio|report_percent }}</strong></div>
 <div class="nr-target-facts"><div><span>Факт</span><strong>{{ condition.fact|report_cash }} USD</strong></div><div><span>План · 100%</span><strong>{{ condition.plan|report_cash }} USD</strong></div></div>
-<p class="nr-target-caption">Осталось до 100%: {{ condition.remaining|report_cash }} USD</p>
+<p class="nr-target-caption">Остаток до 100%: {% if condition.remaining == 0 %}Выполнено{% else %}{{ condition.remaining|report_cash }} USD{% endif %}</p>
 </div>
 {% endfor %}
 {% else %}
-<div class="nr-target-amount">{{ target.remaining|report_cash }} USD</div>
-<p class="nr-target-caption">{% if target.remaining == None %}Нет данных для определения остатка{% elif target.remaining == 0 %}План выполнен{% else %}Объём продаж до выполнения плана{% endif %}</p>
+<p class="nr-target-caption">Остаток до 100%</p>
+<div class="nr-target-amount">{% if target.remaining == 0 %}Выполнено{% else %}{{ target.remaining|report_cash }} USD{% endif %}</div>
+{% if target.remaining != 0 %}<p class="nr-target-caption">{% if target.remaining == None %}Нет данных для определения остатка{% else %}Объём продаж до выполнения плана{% endif %}</p>{% endif %}
 <div class="nr-target-progress-label"><span>Выполнение плана</span><strong>{{ target.ratio|report_percent }}</strong></div>
 <div class="nr-target-track" role="progressbar" aria-label="Выполнение плана: {{ row.subdivision }} · {{ row.kind }} · {{ target.label }}" aria-valuemin="0" aria-valuemax="100"{% if target.ratio != None %} aria-valuenow="{{ target.progress|stringformat:'.2f' }}"{% endif %}><i style="width:{{ target.progress|stringformat:'.2f' }}%"></i></div>
 <div class="nr-target-facts"><div><span>Факт</span><strong>{{ target.fact|report_cash }} USD</strong></div><div><span>План · 100%</span><strong>{{ target.plan|report_cash }} USD</strong></div></div>
