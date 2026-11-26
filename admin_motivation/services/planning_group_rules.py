@@ -123,7 +123,10 @@ def install(cursor,snapshot):
 
 def patch(source,table=TABLE,minimum_source='DataWH.motivation.vSubdivisionMotiveCoeffTo'):
     """Override formulas; retain exact rates before any configured missing rate."""
-    if '__PORTAL_GROUP_RULES__' in source:return source
+    if '__PORTAL_GROUP_RULES__' in source:
+        if re.search(r"CONVERT\s*\(\s*float\s*,\s*N?'Не задан коэффициент группы:",source,re.I):
+            raise ValidationError('Установлена старая процедура подбора ставок. Обновите задание «Все кварталы 2026» в Центре расчётов и создайте новый акционерный запуск.')
+        return source
     from .shareholder_regions import _query_branch_end
     code=mask_sql(source)
     if minimum_source=='DataWH.motivation.vSubdivisionMotiveCoeffTo' and re.search(r'\bINTO\s+#coeff_source\b',code,re.I):minimum_source='#coeff_source'
@@ -162,10 +165,46 @@ def patch(source,table=TABLE,minimum_source='DataWH.motivation.vSubdivisionMotiv
             if re.search(r'<\s*sc\.\[?DateTo\]?',tail,re.I):dates=f'{on_date}>=grc.DateFrom AND {on_date}<grc.DateTo'
             minimum=(f'(SELECT MIN(grc.{field}) FROM {minimum_source} grc WHERE grc.PGSales={planning}'
                      f' AND grc.Subdivision={branch} AND LTRIM(RTRIM(grc.TypeCoeff))={kind} AND {dates})')
-            error=f"CONVERT(float,N'Не задан коэффициент группы: '+gr.PGSales)"
-            value=f"CASE gr.Missing WHEN N'minimum' THEN COALESCE({minimum},{error}) WHEN N'fixed' THEN gr.{field} WHEN N'error' THEN {error} ELSE NULL END"
+            value=f"CASE gr.Missing WHEN N'minimum' THEN {minimum} WHEN N'fixed' THEN gr.{field} ELSE NULL END"
             fallback='(SELECT TOP(1) '+value+lookup+')'
-            edits.append((start,stop+1,f'COALESCE({exact},{fallback},{native})'))
+            method='(SELECT TOP(1) gr.Missing'+lookup+')'
+            edits.append((start,stop+1,f"CASE WHEN {method} IN(N'minimum',N'fixed',N'error') THEN COALESCE({exact},{fallback}) ELSE COALESCE({exact},{native}) END"))
         previous=scope_end
     for start,end,value in sorted(edits,reverse=True):source=source[:start]+value+source[end:]
-    return '-- __PORTAL_GROUP_RULES__\n'+source
+    return '-- __PORTAL_GROUP_RULES__\n'+validate_missing_rates(source)
+
+
+def validate_missing_rates(source):
+    """Fail explicitly after input materialization, before payout windows/deletes.
+
+    Missing configured rates remain NULL rather than falling through to native
+    defaults. Never use an invalid conversion as a conditional SQL error.
+    """
+    code=mask_sql(source)
+    if not re.search(r'\bINTO\s+#pf_base\b',code,re.I):return source
+    boundary=re.search(r'\bDELETE\s+(?:FROM\s+)?#pf_base\b',code,re.I)
+    if not boundary:raise ValidationError('Не найдена граница проверки ставок правил групп.')
+    guard="""
+-- __PORTAL_GROUP_RATE_VALIDATION__
+DECLARE @PortalGroupRateError nvarchar(2048);
+SELECT TOP(1) @PortalGroupRateError=CONCAT(N'PG_RULE_RATE_MISSING: subdivision=',[Подразделение],
+ N'; kind=',[ТипКоэф],N'; group=',[ГруппаПлановПродаж],N'; product=',[ГруппаТоваров],N'; brand=',[Марка],
+ N'')
+FROM #pf_base WHERE K0 IS NULL OR K1 IS NULL OR K2 IS NULL OR K3 IS NULL OR K4 IS NULL;
+IF @PortalGroupRateError IS NOT NULL THROW 50087,@PortalGroupRateError,1;
+"""
+    return source[:boundary.start()]+guard+source[boundary.start():]
+
+
+def missing_rate_message(error):
+    text=str(error)
+    match=re.search(r'PG_RULE_RATE_MISSING: ([^\r\n]{1,1600}?)\s*\(50087\)',text)
+    if match:
+        detail=match[1]
+        try:detail=detail.encode('cp1251').decode('utf-8')
+        except (UnicodeEncodeError,UnicodeDecodeError):pass
+        for key,label in (('subdivision=','Подразделение: '),('kind=','Вид: '),('group=','Группа: '),('product=','Товар: '),('brand=','Бренд: ')):
+            detail=detail.replace(key,label)
+        return 'Не найдена ставка по правилу группы. '+detail+'. Проверьте точные ставки и подбор K0–K4.'
+    if '(50087)' in text:return 'Не найдена ставка по правилу группы. Проверьте точные ставки и подбор K0–K4. Подробности в журнале задания.'
+    return None
