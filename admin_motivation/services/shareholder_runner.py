@@ -67,6 +67,13 @@ def save_query(run,cursor,mode,dataset,sql,args=(),kind=None):
             value=dict(zip(fields,row))
             if kind:value['ТипКоэф']=kind
             payload.append(serial(value))
+            if dataset.startswith('report_') and run.scenario=='combined':
+                from .shareholder_reports import OPTION_FIELDS,period_code
+                if period_code(value.get('КварталМотивации','')) in [*map(str,run.quarters),'5']:
+                    choices=getattr(run,'_report_options',None)
+                    if choices is None:choices={key:set() for key in OPTION_FIELDS};run._report_options=choices
+                    for key,field in OPTION_FIELDS.items():
+                        if value.get(field):choices[key].add(str(value[field]))
         ShareholderSnapshot.objects.create(calculation=run,mode=mode,dataset=dataset,sequence=sequence,payload=payload)
         sequence+=1;count+=len(payload)
     return count
@@ -184,6 +191,9 @@ def execute(run,connector=None):
         metadata['counts']['combined']['report']+=curator_count
         metadata['curator_rows']=curator_count
         if not any(item['report'] for item in metadata['counts'].values()):raise ValidationError('Расчёт не вернул строк. Пустой результат не подставлен.')
+        if hasattr(run,'_report_options'):
+            from .shareholder_reports import OPTIONS_KEY
+            metadata[OPTIONS_KEY]={key:sorted(values) for key,values in run._report_options.items()}
         ShareholderCalculation.objects.filter(pk=run.pk,state='running').update(state='completed',stage='Готово · все отчёты используют один снимок',metadata=serial(metadata),completed_at=timezone.now())
     finally:
         if connection is not None:connection.close()
