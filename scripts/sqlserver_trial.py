@@ -134,6 +134,32 @@ def resumable_snapshot(base,workspace=None):
     return workspace,metadata
 
 
+def retarget_snapshot(workspace,metadata,database):
+    from portal.sqlserver_trial_config import trial_name
+    trial_name(database)
+    if database.casefold()==metadata['database'].casefold():
+        raise RuntimeError('Для повторной попытки укажите новое имя пустой тестовой базы.')
+    if (workspace/'verified.json').exists():raise RuntimeError('Проверенный запуск перенаправлять нельзя.')
+    previous=workspace/('run-'+uuid.UUID(metadata['run_id']).hex+'.json')
+    with previous.open('x',encoding='utf-8') as output:
+        json.dump(metadata,output,ensure_ascii=False,indent=2)
+    result={**metadata,'database':database,'run_id':uuid.uuid4().hex,
+            'previous_database':metadata['database'],'previous_run_id':metadata['run_id']}
+    temporary=workspace/'run.json.tmp'
+    temporary.write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding='utf-8')
+    temporary.replace(workspace/'run.json')
+    return result
+
+
+def check_indexed_power(workspace):
+    from portal.sqlserver_trial_migrations import POWER_KEY_LENGTH
+    snapshot=workspace/'source.sqlite3'
+    with closing(sqlite3.connect(snapshot.resolve().as_uri()+'?mode=ro',uri=True)) as connection:
+        for (value,) in connection.execute('SELECT power FROM base_salesplanningblockpair'):
+            if len(value.encode('utf-16-le'))//2>POWER_KEY_LENGTH:
+                raise RuntimeError('Мощность в готовом снимке превышает 255 символов SQL Server. Данные не обрезаны; перенос остановлен до создания назначения.')
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--server',default='vm-dwh')
@@ -141,6 +167,7 @@ def main():
     parser.add_argument('--source')
     parser.add_argument('--workspace')
     parser.add_argument('--resume-snapshot',action='store_true')
+    parser.add_argument('--retry-database')
     parser.add_argument('--snapshot-only',action='store_true')
     parser.add_argument('--run-prepared',action='store_true')
     parser.add_argument('--serve',action='store_true')
@@ -152,6 +179,7 @@ def main():
     trial_name(options.database)
     base=ROOT/'.local'/'sqlserver-trial'
     if options.run_prepared and options.resume_snapshot:raise RuntimeError('Выберите только один режим продолжения.')
+    if options.retry_database and not options.resume_snapshot:raise RuntimeError('--retry-database применяется только с --resume-snapshot.')
     if options.run_prepared:
         workspace=Path(options.workspace).resolve() if options.workspace else Path(json.loads((base/'latest.json').read_text(encoding='utf-8'))['workspace'])
         metadata=json.loads((workspace/'run.json').read_text(encoding='utf-8'))
@@ -163,6 +191,7 @@ def main():
     else:
         if options.resume_snapshot:
             workspace,metadata=resumable_snapshot(base,options.workspace)
+            if options.retry_database:metadata=retarget_snapshot(workspace,metadata,options.retry_database)
             print('Продолжение с готовой копии; повторное копирование SQLite не требуется: '+str(workspace),flush=True)
             export_snapshot(workspace)
         else:
@@ -180,6 +209,7 @@ def main():
             print('Копия и выгрузка готовы. SQL Server не затронут: '+str(workspace),flush=True);return
         env=trial_environment(workspace,metadata)
         if importlib.util.find_spec('mssql') is None:raise RuntimeError('Установите requirements-sqlserver-trial.txt в отдельное окружение.')
+        check_indexed_power(workspace)
         config=database_config(env)
         print('4. Отдельная пустая база SQL Server: '+metadata['database']+'…',flush=True)
         prepare_target(config,metadata['run_id'])
