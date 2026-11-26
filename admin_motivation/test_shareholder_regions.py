@@ -44,6 +44,56 @@ class RegionalSQLTests(TestCase):
             self.assertIn('PARTITION BY Подразделение,АвторСделки,Год,ТипКоэф',annual)
             self.assertIn("VariationCalculate=N'Марка(Бренд)'",annual)
 
+    def test_installed_join_formatting_and_alternate_type_filters_are_supported(self):
+        definition=self.compiled('all_2026')
+        bracketed=re.sub(r'\bsc\.(\w+)',r'[sc].[\1]',definition)
+        bracketed=bracketed.replace('TRIM([sc].[TypeCoeff])','LTRIM(RTRIM([sc].[TypeCoeff]))')
+        single_in=re.sub(r"TRIM\(sc.TypeCoeff\)\s*=\s*'Политики'", "TRIM(sc.TypeCoeff) IN (N'Политики')",definition)
+        for source in (bracketed,single_in):
+            sql=private_sql(source,'combined','new',original_rules=True,regional_policy=True)
+            self.assertGreaterEqual(sql.count('FROM #share_region_coefficients'),4)
+            self.assertIn("OR LTRIM(RTRIM(TypeCoeff))<>N'Политики'",sql)
+            self.assertIn('FROM #share_region_defaults',sql)
+            self.assertIn('d.Period_=5',sql)
+        self.assertIn('LTRIM(RTRIM([sc].[TypeCoeff]))',private_sql(bracketed,'combined','new',original_rules=True,regional_policy=True))
+
+    def test_nested_select_before_type_predicate_does_not_hide_join(self):
+        definition=self.compiled('all_2026')
+        definition,count=re.subn(r'(vSubdivisionMotiveCoeffTo\s+sc\s+ON\s+)',r'\1 1=(SELECT 1) AND ',definition,count=1,flags=re.I)
+        self.assertEqual(count,1)
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertIn('1=(SELECT 1) AND',sql)
+        self.assertIn('FROM #share_region_coefficients',sql)
+
+    def test_generated_relation_overrides_only_regional_policies(self):
+        sql=private_sql(self.compiled('all_2026'),'combined','new',original_rules=True,regional_policy=True)
+        relation=re.search(r'\(SELECT DateFrom,DateTo,Subdivision,[\s\S]*?FROM #share_region_coefficients\)',sql)[0]
+        relation=relation.replace('DataWH.motivation.vSubdivisionMotiveCoeffTo','old_coeff').replace('#share_region_coefficients','frozen_coeff').replace("N'","'")
+        db=sqlite3.connect(':memory:')
+        columns=','.join(name+(' REAL' if name.startswith('K') else ' TEXT') for name in regions.FIELDS)
+        for name in ('old_coeff','frozen_coeff'):db.execute('CREATE TABLE '+name+'('+columns+')')
+        values=[('Д-Москва','Политики',.01),('Д-Ростов','Политики',.02),('Д-Ростов','Продажи',.03),('Д-Питер','Директора',.04),(None,'Политики',.05),('Д-Ростов',None,.06)]
+        for table,entries in [('old_coeff',values),('frozen_coeff',[('Д-Ростов','Политики',.11),('Д-Питер','Политики',.12)])]:
+            for branch,kind,rate in entries:
+                fields=dict.fromkeys(regions.FIELDS,'')
+                fields.update(Subdivision=branch,TypeCoeff=kind,K0=rate)
+                db.execute('INSERT INTO '+table+' VALUES('+','.join('?' for _ in regions.FIELDS)+')',[fields[name] for name in regions.FIELDS])
+        result={(branch,kind):rate for branch,kind,rate in db.execute('SELECT Subdivision,TypeCoeff,K0 FROM '+relation)}
+        db.close()
+        expected={(branch,kind):rate for branch,kind,rate in values}
+        expected['Д-Ростов','Политики']=.11;expected['Д-Питер','Политики']=.12
+        self.assertEqual(result,expected)
+
+    def test_extra_employee_columns_and_comment_references_do_not_break_adapter(self):
+        definition=self.compiled('all_2026')
+        definition,count=re.subn(r"'Политики'\s+АвторСделки", "COALESCE(sc.EmployeeName,s.[Даичи_АвторСделкиНаименование]) AS АвторСделки",definition,count=1)
+        self.assertEqual(count,1)
+        definition+="\n-- DataWH.motivation.vSubdivisionMotiveCoeffTo sc WHERE TRIM(sc.TypeCoeff)='Политики'\n"
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertIn('CAST(NULL AS nvarchar(255)) AS [EmployeeName]',sql)
+        self.assertIn('ELSE (COALESCE(sc.EmployeeName,s.[Даичи_АвторСделкиНаименование]))',sql)
+        self.assertEqual(sql.count('WHERE Subdivision NOT IN ('+regions.REGION_SQL+') OR '),4)
+
     def test_existing_moscow_author_expression_is_preserved(self):
         definition=self.compiled('all_2026')
         definition,count=re.subn(r"'Политики'\s+АвторСделки", "COALESCE(s.[Даичи_АвторСделкиНаименование],N'Политики') AS [АвторСделки]",definition,count=1)

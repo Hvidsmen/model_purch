@@ -158,19 +158,22 @@ def patch(source):
     if len(author_edits)!=1:raise ValidationError('Не распознано назначение автора политиков. Нужна проверка SQL перед региональным расчётом.')
     for start,stop,value in reversed(author_edits):segment=segment[:start]+value+segment[stop:]
     source=source[:fact.end()]+segment+source[end:]
-    # Freeze the approved regional rates instead of falling back to literals.
-    columns=','.join(FIELDS)
-    relation='(SELECT '+columns+' FROM DataWH.motivation.vSubdivisionMotiveCoeffTo WHERE Subdivision NOT IN ('+REGION_SQL+") OR LTRIM(RTRIM(TypeCoeff))<>N'Политики' UNION ALL SELECT "+columns+' FROM #share_region_coefficients)'
+    # Override the regional policy rows at the relation boundary. Every other
+    # subdivision/type keeps its native rows, regardless of how a JOIN spells
+    # or shares its TypeCoeff predicate (TRIM, LTRIM/RTRIM, brackets, etc.).
+    columns=list(FIELDS)
+    code=mask_sql(source)
+    for field in ('EmployeeCode','EmployeeName'):
+        if re.search(r'\[?sc\]?\s*\.\s*\[?'+field+r'\]?(?!\w)',code,re.I):columns.append(field)
+    if re.search(r'\[?sc\]?\s*\.\s*\*',code,re.I):
+        raise ValidationError('Не поддерживается SELECT sc.* в региональном расчёте. Нужен явный список полей коэффициентов.')
+    native=','.join(columns)
+    frozen=','.join(field if field in FIELDS else 'CAST(NULL AS nvarchar(255)) AS ['+field+']' for field in columns)
+    relation='(SELECT '+native+' FROM DataWH.motivation.vSubdivisionMotiveCoeffTo WHERE Subdivision NOT IN ('+REGION_SQL+") OR LTRIM(RTRIM(TypeCoeff))<>N'Политики' OR Subdivision IS NULL OR TypeCoeff IS NULL UNION ALL SELECT "+frozen+' FROM #share_region_coefficients)'
     pattern=r'(?:(?:\[?DataWH\]?\s*\.\s*)?\[?motivation\]?\s*\.\s*)\[?vSubdivisionMotiveCoeffTo\]?(?!\w)'
-    matches=list(re.finditer(pattern,source,re.I));edits=[]
-    for index,match in enumerate(matches):
-        stop=matches[index+1].start() if index+1<len(matches) else len(source)
-        tail=source[match.end():stop]
-        gate=re.search(r"TRIM\(sc.TypeCoeff\)\s*=\s*N?'Политики'",tail,re.I)
-        boundary=re.search(r'\b(?:UNION|SELECT)\b',mask_sql(tail),re.I)
-        if gate and (not boundary or gate.start()<boundary.start()):edits.append(match.span())
-    if len(edits)!=2:raise ValidationError('Не найдены два соединения коэффициентов политиков для регионального расчёта.')
-    for start,end in reversed(edits):source=source[:start]+relation+source[end:]
+    matches=list(re.finditer(pattern,code,re.I))
+    if len(matches)<2:raise ValidationError('Не найдены соединения коэффициентов факта и плана для регионального расчёта. Найдено: '+str(len(matches)))
+    for match in reversed(matches):source=source[:match.start()]+relation+source[match.end():]
     # Native percent-plan rows must not replicate the unsplit regional plan.
     join=re.search(r'LEFT\s+JOIN\s+#percent_plan_menger\s+pm\s+ON',mask_sql(source),re.I)
     if not join:raise ValidationError('Не найдено распределение плана политиков.')
@@ -259,12 +262,12 @@ def fallback_formulas(source):
     """Exact formula first, then the approved version's frozen fallback."""
     from .pilot_formula import closing
     code=mask_sql(source)
-    pattern=r'\bCOALESCE\s*\(\s*sc\.\[?VariationCalculate\]?\s*,'
+    pattern=r'\bCOALESCE\s*\(\s*\[?sc\]?\s*\.\s*\[?VariationCalculate\]?\s*,'
     matches=list(re.finditer(pattern,code,re.I));edits=[]
     for index,match in enumerate(matches):
         end=closing(code,code.index('(',match.start()))
         stop=matches[index+1].start() if index+1<len(matches) else len(source)
-        date_match=re.search(r'(\w+\.\[?\w+\]?)\s+BETWEEN\s+sc\.\[?DateFrom\]?',code[end:stop],re.I)
+        date_match=re.search(r'(\[?\w+\]?\s*\.\s*\[?\w+\]?)\s*(?:BETWEEN|>=)\s*\[?sc\]?\s*\.\s*\[?DateFrom\]?' ,code[end:stop],re.I)
         if not date_match:raise ValidationError('Не найдена дата формулы по умолчанию региона.')
         date_=date_match[1];branch='sub.SubdivisionName' if 'closeddealdate' in date_.casefold() else 's.SubdivisionName'
         fallback='CASE WHEN '+branch+' IN ('+REGION_SQL+') THEN (SELECT TOP(1) DefaultFormula FROM #share_region_defaults WHERE Date_<='+date_+' ORDER BY Date_ DESC) END,'
