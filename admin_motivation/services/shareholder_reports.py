@@ -101,7 +101,7 @@ def filtered_performance(source,stored):
     return result
 
 
-def data_for(run,query,*,detailed=True):
+def data_for(run,query,*,detailed=True,defer_detail=False):
     if run.state!='completed':raise ValidationError('Результаты доступны только после успешного завершения всего задания.')
     periods,kinds=selection(run,query);currency=query.get('currency','USD')
     from .closing_coefficient import ReportMultipliers
@@ -126,14 +126,16 @@ def data_for(run,query,*,detailed=True):
                          if (r.get('Подразделение'),r.get('АвторСделки'),r.get('Год')) in identities)
             selected=attach(selected,eligibility,curator=tag=='cur')
         filtered=multipliers.apply([dict(row,ТипКоэф=kind) for row in selected if period_code(row['КварталМотивации']) in periods])
-        if detailed:
+        if detailed and not defer_detail:
             data=manager_detail_report(filtered,currency,performance_rows=source)
         else:
             from .first_quarter_inputs import normalize
             from .manager_detail import period_motivation_summary
             data={'period_summary':period_motivation_summary(normalize(filtered),currency),'currency':currency}
+            if defer_detail:
+                data.update(_source_rows=filtered,_performance_rows=source,_deferred_detail=True)
         from .shareholder_regions import enabled as regional_enabled,REGIONS
-        if detailed and kind=='Политики' and regional_enabled(run):
+        if detailed and not defer_detail and kind=='Политики' and regional_enabled(run):
             personal_source=[row for row in raw if matches(row,query,products=False) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
             if personal_source and all(row.get('Подразделение') in REGIONS for row in personal_source):
                 from .shareholder_personal_targets import targets

@@ -169,7 +169,7 @@ def report(request,pk,kind):
             return render(request,'admin_motivation/reports_next/shareholder_report.html',context)
 
         if not context['needs_author']:
-            data=reports.data_for(run,query,detailed=kind in ('mine','detail'))
+            data=reports.data_for(run,query,detailed=kind in ('mine','detail'),defer_detail=kind=='detail')
             display=present('team' if kind=='team' else 'registry',data,data,periods)
             enrich(display,data)
             for section in display['team_sections']:section['page']=Paginator(section['rows'],50).get_page(query.get(section['page_parameter'],1))
