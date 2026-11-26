@@ -130,6 +130,12 @@ def data_for(run,query,*,detailed=True):
             from .first_quarter_inputs import normalize
             from .manager_detail import period_motivation_summary
             data={'period_summary':period_motivation_summary(normalize(filtered),currency),'currency':currency}
+        from .shareholder_regions import enabled as regional_enabled,REGIONS
+        if detailed and kind=='Политики' and regional_enabled(run):
+            personal_source=[row for row in raw if matches(row,query,products=False) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
+            if personal_source and all(row.get('Подразделение') in REGIONS for row in personal_source):
+                from .shareholder_personal_targets import targets
+                data['personal_plan_targets']=targets(personal_source,periods)
         perf=filtered_performance(filtered,records(run,'perf_'+tag))
         contexts={(r['Подразделение'],str(r['Год']),r['КварталМотивации']) for r in filtered}
         dept=[row for row in records(run,'dept_'+tag) if (row['Подразделение'],str(row['Год']),row['КварталМотивации']) in contexts]
