@@ -956,7 +956,7 @@
                                 <label>Формула <select data-row-formula="{{ good.id }}" class="select-var-calc" {% if not good.has_core_coefficients %}disabled{% endif %} title="Вариант формулы для {{ good.brand }}">
                                     {% for vc in var_calcs %}<option value="{{ vc.id }}" {% if vc.id == good.editor_formula_id %}selected{% endif %}>{{ vc }}</option>{% endfor %}
                                 </select></label>{% if good.editor_mixed_formulas %}<small>Есть разные формулы. Выбор нового значения заменит формулу всех ставок товара.</small>{% endif %}
-                                <label class="row-delete-control"><input type="checkbox" name="delete_coeff={{ good.id }}" onchange="toggleRowDelete(this)"> Удалить товар</label>
+                                <label class="row-delete-control"><input type="checkbox" name="delete_coeff={{ good.id }}" onchange="toggleRowDelete(this)"> Удалить только глобальные ставки</label><a href="{% url 'motivation_product_removal' %}?version={{ selected_version.pk }}&amp;goods={{ good.pk }}">Удаление с просмотром и выбором подразделений</a>
                             </div></details></td>
                             {% for sgb in gb_coefs %}
                                 {% if forloop.counter0 == 0 %}
