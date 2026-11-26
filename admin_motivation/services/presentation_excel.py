@@ -180,7 +180,7 @@ def workbook(kind, data, metadata, query=None, title=None):
         ws = sheet('План-факт', ['Подразделение', 'Вид мотивации', 'База мотивации', 'Сотрудник / область', 'Период',
                    'План мотивации, USD', 'Факт мотивации, USD', 'Выполнение мотивации'],
                    [28, 24, 34, 44, 30, 27, 27, 27], 'Базы мотивации по видам · Разные базы не складываются · USD')
-        performance_items=data['plan_fact'] if kind in ('mine','detail') else summary_performance(data['plan_fact'])
+        performance_items=data['plan_fact'] if kind in ('mine','detail') else data.get('coefficient_plan_fact',summary_performance(data['plan_fact']))
         for index, item in enumerate(performance_items):
             row(ws, [item['subdivision'], item['kind'], item.get('formula', 'Подразделение'), item.get('scope_author', 'Всё подразделение'), item['period'],
                      item['plan'], item['fact'], item['ratio']],
