@@ -104,16 +104,21 @@ SELECT * INTO #share_subdivisions FROM dbo.Subdivisions WHERE SubdivisionName IN
     if mode=='combined':prefix+="UPDATE #share_subdivisions SET SubdivisionName=N'Д-Москва' WHERE SubdivisionName=N'ТЕРМОТРЕЙД';\n"
     if planning_groups or '__PORTAL_GROUP_RULES__' in source:
         from .planning_group_rules import patch as patch_groups,TABLE
-        source=patch_groups(source,table=group_table).replace(TABLE,group_table)
+        source=patch_groups(source,table=group_table,optimized=True).replace(TABLE,group_table)
         if regional_policy:
             from .shareholder_regions import REGION_SQL
             fields='DateFrom,DateTo,Subdivision,PGSales,TypeCoeff,K0,K1,K2,K3,K4'
             rates='(SELECT '+fields+' FROM DataWH.motivation.vSubdivisionMotiveCoeffTo WHERE Subdivision NOT IN('+REGION_SQL+") OR LTRIM(RTRIM(TypeCoeff))<>N'Политики' UNION ALL SELECT "+fields+' FROM #share_region_coefficients)'
             source=source.replace('DataWH.motivation.vSubdivisionMotiveCoeffTo grc',rates+' grc').replace('#coeff_source grc',rates+' grc')
+            for relation in ('DataWH.motivation.vSubdivisionMotiveCoeffTo','#coeff_source'):
+                source=source.replace(relation+'\n-- __PORTAL_GROUP_MIN_SOURCE_END__',rates+'\n-- __PORTAL_GROUP_MIN_SOURCE_END__')
     if regional_policy:
         from .shareholder_regions import patch,BRANCH_SQL
         source=patch(source)
         prefix=prefix.replace("N'Д-Москва',N'ТЕРМОТРЕЙД'",BRANCH_SQL)
+    if planning_groups:
+        from .group_rule_performance import materialize
+        source=materialize(source,table=group_table)
     if original_rules:
         from .shareholder_original_rules import restore
         source=restore(source)

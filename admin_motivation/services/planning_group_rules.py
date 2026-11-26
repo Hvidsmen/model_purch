@@ -119,9 +119,10 @@ def install(cursor,snapshot):
     cursor.execute(TABLE_SQL[TABLE_SQL.index('CREATE TABLE'):].replace(TABLE,'#share_group_rules'))
     rows=list(tuples(snapshot))
     if rows:cursor.executemany('INSERT INTO #share_group_rules VALUES('+','.join('?' for _ in FIELDS)+')',rows)
+    cursor.execute('CREATE INDEX IX_share_group_rules ON #share_group_rules(Date_,PGSales,TypeCoeff,Subdivision);')
 
 
-def patch(source,table=TABLE,minimum_source='DataWH.motivation.vSubdivisionMotiveCoeffTo'):
+def patch(source,table=TABLE,minimum_source='DataWH.motivation.vSubdivisionMotiveCoeffTo',optimized=False):
     """Override formulas; retain exact rates before any configured missing rate."""
     if '__PORTAL_GROUP_RULES__' in source:
         if re.search(r"CONVERT\s*\(\s*float\s*,\s*N?'Не задан коэффициент группы:",source,re.I):
@@ -153,9 +154,21 @@ def patch(source,table=TABLE,minimum_source='DataWH.motivation.vSubdivisionMotiv
         on_date=date[1];kind=kind[1]
         lookup=(f' FROM {table} gr WHERE gr.Date_=(SELECT MAX(gd.Date_) FROM {table} gd WHERE gd.Date_<={on_date})'
                 f" AND gr.PGSales={planning} AND gr.TypeCoeff={kind} AND gr.Subdivision IN(N'',{branch}) ORDER BY CASE WHEN gr.Subdivision={branch} THEN 0 ELSE 1 END")
+        if optimized:
+            from .group_rule_performance import apply_position
+            at=apply_position(code,end+1,scope_end)
+            dates=f'{on_date} BETWEEN grc.DateFrom AND grc.DateTo'
+            if re.search(r'<\s*sc\.\[?DateTo\]?',tail,re.I):dates=f'{on_date}>=grc.DateFrom AND {on_date}<grc.DateTo'
+            relation='-- __PORTAL_GROUP_MIN_SOURCE_BEGIN__\n'+minimum_source+'\n-- __PORTAL_GROUP_MIN_SOURCE_END__\n'
+            mins=','.join(f'MIN(grc.K{i}) AS K{i}' for i in range(5))
+            missing=' OR '.join(f'sc.K{i} IS NULL' for i in range(5))
+            apply=('\nOUTER APPLY (SELECT TOP(1) gr.*'+lookup+') gr\n'
+                   +f'OUTER APPLY (SELECT {mins} FROM {relation} grc WHERE gr.Missing=N\'minimum\''
+                   +f' AND ({missing}) AND grc.PGSales={planning} AND grc.Subdivision={branch} AND grc.TypeCoeff={kind} AND {dates}) grmin\n')
+            edits.append((at,at,apply))
         for projection in re.finditer(r'TRIM\(sc\.TypeCoeff\)(\s+TypeCoeff_)',source[previous:scope_end],re.I):
-            edits.append((previous+projection.start(),previous+projection.end(),'COALESCE(TRIM(sc.TypeCoeff),(SELECT TOP(1) gr.TypeCoeff'+lookup+'))'+projection[1]))
-        formula='(SELECT TOP(1) gr.Formula'+lookup+')'
+            edits.append((previous+projection.start(),previous+projection.end(),('COALESCE(TRIM(sc.TypeCoeff),gr.TypeCoeff)' if optimized else 'COALESCE(TRIM(sc.TypeCoeff),(SELECT TOP(1) gr.TypeCoeff'+lookup+'))')+projection[1]))
+        formula='gr.Formula' if optimized else '(SELECT TOP(1) gr.Formula'+lookup+')'
         edits.append((match.start(),end+1,'COALESCE('+formula+','+source[match.start():end+1]+')'))
         for rate in re.finditer(r'\bCOALESCE\s*\(\s*sc\.\[?(K[0-4])\]?\s*,',code[previous:scope_end],re.I):
             start=previous+rate.start();stop=closing(code,code.index('(',start));field=rate[1]
@@ -165,9 +178,10 @@ def patch(source,table=TABLE,minimum_source='DataWH.motivation.vSubdivisionMotiv
             if re.search(r'<\s*sc\.\[?DateTo\]?',tail,re.I):dates=f'{on_date}>=grc.DateFrom AND {on_date}<grc.DateTo'
             minimum=(f'(SELECT MIN(grc.{field}) FROM {minimum_source} grc WHERE grc.PGSales={planning}'
                      f' AND grc.Subdivision={branch} AND LTRIM(RTRIM(grc.TypeCoeff))={kind} AND {dates})')
+            if optimized:minimum='grmin.'+field
             value=f"CASE gr.Missing WHEN N'minimum' THEN {minimum} WHEN N'fixed' THEN gr.{field} ELSE NULL END"
-            fallback='(SELECT TOP(1) '+value+lookup+')'
-            method='(SELECT TOP(1) gr.Missing'+lookup+')'
+            fallback=value if optimized else '(SELECT TOP(1) '+value+lookup+')'
+            method='gr.Missing' if optimized else '(SELECT TOP(1) gr.Missing'+lookup+')'
             edits.append((start,stop+1,f"CASE WHEN {method} IN(N'minimum',N'fixed',N'error') THEN COALESCE({exact},{fallback}) ELSE COALESCE({exact},{native}) END"))
         previous=scope_end
     for start,end,value in sorted(edits,reverse=True):source=source[:start]+value+source[end:]
