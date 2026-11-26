@@ -114,6 +114,14 @@ def report(request,pk,kind):
     if not query.get('currency'):query['currency']='USD'
     try:periods,kinds=reports.selection(run,query)
     except ValidationError as error:return HttpResponseBadRequest(' '.join(error.messages))
+    available=reports.options(run) if run.state=='completed' else None
+    allowed_authors=set()
+    if available is not None:
+        selected_branches=set(query.getlist('subdivision'))
+        allowed_authors={author for author in available['author']
+                         if not selected_branches or selected_branches.intersection(available['author_subdivisions'].get(author,[]))}
+        query.setlist('author',[author for author in query.getlist('author')
+                               if author not in available['author'] or author in allowed_authors])
     title=reports.TITLES[kind];meta=metadata(run)
     meta.extend((label,', '.join(query.getlist(field)) or 'Все доступные') for field,label in [('currency','Валюта премий'),('period','Периоды отчёта'),('type','Виды мотивации'),('subdivision','Отбор подразделений'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')])
     from .services.shareholder_original_rules import enabled,enrich
@@ -128,9 +136,9 @@ def report(request,pk,kind):
         navigation.append({'title':label,'active':key==kind,'url':reverse('motivation_shareholder_report',args=[run.pk,key])+'?'+target.urlencode()})
     context['navigation']=navigation
     if run.state=='completed':
-        available=reports.options(run)
         context['filters']=[{'key':key,'label':label,'options':[{'value':v,'selected':v in query.getlist(key)} for v in available[key]]} for key,label in [('subdivision','Подразделения'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')]]
-        context['authors']=[{'value':v,'selected':v in query.getlist('author')} for v in available['author']]
+        context['authors']=[{'value':v,'selected':v in query.getlist('author'),'disabled':v not in allowed_authors} for v in available['author']]
+        context['author_subdivisions']=available['author_subdivisions']
         context['type_options']=[{'value':v,'selected':v in kinds} for v in reports.KINDS]
         context['needs_author']=kind=='mine' and len(query.getlist('author'))!=1
         def caption(values,all_caption):

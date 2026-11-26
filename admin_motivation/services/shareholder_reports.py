@@ -11,7 +11,7 @@ KINDS={'Политики':'pol','Продажи':'sales','Директора':'d
 TITLES={'team':'Премии команды','mine':'Моя премия','detail':'Детальный расчёт','deals':'Факт закрытых сделок','registry':'Реестр','executive':'Обзор для генерального директора'}
 ZERO=Decimal(0)
 OPTION_FIELDS=dict(subdivision='Подразделение',author='АвторСделки',planning='ГруппаПлановПродаж',goods='ГруппаТоваров',brand='Марка')
-OPTIONS_KEY='report_filter_options_v1'
+OPTIONS_KEY='report_filter_options_v2'
 
 
 def records(run,dataset):
@@ -33,19 +33,22 @@ def records(run,dataset):
 def options(run):
     from django.core.cache import cache
     stored=run.metadata.get(OPTIONS_KEY) if run.state=='completed' else None
-    if isinstance(stored,dict) and all(isinstance(stored.get(key),list) for key in OPTION_FIELDS):return stored
-    cache_key=f'shareholder-options-v1:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at else None
+    if isinstance(stored,dict) and isinstance(stored.get('author_subdivisions'),dict) and all(isinstance(stored.get(key),list) for key in OPTION_FIELDS):return stored
+    cache_key=f'shareholder-options-v2:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at else None
     if cache_key:
         saved=cache.get(cache_key)
         if saved is not None:return saved
     values={key:set() for key in ('subdivision','author','planning','goods','brand')}
-    fields=OPTION_FIELDS
+    fields=OPTION_FIELDS;author_subdivisions=defaultdict(set)
     for tag in KINDS.values():
         for row in records(run,'report_'+tag):
             if period_code(row['КварталМотивации']) not in [*map(str,run.quarters),'5']:continue
+            if row.get('АвторСделки') and row.get('Подразделение'):
+                author_subdivisions[row['АвторСделки']].add(row['Подразделение'])
             for key,field in fields.items():
                 if row.get(field):values[key].add(row[field])
     result={field:sorted(value) for field,value in values.items()}
+    result['author_subdivisions']={author:sorted(author_subdivisions[author]) for author in result['author']}
     if cache_key:cache.set(cache_key,result,3600)
     if run.state=='completed':
         from ..models import ShareholderCalculation

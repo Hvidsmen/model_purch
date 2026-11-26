@@ -72,6 +72,9 @@ def save_query(run,cursor,mode,dataset,sql,args=(),kind=None):
                 if period_code(value.get('КварталМотивации','')) in [*map(str,run.quarters),'5']:
                     choices=getattr(run,'_report_options',None)
                     if choices is None:choices={key:set() for key in OPTION_FIELDS};run._report_options=choices
+                    if value.get('АвторСделки') and value.get('Подразделение'):
+                        if not hasattr(run,'_author_subdivisions'):run._author_subdivisions={}
+                        run._author_subdivisions.setdefault(str(value['АвторСделки']),set()).add(str(value['Подразделение']))
                     for key,field in OPTION_FIELDS.items():
                         if value.get(field):choices[key].add(str(value[field]))
         ShareholderSnapshot.objects.create(calculation=run,mode=mode,dataset=dataset,sequence=sequence,payload=payload)
@@ -194,6 +197,7 @@ def execute(run,connector=None):
         if hasattr(run,'_report_options'):
             from .shareholder_reports import OPTIONS_KEY
             metadata[OPTIONS_KEY]={key:sorted(values) for key,values in run._report_options.items()}
+            metadata[OPTIONS_KEY]['author_subdivisions']={author:sorted(getattr(run,'_author_subdivisions',{}).get(author,())) for author in metadata[OPTIONS_KEY]['author']}
         ShareholderCalculation.objects.filter(pk=run.pk,state='running').update(state='completed',stage='Готово · все отчёты используют один снимок',metadata=serial(metadata),completed_at=timezone.now())
     finally:
         if connection is not None:connection.close()
