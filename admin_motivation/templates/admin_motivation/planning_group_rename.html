@@ -1,0 +1,17 @@
+{% extends 'admin_motivation/base.html' %}{% load static %}
+{% block module_css %}{{ block.super }}<link rel="stylesheet" href="{% static 'admin_motivation/planning_group_rules.css' %}?v=2">{% endblock %}
+{% block content %}<section class="content pgr-page">
+<a class="pgr-back" href="{% url 'motivation_planning_group_rules' %}?version={{ selected_version.pk }}">← Правила групп</a>
+<header class="pgr-heading"><div><h1>Переименовать группу в коэффициентах</h1><p>{{ selected_version }} · {{ selected_version.get_status_display }}</p></div></header>
+<p>Ставки, формулы и правила переносятся только внутри текущего черновика. Названия в старых версиях и расчётах сохраняются. Пробелы по краям нового названия удаляются.</p>
+<section class="pgr-card pgr-editor"><form method="post">{% csrf_token %}<input type="hidden" name="version" value="{{ selected_version.pk }}"><input type="hidden" name="revision" value="{{ selected_version.revision }}">
+{% if form.errors %}<div class="pgr-error" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+<div class="pgr-grid pgr-grid-two">{% include 'admin_motivation/_planning_rule_field.html' with field=form.source %}{% include 'admin_motivation/_planning_rule_field.html' with field=form.target %}</div>
+<p><button class="pgr-button" name="action" value="preview">Проверить замену</button></p>
+{% if plan %}<h2>{{ plan.source }} → {{ plan.target }}</h2><p>Товарных настроек: {{ plan.goods|length }}. Ставок: {{ plan.total }}. Правил группы: {{ plan.rule_count }}.</p>
+<p>По видам коэффициентов: {% for kind,count in plan.kind_counts %}{{ kind }} — {{ count }}{% if not forloop.last %}; {% endif %}{% endfor %}.</p>
+<ul>{% for row in plan.counts %}<li>{{ row.label }}: {{ row.count }}</li>{% endfor %}</ul>
+<p>Подразделения: {% for name in plan.subdivisions %}{{ name }}{% if not forloop.last %}, {% endif %}{% empty %}Только глобальные настройки{% endfor %}.</p>
+<details><summary>Товары, которые будут перенесены</summary><ul>{% for good in plan.goods %}<li>{{ good.group }} · {{ good.brand }}</li>{% endfor %}</ul></details>
+{% if plan.conflicts %}<div class="pgr-error"><strong>Замена заблокирована. Настройки не изменены.</strong><ul>{% for conflict in plan.conflicts %}<li>{{ conflict }}</li>{% endfor %}</ul></div>{% else %}<input type="hidden" name="preview_token" value="{{ preview_token }}"><p>Конфликтов нет. Для применения в расчёте после замены утвердите версию, выполните выгрузку и новый расчёт.</p><button class="pgr-button pgr-button-primary" name="action" value="apply">Подтвердить переименование</button>{% endif %}{% endif %}
+</form></section></section>{% endblock %}
