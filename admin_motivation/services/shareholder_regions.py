@@ -128,6 +128,41 @@ IF EXISTS(SELECT [Подразделение],[Год],[Квартал],[Гру�
 '''
 
 
+# Native procedures may cache this view once, then join the cache for fact and
+# plan. Follow only explicit SELECT INTO / CTE dependencies on that view.
+_SQL_IDENTIFIER = r'(?:\[[^\]]+\]|[\w#]+)(?:\s*\.\s*(?:\[[^\]]+\]|[\w#]+)){0,2}'
+
+
+def _relation_key(name):
+    return re.sub(r'[\[\]\s]', '', name).casefold()
+
+
+def coefficient_joins(source):
+    from .pilot_formula import closing
+    code = mask_sql(source)
+    known = {'vsubdivisionmotivecoeffto', 'motivation.vsubdivisionmotivecoeffto',
+             'datawh.motivation.vsubdivisionmotivecoeffto'}
+    dependencies = []
+    for match in re.finditer(r'\bINTO\s+(?P<target>'+_SQL_IDENTIFIER+r')\s+FROM\s+(?P<input>'+_SQL_IDENTIFIER+r')', code, re.I):
+        dependencies.append((_relation_key(match['target']), {_relation_key(match['input'])}))
+    for match in re.finditer(r'(?P<target>'+_SQL_IDENTIFIER+r')\s+AS\s*\(', code, re.I):
+        opening = match.end()-1
+        end = closing(code, opening)
+        body = code[opening+1:end]
+        # Only a single-input coefficient CTE is supported; reject unions/joins
+        # rather than replacing a mixed relation with the regional matrix.
+        refs = re.findall(r'\bFROM\s+('+_SQL_IDENTIFIER+r')', body, re.I)
+        if len(refs)==1 and not re.search(r'\b(?:JOIN|UNION)\b', body, re.I):
+            dependencies.append((_relation_key(match['target']), {_relation_key(refs[0])}))
+    while True:
+        found = {target for target, inputs in dependencies if inputs <= known}
+        if found <= known:break
+        known.update(found)
+    pattern = r'\bJOIN\s+(?P<relation>'+_SQL_IDENTIFIER+r')\s+(?:AS\s+)?\[?sc\]?\s+ON\b'
+    return [match for match in re.finditer(pattern, code, re.I)
+            if _relation_key(match['relation']) in known]
+
+
 def patch(source):
     """Applied only to a new shareholder batch; Moscow's native expressions stay."""
     mask=mask_sql(source)
@@ -165,15 +200,26 @@ def patch(source):
     code=mask_sql(source)
     for field in ('EmployeeCode','EmployeeName'):
         if re.search(r'\[?sc\]?\s*\.\s*\[?'+field+r'\]?(?!\w)',code,re.I):columns.append(field)
-    if re.search(r'\[?sc\]?\s*\.\s*\*',code,re.I):
+    # A loader may SELECT sc.* into its cache; only payout projections need
+    # explicit coefficient columns so the regional UNION has a known shape.
+    if re.search(r'\[?sc\]?\s*\.\s*\*',code[fact.start():],re.I):
         raise ValidationError('Не поддерживается SELECT sc.* в региональном расчёте. Нужен явный список полей коэффициентов.')
     native=','.join(columns)
     frozen=','.join(field if field in FIELDS else 'CAST(NULL AS nvarchar(255)) AS ['+field+']' for field in columns)
-    relation='(SELECT '+native+' FROM DataWH.motivation.vSubdivisionMotiveCoeffTo WHERE Subdivision NOT IN ('+REGION_SQL+") OR LTRIM(RTRIM(TypeCoeff))<>N'Политики' OR Subdivision IS NULL OR TypeCoeff IS NULL UNION ALL SELECT "+frozen+' FROM #share_region_coefficients)'
-    pattern=r'(?:(?:\[?DataWH\]?\s*\.\s*)?\[?motivation\]?\s*\.\s*)\[?vSubdivisionMotiveCoeffTo\]?(?!\w)'
-    matches=list(re.finditer(pattern,code,re.I))
-    if len(matches)<2:raise ValidationError('Не найдены соединения коэффициентов факта и плана для регионального расчёта. Найдено: '+str(len(matches)))
-    for match in reversed(matches):source=source[:match.start()]+relation+source[match.end():]
+    joins=coefficient_joins(source)
+    fact_union=re.search(r'\bUNION\s+ALL\b',code[fact.end():],re.I)
+    fact_end=fact.end()+fact_union.start() if fact_union else fact.end()
+    plan_start=re.search(r'\bINTO\s+#plan\b',code,re.I)
+    plan_union=re.search(r'\bUNION\s+ALL\b',code[plan_start.end():],re.I) if plan_start else None
+    plan_end=plan_start.end()+plan_union.start() if plan_union else len(code)
+    if (not plan_start
+            or not any(fact.start()<match.start()<fact_end for match in joins)
+            or not any(plan_start.end()<match.start()<plan_end for match in joins)):
+        raise ValidationError('Не найдены соединения коэффициентов факта и плана для регионального расчёта. Найдено: '+str(len(joins)))
+    for match in reversed(joins):
+        original=source[match.start('relation'):match.end('relation')]
+        relation='(SELECT '+native+' FROM '+original+' WHERE Subdivision NOT IN ('+REGION_SQL+") OR LTRIM(RTRIM(TypeCoeff))<>N'Политики' OR Subdivision IS NULL OR TypeCoeff IS NULL UNION ALL SELECT "+frozen+' FROM #share_region_coefficients)'
+        source=source[:match.start('relation')]+relation+source[match.end('relation'):]
     # Native percent-plan rows must not replicate the unsplit regional plan.
     join=re.search(r'LEFT\s+JOIN\s+#percent_plan_menger\s+pm\s+ON',mask_sql(source),re.I)
     if not join:raise ValidationError('Не найдено распределение плана политиков.')
