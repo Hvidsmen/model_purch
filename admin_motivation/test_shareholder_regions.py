@@ -103,6 +103,35 @@ class RegionalSQLTests(TestCase):
         matches=regions.coefficient_joins(source)
         self.assertEqual([m['relation'] for m in matches],['rates'])
 
+    def test_nested_unions_before_coefficient_joins_do_not_end_fact_or_plan(self):
+        definition=self.compiled('all_2026')
+        view='DataWH.motivation.vSubdivisionMotiveCoeffTo'
+        # A derived query can combine input kinds before the outer rate JOIN.
+        # Its UNION must not be mistaken for the end of the outer fact/plan.
+        definition,count=re.subn(r'(LEFT\s+JOIN\s+'+re.escape(view)+r'\s+sc\s+ON)',
+            r'CROSS JOIN (SELECT 1 AS Marker_ UNION ALL SELECT 2) shared_inputs \1',definition,flags=re.I)
+        self.assertEqual(count,4)
+        # Keep two policy joins recognizable and use native derived relations
+        # for the other coefficient kind, matching the reported count of two.
+        seen=0
+        def native_sales(match):
+            nonlocal seen
+            seen+=1
+            return '(SELECT * FROM '+view+') sc' if seen in (2,4) else match[0]
+        definition=re.sub(re.escape(view)+r'\s+sc',native_sales,definition)
+        self.assertEqual(len(regions.coefficient_joins(definition)),2)
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertEqual(sql.count('shared_inputs LEFT JOIN'),4)
+        self.assertEqual(sql.count('FROM #share_region_coefficients)'),2)
+        self.assertIn('d.Period_=5',sql)
+
+    def test_shared_fact_plan_default_projections_need_both_contexts_not_four_copies(self):
+        source="SELECT COALESCE(sc.VariationCalculate,N'Подразделение') AS Formula FROM fact LEFT JOIN rates sc ON s.ClosedDealDate BETWEEN sc.DateFrom AND sc.DateTo; SELECT COALESCE(sc.VariationCalculate,N'Подразделение') AS Formula FROM plan LEFT JOIN rates sc ON t.Date_ BETWEEN sc.DateFrom AND sc.DateTo;"
+        patched=regions.fallback_formulas(source)
+        self.assertEqual(patched.count('FROM #share_region_defaults'),2)
+        with self.assertRaisesMessage(ValidationError,'формулы факта и плана'):
+            regions.fallback_formulas(source.replace('t.Date_', 's.ClosedDealDate'))
+
     def test_generated_relation_overrides_only_regional_policies(self):
         sql=private_sql(self.compiled('all_2026'),'combined','new',original_rules=True,regional_policy=True)
         relation=re.search(r'\(SELECT DateFrom,DateTo,Subdivision,[\s\S]*?FROM #share_region_coefficients\)',sql)[0]

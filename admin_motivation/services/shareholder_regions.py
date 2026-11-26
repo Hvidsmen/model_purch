@@ -163,14 +163,27 @@ def coefficient_joins(source):
             if _relation_key(match['relation']) in known]
 
 
+def _query_branch_end(code, start):
+    """A UNION inside a derived table is not the end of its outer query."""
+    depth=0
+    for token in re.finditer(r'\(|\)|;|\bUNION\s+ALL\b',code[start:],re.I):
+        value=token[0].upper()
+        if value=='(':
+            depth+=1
+        elif value==')':
+            if depth==0:return start+token.start()
+            depth-=1
+        elif depth==0:
+            return start+token.start()
+    return len(code)
+
+
 def patch(source):
     """Applied only to a new shareholder batch; Moscow's native expressions stay."""
     mask=mask_sql(source)
     fact=re.search(r';\s*WITH\s+fact\s+AS\s*\(',mask,re.I)
     if not fact:raise ValidationError('Не найдена база факта для региональных планов.')
-    stop=re.search(r'\bUNION\s+ALL\b',mask[fact.end():],re.I)
-    if not stop:raise ValidationError('Не найдена граница факта политиков.')
-    end=fact.end()+stop.start()
+    end=_query_branch_end(mask,fact.end())
     segment=source[fact.end():end]
     code=mask_sql(segment)
     select=re.search(r'\bSELECT\b',code,re.I)
@@ -207,11 +220,9 @@ def patch(source):
     native=','.join(columns)
     frozen=','.join(field if field in FIELDS else 'CAST(NULL AS nvarchar(255)) AS ['+field+']' for field in columns)
     joins=coefficient_joins(source)
-    fact_union=re.search(r'\bUNION\s+ALL\b',code[fact.end():],re.I)
-    fact_end=fact.end()+fact_union.start() if fact_union else fact.end()
+    fact_end=_query_branch_end(code,fact.end())
     plan_start=re.search(r'\bINTO\s+#plan\b',code,re.I)
-    plan_union=re.search(r'\bUNION\s+ALL\b',code[plan_start.end():],re.I) if plan_start else None
-    plan_end=plan_start.end()+plan_union.start() if plan_union else len(code)
+    plan_end=_query_branch_end(code,plan_start.end()) if plan_start else len(code)
     if (not plan_start
             or not any(fact.start()<match.start()<fact_end for match in joins)
             or not any(plan_start.end()<match.start()<plan_end for match in joins)):
@@ -309,16 +320,17 @@ def fallback_formulas(source):
     from .pilot_formula import closing
     code=mask_sql(source)
     pattern=r'\bCOALESCE\s*\(\s*\[?sc\]?\s*\.\s*\[?VariationCalculate\]?\s*,'
-    matches=list(re.finditer(pattern,code,re.I));edits=[]
+    matches=list(re.finditer(pattern,code,re.I));edits=[];contexts=set()
     for index,match in enumerate(matches):
         end=closing(code,code.index('(',match.start()))
         stop=matches[index+1].start() if index+1<len(matches) else len(source)
         date_match=re.search(r'(\[?\w+\]?\s*\.\s*\[?\w+\]?)\s*(?:BETWEEN|>=)\s*\[?sc\]?\s*\.\s*\[?DateFrom\]?' ,code[end:stop],re.I)
         if not date_match:raise ValidationError('Не найдена дата формулы по умолчанию региона.')
-        date_=date_match[1];branch='sub.SubdivisionName' if 'closeddealdate' in date_.casefold() else 's.SubdivisionName'
+        date_=date_match[1];is_fact='closeddealdate' in date_.casefold();contexts.add('fact' if is_fact else 'plan')
+        branch='sub.SubdivisionName' if is_fact else 's.SubdivisionName'
         fallback='CASE WHEN '+branch+' IN ('+REGION_SQL+') THEN (SELECT TOP(1) DefaultFormula FROM #share_region_defaults WHERE Date_<='+date_+' ORDER BY Date_ DESC) END,'
         edits.append((match.end(),fallback))
-    if len(edits)<4:raise ValidationError('Не найдены формулы факта и плана для регионов.')
+    if contexts!={'fact','plan'}:raise ValidationError('Не найдены формулы факта и плана для регионов.')
     for point,value in reversed(edits):source=source[:point]+value+source[point:]
     return source
 
