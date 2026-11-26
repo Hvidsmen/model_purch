@@ -7,6 +7,9 @@ from .shareholder_personal_targets import COVERAGE
 
 
 def performance(rows,kind,periods,*,original_rules=True):
+    periods=list(dict.fromkeys(periods))
+    coverages={code:COVERAGE[code] if original_rules else (('1','2') if code=='2' else ('4',) if code=='5' else (code,)) for code in periods}
+    total_coverage=tuple(sorted({q for coverage in coverages.values() for q in coverage}))
     unique={};groups={}
     for row in rows:
         context=(row.get('Подразделение'),row.get('Год'))
@@ -23,17 +26,16 @@ def performance(rows,kind,periods,*,original_rules=True):
         groups[item['context']].setdefault(item['code'],[]).append(item)
     result=[]
     for (branch,year),quarters in groups.items():
-        for code in periods:
-            coverage=COVERAGE[code] if original_rules else (('1','2') if code=='2' else ('4',) if code=='5' else (code,))
+        for code,coverage in [*coverages.items(),*([('total',total_coverage)] if total_coverage else [])]:
             inputs=[item for q in coverage for item in quarters.get(q,[])]
             values={}
             for name in ('plan','fact'):
                 values[name]=(sum((item[name] for item in inputs),Decimal(0))
                               if all(q in quarters for q in coverage) and all(item[name] is not None for item in inputs) else None)
-            if code=='1':values['plan']=values['fact']
+            if code=='1' or (code=='total' and periods==['1']):values['plan']=values['fact']
             result.append({'subdivision':branch,'year':year,'kind':kind,
                            'coefficient_total':True,
                            'formula':'Общая база вида мотивации','scope_author':'Всё подразделение',
-                           'period':'Год' if code=='5' else code+' квартал',**values,
+                           'period':'Итого' if code=='total' else 'Год' if code=='5' else code+' квартал',**values,
                            'ratio':ratio(values['fact'],values['plan']) if all(v is not None for v in values.values()) else None})
     return result

@@ -18,16 +18,16 @@ class CoefficientTotalTests(SimpleTestCase):
         rows=source_rows();before=deepcopy(rows)
         duplicate={**rows[0],'VariationCalculate':'Подразделение'}
         result=performance([*rows,duplicate],'Политики',list('12345'))
-        self.assertEqual([r['plan'] for r in result],list(map(D,[50,300,300,1000,1000])))
-        self.assertEqual([r['fact'] for r in result],list(map(D,[50,150,150,500,500])))
-        self.assertEqual([r['ratio'] for r in result],[D(1),D('.5'),D('.5'),D('.5'),D('.5')])
+        self.assertEqual([r['plan'] for r in result],list(map(D,[50,300,300,1000,1000,1000])))
+        self.assertEqual([r['fact'] for r in result],list(map(D,[50,150,150,500,500,500])))
+        self.assertEqual([r['ratio'] for r in result],[D(1),D('.5'),D('.5'),D('.5'),D('.5'),D('.5')])
         self.assertEqual(rows,before)
 
     def test_same_product_from_two_employees_is_additive_and_branches_remain_separate(self):
         rows=source_rows()
         result=performance([*rows,*[{**r,'АвторСделки':'Другой'} for r in rows],
                             *[{**r,'Подразделение':'Д-Ростов'} for r in rows]],'Продажи',['2'])
-        self.assertEqual([(r['subdivision'],r['plan'],r['fact']) for r in result],
+        self.assertEqual([(r['subdivision'],r['plan'],r['fact']) for r in result if r['period']!='Итого'],
                          [('Д-Питер',D(600),D(300)),('Д-Ростов',D(300),D(150))])
 
     def test_missing_quarter_inputs_do_not_fall_back_to_overlapping_windows(self):
@@ -35,6 +35,15 @@ class CoefficientTotalTests(SimpleTestCase):
         result=performance(rows,'Политики',['2'])
         self.assertIsNone(result[0]['plan']);self.assertIsNone(result[0]['ratio'])
         self.assertEqual(result[0]['fact'],D(150))
+
+    def test_total_counts_union_of_quarter_windows_and_recomputes_percentage(self):
+        for periods,plan,fact in [(['1','2'],300,150),(['2','3'],600,300),
+                                  (['1','3'],400,200),(['4','5'],1000,500),(['5'],1000,500),(['1'],50,50)]:
+            with self.subTest(periods=periods):
+                total=performance(source_rows(),'Политики',periods)[-1]
+                self.assertEqual(total['period'],'Итого')
+                self.assertEqual((total['plan'],total['fact'],total['ratio']),
+                                 (D(plan),D(fact),D(fact)/D(plan)))
 
 
 class CoefficientTotalReportTests(TestCase):
@@ -59,6 +68,8 @@ class CoefficientTotalReportTests(TestCase):
             self.assertNotIn('conditions',card)
             self.assertEqual((card['plan'],card['fact'],card['remaining']),(D(300),D(150),D(150)))
             self.assertEqual(len(section['performance_matrix']['rows']),1)
+            total=section['performance_matrix']['rows'][0]['total']
+            self.assertEqual((total['plan'],total['fact'],total['ratio']),(D(300),D(150),D('.5')))
         html=render_to_string('admin_motivation/reports_next/_team_remaining.html',{'presentation':display})
         self.assertEqual(html.count('<article '),2)
         self.assertNotIn('nr-target-condition',html)
@@ -69,7 +80,7 @@ class CoefficientTotalReportTests(TestCase):
         output=workbook('team',data,[]);self.addCleanup(output.close)
         book=load_workbook(output,read_only=True);self.addCleanup(book.close)
         rows=[row for row in book['План-факт'].iter_rows(values_only=True) if row and row[0]=='Д-Питер']
-        self.assertEqual(len(rows),2)
+        self.assertEqual(len(rows),4)
         self.assertTrue(all(row[-3:]==(300,150,.5) for row in rows))
 
     def test_product_filters_apply_to_additive_totals(self):
