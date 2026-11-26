@@ -371,7 +371,7 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False, annual_accrual_snapshot=False, period_authors_only=False):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False, annual_accrual_snapshot=False, period_authors_only=False, compact_summary=False):
     if kind == 'manager':
         values = {'GPGoods': [], 'Brend': [], **values}
     from functools import partial
@@ -431,7 +431,14 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         if period_authors_only:
             if kind!='manager-detail':raise ValidationError('Состав авторов периода доступен только для детализации мотивации.')
             from .period_authors import restrict_sql as period_author_sql
-            source_sql=period_author_sql(source_sql,period_codes,calculation_variant)
+            if compact_summary and summary_only:
+                from . import overview_inputs
+                overview_inputs.reset(cursor,overview_inputs.AUTHORS)
+                cohort_sql,cohort_args=bind_report_sql(overview_inputs.author_sql(period_codes,calculation_variant),values)
+                cursor.execute(cohort_sql,*cohort_args)
+                source_sql=overview_inputs.restrict_authors(source_sql)
+            else:
+                source_sql=period_author_sql(source_sql,period_codes,calculation_variant)
         sql, args = bind_report_sql(source_sql, values)
         if kind == 'subdivisions' and values.get('PremiumPeriods'):
             periods = values['PremiumPeriods']
@@ -452,6 +459,10 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
             return {'summary': summary, 'totals': totals, 'details': details, 'page': page, 'pages': pages, 'offset': (page-1)*50}
         if kind == 'manager-detail':
             from .manager_detail import grouped_sql, manager_detail_report
+            if compact_summary and summary_only and include_performance:
+                from . import overview_inputs
+                sql=overview_inputs.prepare(cursor,sql,args,values.get('TypeCoeff_'),calculation_variant)
+                args=[]
             rows = read_rows(cursor, grouped_sql(sql, summary_only=summary_only), args)
             if values.get('TypeCoeff_')=='Кураторы':rows=[dict(row,ТипКоэф='Кураторы') for row in rows]
             if summary_only:
@@ -462,8 +473,14 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                 result = {'period_summary': period_motivation_summary(rows, values.get('Currency', 'USD'), pilot=pilot), 'currency': values.get('Currency', 'USD')}
                 if calculation_variant in ('all_2026', 'separate_2026') or include_performance:
                     from .motivation_performance import grouped_sql as performance_sql, department_sql
-                    result['motivation_performance'] = read_rows(cursor, performance_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant), args)
-                    result['department_performance'] = read_rows(cursor, department_sql(sql, calculation_variant), args)
+                    performance_query=performance_sql(sql, coefficient_type=values.get('TypeCoeff_'), calculation_variant=calculation_variant)
+                    department_query=department_sql(sql,calculation_variant)
+                    if compact_summary and include_performance:
+                        table=overview_inputs.plan_fact_table(calculation_variant)
+                        performance_query=performance_query.replace(table,overview_inputs.PLAN)
+                        department_query=department_query.replace(table,overview_inputs.PLAN)
+                    result['motivation_performance'] = read_rows(cursor, performance_query, args)
+                    result['department_performance'] = read_rows(cursor, department_query, args)
                     from .annual_accrual import grouped_sql as annual_sql, snapshot_sql
                     annual_source = (snapshot_sql(calculation_variant, values.get('Currency', 'USD'),
                                                  director_roster='PortalDirectorRoster' in values)
