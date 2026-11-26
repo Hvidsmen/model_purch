@@ -1,6 +1,6 @@
 {% load report_format %}
 <article class="nr-target-card{% if compact %} nr-target-secondary{% endif %}{% if target.remaining == 0 %} nr-target-complete{% endif %}">
-<div class="nr-target-heading"><span>{% if compact %}{{ row.kind }}{% else %}{{ row.title }}{% endif %}{% if not compact and row.title != 'Всё подразделение' %} · {{ row.kind }}{% endif %}</span><span class="nr-target-period">{% if target.label == '2 кв.' %}2 кв. (1–2 кв.){% else %}{{ target.label }}{% endif %}</span></div>
+<div class="nr-target-heading"><span>{% if compact %}{{ row.kind }}{% else %}{{ row.title }}{% endif %}{% if not compact and row.title != 'Всё подразделение' %} · {{ row.kind }}{% endif %}</span><span class="nr-target-period">{% if target.display_label %}{{ target.display_label }}{% elif target.label == '2 кв.' %}2 кв. (1–2 кв.){% else %}{{ target.label }}{% endif %}</span></div>
 <p class="nr-target-context">{{ row.subdivision }} · {{ row.year }}{% if row.title != 'Всё подразделение' and not target.conditions and not target.coefficient_total %} · {{ target.formula|default:row.formula }} · {{ target.scope_author|default:row.scope_author }}{% endif %}</p>
 {% if target.conditions %}
 <p class="nr-target-caption">Условия выполнения · базы могут пересекаться</p>

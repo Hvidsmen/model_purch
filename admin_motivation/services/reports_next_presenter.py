@@ -131,26 +131,21 @@ def present(kind, data, ledger=None, period='all'):
                 if cell is None:
                     continue
                 plan, fact = cell.get('plan'), cell.get('fact')
-                targets.append({**cell, 'label': column['label'],
+                targets.append({**cell, 'label': column['label'], 'code': column['code'],
                     'remaining': max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None else None})
-            from ..templatetags.report_format import report_cash, report_percent
             display_targets = []
             for target in targets:
                 ratio = target.get('ratio')
                 display = {**target, 'progress': min(max(ratio * 100, ZERO), Decimal(100)) if ratio is not None else ZERO}
-                if (display_targets and target['label'] == 'Год' and display_targets[-1]['label'] == '4 кв.'
-                        and target.get('plan') is not None and target.get('fact') is not None
-                        and all(report_cash(target.get(key)) == report_cash(display_targets[-1].get(key))
-                                for key in ('plan', 'fact', 'remaining'))
-                        and report_percent(target.get('ratio')) == report_percent(display_targets[-1].get('ratio'))):
-                    display_targets[-1]['label'] = 'IV квартал и годовая часть'
-                else:
-                    display_targets.append(display)
+                display_targets.append(display)
             result['remaining_targets'].append({**row, 'title': title, 'targets': targets, 'display_targets': display_targets})
     if kind not in ('mine','detail'):
         from .team_target_layout import coefficient_cards
         result['remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] != 'По коэффициентам'] + coefficient_cards(
             [row for row in result['remaining_targets'] if row['title'] == 'По коэффициентам'])
+    from .team_target_layout import period_cards
+    for row in result['remaining_targets']:
+        row['display_targets']=period_cards(row['display_targets'],cumulative=ledger.get('original_rules',False))
     result['department_remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] == 'Всё подразделение']
     for section in result['team_sections']:
         section['remaining_targets'] = [row for row in result['remaining_targets']
