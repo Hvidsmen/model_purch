@@ -30,17 +30,17 @@ class CoefficientCardsTests(SimpleTestCase):
         for section,count in zip(result['team_sections'],[2,3]):
             self.assertEqual(len(section['remaining_targets']),1)
             cards=section['remaining_targets'][0]['display_targets']
-            self.assertEqual([card['label'] for card in cards],['1 кв.','2 кв.','4 кв.','Год'])
+            self.assertEqual([card['label'] for card in cards],['1 кв.','2 кв.','IV квартал и годовая часть'])
             for card in cards:
                 self.assertEqual(len(card['conditions']),count)
                 self.assertIsNone(card['plan'])  # overlapping bases are not added
                 self.assertEqual([c['plan'] for c in card['conditions']],
                                  [D(100*i) for i in range(1,count+1)])
-        self.assertEqual(len(result['team_target_rows']),4)
+        self.assertEqual(len(result['team_target_rows']),3)
         self.assertTrue(all(len(cell['cards'])==1 for line in result['team_target_rows'] for cell in line['cells']))
         html=render_to_string('admin_motivation/reports_next/_team_remaining.html',{'presentation':result})
-        self.assertEqual(html.count('<article '),8)
-        self.assertEqual(html.count('nr-target-condition'),20)
+        self.assertEqual(html.count('<article '),6)
+        self.assertEqual(html.count('nr-target-condition'),15)
         self.assertEqual(ledger,before)
 
     def test_personal_details_keep_their_original_formula_bases(self):
