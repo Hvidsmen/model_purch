@@ -12,7 +12,7 @@ SALT = 'motivation-approval-v1'
 
 
 def state_digest(version, plan):
-    versions = list(GlobalCoeffVersion.objects.order_by('pk').values('pk', 'effective_from', 'status', 'revision', 'replaced_by_id', 'title', 'fallback_variation'))
+    versions = list(GlobalCoeffVersion.objects.order_by('pk').values('pk', 'effective_from', 'status', 'revision', 'replaced_by_id', 'title', 'fallback_variation','planning_rules'))
     plan = SalesPlanScenario.objects.get(pk=plan.pk) if plan else None
     if plan and plan.is_deleted:
         raise ValidationError('Сценарий плана удалён. Выберите другой сценарий.')
@@ -39,7 +39,7 @@ def review_approval(version, plan=None, baseline=None, subdivision=None, changes
     if not (version.coefficients.exists() or version.subdivision_coefficients.exists() or GlobalDirectorCoeff.objects.filter(version=version).exists() or SubdivisionDirectorCoeff.objects.filter(version=version).exists() or CuratorCoefficient.objects.filter(version=version).exists()):
         raise ValidationError('Нельзя утвердить пустой набор коэффициентов.')
     before_state = state_digest(version, plan)
-    summary = {'fallback_formula': version.fallback_variation or 'Прежнее правило по группе товара'}
+    summary = {'fallback_formula': version.fallback_variation or 'Прежнее правило по группе товара','planning_group_rules':version.planning_rules}
     if version.discount_segments.exists():
         summary['discount_segments'] = [[row.type_discount, *[None if getattr(row, f'o{i}') is None else str(getattr(row, f'o{i}')) for i in range(5)]] for row in version.discount_segments.order_by('type_discount')]
     if plan:

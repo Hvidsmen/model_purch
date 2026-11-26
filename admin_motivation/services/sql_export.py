@@ -48,6 +48,8 @@ def export_motivation(connector, manage_connection=True):
             cursor.execute(f'DELETE FROM DataWH.motivation.{table} WHERE Date_ >= ?', start_date)
         from .formula_defaults import export_defaults
         export_defaults(cursor, versions)
+        from .planning_group_rules import export as export_group_rules
+        export_group_rules(cursor,versions)
         for version in versions:
             date_from = version.effective_from
             if include_segments:
@@ -82,7 +84,7 @@ def export_motivation(connector, manage_connection=True):
                 cursor.executemany('INSERT INTO DataWH.motivation.GoodsMotivation (Date_, GoodsKey, PGSales, Group_, Brand) VALUES (?, ?, ?, ?, ?)', good_rows)
         if manage_connection:
             from .pilot_formula import GLOBAL_SUBDIVISION
-            if (any(version.fallback_variation for version in versions) or SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
+            if (any(version.fallback_variation or version.planning_rules for version in versions) or SubdivisionCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
                     or SubdivisionDirectorCoeff.objects.filter(version__in=versions, variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
                     or SubdivisionManagerCoeff.objects.filter(version__in=versions).exists() or curators_enabled()):
                 from .calculation_jobs import prepare

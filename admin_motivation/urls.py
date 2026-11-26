@@ -1,4 +1,5 @@
 from . import dimension_exclusion_views
+from . import group_rule_views
 from . import exclusion_views,subdivision_directory_views
 from . import reports_director_scenarios, reports_integral_2026, reports_2025, editor_views, reports_next_views, reports_all_2026, coverage_views, review_views, balancing_views, discount_views, operation_views, views, plan_views, comparison_views, director_views, report_views
 from django.urls import include, path
@@ -44,6 +45,7 @@ urlpatterns = [
     path('coefficients/coverage/repair/', coverage_views.repair, name='motivation_coverage_repair'),
     path('coefficients/coverage/', coverage_views.coverage, name='motivation_coefficient_coverage'),
     path('versions/fallback-formula/', coverage_views.save_formula, name='motivation_fallback_formula'),
+    path('versions/planning-groups/',group_rule_views.workspace,name='motivation_planning_group_rules'),
     path('reviews/', review_views.reviews, name='motivation_reviews'),
     path('reviews/<int:review_id>/', review_views.review_detail, name='motivation_review'),
     path('coefficients/balancing/', balancing_views.balancing, name='motivation_coefficient_balancing'),

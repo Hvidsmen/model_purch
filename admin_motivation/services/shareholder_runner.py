@@ -31,10 +31,11 @@ def create(configuration,user):
     job=configuration['source_job']
     calculation_command(job,locked=False,include_separate=False)
     parameters={key:str(getattr(job,key)) for key in ('fact_year','plan_version','quarter_share','year_share','payout_threshold')}
+    from .planning_group_rules import frozen
     return ShareholderCalculation.objects.create(name=configuration['name'],as_of=configuration['as_of'],scenario=configuration['scenario'],
         quarters=sorted(int(v) for v in configuration['quarters']),threshold_percent=configuration['threshold_percent'],source_job=job,created_by=user,
         configuration={**parameters,'rule':RULE,'source_job_key':str(job.key),
-            'regional_rule':regions.RULE,'regional_rates':regions.approved_rates()})
+            'regional_rule':regions.RULE,'regional_rates':regions.approved_rates(),'planning_group_rules':frozen()})
 
 
 def launch(run):
@@ -126,6 +127,8 @@ def execute(run,connector=None):
             profiles={regions.uses_native_key_functions(value) for value in definitions.values()}
             if len(profiles)!=1:raise ValidationError('Установленные процедуры используют разные ключи коэффициентов. Обновите задания расчёта 2026 перед новым запуском.')
             regions.install_rates(cursor,run,definitions['combined'])
+        from .planning_group_rules import install as install_group_rules
+        install_group_rules(cursor,run.configuration.get('planning_group_rules',[]))
         progress(run,'Определение долей авторов по исходным подразделениям')
         weights=prepare_mapping(cursor,run)
         cursor.execute('''CREATE TABLE #share_parameters(FactYear int,PlanVersion nvarchar(500),QuarterShare decimal(9,8),YearShare decimal(9,8),PayoutThreshold decimal(9,8),Cutoff date);''')
@@ -138,7 +141,7 @@ def execute(run,connector=None):
         if regions.enabled(run):
             metadata.update(regional_rule=regions.RULE,branches=list(regions.BRANCHES),regional_plan_basis='all 2026 through cutoff, after reassignment; per subdivision',regional_rate_source='approved portal versions frozen at creation')
         for mode,definition in definitions.items():
-            batch=private_sql(definition,mode,run.pk,original_rules=enabled(run),regional_policy=regions.enabled(run))
+            batch=private_sql(definition,mode,run.pk,original_rules=enabled(run),regional_policy=regions.enabled(run),planning_groups=any(v['rules'] for v in run.configuration.get('planning_group_rules',[])))
             for name in temporary_tables(batch):
                 if name in ('#share_parameters','#share_author_map'):continue
                 cursor.execute("IF OBJECT_ID('tempdb.."+name+"') IS NOT NULL DROP TABLE "+name)
@@ -217,7 +220,9 @@ def run_calculation(pk,connector=None):
         logger.exception('Shareholder calculation %s failed, reference %s',run.pk,reference)
         reason=' '.join(error.messages) if isinstance(error,ValidationError) else 'Подробности в журнале отдельного задания.'
         if not isinstance(error,ValidationError):
-            if re.search(r'\(50071\)',str(error)):reason='Перераспределение не сохранило оборот USD/RUB. Результаты не опубликованы.'
+            group_error=re.search(r"Не задан коэффициент группы:\s*([^'\"\r\n]{1,255})",str(error))
+            if group_error:reason='Не задан коэффициент группы: '+group_error[1]+'. Заполните ставки или выберите другой способ подбора.'
+            elif re.search(r'\(50071\)',str(error)):reason='Перераспределение не сохранило оборот USD/RUB. Результаты не опубликованы.'
             elif re.search(r'\(5008[234]\)',str(error)):reason='Не удалось проверить доли, сохранность плана или утверждённые коэффициенты Ростова/Питера. Результаты не опубликованы.'
             elif re.search(r'\(50081\)',str(error)):reason='Не найдены выгруженные ставки куратора. Проверьте назначения и выгрузку утверждённой версии.'
             elif re.search(r'\(50040\)',str(error)):reason='Нет совместимого подготовленного факта. Обновите подготовку в Центре расчётов.'
