@@ -114,7 +114,7 @@ def present(kind, data, ledger=None, period='all'):
         card['type_totals'] = [{'kind': item['kind'], 'total': card['kind_totals'].get(item['kind'])}
                                for item in result['type_totals']]
     if 'plan_fact' in ledger:
-        performance_items=ledger['plan_fact'] if kind in ('mine','detail') else summary_performance(ledger['plan_fact'])
+        performance_items=ledger['plan_fact'] if kind in ('mine','detail') else ledger.get('coefficient_plan_fact',summary_performance(ledger['plan_fact']))
         result['performance_matrix'] = performance_matrix(performance_items, result['period_columns'])
         for section in result['team_sections']:
             section['performance_matrix'] = performance_matrix(

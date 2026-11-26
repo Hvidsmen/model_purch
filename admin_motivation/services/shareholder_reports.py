@@ -108,7 +108,7 @@ def data_for(run,query,*,detailed=True):
     multipliers=ReportMultipliers(physical=True,mode=run.metadata.get('manager_correction_mode','legacy'))
     from .shareholder_original_rules import enabled,attach
     original_rules=enabled(run)
-    sections=[];rows=[];performance=[];department=[]
+    sections=[];rows=[];performance=[];department=[];coefficient_performance=[]
     for kind in kinds:
         tag=KINDS[kind]
         search=query.get('search','').strip().casefold()
@@ -118,6 +118,8 @@ def data_for(run,query,*,detailed=True):
              if not query.getlist('subdivision') or row.get('Подразделение') in query.getlist('subdivision')]
         source=multipliers.apply([row for row in raw if period_code(row['КварталМотивации']) in periods])
         selected=[row for row in raw if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
+        from .coefficient_totals import performance as coefficient_totals
+        coefficient_performance.extend(coefficient_totals(selected,kind,periods,original_rules=original_rules))
         if original_rules:
             identities={(r.get('Подразделение'),r.get('АвторСделки'),r.get('Год')) for r in selected}
             eligibility=(r for r in records(run,'eligibility_'+tag)
@@ -163,7 +165,7 @@ def data_for(run,query,*,detailed=True):
                     'possible':item.get('possible_values',[None]*len(summary['columns']))[index],
                     'annual_accrual':annual[(item['subdivision'],item['author'],code)] if code in '1234' else None,
                     'detail_url':reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+target.urlencode()})
-    return {'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'department_plan_fact':department,'kinds':kinds,
+    return {'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'coefficient_plan_fact':coefficient_performance,'department_plan_fact':department,'kinds':kinds,
         'has_unallocated':any(row['unallocated'] for row in rows),'total':sum((row['total'] for row in rows),ZERO),
         'currency':currency,'payout_threshold':Decimal(run.configuration['payout_threshold'])}
 
