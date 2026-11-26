@@ -202,7 +202,11 @@ def patch(source):
         if not alias:continue
         expression=segment[start:start+alias.start()].strip()
         if not expression or expression.endswith('.'):raise ValidationError('Не распознано выражение автора политиков.')
-        author_edits.append((start,stop," CASE WHEN sub.SubdivisionName IN ("+REGION_SQL+") THEN LTRIM(RTRIM(s.[Даичи_АвторСделкиНаименование])) ELSE ("+expression+") END AS АвторСделки\n"))
+        # Optimized SQL shares the projection across all coefficient kinds.
+        # Preserve sales/director authors and override only the policy branch.
+        policy_type=re.search(r"\bWHEN\s+([\w\[\].]+)\s*=\s*N?'Политики'",expression,re.I)
+        policy_guard=" AND LTRIM(RTRIM("+policy_type[1]+"))=N'Политики'" if policy_type else ''
+        author_edits.append((start,stop," CASE WHEN sub.SubdivisionName IN ("+REGION_SQL+")"+policy_guard+" THEN LTRIM(RTRIM(s.[Даичи_АвторСделкиНаименование])) ELSE ("+expression+") END AS АвторСделки\n"))
     if len(author_edits)!=1:raise ValidationError('Не распознано назначение автора политиков. Нужна проверка SQL перед региональным расчётом.')
     for start,stop,value in reversed(author_edits):segment=segment[:start]+value+segment[stop:]
     source=source[:fact.end()]+segment+source[end:]
@@ -211,17 +215,17 @@ def patch(source):
     # or shares its TypeCoeff predicate (TRIM, LTRIM/RTRIM, brackets, etc.).
     columns=list(FIELDS)
     code=mask_sql(source)
-    for field in ('EmployeeCode','EmployeeName'):
+    for field in ('EmployeeCode','EmployeeName','NormalizedTypeCoeff'):
         if re.search(r'\[?sc\]?\s*\.\s*\[?'+field+r'\]?(?!\w)',code,re.I):columns.append(field)
     # A loader may SELECT sc.* into its cache; only payout projections need
     # explicit coefficient columns so the regional UNION has a known shape.
     if re.search(r'\[?sc\]?\s*\.\s*\*',code[fact.start():],re.I):
         raise ValidationError('Не поддерживается SELECT sc.* в региональном расчёте. Нужен явный список полей коэффициентов.')
     native=','.join(columns)
-    frozen=','.join(field if field in FIELDS else 'CAST(NULL AS nvarchar(255)) AS ['+field+']' for field in columns)
+    frozen=','.join(field if field in FIELDS else 'LTRIM(RTRIM(TypeCoeff)) AS [NormalizedTypeCoeff]' if field=='NormalizedTypeCoeff' else 'CAST(NULL AS nvarchar(255)) AS ['+field+']' for field in columns)
     joins=coefficient_joins(source)
     fact_end=_query_branch_end(code,fact.end())
-    plan_start=re.search(r'\bINTO\s+#plan\b',code,re.I)
+    plan_start=re.search(r'\bINTO\s+(?P<table>#plan(?:_\d+)?)\b',code,re.I)
     plan_end=_query_branch_end(code,plan_start.end()) if plan_start else len(code)
     if (not plan_start
             or not any(fact.start()<match.start()<fact_end for match in joins)
@@ -251,7 +255,8 @@ IF EXISTS(SELECT 1 FROM #share_transformed s JOIN dbo.Subdivisions b ON b.Subdiv
     # Split after #plan is built, before either public-style temporary output.
     point=re.search(r"IF\s+OBJECT_ID\(N?'tempdb\.\.#share_plan_fact'\)",source,re.I)
     if not point:raise ValidationError('Не найдена граница сохранения план-факта.')
-    source=source[:point.start()]+SPLIT_SQL+source[point.start():]
+    split_sql=re.sub(r'#plan\b',lambda _:plan_start['table'],SPLIT_SQL)
+    source=source[:point.start()]+split_sql+source[point.start():]
     return triple_gates(fallback_formulas(source))
 
 
@@ -328,7 +333,9 @@ def fallback_formulas(source):
         if not date_match:raise ValidationError('Не найдена дата формулы по умолчанию региона.')
         date_=date_match[1];is_fact='closeddealdate' in date_.casefold();contexts.add('fact' if is_fact else 'plan')
         branch='sub.SubdivisionName' if is_fact else 's.SubdivisionName'
-        fallback='CASE WHEN '+branch+' IN ('+REGION_SQL+') THEN (SELECT TOP(1) DefaultFormula FROM #share_region_defaults WHERE Date_<='+date_+' ORDER BY Date_ DESC) END,'
+        shared_type=re.search(r'\[?sc\]?\s*\.\s*\[?NormalizedTypeCoeff\]?\s*=\s*([\w\[\].]+)',code[end:stop],re.I)
+        policy_guard=" AND LTRIM(RTRIM("+shared_type[1]+"))=N'Политики'" if shared_type else ''
+        fallback='CASE WHEN '+branch+' IN ('+REGION_SQL+')'+policy_guard+' THEN (SELECT TOP(1) DefaultFormula FROM #share_region_defaults WHERE Date_<='+date_+' ORDER BY Date_ DESC) END,'
         edits.append((match.end(),fallback))
     if contexts!={'fact','plan'}:raise ValidationError('Не найдены формулы факта и плана для регионов.')
     for point,value in reversed(edits):source=source[:point]+value+source[point:]

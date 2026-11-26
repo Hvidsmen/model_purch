@@ -132,6 +132,33 @@ class RegionalSQLTests(TestCase):
         with self.assertRaisesMessage(ValidationError,'формулы факта и плана'):
             regions.fallback_formulas(source.replace('t.Date_', 's.ClosedDealDate'))
 
+    def test_numbered_native_plan_table_is_used_for_entire_regional_split(self):
+        definition=re.sub(r'#plan\b','#plan_2024',self.compiled('all_2026'))
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertIn('ALTER TABLE #plan_2024 ALTER COLUMN',sql)
+        self.assertIn('INSERT INTO #plan_2024 (',sql)
+        self.assertNotRegex(sql,r'#plan\b')
+
+    def test_normalized_cached_type_is_preserved_in_regional_union(self):
+        definition=self.compiled('all_2026')
+        view='DataWH.motivation.vSubdivisionMotiveCoeffTo'
+        definition=definition.replace(view,'#cached_coeff')
+        definition=definition.replace('TRIM(sc.TypeCoeff)','sc.NormalizedTypeCoeff')
+        point=re.search(r';\s*WITH\s+fact\s+AS',definition,re.I).start()
+        loader=';SELECT *,LTRIM(RTRIM(TypeCoeff)) AS NormalizedTypeCoeff INTO #cached_coeff FROM '+view+';'
+        definition=definition[:point]+loader+definition[point:]
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertIn('NormalizedTypeCoeff FROM #cached_coeff',sql)
+        self.assertIn('LTRIM(RTRIM(TypeCoeff)) AS [NormalizedTypeCoeff]',sql)
+
+    def test_shared_author_projection_only_overrides_regional_policies(self):
+        definition=self.compiled('all_2026')
+        definition,count=re.subn(r"'Политики'\s+АвторСделки", "CASE WHEN sc.TypeCoeff='Политики' THEN s.[Даичи_АвторСделкиНаименование] ELSE sc.TypeCoeff END AS АвторСделки",definition,count=1)
+        self.assertEqual(count,1)
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertIn("AND LTRIM(RTRIM(sc.TypeCoeff))=N'Политики' THEN LTRIM(RTRIM(s.[Даичи_АвторСделкиНаименование]))",sql)
+        self.assertIn('ELSE sc.TypeCoeff END)',sql)
+
     def test_generated_relation_overrides_only_regional_policies(self):
         sql=private_sql(self.compiled('all_2026'),'combined','new',original_rules=True,regional_policy=True)
         relation=re.search(r'\(SELECT DateFrom,DateTo,Subdivision,[\s\S]*?FROM #share_region_coefficients\)',sql)[0]
