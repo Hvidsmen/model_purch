@@ -7,7 +7,7 @@
 {% if goal.threshold_remaining != None %}<div class="nr-period-line nr-threshold"><span>До порога выплаты{% if goal.threshold != None %} {{ goal.threshold|report_percent }}{% endif %}</span><b>{% if goal.threshold_remaining > 0 %}{{ goal.threshold_remaining|report_cash }} USD{% else %}Порог достигнут{% endif %}</b></div>{% endif %}
 {% if goal.under_threshold %}<p class="nr-goal-warning">Порог выплаты не достигнут</p>{% endif %}
 
-{% if goal.personal_plan %}<p class="nr-goal-warning">Личный план — одна из трёх проверок. Выплата также зависит от плана подразделения и правила коэффициента.</p>{% endif %}
+{% if goal.personal_plan %}<p class="nr-goal-warning">Личный план — одна из {% if shareholder_policy_gate %}четырёх{% else %}трёх{% endif %} проверок. Выплата также зависит от плана подразделения{% if shareholder_policy_gate %}, общей базы политиков{% endif %} и правила коэффициента.</p>{% endif %}
 <details class="nr-card-explanation nr-goal-explanation"><summary>Условия и пояснения</summary>
 {% if goal.under_threshold %}<p>Выполнение {{ goal.ratio|report_percent }} ниже порога выплаты {{ goal.threshold|report_percent }}. Условие выполнения плана пока не достигнуто.</p>{% endif %}
 <div class="nr-target-reward"><span>Премия при 100% выполнения</span><strong>{% if goal.reward_at_target != None %}{{ goal.reward_at_target|report_cash }} {{ ledger.currency }}{% else %}Пока нельзя рассчитать{% endif %}</strong>{% if goal.reward_at_target == None %}<p>{{ goal.reward_reason }}</p>{% endif %}</div>

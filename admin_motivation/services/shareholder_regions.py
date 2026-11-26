@@ -7,6 +7,7 @@ from .pilot_formula import mask_sql
 
 RULE='rostov-piter-policy-plans-2026-v1'
 KEY_FORMAT='portal-goods-v2'
+GATE_VERSION='four-checks-v1'
 REGIONS=('Д-Ростов','Д-Питер')
 BRANCHES=('Д-Москва','ТЕРМОТРЕЙД',*REGIONS)
 REGION_SQL="N'Д-Ростов',N'Д-Питер'"
@@ -294,11 +295,22 @@ WHERE p.[Подразделение] IN ('''+REGION_SQL+''') AND LTRIM(RTRIM(p.[
 GROUP BY p.[Подразделение],p.[Год],w.Period_;
 '''
 
+POLICY_GATES_SQL='''
+SELECT p.[Подразделение],p.[Год],w.Period_,
+ COALESCE(SUM(p.[СуммаОтгрузокUSD])/NULLIF(SUM(p.[СуммаПланUSD]),0),0) AS Execution_
+INTO #share_region_policy FROM #pf_base p
+JOIN (VALUES(2,1),(2,2),(3,3),(4,1),(4,2),(4,3),(4,4),(5,1),(5,2),(5,3),(5,4)) w(Period_,Quarter_)
+ ON p.[Квартал]=w.Quarter_
+WHERE p.[Подразделение] IN ('''+REGION_SQL+''') AND LTRIM(RTRIM(p.[ТипКоэф]))=N'Политики'
+GROUP BY p.[Подразделение],p.[Год],w.Period_;
+'''
+
 
 def triple_failure(period, qualifier='#pf_base'):
-    """Whole branch AND employee total AND configured formula must all pass."""
+    """Branch, policy base, employee total and configured formula must all pass."""
     if str(period) not in ('2','3','4','5'):raise ValueError('Q1 is unconditional')
     department="COALESCE((SELECT MAX(d.Execution_) FROM #share_region_department d WHERE d.[Подразделение]="+qualifier+".[Подразделение] AND d.[Год]="+qualifier+".[Год] AND d.Period_="+str(period)+'),0)'
+    policy="COALESCE((SELECT MAX(c.Execution_) FROM #share_region_policy c WHERE c.[Подразделение]="+qualifier+".[Подразделение] AND c.[Год]="+qualifier+".[Год] AND c.Period_="+str(period)+'),0)'
     def ratio(extra=()):
         window='PARTITION BY '+','.join(('Подразделение','АвторСделки','Год','ТипКоэф',*extra))
         return 'COALESCE(SUM(СуммаОтгрузокUSD) OVER('+window+')/NULLIF(SUM(СуммаПланUSD) OVER('+window+'),0),0)'
@@ -308,7 +320,7 @@ def triple_failure(period, qualifier='#pf_base'):
     formula+=" WHEN VariationCalculate=N'Группа планов продаж' THEN "+ratio(('ГруппаПлановПродаж',))
     formula+=" WHEN VariationCalculate=N'Подразделение' THEN "+personal
     formula+=" WHEN VariationCalculate=N'Подразделение(Глобально)' THEN "+department+' ELSE 0 END'
-    return '('+department+'<@PayoutThreshold OR '+personal+'<@PayoutThreshold OR ('+formula+')<@PayoutThreshold)'
+    return '('+department+'<@PayoutThreshold OR '+policy+'<@PayoutThreshold OR '+personal+'<@PayoutThreshold OR ('+formula+')<@PayoutThreshold)'
 
 
 def triple_gates(source):
@@ -342,7 +354,7 @@ def triple_gates(source):
         if found!=2:raise ValidationError('Не найдены две валюты выплаты для тройной проверки периода '+str(index+1))
     for start,end,value in sorted(edits,reverse=True):source=source[:start]+value+source[end:]
     # Insert after all native base exclusions, before any payout projection.
-    source=source[:starts[0]]+DEPARTMENT_GATES_SQL+source[starts[0]:]
+    source=source[:starts[0]]+DEPARTMENT_GATES_SQL+POLICY_GATES_SQL+source[starts[0]:]
     return source
 
 
