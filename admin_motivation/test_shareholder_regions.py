@@ -38,9 +38,12 @@ class RegionalSQLTests(TestCase):
             self.assertIn('СуммаМотивацииUSDГод',sql)
             self.assertNotIn('INTO DataWH.motivation.',sql)
             self.assertIn('THROW 50084',sql)
-            # Annual eligibility includes all three gates, even for global mode.
+            self.assertIn('#share_region_policy',temporary_tables(sql))
+            self.assertLess(sql.index('INTO #share_region_policy'),re.search(r"'1 Квартал'\s+КварталМотивации",sql).start())
+            # Annual eligibility includes all four gates, even for global mode.
             annual=sql[sql.index('SELECT DISTINCT [Подразделение]'):]
             self.assertIn('d.Period_=5',annual)
+            self.assertIn('c.Period_=5',annual)
             self.assertIn('PARTITION BY Подразделение,АвторСделки,Год,ТипКоэф',annual)
             self.assertIn("VariationCalculate=N'Марка(Бренд)'",annual)
 
@@ -201,21 +204,27 @@ class RegionalSQLTests(TestCase):
 
 
 class TripleGateTests(SimpleTestCase):
-    def failures(self,department,first_plan,first_fact,second_plan,second_fact,formula='Марка(Бренд)'):
+    def failures(self,department,first_plan,first_fact,second_plan,second_fact,formula='Марка(Бренд)',policy=1):
         db=sqlite3.connect(':memory:')
         db.executescript('''CREATE TABLE pf_base(Подразделение TEXT,Год INT,АвторСделки TEXT,ТипКоэф TEXT,ГруппаПлановПродаж TEXT,ГруппаТоваров TEXT,Марка TEXT,VariationCalculate TEXT,СуммаПланUSD REAL,СуммаОтгрузокUSD REAL);
- CREATE TABLE region_department(Подразделение TEXT,Год INT,Period_ INT,Execution_ REAL);''')
+ CREATE TABLE region_department(Подразделение TEXT,Год INT,Period_ INT,Execution_ REAL);
+ CREATE TABLE region_policy(Подразделение TEXT,Год INT,Period_ INT,Execution_ REAL);''')
         for region in regions.REGIONS:
             db.execute('INSERT INTO region_department VALUES(?,2026,3,?)',(region,department))
+            db.execute('INSERT INTO region_policy VALUES(?,2026,3,?)',(region,policy))
             for brand,plan,fact in [('A',first_plan,first_fact),('B',second_plan,second_fact)]:
                 db.execute('INSERT INTO pf_base VALUES(?,2026,?,?,?,?,?,?,?,?)',(region,'Автор','Политики','RAC','Goods',brand,formula,plan,fact))
-        condition=regions.triple_failure('3').replace('#pf_base','pf_base').replace('#share_region_department','region_department').replace("N'","'")
+        condition=regions.triple_failure('3').replace('#pf_base','pf_base').replace('#share_region_department','region_department').replace('#share_region_policy','region_policy').replace("N'","'")
         values=db.execute('SELECT Подразделение,Марка,'+condition+' AS Failed FROM pf_base',{'PayoutThreshold':.8}).fetchall()
         db.close();return {(r,b):failed for r,b,failed in values}
 
     def test_department_failure_blocks_even_when_employee_and_formula_pass(self):
         values=self.failures(.7,50,50,50,50)
         self.assertTrue(all(values.values()))
+
+    def test_policy_base_failure_blocks_even_when_all_other_checks_pass(self):
+        self.assertTrue(all(self.failures(.95,50,50,50,50,policy=.7156).values()))
+        self.assertFalse(any(self.failures(.95,50,50,50,50,policy=.8).values()))
 
     def test_employee_failure_blocks_a_passing_brand(self):
         values=self.failures(.9,10,10,90,0)

@@ -22,7 +22,8 @@ def allowed(request):
 def metadata(run):
     from .services.shareholder_original_rules import enabled
     from .services.shareholder_regions import enabled as regional_enabled
-    regional_meta=[('Подразделения расчёта','Москва + ТТ; Ростов и Питер независимо'),('Планы политиков Ростова/Питера','Доли полного факта 2026 после перераспределения на дату среза'),('Проверка политиков Ростова/Питера','Подразделение + общий план сотрудника + формула коэффициента'),('Источник коэффициентов регионов','Утверждённые настройки портала, сохранённые при создании запуска')] if regional_enabled(run) else []
+    policy_gate=run.metadata.get('regional_gate_version')=='four-checks-v1'
+    regional_meta=[('Подразделения расчёта','Москва + ТТ; Ростов и Питер независимо'),('Планы политиков Ростова/Питера','Доли полного факта 2026 после перераспределения на дату среза'),('Проверка политиков Ростова/Питера','Подразделение + '+('общая база политиков + ' if policy_gate else '')+'общий план сотрудника + формула коэффициента'),('Источник коэффициентов регионов','Утверждённые настройки портала, сохранённые при создании запуска')] if regional_enabled(run) else []
     return [*regional_meta,('Правила расчёта','Исходная схема: годовая база I–IV, доплаты при закрытии года' if enabled(run) else 'Прежняя схема: IV квартал и год по IV кварталу, без доплат'),('Сценарий','Для акционеров · перераспределение реальных отгрузок'),('Запуск',str(run.pk)),
         ('Факт по дату включительно',str(run.as_of)),('Данные','Текущий подготовленный факт на момент запуска'),
         ('Подразделения','Москва + ТТ' if run.scenario=='combined' else 'I–III раздельно; IV и год Москва + ТТ'),
@@ -126,7 +127,7 @@ def report(request,pk,kind):
     meta.extend((label,', '.join(query.getlist(field)) or 'Все доступные') for field,label in [('currency','Валюта премий'),('period','Периоды отчёта'),('type','Виды мотивации'),('subdivision','Отбор подразделений'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')])
     from .services.shareholder_original_rules import enabled,enrich
     from .services.shareholder_regions import enabled as regional_enabled
-    context={'shareholder_regional_rules':regional_enabled(run),'shareholder_original_rules':enabled(run),'skip_motivation_workflow':True,'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
+    context={'shareholder_policy_gate':run.metadata.get('regional_gate_version')=='four-checks-v1','shareholder_regional_rules':regional_enabled(run),'shareholder_original_rules':enabled(run),'skip_motivation_workflow':True,'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
         'status_url':reverse('motivation_shareholder_status',args=[run.pk]),'selected_types':kinds,
         'period_options':[{'code':code,'label':'Год' if code=='5' else code+' квартал','selected':code in periods} for code in [*map(str,run.quarters),'5']]}
     navigation=[]

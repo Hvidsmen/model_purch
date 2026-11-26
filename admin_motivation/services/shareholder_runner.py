@@ -136,7 +136,7 @@ def execute(run,connector=None):
                   'turnover_basis':'Price - AmountUSDIt_ITW + BallsOuterUSD; signed; selected quarters through as_of',
                   'quarter_rule':('Q1 always paid; Q2 eligibility Q1+Q2; Q3 Q3; Q4 and year Q1–Q4; annual contributions Q1–Q4; year-end catch-up' if enabled(run) else 'I–III separate if selected; IV and annual Moscow+TT combined')}
         if regions.enabled(run):
-            metadata.update(regional_rule=regions.RULE,branches=list(regions.BRANCHES),regional_plan_basis='all 2026 through cutoff, after reassignment; per subdivision',regional_rate_source='approved portal versions frozen at creation')
+            metadata.update(regional_rule=regions.RULE,regional_gate_version=regions.GATE_VERSION,branches=list(regions.BRANCHES),regional_plan_basis='all 2026 through cutoff, after reassignment; per subdivision',regional_rate_source='approved portal versions frozen at creation')
         for mode,definition in definitions.items():
             batch=private_sql(definition,mode,run.pk,original_rules=enabled(run),regional_policy=regions.enabled(run))
             for name in temporary_tables(batch):
