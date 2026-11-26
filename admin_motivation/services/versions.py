@@ -32,6 +32,8 @@ def create_version(effective_from, title='', source_version=None, allow_overwrit
             raise ValidationError('Появилась новая версия. Обновите страницу перед созданием следующей.')
         version = GlobalCoeffVersion(effective_from=effective_from, title=title, fallback_variation=(latest.fallback_variation if latest else '') if fallback_variation is None else fallback_variation)
         version._allow_overwrite = allow_overwrite
+        from copy import deepcopy
+        version.planning_rules=deepcopy(latest.planning_rules) if latest else []
         version.save()
         if latest:
             GlobalCoeff.objects.bulk_create([

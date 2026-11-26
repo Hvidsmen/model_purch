@@ -57,7 +57,7 @@ IF EXISTS(
 """
 
 
-def private_sql(definition,mode,run_id,*,original_rules=False,regional_policy=False):
+def private_sql(definition,mode,run_id,*,original_rules=False,regional_policy=False,planning_groups=False,group_table='#share_group_rules'):
     from .curator_sql import strip
     definition=strip(definition) if definition else definition
     if mode not in ('combined','separate'):raise ValidationError('Неизвестный сценарий.')
@@ -100,6 +100,14 @@ SELECT @FactYear=FactYear,@PlanVersion=PlanVersion,@QuarterShare=QuarterShare,@Y
 SELECT * INTO #share_subdivisions FROM dbo.Subdivisions WHERE SubdivisionName IN(N'Д-Москва',N'ТЕРМОТРЕЙД');
 '''
     if mode=='combined':prefix+="UPDATE #share_subdivisions SET SubdivisionName=N'Д-Москва' WHERE SubdivisionName=N'ТЕРМОТРЕЙД';\n"
+    if planning_groups or '__PORTAL_GROUP_RULES__' in source:
+        from .planning_group_rules import patch as patch_groups,TABLE
+        source=patch_groups(source,table=group_table).replace(TABLE,group_table)
+        if regional_policy:
+            from .shareholder_regions import REGION_SQL
+            fields='DateFrom,DateTo,Subdivision,PGSales,TypeCoeff,K0,K1,K2,K3,K4'
+            rates='(SELECT '+fields+' FROM DataWH.motivation.vSubdivisionMotiveCoeffTo WHERE Subdivision NOT IN('+REGION_SQL+") OR LTRIM(RTRIM(TypeCoeff))<>N'Политики' UNION ALL SELECT "+fields+' FROM #share_region_coefficients)'
+            source=source.replace('DataWH.motivation.vSubdivisionMotiveCoeffTo grc',rates+' grc').replace('#coeff_source grc',rates+' grc')
     if regional_policy:
         from .shareholder_regions import patch,BRANCH_SQL
         source=patch(source)

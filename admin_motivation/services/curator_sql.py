@@ -27,7 +27,7 @@ def export_assignments(cursor):
     if values:cursor.executemany(f'INSERT INTO {TABLE} VALUES(?,?,?)',values)
 
 
-def pair_batch(definition,variant='all_2026',*,original_rules=False):
+def pair_batch(definition,variant='all_2026',*,original_rules=False,group_table='motivation.PortalPlanningGroupRules'):
     source=strip(definition)
     if 'Директора' not in source or not re.search(r'Employee(?:Name|Code)',source,re.I):raise ValidationError('Нужна SQL-процедура с персональным расчётом директоров для подключения кураторов.')
     if variant=='main':
@@ -37,7 +37,7 @@ def pair_batch(definition,variant='all_2026',*,original_rules=False):
         source=source.replace('Separate2026','All2026').replace('PortalSeparateSubdivisions','PortalCalculationSubdivisions')
         # Undo the transition-only Moscow rate lookup for the curator's own rates.
         source=re.sub(r"COALESCE\(\(SELECT TOP \(1\) m.TargetName FROM DataWH.motivation.PortalSubdivisionMerge m WHERE m.SourceName=(\w+\.SubdivisionName)\),\1\)",r'\1',source,flags=re.I)
-    batch=private_sql(source,'combined',uuid4(),original_rules=original_rules)
+    batch=private_sql(source,'combined',uuid4(),original_rules=original_rules,group_table=group_table)
     batch=batch.replace(ALLOCATION_SQL,'SELECT * INTO #share_transformed FROM #portal_motivation_sales;\n')
     batch=batch.replace("SELECT * INTO #share_subdivisions FROM dbo.Subdivisions WHERE SubdivisionName IN(N'Д-Москва',N'ТЕРМОТРЕЙД');",
         'SELECT s.* INTO #share_subdivisions FROM dbo.Subdivisions s JOIN #curator_request r ON r.Subdivision=s.SubdivisionName;')
@@ -152,7 +152,7 @@ def shareholder_snapshots(run,cursor,definition,save_query):
     pairs=cursor.fetchall()
     if not pairs:return 0
     from .shareholder_original_rules import enabled,performance_sql as original_performance_sql
-    batch=pair_batch(definition,original_rules=enabled(run))
+    batch=pair_batch(definition,original_rules=enabled(run),group_table='#share_group_rules')
     cursor.execute('CREATE TABLE #curator_request(EmployeeCode nvarchar(64) COLLATE DATABASE_DEFAULT,Subdivision nvarchar(255) COLLATE DATABASE_DEFAULT,FullName nvarchar(255) COLLATE DATABASE_DEFAULT);')
     from .manager_detail import grouped_sql
     from .motivation_performance import grouped_sql as performance_sql,department_sql

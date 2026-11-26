@@ -226,6 +226,7 @@ class GlobalCoeffVersion(models.Model):
     approved_at = models.DateTimeField('Утверждена', null=True, blank=True)
     replaced_by = models.ForeignKey('self', on_delete=models.PROTECT, null=True, blank=True, related_name='replaced_versions')
     revision = models.PositiveBigIntegerField(default=0)
+    planning_rules = models.JSONField('Правила групп планов продаж',default=list,blank=True)
     fallback_variation = models.CharField('Формула при отсутствии точной настройки', max_length=64, blank=True, default='', choices=[('', 'Прежнее правило по группе товара'), ('Группа планов продаж', 'Группа планов продаж'), ('Подразделение', 'Подразделение'), ('Подразделение(Глобально)', 'Подразделение(Глобально)')])
 
     class Meta:
@@ -257,8 +258,12 @@ class GlobalCoeffVersion(models.Model):
         super().clean()
         if self.effective_from is None or self.effective_from < date(2001, 1, 1):
             raise ValidationError({'effective_from': 'Дата версии не может быть раньше 01.01.2001.'})
+        from .services.planning_group_rules import validate
+        validate(self.planning_rules)
         if self.pk:
             original = type(self).objects.get(pk=self.pk)
+            if original.planning_rules != self.planning_rules and not self.is_editable:
+                raise ValidationError('Правила групп можно изменять только в последнем черновике.')
             self.revision = original.revision
             if original.fallback_variation != self.fallback_variation and not self.is_editable:
                 raise ValidationError('Формулу по умолчанию можно изменять только в последнем черновике.')

@@ -224,8 +224,13 @@ def prepare(cursor, variant='main'):
     exported_defaults = [item.get('fallback_variation') for item in previous_export.snapshot.get('versions', [])] if previous_export else []
     configured_default = remote_mode > 0 or any(exported_defaults) or GlobalCoeffVersion.objects.filter(status='approved').exclude(fallback_variation='').exists()
     changed, _ = patch_defaults(changed, required=configured_default)
+    group_versions=list(GlobalCoeffVersion.objects.filter(status='approved'))
+    from .planning_group_rules import TABLE_SQL as GROUP_TABLE_SQL,patch as patch_groups
+    cursor.execute(GROUP_TABLE_SQL)
+    group_configured=any(v.planning_rules for v in group_versions) or bool(previous_export and any(v.get('planning_rules') for v in previous_export.snapshot.get('versions',[])))
+    if group_configured:changed=patch_groups(changed)
     from .curators import enabled as curators_enabled
-    global_default = remote_mode == 2 or GLOBAL_SUBDIVISION in exported_defaults or GlobalCoeffVersion.objects.filter(status='approved', fallback_variation=GLOBAL_SUBDIVISION).exists()
+    global_default = remote_mode == 2 or GLOBAL_SUBDIVISION in exported_defaults or GlobalCoeffVersion.objects.filter(status='approved', fallback_variation=GLOBAL_SUBDIVISION).exists() or any(r.get('formula')==GLOBAL_SUBDIVISION for v in group_versions for r in v.planning_rules)
     if (global_default or SubdivisionCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists()
             or SubdivisionDirectorCoeff.objects.filter(version__status='approved', variation_calculate__variation_name=GLOBAL_SUBDIVISION).exists() or curators_enabled()):
         changed = patch_calculation(changed)
