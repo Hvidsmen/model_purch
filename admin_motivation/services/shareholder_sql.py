@@ -57,9 +57,11 @@ IF EXISTS(
 """
 
 
-def private_sql(definition,mode,run_id,*,original_rules=False,regional_policy=False,planning_groups=False,group_table='#share_group_rules'):
+def private_sql(definition,mode,run_id,*,original_rules=False,regional_policy=False,planning_groups=False,group_table='#share_group_rules',preserve_main_scope=False):
+    from .main_formula_scope import shareholder_source
     from .curator_sql import strip
     definition=strip(definition) if definition else definition
+    if not preserve_main_scope:definition=shareholder_source(definition)
     if mode not in ('combined','separate'):raise ValidationError('Неизвестный сценарий.')
     if not definition or MARKER not in definition:raise ValidationError('Сначала обновите существующее задание «Все кварталы 2026»: нужна процедура с подготовленным фактом.')
     suffix='All2026' if mode=='combined' else 'Separate2026'

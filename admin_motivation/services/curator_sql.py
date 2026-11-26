@@ -27,7 +27,7 @@ def export_assignments(cursor):
     if values:cursor.executemany(f'INSERT INTO {TABLE} VALUES(?,?,?)',values)
 
 
-def pair_batch(definition,variant='all_2026',*,original_rules=False,group_table='motivation.PortalPlanningGroupRules'):
+def pair_batch(definition,variant='all_2026',*,original_rules=False,group_table='motivation.PortalPlanningGroupRules',main_scope=False):
     source=strip(definition)
     if 'Директора' not in source or not re.search(r'Employee(?:Name|Code)',source,re.I):raise ValidationError('Нужна SQL-процедура с персональным расчётом директоров для подключения кураторов.')
     if variant=='main':
@@ -37,7 +37,7 @@ def pair_batch(definition,variant='all_2026',*,original_rules=False,group_table=
         source=source.replace('Separate2026','All2026').replace('PortalSeparateSubdivisions','PortalCalculationSubdivisions')
         # Undo the transition-only Moscow rate lookup for the curator's own rates.
         source=re.sub(r"COALESCE\(\(SELECT TOP \(1\) m.TargetName FROM DataWH.motivation.PortalSubdivisionMerge m WHERE m.SourceName=(\w+\.SubdivisionName)\),\1\)",r'\1',source,flags=re.I)
-    batch=private_sql(source,'combined',uuid4(),original_rules=original_rules,group_table=group_table)
+    batch=private_sql(source,'combined',uuid4(),original_rules=original_rules,group_table=group_table,preserve_main_scope=main_scope)
     from .planning_group_rules import for_curator
     batch=for_curator(batch)
     batch=batch.replace(ALLOCATION_SQL,'SELECT * INTO #share_transformed FROM #portal_motivation_sales;\n')
@@ -85,7 +85,7 @@ def append_to_procedure(definition,variant):
     if START in definition:raise ValidationError('Кураторы уже подключены к процедуре.')
     if "Директора" not in definition or not re.search(r'Employee(?:Name|Code)',definition,re.I):
         raise ValidationError('Исходная SQL-процедура не содержит персонального расчёта директоров. Для подключения кураторов нужна совместимая версия процедуры.')
-    batch=pair_batch(definition,variant)
+    batch=pair_batch(definition,variant,main_scope=True)
     suffix={'main':'','all_2026':'All2026','separate_2026':'Separate2026'}[variant]
     for source,target in (('#share_report','ReportMotivationByDealAuthor'),('#share_annual','AnnualAccrual'),('#share_fact','Fact')):
         batch+=f'\nINSERT INTO DataWH.motivation.{target}{suffix} SELECT * FROM {source};'
