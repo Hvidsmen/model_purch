@@ -53,3 +53,23 @@ class ShareholderReportSpeedTests(TestCase):
         self.assertEqual(count,2)
         self.assertEqual(self.run._report_options['author'],{'Автор'})
         self.assertEqual(self.run._report_options['brand'],{'Brand'})
+
+    def test_detail_builds_tree_once_and_preserves_the_complete_report(self):
+        from .services.manager_detail import combine_reports,manager_detail_report
+        chunk=self.run.chunks.get(dataset='report_pol')
+        ShareholderSnapshot.objects.create(calculation=self.run,mode='combined',dataset='report_sales',sequence=0,payload=deepcopy(chunk.payload))
+        gate=self.run.chunks.get(dataset='eligibility_pol')
+        ShareholderSnapshot.objects.create(calculation=self.run,mode='combined',dataset='eligibility_sales',sequence=0,payload=deepcopy(gate.payload))
+        for types in ['type=Политики','type=Политики&type=Продажи']:
+            for currency in ['USD','RUB']:
+                with self.subTest(types=types,currency=currency):
+                    query=QueryDict(types+'&period=1&period=2&period=5&currency='+currency)
+                    before=reports.data_for(self.run,query)
+                    expected=combine_reports(before['sections'],currency)
+                    with patch.object(reports,'manager_detail_report',side_effect=AssertionError('No per-type detail trees')):
+                        after=reports.data_for(self.run,query,defer_detail=True)
+                    with patch('admin_motivation.services.manager_detail.manager_detail_report',wraps=manager_detail_report) as build:
+                        actual=combine_reports(after['sections'],currency)
+                    self.assertEqual(build.call_count,1)
+                    self.assertEqual(actual,expected)
+                    self.assertEqual(after['rows'],before['rows'])

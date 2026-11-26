@@ -238,7 +238,12 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
 def combine_reports(sections, currency='USD'):
     """Keep worker types distinct while presenting a single selected-type report."""
     if len(sections) == 1:
-        return sections[0]['data']
+        data=sections[0]['data']
+        if data.get('_deferred_detail'):
+            result=manager_detail_report(data['_source_rows'],currency,data['_performance_rows'])
+            result.update({key:value for key,value in data.items() if key not in result and key!='_deferred_detail'})
+            return result
+        return data
     rows, performance = [], []
     for section in sections:
         for target, source in ((rows, section['data'].get('_source_rows', [])),
