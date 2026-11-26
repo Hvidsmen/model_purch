@@ -44,3 +44,20 @@ class ShareholderAuthorFilterTests(TestCase):
         self.assertTrue(response.context['needs_author'])
         self.assertEqual(response.context['query'].getlist('author'),[])
         data.assert_not_called()
+
+    def test_personal_report_accepts_multiple_authors_and_keeps_product_groups_separate(self):
+        params={'subdivision':'Д-Питер','author':['Питерский сотрудник','Общий сотрудник'],
+                'type':'Политики','period':'1'}
+        response=self.client.get(self.url('mine'),params)
+        self.assertEqual(response.status_code,200)
+        self.assertFalse(response.context['needs_author'])
+        self.assertTrue(response.context['multiple_authors'])
+        self.assertEqual(response.context['ledger']['total'],180)
+        groups=response.context['presentation']['product_sections'][0]['groups']
+        self.assertEqual({group['author'] for group in groups},{'Питерский сотрудник','Общий сотрудник'})
+        self.assertNotContains(response,'<select name="author"')
+        self.assertContains(response,'Найти сотрудника')
+        self.assertContains(response,'Премии выбранных сотрудников по периодам')
+        exported=self.client.get(self.url('mine'),{**params,'export':'xlsx'})
+        self.assertEqual(exported.status_code,200)
+        exported.close()

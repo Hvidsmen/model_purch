@@ -140,10 +140,12 @@ def report(request,pk,kind):
         context['authors']=[{'value':v,'selected':v in query.getlist('author'),'disabled':v not in allowed_authors} for v in available['author']]
         context['author_subdivisions']=available['author_subdivisions']
         context['type_options']=[{'value':v,'selected':v in kinds} for v in reports.KINDS]
-        context['needs_author']=kind=='mine' and len(query.getlist('author'))!=1
+        context['needs_author']=kind=='mine' and not query.getlist('author')
+        context['multiple_authors']=kind=='mine' and len(query.getlist('author'))>1
         def caption(values,all_caption):
             return ', '.join(values) if values and len(values)<=2 else f'Выбрано: {len(values)}' if values else all_caption
         context.update(branches=[{'name':item['value'],'selected':item['selected']} for item in context['filters'][0]['options']],
+            author_label=caption(query.getlist('author'),'Выберите сотрудников'),
             branch_label=caption(query.getlist('subdivision'),'Все доступные подразделения'),
             type_choices=context['type_options'],type_label=caption(query.getlist('type'),'Все доступные виды'),
             period_choices=[{'value':item['code'],'label':item['label'],'selected':item['selected']} for item in context['period_options']],

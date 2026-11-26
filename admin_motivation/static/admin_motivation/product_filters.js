@@ -3,7 +3,7 @@
   const checks = [...menu.querySelectorAll('input[type=checkbox]')];
   const update = () => {
    const values = checks.filter(input => input.checked).map(input => input.value);
-   menu.querySelector('[data-product-caption]').textContent = !values.length ? 'Все доступные' : values.length <= 2 ? values.join(', ') : `Выбрано: ${values.length}`;
+   menu.querySelector('[data-product-caption]').textContent = !values.length ? (menu.dataset.emptyCaption || 'Все доступные') : values.length <= 2 ? values.join(', ') : `Выбрано: ${values.length}`;
   };
   checks.forEach(input => input.addEventListener('change', update));
   menu.querySelector('[data-product-all]')?.addEventListener('click', () => {
