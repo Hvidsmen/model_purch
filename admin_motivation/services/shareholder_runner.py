@@ -11,6 +11,7 @@ from django.utils import timezone
 from ..models import ShareholderCalculation,ShareholderSnapshot
 from .shareholder_allocation import author_weights
 from .shareholder_sql import private_sql,temporary_tables,fingerprint
+from . import shareholder_regions as regions
 
 logger=logging.getLogger(__name__)
 from .shareholder_original_rules import RULE,enabled,performance_sql as original_performance_sql
@@ -32,7 +33,8 @@ def create(configuration,user):
     parameters={key:str(getattr(job,key)) for key in ('fact_year','plan_version','quarter_share','year_share','payout_threshold')}
     return ShareholderCalculation.objects.create(name=configuration['name'],as_of=configuration['as_of'],scenario=configuration['scenario'],
         quarters=sorted(int(v) for v in configuration['quarters']),threshold_percent=configuration['threshold_percent'],source_job=job,created_by=user,
-        configuration={**parameters,'rule':RULE,'source_job_key':str(job.key)})
+        configuration={**parameters,'rule':RULE,'source_job_key':str(job.key),
+            'regional_rule':regions.RULE,'regional_rates':regions.approved_rates()})
 
 
 def launch(run):
@@ -72,13 +74,15 @@ def save_query(run,cursor,mode,dataset,sql,args=(),kind=None):
 
 def prepare_mapping(cursor,run):
     quarters=','.join(str(int(q)) for q in run.quarters)
+    scope=regions.BRANCH_SQL if regions.enabled(run) else "N'Д-Москва',N'ТЕРМОТРЕЙД'"
+    quarter_condition=('sub.SubdivisionName IN ('+regions.REGION_SQL+') OR ' if regions.enabled(run) else '')
     cursor.execute('''SELECT COUNT(*) FROM (SELECT SubdivisionKey FROM dbo.Subdivisions
- WHERE SubdivisionKey IN(SELECT SubdivisionKey FROM dbo.Subdivisions WHERE SubdivisionName IN(N'Д-Москва',N'ТЕРМОТРЕЙД')) GROUP BY SubdivisionKey HAVING COUNT(*)>1) duplicates''')
-    if cursor.fetchone()[0]:raise ValidationError('В справочнике повторяются ключи подразделений Москвы/ТТ.')
+ WHERE SubdivisionKey IN(SELECT SubdivisionKey FROM dbo.Subdivisions WHERE SubdivisionName IN('''+scope+''')) GROUP BY SubdivisionKey HAVING COUNT(*)>1) duplicates''')
+    if cursor.fetchone()[0]:raise ValidationError('В справочнике повторяются ключи подразделений расчёта.')
     cursor.execute('''SELECT sub.SubdivisionName,COALESCE(LTRIM(RTRIM(s.[Даичи_АвторСделкиНаименование])),N''),
- SUM(CASE WHEN DATEPART(QUARTER,s.ClosedDealDate) IN ('''+quarters+''') THEN s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD ELSE 0 END)
+ SUM(CASE WHEN '''+quarter_condition+'''DATEPART(QUARTER,s.ClosedDealDate) IN ('''+quarters+''') THEN s.Price-s.AmountUSDIt_ITW+s.BallsOuterUSD ELSE 0 END)
  FROM motivation.PortalPreparedSales s JOIN dbo.Subdivisions sub ON sub.SubdivisionKey=s.Subdivision
- WHERE s.ClosedDealDate>=? AND s.ClosedDealDate<? AND sub.SubdivisionName IN(N'Д-Москва',N'ТЕРМОТРЕЙД')
+ WHERE s.ClosedDealDate>=? AND s.ClosedDealDate<? AND sub.SubdivisionName IN('''+scope+''')
  AND EXISTS(SELECT 1 FROM dbo.Product p WHERE p.ProductCode=s.ProductCode AND p.[Тип номенклатуры]=N'Товар')
  AND EXISTS(SELECT 1 FROM dbo.Customer c WHERE c.CustomerKey=s.CustomerKey)
  GROUP BY sub.SubdivisionName,COALESCE(LTRIM(RTRIM(s.[Даичи_АвторСделкиНаименование])),N'')''',date(2026,1,1),run.as_of+timedelta(days=1))
@@ -108,7 +112,8 @@ def execute(run,connector=None):
             cursor.execute('SELECT OBJECT_DEFINITION(OBJECT_ID(?))','motivation.'+name)
             row=cursor.fetchone();definitions[mode]=row[0] if row else None
         if not definitions['combined']:raise ValidationError('Не установлено задание «Все кварталы 2026». Обновите его через Центр расчётов.')
-        progress(run,'Определение долей авторов отдельно по Москве и ТТ')
+        if regions.enabled(run):regions.install_rates(cursor,run)
+        progress(run,'Определение долей авторов по исходным подразделениям')
         weights=prepare_mapping(cursor,run)
         cursor.execute('''CREATE TABLE #share_parameters(FactYear int,PlanVersion nvarchar(500),QuarterShare decimal(9,8),YearShare decimal(9,8),PayoutThreshold decimal(9,8),Cutoff date);''')
         config=run.configuration
@@ -117,8 +122,10 @@ def execute(run,connector=None):
                   'procedure_hashes':{},'counts':{},'redistribution':'separate-original-subdivision-before-coefficients',
                   'turnover_basis':'Price - AmountUSDIt_ITW + BallsOuterUSD; signed; selected quarters through as_of',
                   'quarter_rule':('Q1 always paid; Q2 eligibility Q1+Q2; Q3 Q3; Q4 and year Q1–Q4; annual contributions Q1–Q4; year-end catch-up' if enabled(run) else 'I–III separate if selected; IV and annual Moscow+TT combined')}
+        if regions.enabled(run):
+            metadata.update(regional_rule=regions.RULE,branches=list(regions.BRANCHES),regional_plan_basis='all 2026 through cutoff, after reassignment; per subdivision',regional_rate_source='approved portal versions frozen at creation')
         for mode,definition in definitions.items():
-            batch=private_sql(definition,mode,run.pk,original_rules=enabled(run))
+            batch=private_sql(definition,mode,run.pk,original_rules=enabled(run),regional_policy=regions.enabled(run))
             for name in temporary_tables(batch):
                 if name in ('#share_parameters','#share_author_map'):continue
                 cursor.execute("IF OBJECT_ID('tempdb.."+name+"') IS NOT NULL DROP TABLE "+name)
@@ -129,6 +136,10 @@ def execute(run,connector=None):
                 if cursor.description and cursor.description[0][0]=='SharePreparedRun':prepared=str(cursor.fetchone()[0])
                 if not cursor.nextset():break
             if prepared!=str(ready[0]):raise ValidationError('Во время расчёта изменился подготовленный факт. Результаты не опубликованы.')
+            if regions.enabled(run) and mode=='combined':
+                save_query(run,cursor,mode,'policy_plan_shares','SELECT * FROM #share_plan_weights')
+                save_query(run,cursor,mode,'policy_rates','SELECT * FROM #share_region_coefficients')
+                save_query(run,cursor,mode,'policy_defaults','SELECT * FROM #share_region_defaults')
             metadata['procedure_hashes'][mode]=fingerprint(definition)
             progress(run,'Сохранение согласованных снимков пяти отчётов · '+mode)
             counts={}
@@ -147,6 +158,7 @@ def execute(run,connector=None):
                 counts['report']+=report_count;counts['eligibility']+=eligibility_count
                 query=performance_sql(source,coefficient_type=kind).replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
                 if enabled(run):query=original_performance_sql(query)
+                if regions.enabled(run) and kind=='Политики':query=regions.performance_sql(query)
                 counts['performance']+=save_query(run,cursor,mode,'perf_'+tag,query,kind=kind)
                 query=department_sql(source).replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
                 if enabled(run):query=original_performance_sql(query)
@@ -189,6 +201,7 @@ def run_calculation(pk,connector=None):
         reason=' '.join(error.messages) if isinstance(error,ValidationError) else 'Подробности в журнале отдельного задания.'
         if not isinstance(error,ValidationError):
             if re.search(r'\(50071\)',str(error)):reason='Перераспределение не сохранило оборот USD/RUB. Результаты не опубликованы.'
+            elif re.search(r'\(5008[234]\)',str(error)):reason='Не удалось проверить доли, сохранность плана или утверждённые коэффициенты Ростова/Питера. Результаты не опубликованы.'
             elif re.search(r'\(50081\)',str(error)):reason='Не найдены выгруженные ставки куратора. Проверьте назначения и выгрузку утверждённой версии.'
             elif re.search(r'\(50040\)',str(error)):reason='Нет совместимого подготовленного факта. Обновите подготовку в Центре расчётов.'
         ShareholderCalculation.objects.filter(pk=run.pk,state='running').update(state='failed',stage='Расчёт остановлен',error=reason+' Код: '+reference,completed_at=timezone.now())

@@ -13,6 +13,8 @@ ZERO=Decimal(0)
 
 
 def records(run,dataset):
+    from .shareholder_regions import enabled as regional_enabled,REGIONS
+    regional=regional_enabled(run)
     chunks=run.chunks.filter(dataset=dataset)
     if run.scenario=='combined' or dataset in ('mapping','deals') or dataset.endswith('_cur'):
         chunks=chunks.filter(mode='combined')
@@ -21,7 +23,8 @@ def records(run,dataset):
             code=period_code(str(row.get('КварталМотивации','')))
             if dataset.startswith('annual_'):code=str(row.get('Квартал',''))
             mode='separate' if run.scenario=='separate' and code in '123' and code else 'combined'
-            if dataset in ('mapping','deals') or dataset.endswith('_cur'):mode='combined'
+            if dataset in ('mapping','deals','policy_plan_shares','policy_rates','policy_defaults') or dataset.endswith('_cur'):mode='combined'
+            if regional and row.get('Подразделение') in REGIONS:mode='combined'
             if chunk.mode==mode:yield row
 
 
@@ -168,7 +171,7 @@ def audit_rows(run,query):
         if query.getlist('author') and row['AssignedAuthor'] not in query.getlist('author'):continue
         if query.get('search','').strip().casefold() not in str(row['AssignedAuthor'] or '').casefold():continue
         branch=row['SourceBranch']
-        if run.scenario=='combined' or quarter=='4':branch='Д-Москва'
+        if branch in ('Д-Москва','ТЕРМОТРЕЙД') and (run.scenario=='combined' or quarter=='4'):branch='Д-Москва'
         if query.getlist('subdivision') and branch not in query.getlist('subdivision'):continue
         fields={'planning':'ГруппаПлановПродаж','goods':'ГруппаТоваров','brand':'Марка'}
         if any(query.getlist(key) and row.get(field) not in query.getlist(key) for key,field in fields.items()):continue
