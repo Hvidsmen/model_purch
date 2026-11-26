@@ -67,6 +67,32 @@ def save(actor,version_id,revision,row,delete=False):
     version.refresh_from_db();return version
 
 
+@transaction.atomic
+def bulk_save(actor, version_id, revision, selected, changes):
+    from base.access import can_access
+    from .directors import lock_editable
+    from ..models import GlobalCoeffVersion
+    if not can_access(actor, 'motivation_editor'):raise PermissionDenied
+    version=lock_editable(version_id)
+    if str(version.revision)!=str(revision):raise ValidationError('Версия изменилась. Обновите страницу.')
+    rows=deepcopy(version.planning_rules)
+    try:
+        indexes={int(value) for value in selected}
+        if not indexes or any(i<0 or i>=len(rows) for i in indexes):raise ValueError
+    except (ValueError,TypeError):raise ValidationError('Выберите правила из текущей версии.')
+    if not changes:raise ValidationError('Выберите, что изменить.')
+    if set(changes)-{'formula','missing','k0','k1','k2','k3','k4'}:raise ValidationError('Некорректные поля массового изменения.')
+    for i in indexes:
+        rows[i].update(changes)
+        if rows[i]['missing']!='fixed':
+            for k in range(5):rows[i].pop('k'+str(k),None)
+    validate(rows)
+    version.planning_rules=rows
+    version.save(update_fields=['planning_rules'])
+    GlobalCoeffVersion.objects.filter(pk=version.pk).update(revision=version.revision+1)
+    return len(indexes)
+
+
 def frozen(versions=None):
     if versions is None:
         from ..models import GlobalCoeffVersion

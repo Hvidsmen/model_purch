@@ -29,6 +29,16 @@ class RuleForm(forms.Form):
         return data
 
 
+class BulkRuleForm(RuleForm):
+    def __init__(self,*args,**kwargs):
+        super().__init__(*args,**kwargs)
+        for name in ('subdivision','kind','planning'):self.fields.pop(name)
+        self.fields['formula'].choices=[('keep','Не менять формулу'),*self.fields['formula'].choices]
+        self.fields['formula'].initial='keep'
+        self.fields['missing'].choices=[('keep','Не менять способ подбора'),*rules.METHODS]
+        self.fields['missing'].initial='keep'
+
+
 @require_http_methods(['GET','POST'])
 def workspace(request):
     if role_for(request.user,'motivation') not in (ADMIN,MODELER,DIRECTOR,FINANCIER,MOTIVATION_VIEWER):raise PermissionDenied
@@ -42,9 +52,22 @@ def workspace(request):
     if existing:
         initial={**existing,**{'k'+str(i):Decimal(str(existing.get('k'+str(i),0)))*100 for i in range(5)}}
     form=RuleForm(request.POST if request.method=='POST' else None,initial=initial or None)
+    bulk=request.method=='POST' and request.POST.get('action')=='bulk'
+    bulk_form=BulkRuleForm(request.POST if bulk else None, auto_id="bulk_%s")
+    if bulk:form=RuleForm(initial=initial or None)
     if request.method=='POST':
         if not can_access(request.user,'motivation_editor'):raise PermissionDenied
-        if form.is_valid():
+        if bulk:
+            if bulk_form.is_valid():
+                data=bulk_form.cleaned_data
+                changes={k:data[k] for k in ('formula','missing') if data[k]!='keep'}
+                if data['missing']=='fixed':changes.update({'k'+str(i):str(data['k'+str(i)]/100) for i in range(5)})
+                try:
+                    count=rules.bulk_save(request.user,version.pk,request.POST.get('revision'),request.POST.getlist('selected_rules'),changes)
+                    messages.success(request,f'Обновлено правил: {count}. Для применения утвердите версию и выполните новую выгрузку и расчёт.')
+                    return redirect(reverse('motivation_planning_group_rules')+'?version='+str(version.pk))
+                except ValidationError as error:bulk_form.add_error(None,error)
+        elif form.is_valid():
             data=form.cleaned_data;row={k:data[k] for k in ('subdivision','kind','planning','formula','missing')}
             if row['missing']=='fixed':row.update({'k'+str(i):str(data['k'+str(i)]/100) for i in range(5)})
             try:
@@ -52,6 +75,6 @@ def workspace(request):
                 messages.success(request,'Правило сохранено. Для применения утвердите версию и выполните новую выгрузку и расчёт.')
                 return redirect(reverse('motivation_planning_group_rules')+'?version='+str(version.pk))
             except ValidationError as error:form.add_error(None,error)
-    return render(request,'admin_motivation/planning_group_rules.html',dict(selected_version=version,versions=versions,form=form,
+    return render(request,'admin_motivation/planning_group_rules.html',dict(selected_version=version,versions=versions,form=form,bulk_form=bulk_form,selected_rules=request.POST.getlist('selected_rules') if bulk else [],bulk_reserve_fields=[bulk_form['k'+str(i)] for i in range(5)],
         editable=version.is_editable and can_access(request.user,'motivation_editor'),rules=version.planning_rules,reserve_fields=[form['k'+str(i)] for i in range(5)],
         planning_groups=Goods.objects.order_by('planning_group_sales').values_list('planning_group_sales',flat=True).distinct()))
