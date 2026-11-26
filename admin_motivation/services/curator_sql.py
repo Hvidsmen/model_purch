@@ -144,8 +144,10 @@ def shareholder_snapshots(run,cursor,definition,save_query):
     """Same source cutoff, one independent director calculation per curator pair."""
     from .curators import enabled
     if not enabled():return 0
+    from .shareholder_regions import enabled as regional_enabled,BRANCH_SQL
+    scope=BRANCH_SQL if regional_enabled(run) else "N'Д-Москва',N'ТЕРМОТРЕЙД'"
     cursor.execute(f'''IF OBJECT_ID(N'{TABLE}',N'U') IS NOT NULL
- SELECT EmployeeCode,Subdivision,FullName FROM {TABLE} WHERE Subdivision IN(N'Д-Москва',N'ТЕРМОТРЕЙД')
+ SELECT EmployeeCode,Subdivision,FullName FROM {TABLE} WHERE Subdivision IN({scope})
  ELSE SELECT CAST(NULL AS nvarchar(64)),CAST(NULL AS nvarchar(255)),CAST(NULL AS nvarchar(255)) WHERE 1=0;''')
     pairs=cursor.fetchall()
     if not pairs:return 0

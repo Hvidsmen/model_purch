@@ -1,0 +1,187 @@
+from datetime import date,timedelta
+from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import Mock,patch
+import sqlite3,re
+from django.test import TestCase,SimpleTestCase
+from django.core.exceptions import ValidationError
+from django.http import QueryDict
+from .services import shareholder_regions as regions,shareholder_runner as runner,shareholder_reports as reports
+from .services.shareholder_sql import private_sql,temporary_tables
+from . import test_shareholder_original_rules as original_tests
+from . import test_shareholders as fixtures
+from .models import GlobalCoeffVersion,Subdivision,SubdivisionCoeff,Goods,TypeCoeff,SegmentCoeff,VariationCalculate,ShareholderSnapshot,Chanel
+
+
+class RegionalSQLTests(TestCase):
+    compiled=original_tests.OriginalSQLTests.compiled
+
+    def test_full_real_pipeline_keeps_regions_independent_and_moscow_legacy(self):
+        for variant,mode in [('all_2026','combined'),('separate_2026','separate')]:
+            definition=self.compiled(variant)
+            old=private_sql(definition,mode,'old',original_rules=True)
+            sql=private_sql(definition,mode,'new',original_rules=True,regional_policy=True)
+            self.assertNotIn('#share_region_plan',old)
+            self.assertIn('WHERE SubdivisionName IN('+regions.BRANCH_SQL+')',sql)
+            if mode=='combined':self.assertIn("UPDATE #share_subdivisions SET SubdivisionName=N'Д-Москва' WHERE SubdivisionName=N'ТЕРМОТРЕЙД'",sql)
+            self.assertIn("THEN LTRIM(RTRIM(s.[Даичи_АвторСделкиНаименование])) ELSE ('Политики')",sql)
+            self.assertIn('FROM #share_region_coefficients',sql)
+            self.assertIn('FROM #share_region_defaults',sql)
+            self.assertIn('COALESCE(sc.VariationCalculate,CASE WHEN',sql)
+            self.assertIn("[АвторСделки] IN(N'Политики',N'Продажи')",sql)
+            self.assertIn("s.SubdivisionName NOT IN ("+regions.REGION_SQL+") AND",sql)
+            self.assertIn("p.[ТипКоэф]))=N'Продажи'",sql)
+            self.assertIn('w.Period_',sql)
+            self.assertIn('#share_plan_weights',temporary_tables(sql))
+            self.assertIn('#share_region_department',temporary_tables(sql))
+            self.assertLess(sql.index('INTO #share_region_department'),re.search(r"'1 Квартал'\s+КварталМотивации",sql).start())
+            self.assertIn('СуммаМотивацииUSDГод',sql)
+            self.assertNotIn('INTO DataWH.motivation.',sql)
+            self.assertIn('THROW 50084',sql)
+            # Annual eligibility includes all three gates, even for global mode.
+            annual=sql[sql.index('SELECT DISTINCT [Подразделение]'):]
+            self.assertIn('d.Period_=5',annual)
+            self.assertIn('PARTITION BY Подразделение,АвторСделки,Год,ТипКоэф',annual)
+            self.assertIn("VariationCalculate=N'Марка(Бренд)'",annual)
+
+    def test_existing_moscow_author_expression_is_preserved(self):
+        definition=self.compiled('all_2026')
+        definition,count=re.subn(r"'Политики'\s+АвторСделки", "COALESCE(s.[Даичи_АвторСделкиНаименование],N'Политики') AS [АвторСделки]",definition,count=1)
+        self.assertEqual(count,1)
+        sql=private_sql(definition,'combined','new',original_rules=True,regional_policy=True)
+        self.assertIn("ELSE (COALESCE(s.[Даичи_АвторСделкиНаименование],N'Политики')) END AS АвторСделки",sql)
+
+    def test_missing_native_plan_or_author_shape_fails_closed(self):
+        definition=self.compiled('all_2026')
+        with self.assertRaises(ValidationError):private_sql(definition.replace('#percent_plan_menger','#renamed'), 'combined','new',original_rules=True,regional_policy=True)
+
+
+class TripleGateTests(SimpleTestCase):
+    def failures(self,department,first_plan,first_fact,second_plan,second_fact,formula='Марка(Бренд)'):
+        db=sqlite3.connect(':memory:')
+        db.executescript('''CREATE TABLE pf_base(Подразделение TEXT,Год INT,АвторСделки TEXT,ТипКоэф TEXT,ГруппаПлановПродаж TEXT,ГруппаТоваров TEXT,Марка TEXT,VariationCalculate TEXT,СуммаПланUSD REAL,СуммаОтгрузокUSD REAL);
+ CREATE TABLE region_department(Подразделение TEXT,Год INT,Period_ INT,Execution_ REAL);''')
+        for region in regions.REGIONS:
+            db.execute('INSERT INTO region_department VALUES(?,2026,3,?)',(region,department))
+            for brand,plan,fact in [('A',first_plan,first_fact),('B',second_plan,second_fact)]:
+                db.execute('INSERT INTO pf_base VALUES(?,2026,?,?,?,?,?,?,?,?)',(region,'Автор','Политики','RAC','Goods',brand,formula,plan,fact))
+        condition=regions.triple_failure('3').replace('#pf_base','pf_base').replace('#share_region_department','region_department').replace("N'","'")
+        values=db.execute('SELECT Подразделение,Марка,'+condition+' AS Failed FROM pf_base',{'PayoutThreshold':.8}).fetchall()
+        db.close();return {(r,b):failed for r,b,failed in values}
+
+    def test_department_failure_blocks_even_when_employee_and_formula_pass(self):
+        values=self.failures(.7,50,50,50,50)
+        self.assertTrue(all(values.values()))
+
+    def test_employee_failure_blocks_a_passing_brand(self):
+        values=self.failures(.9,10,10,90,0)
+        self.assertTrue(all(values[r,'A'] for r in regions.REGIONS))
+
+    def test_brand_failure_blocks_even_when_employee_total_passes(self):
+        values=self.failures(.9,50,10,50,90)
+        for r in regions.REGIONS:self.assertEqual((values[r,'A'],values[r,'B']),(1,0))
+
+    def test_global_formula_still_requires_employee_total(self):
+        self.assertTrue(all(self.failures(.9,50,10,50,10,'Подразделение(Глобально)').values()))
+
+    def test_every_gate_must_pass_and_q1_has_no_gate(self):
+        self.assertFalse(any(self.failures(.9,50,50,50,50).values()))
+        with self.assertRaises(ValueError):regions.triple_failure(1)
+
+
+class RegionalRatesTests(TestCase):
+    def make_rates(self):
+        latest=GlobalCoeffVersion.objects.order_by('-effective_from').first()
+        version=GlobalCoeffVersion.objects.create(effective_from=max(date(2026,1,1),latest.effective_from+timedelta(days=1)) if latest else date(2001,1,1))
+        channel=Chanel.objects.create(chanel_name='Тест')
+        kind=TypeCoeff.objects.create(type_coeff_name='Политики');formula=VariationCalculate.objects.create(variation_name='Марка(Бренд)')
+        goods=Goods.objects.create(goods_key='RAC-A',planning_group_sales='1. RAC',group='Бытовые кондиционеры',brand='A')
+        for name in regions.REGIONS:
+            sub=Subdivision.all_objects.create(subdivision_key=name,subdivision_name=name,subdivision_global=name,chanel=channel)
+            for i in range(5):
+                segment,_=SegmentCoeff.objects.get_or_create(segment_name='K'+str(i))
+                SubdivisionCoeff.objects.create(version=version,subdivision=sub,goods=goods,type_coeff=kind,segment=segment,motivation_coeff=.001*(i+1),manager_coeff=1,variation_calculate=formula)
+        from django.db import models
+        models.QuerySet.update(GlobalCoeffVersion.objects.filter(pk=version.pk),status='approved')
+        version.refresh_from_db();return version
+
+    def test_global_fallback_is_frozen_and_missing_exact_matrix_is_allowed(self):
+        self.make_rates();saved=regions.approved_rates()
+        self.assertEqual(saved['defaults'][0]['DefaultFormula'],'Подразделение(Глобально)')
+        saved['coefficients']=[]
+        cursor=Mock();regions.install_rates(cursor,SimpleNamespace(configuration={'regional_rates':saved}))
+        self.assertIn('#share_region_defaults',cursor.executemany.call_args.args[0])
+        self.assertEqual(cursor.executemany.call_args.args[1][0][1],'Подразделение(Глобально)')
+
+    def test_only_approved_own_rates_are_frozen_and_missing_cells_are_rejected(self):
+        version=self.make_rates();saved=regions.approved_rates()
+        self.assertEqual({r['Subdivision'] for r in saved['coefficients']},set(regions.REGIONS))
+        self.assertEqual(saved['coefficients'][0]['K1'],'0.002')
+        self.assertEqual(saved['coefficients'][0]['VariationCalculate'],'Марка(Бренд)')
+        cursor=Mock();run=SimpleNamespace(configuration={'regional_rates':saved})
+        regions.install_rates(cursor,run)
+        self.assertEqual(len(cursor.executemany.call_args.args[1]),2)
+        self.assertTrue(cursor.executemany.call_args.args[1][0][1].endswith('T23:59:59.9999999'))
+        self.assertEqual(saved,regions.approved_rates())
+        # A blank snapshot must not substitute SQL's literal fallback rates.
+        with self.assertRaises(ValidationError):regions.install_rates(cursor,SimpleNamespace(configuration={}))
+
+
+class RegionalSnapshotTests(TestCase):
+    setUp=fixtures.SnapshotTests.setUp
+    url=fixtures.SnapshotTests.url
+
+    def test_mapping_uses_whole_2026_in_regions_and_keeps_moscow_quarter_selection(self):
+        self.run.configuration['regional_rule']=regions.RULE;self.run.quarters=[3]
+        cursor=Mock();cursor.fetchone.return_value=(0,)
+        cursor.fetchall.return_value=[('Д-Ростов','A',900),('Д-Ростов','tiny',1),('Д-Питер','B',500),('Д-Москва','M',200)]
+        weights=runner.prepare_mapping(cursor,self.run)
+        sql=cursor.execute.call_args_list[1].args[0]
+        self.assertIn('sub.SubdivisionName IN ('+regions.REGION_SQL+') OR DATEPART(QUARTER,s.ClosedDealDate) IN (3)',sql)
+        self.assertEqual({(w['branch'],w['assigned']) for w in weights},{('Д-Ростов','A'),('Д-Питер','B'),('Д-Москва','M')})
+
+    def test_deal_filter_keeps_rostov_and_piter_in_combined_mode(self):
+        self.run.configuration['regional_rule']=regions.RULE;self.run.save(update_fields=['configuration'])
+        for i,branch in enumerate(regions.REGIONS):
+            ShareholderSnapshot.objects.create(calculation=self.run,mode='combined',dataset='deals',sequence=i,payload=[{'SourceBranch':branch,'ClosedDate':'2026-04-05','AssignedAuthor':'A'}])
+        self.assertEqual([r['SourceBranch'] for r in reports.audit_rows(self.run,QueryDict('subdivision=Д-Ростов'))],['Д-Ростов'])
+        self.assertEqual([r['SourceBranch'] for r in reports.audit_rows(self.run,QueryDict('subdivision=Д-Питер'))],['Д-Питер'])
+
+    def test_all_new_reports_and_exports_keep_regional_totals_and_catchups_separate(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from .services.shareholder_original_rules import RULE
+        self.run.configuration.update(rule=RULE,regional_rule=regions.RULE)
+        self.run.save(update_fields=['configuration']);self.run.chunks.all().delete()
+        for i,branch in enumerate(regions.REGIONS):
+            paid='25' if i==0 else '0'
+            data=[original_tests.row('3','100','0',branch=branch),original_tests.row('5','25',paid,branch=branch)]
+            for dataset,payload in [('report_pol',data),('eligibility_pol',[original_tests.gate(data[-1],i==0)]),
+                ('annual_pol',[dict(data[0],Квартал=3,AnnualUSD='25',AnnualRUB='2250')]),
+                ('policy_plan_shares',[{'Subdivision':branch,'Author_':'Иванов','Turnover_':'1000','Weight_':'1'}]),
+                ('policy_rates',[dict(Subdivision=branch,DateFrom='2026-01-01',DateTo='9999-12-31',PGSales='1. RAC',Group_='Goods',Brand='A',TypeCoeff='Политики',VariationCalculate='Марка(Бренд)',**{f'K{k}':'.001' for k in range(5)})])]:
+                ShareholderSnapshot.objects.create(calculation=self.run,mode='combined',dataset=dataset,sequence=i,payload=runner.serial(payload))
+        for branch,expected in [('Д-Ростов',125),('Д-Питер',0)]:
+            query={'subdivision':branch,'author':'Иванов','type':'Политики'}
+            for kind in ('team','mine','detail','registry','executive'):
+                response=self.client.get(self.url(kind),query)
+                self.assertEqual(response.status_code,200)
+                self.assertEqual(response.context['ledger']['total'],expected)
+                self.assertEqual({r['subdivision'] for r in response.context['ledger']['rows']},{branch})
+                export=self.client.get(self.url(kind),{**query,'export':'xlsx'})
+                self.assertEqual(export.status_code,200)
+                book=load_workbook(BytesIO(b''.join(export.streaming_content)),data_only=True)
+                sheet=book['Доплаты и годовая часть']
+                self.assertEqual(sum(r[10] for r in list(sheet.values)[1:]),expected)
+                self.assertEqual(book['Доли плана регионов'].cell(2,1).value,branch)
+                self.assertEqual(book['Коэффициенты регионов'].cell(2,1).value,branch)
+                book.close();export.close()
+
+    def test_new_run_freezes_regional_rates_at_creation(self):
+        saved={'versions':[{'id':4,'from':'2026-01-01','revision':10}],'coefficients':[{'Subdivision':'Д-Ростов','K0':'.001'}]}
+        with patch.object(regions,'approved_rates',return_value=saved):
+            run=runner.create({'source_job':self.job,'name':'Regions','as_of':date(2026,11,20),'scenario':'combined','quarters':['1','2','3','4'],'threshold_percent':Decimal(1)},self.user)
+        saved['coefficients'][0]['K0']='.9'
+        run.refresh_from_db()
+        self.assertEqual(run.configuration['regional_rule'],regions.RULE)
+        self.assertEqual(run.configuration['regional_rates']['coefficients'][0]['K0'],'.001')

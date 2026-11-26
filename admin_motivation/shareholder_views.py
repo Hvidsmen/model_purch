@@ -21,7 +21,9 @@ def allowed(request):
 
 def metadata(run):
     from .services.shareholder_original_rules import enabled
-    return [('Правила расчёта','Исходная схема: годовая база I–IV, доплаты при закрытии года' if enabled(run) else 'Прежняя схема: IV квартал и год по IV кварталу, без доплат'),('Сценарий','Для акционеров · перераспределение реальных отгрузок'),('Запуск',str(run.pk)),
+    from .services.shareholder_regions import enabled as regional_enabled
+    regional_meta=[('Подразделения расчёта','Москва + ТТ; Ростов и Питер независимо'),('Планы политиков Ростова/Питера','Доли полного факта 2026 после перераспределения на дату среза'),('Проверка политиков Ростова/Питера','Подразделение + общий план сотрудника + формула коэффициента'),('Источник коэффициентов регионов','Утверждённые настройки портала, сохранённые при создании запуска')] if regional_enabled(run) else []
+    return [*regional_meta,('Правила расчёта','Исходная схема: годовая база I–IV, доплаты при закрытии года' if enabled(run) else 'Прежняя схема: IV квартал и год по IV кварталу, без доплат'),('Сценарий','Для акционеров · перераспределение реальных отгрузок'),('Запуск',str(run.pk)),
         ('Факт по дату включительно',str(run.as_of)),('Данные','Текущий подготовленный факт на момент запуска'),
         ('Подразделения','Москва + ТТ' if run.scenario=='combined' else 'I–III раздельно; IV и год Москва + ТТ'),
         ('Кварталы определения долей',', '.join(map(str,run.quarters))),('Порог авторов, %',str(run.threshold_percent)),
@@ -115,7 +117,8 @@ def report(request,pk,kind):
     title=reports.TITLES[kind];meta=metadata(run)
     meta.extend((label,', '.join(query.getlist(field)) or 'Все доступные') for field,label in [('currency','Валюта премий'),('period','Периоды отчёта'),('type','Виды мотивации'),('subdivision','Отбор подразделений'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')])
     from .services.shareholder_original_rules import enabled,enrich
-    context={'shareholder_original_rules':enabled(run),'skip_motivation_workflow':True,'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
+    from .services.shareholder_regions import enabled as regional_enabled
+    context={'shareholder_regional_rules':regional_enabled(run),'shareholder_original_rules':enabled(run),'skip_motivation_workflow':True,'shareholder_report':True,'run':run,'kind':kind,'title':title,'query':query,'metadata':meta,'pending':run.state in ('queued','running'),
         'status_url':reverse('motivation_shareholder_status',args=[run.pk]),'selected_types':kinds,
         'period_options':[{'code':code,'label':'Год' if code=='5' else code+' квартал','selected':code in periods} for code in [*map(str,run.quarters),'5']]}
     navigation=[]
@@ -195,7 +198,7 @@ def report(request,pk,kind):
                     from .services.presentation_excel import workbook
                     output=workbook('team' if kind=='team' else 'registry',data,meta,query,title)
                 if enabled(run) and not audit:
-                    output=catchup_excel(output,data)
+                    output=catchup_excel(output,data,run)
                 return FileResponse(output,as_attachment=True,filename=f'shareholders-{run.pk}-{kind}.xlsx')
     context['export_url']='?'+dict_query(query,export='xlsx').urlencode()
     context['audit_url']=reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+dict_query(query,audit='1').urlencode()
@@ -209,7 +212,7 @@ def dict_query(query,**values):
     return result
 
 
-def catchup_excel(output, ledger):
+def catchup_excel(output, ledger, run=None):
     """Identical breakdown for all new-scheme exports; potential is never a payout."""
     from openpyxl import load_workbook
     book=load_workbook(output)
@@ -240,4 +243,21 @@ def catchup_excel(output, ledger):
     info.append(['Годовая строка','Возможные доплаты кварталов свёрнуты в годовой строке: повторно не складывать.'])
     info.append(['Доплата к выплате','Только при выполнении годового условия I–IV кварталов.'])
     info.append(['В годовую премию','Отдельные годовые доли кварталов; не входят в квартальные доплаты.'])
+    if run is not None and run.configuration.get('regional_rule'):
+        selected={row['subdivision'] for row in ledger['rows']}
+        shares=book.create_sheet('Доли плана регионов');shares.append(['Подразделение','Автор','Факт после перераспределения, USD','Доля плана'])
+        for row in reports.records(run,'policy_plan_shares'):
+            if row['Subdivision'] in selected:shares.append([row['Subdivision'],row['Author_'],float(row['Turnover_']),float(row['Weight_'])])
+        rates=book.create_sheet('Коэффициенты регионов');columns=['Subdivision','DateFrom','DateTo','PGSales','Group_','Brand','TypeCoeff','K0','K1','K2','K3','K4','VariationCalculate'];rates.append(columns)
+        for row in reports.records(run,'policy_rates'):
+            if row['Subdivision'] in selected:rates.append([float(row[c]) if c.startswith('K') else row[c] for c in columns])
+        defaults=book.create_sheet('Формулы по умолчанию');defaults.append(['Действует с','Формула при отсутствии точной настройки'])
+        for row in reports.records(run,'policy_defaults'):defaults.append([row['Date_'],row['DefaultFormula']])
+        for sheet_ in (shares,rates,defaults):
+            sheet_.freeze_panes='A2';sheet_.auto_filter.ref=sheet_.dimensions
+            for line in sheet_.iter_rows(min_row=2):
+                for cell in line:
+                    if isinstance(cell.value,str):cell.data_type='s'
+                    if sheet_==shares and cell.column==4:cell.number_format='0.0000%'
+                    if sheet_==rates and 8<=cell.column<=12:cell.number_format='0.0000%'
     result=BytesIO();book.save(result);book.close();result.seek(0);return result
