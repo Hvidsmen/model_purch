@@ -53,5 +53,5 @@ def workspace(request):
                 return redirect(reverse('motivation_planning_group_rules')+'?version='+str(version.pk))
             except ValidationError as error:form.add_error(None,error)
     return render(request,'admin_motivation/planning_group_rules.html',dict(selected_version=version,versions=versions,form=form,
-        editable=version.is_editable and can_access(request.user,'motivation_editor'),rules=version.planning_rules,
+        editable=version.is_editable and can_access(request.user,'motivation_editor'),rules=version.planning_rules,reserve_fields=[form['k'+str(i)] for i in range(5)],
         planning_groups=Goods.objects.order_by('planning_group_sales').values_list('planning_group_sales',flat=True).distinct()))
