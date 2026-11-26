@@ -68,6 +68,27 @@ CREATE TABLE group_rules(Date_,Subdivision,TypeCoeff,PGSales,Formula,Missing,K0 
         db.execute("INSERT INTO group_rules VALUES('2026-01-01','','Политики','3. PROF','Подразделение','fixed',0.01,0.01,0.01,0.01,0.01)")
         self.assertEqual(db.execute(sql).fetchone()[:3],(.004,.008,'Группа планов продаж'))
 
+    def test_curator_uses_own_rule_instead_of_director_rule(self):
+        db,sql=self.query('fixed')
+        db.execute("UPDATE group_rules SET TypeCoeff='Директора',K0=0.01,K1=0.01 WHERE TypeCoeff='Политики'")
+        db.execute("INSERT INTO group_rules VALUES('2026-01-01','Д-Питер','Кураторы','3. PROF','Подразделение','fixed',0.02,0.02,0.02,0.02,0.02)")
+        sql=rules.for_curator(sql.replace("'Политики'","'Директора'")).replace("N'","'")
+        self.assertEqual(db.execute(sql).fetchone()[:3],(.02,.02,'Подразделение'))
+        self.assertIn("grc.TypeCoeff))='Директора'",sql)
+
+    def test_curator_missing_plan_keeps_internal_director_type(self):
+        patched=rules.patch(SOURCE.replace("N'Политики'","N'Директора'"))
+        sql=rules.for_curator(patched)
+        self.assertIn("SELECT TOP(1) CASE WHEN gr.TypeCoeff=N'Кураторы' THEN N'Директора' ELSE gr.TypeCoeff END",sql)
+
+    def test_curator_batch_remaps_group_rule_lookup_only(self):
+        from .test_curators import CuratorSQLTests
+        from .services.curator_sql import pair_batch
+        source=CuratorSQLTests.definition(self)+"\n-- __PORTAL_GROUP_RULES__\nSELECT gr.Formula FROM motivation.PortalPlanningGroupRules gr WHERE gr.TypeCoeff=N'Директора' AND gr.Subdivision=N'Д-Москва';"
+        sql=pair_batch(source)
+        self.assertIn("gr.TypeCoeff=CASE WHEN (N'Директора')=N'Директора' THEN N'Кураторы'",sql)
+        self.assertIn("UPDATE #curator_coeff SET TypeCoeff=N'Директора'",sql)
+
 
 class GroupRuleVersionTests(TestCase):
     def setUp(self):
@@ -98,6 +119,20 @@ class GroupRuleVersionTests(TestCase):
         response=self.client.post(url,data)
         self.assertEqual(response.status_code,302)
         self.version.refresh_from_db();self.assertEqual(self.version.planning_rules[0]['k0'],'0.005')
+
+    def test_all_types_save_together_replace_existing_and_preserve_other_groups(self):
+        other={**RULE,'planning':'1. RAC'}
+        self.version.planning_rules=[dict(RULE,subdivision='',kind='Продажи',missing='error'),other];self.version.save()
+        response=self.client.post(reverse('motivation_planning_group_rules'),dict(RULE,subdivision='',kind='all',version=self.version.pk,revision=0))
+        self.assertEqual(response.status_code,302)
+        self.version.refresh_from_db()
+        selected=[r for r in self.version.planning_rules if r['subdivision']=='' and r['planning']=='3. PROF']
+        self.assertEqual({r['kind'] for r in selected},set(rules.KINDS))
+        self.assertEqual(len(selected),4)
+        self.assertTrue(all(r['missing']=='minimum' for r in selected))
+        self.assertIn(other,self.version.planning_rules)
+        self.assertEqual(self.version.revision,1)
+        rules.validate(self.version.planning_rules)
 
     def test_compiler_supports_actual_procedure_and_private_frozen_rules(self):
         from .test_shareholder_regions import RegionalSQLTests

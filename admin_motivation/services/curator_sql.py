@@ -38,6 +38,8 @@ def pair_batch(definition,variant='all_2026',*,original_rules=False,group_table=
         # Undo the transition-only Moscow rate lookup for the curator's own rates.
         source=re.sub(r"COALESCE\(\(SELECT TOP \(1\) m.TargetName FROM DataWH.motivation.PortalSubdivisionMerge m WHERE m.SourceName=(\w+\.SubdivisionName)\),\1\)",r'\1',source,flags=re.I)
     batch=private_sql(source,'combined',uuid4(),original_rules=original_rules,group_table=group_table)
+    from .planning_group_rules import for_curator
+    batch=for_curator(batch)
     batch=batch.replace(ALLOCATION_SQL,'SELECT * INTO #share_transformed FROM #portal_motivation_sales;\n')
     batch=batch.replace("SELECT * INTO #share_subdivisions FROM dbo.Subdivisions WHERE SubdivisionName IN(N'Д-Москва',N'ТЕРМОТРЕЙД');",
         'SELECT s.* INTO #share_subdivisions FROM dbo.Subdivisions s JOIN #curator_request r ON r.Subdivision=s.SubdivisionName;')
