@@ -147,6 +147,10 @@ def present(kind, data, ledger=None, period='all'):
                 else:
                     display_targets.append(display)
             result['remaining_targets'].append({**row, 'title': title, 'targets': targets, 'display_targets': display_targets})
+    if kind not in ('mine','detail'):
+        from .team_target_layout import coefficient_cards
+        result['remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] != 'По коэффициентам'] + coefficient_cards(
+            [row for row in result['remaining_targets'] if row['title'] == 'По коэффициентам'])
     result['department_remaining_targets'] = [row for row in result['remaining_targets'] if row['title'] == 'Всё подразделение']
     for section in result['team_sections']:
         section['remaining_targets'] = [row for row in result['remaining_targets']
@@ -252,17 +256,21 @@ def personal_details(ledger, query, *, period_codes=None):
         for index, label in enumerate(data['periods']):
             block = data['detail_totals'][index]
             plan, fact, ratio = block[14:17]
+            personal_target=data.get('personal_plan_targets',{}).get(period_code(label))
+            if personal_target:plan,fact,ratio=(personal_target[key] for key in ('plan','fact','ratio'))
             remaining = max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None else None
             first_quarter = period_code(label) == '1'
             goals.append({'period': display_period(label), 'kind': kind, 'branch':section.get('branch',''), 'plan': plan, 'fact': fact, 'ratio': ratio,
                 'remaining': remaining, 'first_quarter': first_quarter,
                 'threshold_remaining': max(plan * ledger['payout_threshold'] - fact, ZERO) if not first_quarter and plan is not None and plan > 0 and fact is not None and ledger.get('payout_threshold') is not None else None,
-                'global_scope': data.get('global_subdivision_mode', False), 'threshold': ledger.get('payout_threshold'),
+                'personal_plan':bool(personal_target),'global_scope':False if personal_target else data.get('global_subdivision_mode', False), 'threshold': ledger.get('payout_threshold'),
                 'under_threshold': not first_quarter and ratio is not None and ledger.get('payout_threshold') is not None and ratio < ledger['payout_threshold'],
                 'progress': min(max(ratio * 100, ZERO), Decimal(100)) if ratio is not None else ZERO,
                 'possible': block[13], 'calculated': block[17], 'bonus': block[18], 'reward_at_target': None,
                 'reward_reason': 'Выполнение считается по всему подразделению, а личная премия зависит от будущих личных отгрузок, товаров и ступеней скидки. Эти данные пока неизвестны.' if data.get('global_subdivision_mode') else 'В сохранённом расчёте нет отдельного прогноза премии при 100%. Для него нужно знать структуру будущих личных продаж и ставок.',
                 'gap': max(block[13] - block[17], ZERO) if block[13] is not None else None})
+            if personal_target:
+                goals[-1]['reward_reason']='Показан распределённый личный план. Для прогноза премии при 100% нужны будущие отгрузки, ставки и выполнение остальных условий выплаты.'
         def matrix_metrics(blocks):
             result = []
             for index, label in enumerate(data['periods']):

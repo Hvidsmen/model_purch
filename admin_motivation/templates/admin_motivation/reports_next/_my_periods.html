@@ -1,6 +1,6 @@
 {% load report_format %}
-<div class="nr-section-title"><h2 id="my-premium-periods" tabindex="-1">{% if employee_report %}Премия сотрудника по периодам{% else %}Ваша премия по периодам{% endif %}</h2><span>С учётом условий выполнения</span></div>
-<div class="nr-card-grid nr-with-total nr-personal-cards">
+<div class="nr-section-title"><h2 id="my-premium-periods" tabindex="-1">{% if multiple_authors %}Премии выбранных сотрудников по периодам{% elif employee_report %}Премия сотрудника по периодам{% else %}Ваша премия по периодам{% endif %}</h2><span>С учётом условий выполнения</span></div>
+<div class="nr-card-grid nr-with-total nr-personal-cards{% if shareholder_report %} nr-personal-horizontal{% endif %}"{% if shareholder_report %} style="--nr-period-card-count:{{ presentation.period_cards|length|add:'1' }}"{% endif %}>
 {% for card in presentation.period_cards %}
 <article class="nr-period"><div class="nr-period-head"><span>{% if card.label == "Год" %}Годовая премия{% else %}Премия за {{ card.label }}{% endif %}</span><span class="nr-status">Рассчитано</span></div>
 <strong>{{ card.amount|report_cash }} {{ ledger.currency }}</strong>

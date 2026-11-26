@@ -10,6 +10,8 @@ from .reports_next import period_code
 KINDS={'Политики':'pol','Продажи':'sales','Директора':'dir','Кураторы':'cur'}
 TITLES={'team':'Премии команды','mine':'Моя премия','detail':'Детальный расчёт','deals':'Факт закрытых сделок','registry':'Реестр','executive':'Обзор для генерального директора'}
 ZERO=Decimal(0)
+OPTION_FIELDS=dict(subdivision='Подразделение',author='АвторСделки',planning='ГруппаПлановПродаж',goods='ГруппаТоваров',brand='Марка')
+OPTIONS_KEY='report_filter_options_v2'
 
 
 def records(run,dataset):
@@ -30,19 +32,28 @@ def records(run,dataset):
 
 def options(run):
     from django.core.cache import cache
-    cache_key=f'shareholder-options-v1:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at else None
+    stored=run.metadata.get(OPTIONS_KEY) if run.state=='completed' else None
+    if isinstance(stored,dict) and isinstance(stored.get('author_subdivisions'),dict) and all(isinstance(stored.get(key),list) for key in OPTION_FIELDS):return stored
+    cache_key=f'shareholder-options-v2:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at else None
     if cache_key:
         saved=cache.get(cache_key)
         if saved is not None:return saved
     values={key:set() for key in ('subdivision','author','planning','goods','brand')}
-    fields=dict(subdivision='Подразделение',author='АвторСделки',planning='ГруппаПлановПродаж',goods='ГруппаТоваров',brand='Марка')
+    fields=OPTION_FIELDS;author_subdivisions=defaultdict(set)
     for tag in KINDS.values():
         for row in records(run,'report_'+tag):
             if period_code(row['КварталМотивации']) not in [*map(str,run.quarters),'5']:continue
+            if row.get('АвторСделки') and row.get('Подразделение'):
+                author_subdivisions[row['АвторСделки']].add(row['Подразделение'])
             for key,field in fields.items():
                 if row.get(field):values[key].add(row[field])
     result={field:sorted(value) for field,value in values.items()}
+    result['author_subdivisions']={author:sorted(author_subdivisions[author]) for author in result['author']}
     if cache_key:cache.set(cache_key,result,3600)
+    if run.state=='completed':
+        from ..models import ShareholderCalculation
+        run.metadata={**run.metadata,OPTIONS_KEY:result}
+        ShareholderCalculation.objects.filter(pk=run.pk,state='completed').update(metadata=run.metadata)
     return result
 
 
@@ -100,17 +111,31 @@ def data_for(run,query,*,detailed=True):
     sections=[];rows=[];performance=[];department=[]
     for kind in kinds:
         tag=KINDS[kind]
-        raw=list(records(run,'report_'+tag))
-        if original_rules:raw=attach(raw,records(run,'eligibility_'+tag),curator=tag=='cur')
-        source=multipliers.apply([row for row in raw if period_code(row['КварталМотивации']) in periods])
         search=query.get('search','').strip().casefold()
-        filtered=[dict(row,ТипКоэф=kind) for row in source if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
+        # Annual catch-up needs all periods for the selected identity/products.
+        # Department performance still needs all authors/products in the branch.
+        raw=[row for row in records(run,'report_'+tag)
+             if not query.getlist('subdivision') or row.get('Подразделение') in query.getlist('subdivision')]
+        source=multipliers.apply([row for row in raw if period_code(row['КварталМотивации']) in periods])
+        selected=[row for row in raw if matches(row,query) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
+        if original_rules:
+            identities={(r.get('Подразделение'),r.get('АвторСделки'),r.get('Год')) for r in selected}
+            eligibility=(r for r in records(run,'eligibility_'+tag)
+                         if (r.get('Подразделение'),r.get('АвторСделки'),r.get('Год')) in identities)
+            selected=attach(selected,eligibility,curator=tag=='cur')
+        filtered=multipliers.apply([dict(row,ТипКоэф=kind) for row in selected if period_code(row['КварталМотивации']) in periods])
         if detailed:
             data=manager_detail_report(filtered,currency,performance_rows=source)
         else:
             from .first_quarter_inputs import normalize
             from .manager_detail import period_motivation_summary
             data={'period_summary':period_motivation_summary(normalize(filtered),currency),'currency':currency}
+        from .shareholder_regions import enabled as regional_enabled,REGIONS
+        if detailed and kind=='Политики' and regional_enabled(run):
+            personal_source=[row for row in raw if matches(row,query,products=False) and (not search or search in str(row.get('АвторСделки') or '').casefold())]
+            if personal_source and all(row.get('Подразделение') in REGIONS for row in personal_source):
+                from .shareholder_personal_targets import targets
+                data['personal_plan_targets']=targets(personal_source,periods)
         perf=filtered_performance(filtered,records(run,'perf_'+tag))
         contexts={(r['Подразделение'],str(r['Год']),r['КварталМотивации']) for r in filtered}
         dept=[row for row in records(run,'dept_'+tag) if (row['Подразделение'],str(row['Год']),row['КварталМотивации']) in contexts]

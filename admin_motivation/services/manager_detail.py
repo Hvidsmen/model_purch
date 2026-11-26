@@ -129,6 +129,11 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
         rows = pilot_rows(rows)
         if performance_rows is not None:
             performance_rows = pilot_rows(performance_rows)
+    execution_index=defaultdict(list);annual_execution_index=defaultdict(list)
+    for row in performance_rows or []:
+        key=(row.get('Подразделение'),str(row.get('Год')),str(row.get('КварталМотивации') or '').strip())
+        execution_index[key].append(row)
+        if key[2].casefold()=='год':annual_execution_index[key[:2]].append(row)
     years = sorted({str(row['Год']) for row in rows if row.get('Год') is not None})
     year_scopes = {str(row.get('Год')) for row in rows}
     def period(row):
@@ -156,13 +161,10 @@ def manager_detail_report(rows, currency='USD', performance_rows=None, pilot=Fal
             expected = {(sub, year, str(raw_period).strip()) for sub, year in scopes}
         if overall:
             scopes = {(sub, year) for sub, year, _ in expected}
-            department = [row for row in performance_rows or [] if
-                (row.get('Подразделение'), str(row.get('Год'))) in scopes and
-                str(row.get('КварталМотивации') or '').strip().casefold() == 'год']
+            department = [row for scope in scopes for row in annual_execution_index.get(scope,())]
             complete = {(row.get('Подразделение'), str(row.get('Год'))) for row in department} == scopes
         else:
-            department = [row for row in performance_rows or [] if
-                (row.get('Подразделение'), str(row.get('Год')), str(row.get('КварталМотивации') or '').strip()) in expected]
+            department = [row for scope in expected for row in execution_index.get(scope,())]
             complete = {(row.get('Подразделение'), str(row.get('Год')), str(row.get('КварталМотивации') or '').strip()) for row in department} == expected
         if not department or not complete:
             values[14:17] = [None, None, None]

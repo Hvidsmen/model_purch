@@ -250,7 +250,10 @@ class RegionalRatesTests(TestCase):
         version.refresh_from_db();return version
 
     def test_global_fallback_is_frozen_and_missing_exact_matrix_is_allowed(self):
-        self.make_rates();saved=regions.approved_rates()
+        version=self.make_rates()
+        from django.db.models import QuerySet
+        QuerySet.update(GlobalCoeffVersion.objects.filter(pk=version.pk),fallback_variation='Подразделение(Глобально)')
+        saved=regions.approved_rates()
         self.assertEqual(saved['defaults'][0]['DefaultFormula'],'Подразделение(Глобально)')
         saved['coefficients']=[]
         cursor=Mock();regions.install_rates(cursor,SimpleNamespace(configuration={'regional_rates':saved}))

@@ -67,6 +67,16 @@ def save_query(run,cursor,mode,dataset,sql,args=(),kind=None):
             value=dict(zip(fields,row))
             if kind:value['ТипКоэф']=kind
             payload.append(serial(value))
+            if dataset.startswith('report_') and run.scenario=='combined':
+                from .shareholder_reports import OPTION_FIELDS,period_code
+                if period_code(value.get('КварталМотивации','')) in [*map(str,run.quarters),'5']:
+                    choices=getattr(run,'_report_options',None)
+                    if choices is None:choices={key:set() for key in OPTION_FIELDS};run._report_options=choices
+                    if value.get('АвторСделки') and value.get('Подразделение'):
+                        if not hasattr(run,'_author_subdivisions'):run._author_subdivisions={}
+                        run._author_subdivisions.setdefault(str(value['АвторСделки']),set()).add(str(value['Подразделение']))
+                    for key,field in OPTION_FIELDS.items():
+                        if value.get(field):choices[key].add(str(value[field]))
         ShareholderSnapshot.objects.create(calculation=run,mode=mode,dataset=dataset,sequence=sequence,payload=payload)
         sequence+=1;count+=len(payload)
     return count
@@ -112,7 +122,10 @@ def execute(run,connector=None):
             cursor.execute('SELECT OBJECT_DEFINITION(OBJECT_ID(?))','motivation.'+name)
             row=cursor.fetchone();definitions[mode]=row[0] if row else None
         if not definitions['combined']:raise ValidationError('Не установлено задание «Все кварталы 2026». Обновите его через Центр расчётов.')
-        if regions.enabled(run):regions.install_rates(cursor,run)
+        if regions.enabled(run):
+            profiles={regions.uses_native_key_functions(value) for value in definitions.values()}
+            if len(profiles)!=1:raise ValidationError('Установленные процедуры используют разные ключи коэффициентов. Обновите задания расчёта 2026 перед новым запуском.')
+            regions.install_rates(cursor,run,definitions['combined'])
         progress(run,'Определение долей авторов по исходным подразделениям')
         weights=prepare_mapping(cursor,run)
         cursor.execute('''CREATE TABLE #share_parameters(FactYear int,PlanVersion nvarchar(500),QuarterShare decimal(9,8),YearShare decimal(9,8),PayoutThreshold decimal(9,8),Cutoff date);''')
@@ -184,6 +197,10 @@ def execute(run,connector=None):
         metadata['counts']['combined']['report']+=curator_count
         metadata['curator_rows']=curator_count
         if not any(item['report'] for item in metadata['counts'].values()):raise ValidationError('Расчёт не вернул строк. Пустой результат не подставлен.')
+        if hasattr(run,'_report_options'):
+            from .shareholder_reports import OPTIONS_KEY
+            metadata[OPTIONS_KEY]={key:sorted(values) for key,values in run._report_options.items()}
+            metadata[OPTIONS_KEY]['author_subdivisions']={author:sorted(getattr(run,'_author_subdivisions',{}).get(author,())) for author in metadata[OPTIONS_KEY]['author']}
         ShareholderCalculation.objects.filter(pk=run.pk,state='running').update(state='completed',stage='Готово · все отчёты используют один снимок',metadata=serial(metadata),completed_at=timezone.now())
     finally:
         if connection is not None:connection.close()

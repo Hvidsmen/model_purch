@@ -3,11 +3,11 @@
   const checks = [...menu.querySelectorAll('input[type=checkbox]')];
   const update = () => {
    const values = checks.filter(input => input.checked).map(input => input.value);
-   menu.querySelector('[data-product-caption]').textContent = !values.length ? 'Все доступные' : values.length <= 2 ? values.join(', ') : `Выбрано: ${values.length}`;
+   menu.querySelector('[data-product-caption]').textContent = !values.length ? (menu.dataset.emptyCaption || 'Все доступные') : values.length <= 2 ? values.join(', ') : `Выбрано: ${values.length}`;
   };
   checks.forEach(input => input.addEventListener('change', update));
   menu.querySelector('[data-product-all]')?.addEventListener('click', () => {
-   checks.forEach(input => { input.checked = true; }); update();
+   checks.forEach(input => { input.checked = !input.disabled; }); update();
    menu.dispatchEvent(new Event('change', {bubbles: true}));
   });
   menu.querySelector('[data-product-clear]').addEventListener('click', () => {
@@ -16,7 +16,7 @@
   });
   menu.querySelector('[data-product-search]').addEventListener('input', event => {
    const text = event.target.value.trim().toLocaleLowerCase('ru');
-   checks.forEach(input => { input.closest('label').hidden = !input.value.toLocaleLowerCase('ru').includes(text); });
+   checks.forEach(input => { input.closest('label').hidden = input.disabled || !input.value.toLocaleLowerCase('ru').includes(text); });
   });
   menu.addEventListener('keydown', event => {
    if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary').focus(); }
