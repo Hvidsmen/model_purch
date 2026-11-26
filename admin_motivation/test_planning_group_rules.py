@@ -99,6 +99,20 @@ class GroupRuleVersionTests(TestCase):
         self.assertEqual(response.status_code,302)
         self.version.refresh_from_db();self.assertEqual(self.version.planning_rules[0]['k0'],'0.005')
 
+    def test_all_types_save_together_replace_existing_and_preserve_other_groups(self):
+        other={**RULE,'planning':'1. RAC'}
+        self.version.planning_rules=[dict(RULE,subdivision='',kind='Продажи',missing='error'),other];self.version.save()
+        response=self.client.post(reverse('motivation_planning_group_rules'),dict(RULE,subdivision='',kind='all',version=self.version.pk,revision=0))
+        self.assertEqual(response.status_code,302)
+        self.version.refresh_from_db()
+        selected=[r for r in self.version.planning_rules if r['subdivision']=='' and r['planning']=='3. PROF']
+        self.assertEqual({r['kind'] for r in selected},set(rules.KINDS))
+        self.assertEqual(len(selected),3)
+        self.assertTrue(all(r['missing']=='minimum' for r in selected))
+        self.assertIn(other,self.version.planning_rules)
+        self.assertEqual(self.version.revision,1)
+        rules.validate(self.version.planning_rules)
+
     def test_compiler_supports_actual_procedure_and_private_frozen_rules(self):
         from .test_shareholder_regions import RegionalSQLTests
         from .services.shareholder_sql import private_sql

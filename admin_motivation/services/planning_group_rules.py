@@ -7,6 +7,7 @@ from django.db import transaction
 from .pilot_formula import mask_sql,closing
 
 FORMULAS=('Группа планов продаж','Группа товаров','Марка(Бренд)','Подразделение','Подразделение(Глобально)')
+KINDS=('Политики','Продажи','Директора')
 METHODS=(('auto','Текущий автоматический подбор'),('minimum','Минимум внутри группы'),('fixed','Заданные K0–K4'),('error','Не рассчитывать без точной ставки'))
 TABLE='motivation.PortalPlanningGroupRules'
 TABLE_SQL='''IF OBJECT_ID(N'motivation.PortalPlanningGroupRules',N'U') IS NULL
@@ -22,7 +23,7 @@ def validate(rows):
     for row in rows:
         if not isinstance(row,dict):raise ValidationError('Некорректное правило группы.')
         if row.get('formula','') not in ('',*FORMULAS) or row.get('missing') not in dict(METHODS):raise ValidationError('Выберите формулу и способ подбора.')
-        if row.get('kind') not in ('Политики','Продажи','Директора'):raise ValidationError('Выберите вид коэффициента.')
+        if row.get('kind') not in KINDS:raise ValidationError('Выберите вид коэффициента.')
         if not str(row.get('planning') or '').strip():raise ValidationError('Укажите группу планов продаж.')
         for field in ('subdivision','planning'):
             if not isinstance(row.get(field,''),str) or len(row.get(field,''))>255:raise ValidationError('Некорректное название группы или подразделения.')
@@ -45,9 +46,11 @@ def save(actor,version_id,revision,row,delete=False):
     if not can_access(actor,'motivation_editor'):raise PermissionDenied
     version=lock_editable(version_id)
     if str(version.revision)!=str(revision):raise ValidationError('Версия изменилась. Обновите страницу.')
-    validate([row]);key=lambda r:tuple(str(r.get(k,'')).strip().casefold() for k in ('subdivision','kind','planning'))
-    rows=[r for r in version.planning_rules if key(r)!=key(row)]
-    if not delete:rows.append(row)
+    incoming=[dict(row,kind=kind) for kind in KINDS] if row.get('kind')=='all' else [row]
+    validate(incoming);key=lambda r:tuple(str(r.get(k,'')).strip().casefold() for k in ('subdivision','kind','planning'))
+    keys={key(r) for r in incoming}
+    rows=[r for r in version.planning_rules if key(r) not in keys]
+    if not delete:rows.extend(incoming)
     validate(rows);version.planning_rules=rows;version.save(update_fields=['planning_rules'])
     GlobalCoeffVersion.objects.filter(pk=version.pk).update(revision=version.revision+1)
     version.refresh_from_db();return version
