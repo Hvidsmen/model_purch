@@ -60,3 +60,9 @@
 .content-wrapper .nr-page .nr-matrix-floating[hidden]{display:none!important}
 .content-wrapper .nr-page .nr-matrix-floating .nr-matrix-inner{padding-top:0;padding-bottom:0}
 @media print{.content-wrapper .nr-page .nr-matrix-floating{display:none!important}}
+
+/* Keep quarterly, annual and total premiums on one horizontal axis. */
+.content-wrapper .nr-page .nr-personal-periods-row{grid-template-columns:repeat(var(--nr-period-card-count,6),minmax(220px,1fr));overflow-x:auto;align-items:stretch;padding-bottom:6px}
+.content-wrapper .nr-page .nr-personal-periods-row .nr-period-head{flex-wrap:wrap}
+.content-wrapper .nr-page .nr-personal-periods-row .nr-period-line{align-items:flex-start}
+.content-wrapper .nr-page .nr-personal-periods-row .nr-period-line>b{white-space:nowrap}
