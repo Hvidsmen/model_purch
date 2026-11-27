@@ -12,12 +12,12 @@ from .directors import lock_editable
 def norm(value):return re.sub(r'\s+','',str(value or '')).casefold()
 
 
-def rate(value):
+def rate(value,*,precision=6):
     if value is None or isinstance(value,bool):raise ValidationError('Заполните каждую K0–K4: пустое значение не считается нулём.')
     try:
         text=str(value).replace(' ','').replace(',','.')
         value=Decimal(text.rstrip('%'))/(100 if text.endswith('%') else 1)
-        rounded=value.quantize(Decimal('.000001'))
+        rounded=value.quantize(Decimal(1).scaleb(-precision))
         if not value.is_finite() or not -1<=value<=1 or abs(value-rounded)>Decimal('0.000000000001'):raise ValueError
         return str(rounded)
     except (ValueError,InvalidOperation):raise ValidationError('Ставка должна быть от −100% до 100%, до четырёх знаков в процентах.')
@@ -35,6 +35,10 @@ def parse(upload, *, with_scope=False):
     result=[];found=False;scope=[]
     try:
         for sheet in book:
+            from .export_matrix_import import is_matrix,core_sheet
+            if sheet.title=='Подразделения' and is_matrix(sheet):
+                if sheet.max_row>5000 or sheet.max_column>16384 or sheet.max_row*sheet.max_column>2000000:raise ValidationError('Выгрузка слишком большая. Разделите файл.')
+                parsed=core_sheet(sheet);result.extend(parsed['rows']);scope.extend(parsed['scope']);found=True;continue
             if sheet.max_row>2000 or sheet.max_column>256:raise ValidationError('В шаблоне допускается до 2000 строк и 256 колонок.')
             rows=list(sheet.iter_rows(values_only=True));header=None
             for i,row in enumerate(rows):
@@ -86,7 +90,8 @@ def resolve(rows,mappings=None,scope=None):
     mappings=mappings or {};goods=list(Goods.objects.order_by('pk'));branches=list(Subdivision.all_objects.order_by('subdivision_key'))
     good_map={};branch_map={}
     for good in goods:good_map.setdefault(tuple(norm(v) for v in (good.planning_group_sales,good.group,good.brand)),[]).append(good)
-    for branch in branches:branch_map.setdefault(norm(branch.subdivision_key),[]).append(branch)
+    for branch in branches:
+        for name in {norm(branch.subdivision_key),norm(branch.subdivision_name)}:branch_map.setdefault(name,[]).append(branch)
     resolved=[];errors=[];missing_goods={};missing_branches={};seen=set()
     identities={};branch_names={}
     for block in scope or []:
@@ -124,7 +129,9 @@ def apply(version_id,revision,rows,mappings,formula_id,*,scope=None):
     plan=resolve(rows,mappings,scope)
     if not plan['ready']:raise ValidationError('Сначала сопоставьте все подразделения и товарные матрицы; устраните повторения.')
     formula=VariationCalculate.objects.filter(pk=formula_id).first()
-    if not formula:raise ValidationError('Выберите формулу для новых ячеек.')
+    if not formula and any(not row.get('matrix_export') for row in plan['rows']):raise ValidationError('Выберите формулу для новых ячеек.')
+    from .director_formula import resolve as effective_formula
+    formulas={f.variation_name:f for f in VariationCalculate.objects.all()}
     kinds={}
     for name in ('Политики','Продажи'):
         matches=list(TypeCoeff.objects.filter(type_coeff_name=name))
@@ -137,26 +144,36 @@ def apply(version_id,revision,rows,mappings,formula_id,*,scope=None):
             if label in segments:raise ValidationError('В справочнике повторяется сегмент K0–K4.')
             segments[label]=segment
     if len(segments)!=5:raise ValidationError('В справочнике нужны все K0–K4.')
-    existing={(r.subdivision_id,r.goods_id,r.type_coeff_id,r.segment_id):r for r in SubdivisionCoeff.objects.filter(version=version,type_coeff__in=kinds.values())}
+    existing={(r.subdivision_id,r.goods_id,r.type_coeff_id,r.segment_id):r for r in SubdivisionCoeff.objects.filter(version=version,type_coeff__in=kinds.values()).select_related('goods','subdivision','variation_calculate')}
     created=[];updated=[]
     for row in plan['rows']:
         if len(row['rates'])!=5:raise ValidationError('В матрице должны быть K0–K4.')
         for index,raw in enumerate(row['rates']):
-            value=rate(raw)
+            if raw is None and row.get('matrix_export'):continue
+            value=rate(raw,precision=12 if row.get('matrix_export') else 6)
             identity=(row['branch_id'],row['goods_id'],kinds[row['kind']].pk,segments['k'+str(index)].pk)
             cell=existing.get(identity)
+            file_formula=row.get('formulas',[None]*5)[index]
+            selected=formulas.get(file_formula) if file_formula else None
+            if file_formula and not selected:raise ValidationError(f'Не найдена формула «{file_formula}».')
             if cell:
-                if Decimal(str(cell.motivation_coeff))!=Decimal(value):cell.motivation_coeff=float(value);updated.append(cell)
-            else:created.append(SubdivisionCoeff(version=version,subdivision_id=identity[0],goods_id=identity[1],type_coeff_id=identity[2],segment_id=identity[3],motivation_coeff=float(value),manager_coeff=1,variation_calculate=formula))
+                changed=Decimal(str(cell.motivation_coeff))!=Decimal(value)
+                if changed:cell.motivation_coeff=float(value)
+                if selected and file_formula!=effective_formula(version,cell.goods,cell.subdivision.subdivision_key,cell,kind=row['kind'])[0]:cell.variation_calculate=selected;changed=True
+                if changed:updated.append(cell)
+            else:
+                if not selected and not formula:raise ValidationError('Выберите формулу для новых ячеек без формулы в файле.')
+                created.append(SubdivisionCoeff(version=version,subdivision_id=identity[0],goods_id=identity[1],type_coeff_id=identity[2],segment_id=identity[3],motivation_coeff=float(value),manager_coeff=1,variation_calculate=selected or formula))
     if created:SubdivisionCoeff.objects.bulk_create(created,batch_size=100)
-    if updated:SubdivisionCoeff.objects.bulk_update(updated,['motivation_coeff'],batch_size=100)
+    if updated:SubdivisionCoeff.objects.bulk_update(updated,['motivation_coeff','variation_calculate'],batch_size=100)
     return {'created':len(created),'updated':len(updated),'matrices':len(plan['rows'])}
 
 
 
 def branch_coverage(scope,branches,mappings,branch_names):
     known={}
-    for branch in branches:known.setdefault(norm(branch.subdivision_key),[]).append(branch)
+    for branch in branches:
+        for name in {norm(branch.subdivision_key),norm(branch.subdivision_name)}:known.setdefault(name,[]).append(branch)
     present=set();unknown=set();by_kind={kind:set() for kind in ('Политики','Продажи')}
     for block in scope:
         for name in block['branches']:
@@ -185,6 +202,8 @@ def has_subdivision_blocks(upload):
             if sum(item.file_size for item in archive.infolist())>100*1024*1024:return True
         book=load_workbook(BytesIO(content),read_only=True,data_only=True,keep_links=False)
         for sheet in book:
+            from .export_matrix_import import is_matrix
+            if sheet.title=='Подразделения' and is_matrix(sheet):return True
             for index,row in enumerate(sheet.iter_rows(max_row=min(sheet.max_row,2000),max_col=256,values_only=True)):
                 if index>0 and len(row)>3 and norm(row[1])=='группаплановпродаж' and norm(row[2])=='группаerp' and any(norm(v) in ('политики','продажи') for v in row):return True
         return False

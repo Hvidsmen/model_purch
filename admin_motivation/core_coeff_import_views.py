@@ -17,7 +17,7 @@ def targets(plan):return [(r['goods_id'],r['branch_id'],r['kind']) for r in plan
 def page(request,version):
     if not can_access(request.user,'motivation_editor'):raise PermissionDenied
     if version is None:raise Http404('Выберите версию коэффициентов.')
-    data={'selected_version':version,'formulas':VariationCalculate.objects.order_by('pk')}
+    data={'selected_version':version,'formulas':VariationCalculate.objects.order_by('pk'),'requires_formula':True}
     try:
         if request.method=='POST':
             if not version.is_editable:raise ValidationError('Загрузка доступна только в последнем черновике.')
@@ -44,6 +44,7 @@ def page(request,version):
             existing={(r.subdivision_id,r.goods_id,r.type_coeff.type_coeff_name,r.segment.segment_name.upper().replace('O','K')):r.motivation_coeff for r in SubdivisionCoeff.objects.filter(version=version).select_related('type_coeff','segment')}
             for row in plan['rows']:row['before']=[existing.get((row['branch_id'],row['goods_id'],row['kind'],'K'+str(i))) for i in range(5)]
             payload={'actor':request.user.pk,'version':version.pk,'revision':version.revision,'rows':rows,'scope':scope,'mappings':mappings,'targets':targets(plan)}
+            data['requires_formula']=any(not row.get('matrix_export') or any(value is not None and not row.get('formulas',[None]*5)[i] for i,value in enumerate(row['rates'])) for row in rows)
             data.update(plan,preview_token=signing.dumps(payload,salt=SALT,compress=True),preview=True)
     except (ValidationError,signing.BadSignature,ValueError) as exc:
         data['error']='; '.join(exc.messages) if isinstance(exc,ValidationError) else 'Предварительный просмотр устарел или повреждён. Загрузите файл заново.'
