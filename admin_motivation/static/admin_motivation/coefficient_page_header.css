@@ -2,6 +2,6 @@
 .content-wrapper .table-wrapper.coefficient-page-scroll{max-height:none;height:auto;overflow-x:auto;overflow-y:hidden}
 .content-wrapper .coefficient-page-scroll thead th{position:static;top:auto}
 .content-wrapper .coefficient-page-scroll thead th[rowspan]{position:sticky;top:auto}
-.coefficient-page-floating{position:fixed;z-index:45;overflow:hidden;background:white;box-shadow:0 3px 8px #25375526;pointer-events:auto}
+.coefficient-page-floating{position:fixed;z-index:39;overflow:hidden;background:white;box-shadow:0 3px 8px #25375526;pointer-events:auto}
 .coefficient-page-floating[hidden]{display:none!important}
 @media print{.coefficient-page-floating{display:none!important}}
