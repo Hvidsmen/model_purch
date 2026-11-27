@@ -78,3 +78,27 @@ class PremiumForecastTests(SimpleTestCase):
         self.assertEqual(display['possible'],D(100))
         self.assertEqual(display['forecast_100']['quarter'],D(200))
         self.assertEqual(display['forecast_100']['annual'],D(60))
+
+    def test_employee_forecasts_reconcile_with_kind_and_all_pages_total(self):
+        from .services.reports_next_presenter import present
+        from .test_quarter_totals import premium as ledger_row
+        from django.core.paginator import Paginator
+        rows=[]
+        for author,amount in [('One',D(100)),('Two',D(50))]:
+            row=ledger_row('2','Политики','0',author=author,branch='Д-Питер')
+            row.update(possible=amount,annual_accrual=amount/D(4));rows.append(row)
+        ledger=dict(shareholder_forecast=True,rows=rows,total=D(0),kinds=['Политики'],currency='USD',coefficient_plan_fact=[base()])
+        display=present('team',ledger,ledger,['2'])
+        section=display['team_sections'][0]
+        self.assertEqual([r['forecast_100']['quarter'] for r in section['rows']],[D(200),D(100)])
+        self.assertEqual(section['forecast_100']['quarter'],D(300))
+        self.assertEqual(section['forecast_100']['annual'],D(75))
+        self.assertEqual(section['period_summary_cells'][0]['forecast_100']['quarter'],D(300))
+        self.assertEqual(display['registry_rows'][0]['period_cells'][0]['forecast_100']['annual'],D(50))
+        section['page']=Paginator(section['rows'],1).page(1)
+        html=render_to_string('admin_motivation/reports_next/_team_tables.html',dict(presentation=display,ledger=ledger,kind='team',shareholder_report=True,shareholder_original_rules=True))
+        self.assertIn('При 100% плана · квартальная часть',html)
+        self.assertIn('При 100% плана · в годовую премию',html)
+        self.assertIn('300,00',html)
+        self.assertIn('75,00',html)
+        self.assertEqual(section['forecast_100']['quarter'],display['forecast_100']['quarter'])
