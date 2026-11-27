@@ -16,5 +16,15 @@
  dialog.addEventListener('close',()=>{frame.src='about:blank';});
  window.addEventListener('message',event=>{if(event.origin!==location.origin||event.source!==frame.contentWindow)return;if(event.data?.closingClose)dialog.close();if(event.data?.closingSaved){const pending={};document.querySelectorAll('.pw-grid input[name^="coefficient_"]').forEach(input=>{if(input.value!==input.dataset.initialValue&&input.name!=='coefficient_'+dialog.dataset.branch)pending[input.name]=input.value;});sessionStorage.setItem('closing-unsaved:'+location.pathname+location.search,JSON.stringify(pending));location.reload();}});
  try{const key='closing-unsaved:'+location.pathname+location.search;const pending=JSON.parse(sessionStorage.getItem(key)||'{}');sessionStorage.removeItem(key);Object.entries(pending).forEach(([name,value])=>{const input=document.getElementsByName(name)[0];if(input&&!input.disabled){input.value=value;input.dispatchEvent(new Event('input',{bubbles:true}));}});}catch{}
+ document.querySelectorAll('[data-confirm-coefficient]').forEach(form=>{
+  const button=form.querySelector('button'),input=document.getElementsByName('coefficient_'+form.dataset.confirmCoefficient)[0],rowStatus=form.querySelector('[data-row-confirm-status]');if(!input||input.disabled)return;button.disabled=false;
+  form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;rowStatus.textContent='Подтверждаем…';
+   const data=new FormData(form);data.set('coefficient',input.value);
+   try{const response=await fetch(location.href,{method:'POST',body:data,credentials:'same-origin'});if(!response.headers.get('content-type')?.includes('application/json'))throw Error('Не удалось подтвердить. Обновите страницу и повторите.');const result=await response.json();if(!response.ok)throw Error(result.error||'Проверьте множитель.');
+    const pending={};document.querySelectorAll('.pw-grid input[name^="coefficient_"]').forEach(other=>{if(other!==input&&!other.disabled&&other.value!==other.dataset.initialValue)pending[other.name]=other.value;});
+    sessionStorage.setItem('closing-unsaved:'+location.pathname+location.search,JSON.stringify(pending));location.reload();
+   }catch(error){rowStatus.textContent=error.message;button.disabled=false;}
+  });
+ });
  currency.addEventListener('change',()=>{const url=new URL(location.href);url.searchParams.set('closing_currency',currency.value);history.replaceState(null,'',url);refresh();});document.querySelector('[data-closing-refresh]')?.addEventListener('click',refresh);refresh();
 })();
