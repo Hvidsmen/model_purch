@@ -34,10 +34,9 @@
 })();
 
 
-// Put the employee picker in the browser's top layer, outside clipping panels.
+// All report pickers use the browser's top layer, outside clipping panels.
 (() => {
- const details=document.querySelector('.nr-author-filter');
- if (!details) return;
+ document.querySelectorAll('.nr-shareholder-filters .next-branches').forEach(details=>{
  const menu=details.querySelector('.next-branch-options');
  const caption=details.querySelector('summary');
  const supported=typeof menu.showPopover==='function';
@@ -57,11 +56,15 @@
  };
  details.addEventListener('toggle',()=>{
   if (!supported) return;
-  if (details.open) {menu.showPopover();position();}
+  if (details.open) {
+   document.querySelectorAll('.nr-shareholder-filters .next-branches[open]').forEach(other=>{if(other!==details) other.open=false;});
+   menu.showPopover();position();
+  }
   else if (menu.matches(':popover-open')) menu.hidePopover();
  });
  window.addEventListener('resize',position);
  window.addEventListener('scroll',position,true);
  document.addEventListener('click',event=>{if (details.open&&!details.contains(event.target)) details.open=false;});
  details.addEventListener('keydown',event=>{if(event.key==='Escape'){details.open=false;caption.focus();event.preventDefault();}});
+ });
 })();
