@@ -79,6 +79,19 @@ def comparisons(request):
     try:
         year,period,currency = selection(request.GET)
         rows,execution = baseline(year,period,currency)
+        from .services.closing_plan_fact import load, shares
+        plan_fact_error=''
+        try:
+            plan_fact=load(execution,period)
+        except Exception:
+            logging.getLogger(__name__).exception('CEO department plan/fact unavailable')
+            plan_fact={}
+            plan_fact_error='План и факт недоступны; доли от факта не рассчитаны.'
+        usd_rows=rows
+        if currency!='USD':
+            usd_rows,usd_execution=baseline(year,period,'USD')
+            if usd_execution.pk!=execution.pk:
+                raise ValidationError('Расчёт изменился. Обновите суммы.')
         records = {r.subdivision.subdivision_key:r for r in PeriodMotivationCoefficient.objects.filter(year=year,period=period).select_related('subdivision')}
         branches = Subdivision.objects.all()
         result = {}
@@ -88,7 +101,12 @@ def comparisons(request):
             comparison = details.impact(source, record.coefficient if record else 1,
                                         record.kind_coefficients if record else {}, record.personal_coefficients if record else {})
             result[str(branch.pk)] = {key:comparison[key] for key in ('before','after','change','coefficient','percent')}
-        return JsonResponse(dict(rows=result, currency=currency, execution=str(execution.run_id)))
+            values=plan_fact.get(branch.subdivision_key.casefold(),{})
+            usd_comparison=comparison if currency=='USD' else details.impact(
+                [r for r in usd_rows if r['branch'].casefold()==branch.subdivision_key.casefold()],
+                record.coefficient if record else 1,record.kind_coefficients if record else {},record.personal_coefficients if record else {})
+            result[str(branch.pk)].update(plan=values.get('plan'),fact=values.get('fact'),**shares(usd_comparison,values))
+        return JsonResponse(dict(rows=result, currency=currency, execution=str(execution.run_id),plan_fact_currency='USD',plan_fact_error=plan_fact_error))
     except ValidationError as exc:
         return JsonResponse({'error':' '.join(exc.messages)}, status=400)
     except Exception:
