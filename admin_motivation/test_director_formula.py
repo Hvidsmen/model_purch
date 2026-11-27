@@ -77,7 +77,7 @@ class DirectorFormulaTests(TestCase):
         self.assertEqual(SubdivisionDirectorCoeff.objects.get(version=draft,subdivision=self.sub,employee=self.other_director).variation_calculate,self.formula)
 
     @patch('admin_motivation.services.calculation_jobs.prepare')
-    def test_export_uses_explicit_formula_and_legacy_defaults_for_others(self, prepare):
+    def test_export_uses_explicit_formula_and_inherits_core_for_others(self, prepare):
         self.apply(subdivision_id=self.sub.pk,employee_id=self.director.pk)
         approve_review(review_approval(GlobalCoeffVersion.objects.get(pk=self.first.pk))['token'])
         connection,cursor = Mock(),Mock()
@@ -86,7 +86,7 @@ class DirectorFormulaTests(TestCase):
         first = [row for row in rows if row[7]==self.director.employee_code and row[1]==self.sub.subdivision_key]
         self.assertEqual(len(first),5)
         self.assertTrue(all(row[5]==self.formula.variation_name for row in first))
-        self.assertTrue(all(row[5]=='Подразделение' for row in rows if row[7]==self.other_director.employee_code))
+        self.assertTrue(all(row[5]==self.local_coeff.variation_calculate.variation_name for row in rows if row[7]==self.other_director.employee_code))
         prepare.assert_called_once_with(cursor)
 
     def test_post_preserves_selected_director_in_redirect(self):
@@ -96,3 +96,28 @@ class DirectorFormulaTests(TestCase):
         self.assertIn(f'employee={self.director.pk}',response.url)
         self.local.refresh_from_db()
         self.assertEqual(self.local.variation_calculate,self.formula)
+
+    def test_director_inherits_saved_branch_goods_formula_in_ui_and_excel(self):
+        from io import BytesIO
+        from openpyxl import load_workbook
+        from .services.coefficient_groups import coefficient_matrix
+        from .services.director_coeff_export import director_coefficients_workbook
+        formula=VariationCalculate.objects.get_or_create(variation_name='Группа планов продаж')[0]
+        self.local_coeff.variation_calculate=formula;self.local_coeff.save()
+        self.first.refresh_from_db();self.first.fallback_variation='Подразделение(Глобально)';self.first.save()
+        matrix=coefficient_matrix(self.first,self.sub,self.director)
+        goods=[g for groups in matrix.values() for values in groups.values() for g in values]
+        self.assertEqual(next(g for g in goods if g.pk==self.good.pk).director_default_formula,'Группа планов продаж')
+        book=load_workbook(BytesIO(director_coefficients_workbook(self.first,subdivision=self.sub,employee=self.director)))
+        self.assertEqual(book.active['J5'].value,'Группа планов продаж');book.close()
+        self.local.refresh_from_db();self.assertIsNone(self.local.variation_calculate_id);self.assertEqual(self.local.k0,Decimal('.02'))
+        self.local.variation_calculate=self.formula;self.local.save();self.first.refresh_from_db()
+        book=load_workbook(BytesIO(director_coefficients_workbook(self.first,subdivision=self.sub,employee=self.director)))
+        self.assertEqual(book.active['J5'].value,'Подразделение(Глобально)');book.close()
+
+    def test_inherited_formula_is_scoped_to_goods_and_branch(self):
+        from .services.director_formula import resolve
+        self.first.fallback_variation='Подразделение(Глобально)';self.first.save()
+        self.assertEqual(resolve(self.first,self.good,self.sub.subdivision_key,self.local)[0],self.local_coeff.variation_calculate.variation_name)
+        SubdivisionCoeff.objects.filter(version=self.first,subdivision=self.other).delete()
+        self.assertEqual(resolve(self.first,self.good,self.other.subdivision_key,self.branch)[0],'Подразделение(Глобально)')

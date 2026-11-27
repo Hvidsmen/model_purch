@@ -13,6 +13,8 @@ def selected_groups(values, default=('policies', 'sales')):
 
 
 def coefficient_matrix(version, subdivision=None, employee=None):
+    from .director_formula import resolve,rule_for,core_formulas
+    inherited=core_formulas(version) if subdivision else {}
     matrix = SubdivisionCoeff.get_matrix_str(subdivision, version) if subdivision else (GlobalCoeff.get_matrix_str(version) if version else {})
     model = SubdivisionDirectorCoeff if subdivision else GlobalDirectorCoeff
     scope = {'subdivision': subdivision, 'employee': employee} if subdivision else {}
@@ -43,11 +45,12 @@ def coefficient_matrix(version, subdivision=None, employee=None):
                 good.has_core_coefficients = any(cell is not None for group in goods[good] for cell in group)
                 row = directors.get(good.pk)
                 good.director_formula_id = row.variation_calculate_id if row else None
-                from .director_formula import resolve,rule_for
                 branch=subdivision.subdivision_key if subdivision else ''
-                good.director_default_formula=resolve(version,good,branch)[0]
+                try:good.director_default_formula=resolve(version,good,branch,inherited=inherited)[0]
+                except ValidationError:good.director_default_formula='Разные формулы товара — выберите формулу директора'
                 good.director_rule_formula=rule_for(version,good,branch).get('formula','')
-                good.director_formula_label=resolve(version,good,branch,row)[0] if row else ''
+                try:good.director_formula_label=resolve(version,good,branch,row,inherited=inherited)[0] if row else ''
+                except ValidationError:good.director_formula_label='Разные формулы товара — выберите формулу директора'
                 good.director_cells = [{'index': i, 'exists': row is not None, 'global_value': getattr(global_directors[good.pk], f'k{i}') if good.pk in global_directors else None, 'value': getattr(row, f'k{i}') if row else Decimal(0)} for i in range(5)]
     return matrix
 
