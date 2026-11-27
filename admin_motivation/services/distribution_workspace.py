@@ -22,6 +22,8 @@ def registry(user, year, period, batches, grid=None, archived=False):
         if batch.subdivision_id not in present:
             subdivisions.append(batch.subdivision);present.add(batch.subdivision_id)
     from .closing_return import pending
+    from .fao_review import readiness
+    fao_ready=readiness(subdivisions,year,period)
     rows = []
     for branch in subdivisions:
         matching = by_branch.get(branch.pk, [])
@@ -31,8 +33,10 @@ def registry(user, year, period, batches, grid=None, archived=False):
             record = coefficients.get(branch.pk)
             stage = batch.source.get('workflow', {}).get('stage', 'sales') if batch else None
             label = 'Завершено' if batch and batch.state == 'completed' else 'Архив' if archived else 'Ребаланс директоров' if stage == 'directors' else 'Ребаланс политиков' if stage == 'policies' else 'Продажи' if batch else 'Готово к распределению' if record else 'Ожидает множителя'
+            fao_waiting=not fao_ready.get(branch.pk,True)
             awaiting = pending(record)
             if awaiting and not batch:label = 'Возвращено гендиректору: подтвердите коэффициенты'
+            if fao_waiting and not archived:label='Проверка ОЗС ФАО'
             values = {}
             for kind, prefix in [('Продажи', 'sales'), ('Политики', 'policies'), ('Директора','directors')]:
                 for currency in ('USD', 'RUB'):
@@ -40,9 +44,9 @@ def registry(user, year, period, batches, grid=None, archived=False):
                     values[prefix+'_'+currency.lower()] = sum((cash(f['amount']) for f in source if f['kind'] == kind), Decimal(0)) if source is not None else None
             rows.append({'branch': branch, 'batch': batch, 'record': record,
                          'field': fields.get(branch.pk, {}).get('field'),
-                         'locked': bool(batch), 'awaiting_confirmation':awaiting, 'stage_label': label,
-                         'can_start': bool(record and not batch and not awaiting), **values})
-    counts = {'waiting': sum(not row['record'] or row['awaiting_confirmation'] for row in rows),
+                         'locked': bool(batch), 'fao_waiting':fao_waiting,'awaiting_confirmation':awaiting, 'stage_label': label,
+                         'can_start': bool(record and not batch and not awaiting and not fao_waiting), **values})
+    counts = {'waiting': sum(not row['record'] or row['awaiting_confirmation'] or row['fao_waiting'] for row in rows),
               'working': sum(bool(row['batch'] and row['batch'].state == 'draft') for row in rows),
               'completed': sum(bool(row['batch'] and row['batch'].state == 'completed') for row in rows)}
     return rows, counts

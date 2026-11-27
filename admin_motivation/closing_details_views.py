@@ -177,6 +177,11 @@ def dialog(request, subdivision_id):
     def with_metrics(value,general,kinds,persons):
         usd=value if currency=='USD' else details.impact(usd_source,general,kinds,persons)
         return closing_detail_metrics.enrich(value,usd,metrics)
+    fao_note=''
+    if execution is not None:
+        from .services.fao_review import ensure_ready
+        try:ensure_ready(branch,year,period,execution)
+        except ValidationError as exc:fao_note=' '.join(exc.messages)
     authors_by_kind={kind:sorted({r['author'] for r in source if details.identity(r['author']) not in ('', '—', '-', details.identity(kind)) and r.get('author_status') != 'unallocated' and r['kind']==kind}
                                | set(record.personal_coefficients.get(kind,{}) if record else {})) for kind in details.PERSONAL}
     for person in people.forms:
@@ -211,4 +216,4 @@ def dialog(request, subdivision_id):
     from .services.closing_return import pending
     return render(request,'admin_motivation/distribution/closing_dialog.html',dict(branch=branch,year=year,period=period,currency=currency,
         form=form,people=people,personal_cards=personal_cards,comparison=comparison,source_error=source_error,saved=saved,locked=locked,
-        closed=period_closed(year,period),authors_by_kind=authors_by_kind,execution=execution,metric_error=metric_error,awaiting_confirmation=not saved and pending(record)))
+        closed=period_closed(year,period),authors_by_kind=authors_by_kind,execution=execution,fao_note=fao_note,metric_error=metric_error,awaiting_confirmation=not saved and pending(record)))

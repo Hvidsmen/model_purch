@@ -1116,3 +1116,5 @@ from .premium_distribution_models import PremiumDistribution, PremiumDistributio
 from .premium_distribution_models import SalesEmployee
 
 from .premium_distribution_models import PeriodMotivationCoefficient
+
+from .fao_models import FaoWorkflow, FaoReview, FaoDocument, FaoCorrection
