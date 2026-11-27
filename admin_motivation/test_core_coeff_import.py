@@ -85,12 +85,14 @@ class CoreImportTests(TestCase):
         response=self.client.get(reverse('global_coeff_admin_motivation'),{'version':self.version.pk,'export':'subdivisions_xlsx'})
         self.assertEqual(response.status_code,200)
         book=load_workbook(BytesIO(b''.join(response.streaming_content)))
-        self.assertTrue({'Политики','Продажи','Директора','Кураторы'}<=set(book.sheetnames))
-        self.assertEqual(book['Политики']['A2'].value,'Branch A')
-        self.assertEqual(book['Политики']['F2'].value,.0048)
-        self.assertEqual(book['Продажи']['A2'].value,'Branch B')
-        self.assertEqual(book['Директора']['G2'].value,.01)
-        self.assertEqual(book['Кураторы']['G2'].value,.01)
+        self.assertEqual(book.sheetnames,['Подразделения'])
+        sheet=book.active
+        self.assertEqual(sheet['E2'].value,'Политики')
+        self.assertEqual(sheet['K2'].value,'Продажи')
+        self.assertIn('Branch A',sheet['E3'].value)
+        self.assertIn('Branch B',sheet['K3'].value)
+        self.assertEqual(sheet['E5'].value,.0048)
+        self.assertEqual(sheet.freeze_panes,'E5')
         book.close();response.close()
 
     def test_other_actor_cannot_apply_someone_elses_preview(self):
@@ -117,3 +119,29 @@ class CoreImportTests(TestCase):
         user.groups.add(Group.objects.get(name=POLITICIAN));self.client.force_login(user)
         response=self.client.get(reverse('global_coeff_admin_motivation'),{'version':self.version.pk,'export':'subdivisions_xlsx'})
         self.assertEqual(response.status_code,403)
+
+    def test_export_groups_equal_subdivisions_and_splits_on_exact_rate_difference(self):
+        from .services.subdivision_coeff_export import workbook
+        rows=parse(upload());apply(self.version.pk,self.version.revision,rows,{},self.formula.pk)
+        originals=list(SubdivisionCoeff.objects.filter(version=self.version,subdivision=self.branches[0]))
+        for original in originals:
+            original.pk=None;original.subdivision=self.branches[1];original.save()
+        self.version.refresh_from_db()
+        book=load_workbook(workbook(self.version));sheet=book.active
+        self.assertEqual(sheet.max_column,16)
+        self.assertEqual(sheet['E3'].value,'Branch A\nBranch B')
+        self.assertEqual(sheet['G5'].value,0)
+        self.assertIsInstance(sheet['E5'].value,float)
+        book.close()
+        row=SubdivisionCoeff.objects.filter(version=self.version,subdivision=self.branches[1],type_coeff__type_coeff_name='Политики',segment__segment_name='K0').get()
+        row.motivation_coeff+=.000001;row.save();self.version.refresh_from_db()
+        book=load_workbook(workbook(self.version));self.assertEqual(book.active.max_column,22);book.close()
+
+    def test_export_group_formulas_and_revision_check(self):
+        from .services.subdivision_coeff_export import workbook
+        rows=parse(upload());apply(self.version.pk,self.version.revision,rows,{},self.formula.pk)
+        self.version.refresh_from_db();self.version.planning_rules=[dict(subdivision='Branch A',kind='Политики',planning='1. RAC',formula='Марка(Бренд)',missing='auto')];self.version.save()
+        book=load_workbook(workbook(self.version))
+        self.assertEqual(book.active['J5'].value,'Марка(Бренд)');book.close()
+        row=SubdivisionCoeff.objects.filter(version=self.version).first();row.motivation_coeff=.1;row.save()
+        with self.assertRaisesMessage(ValidationError,'Версия изменилась'):workbook(self.version)
