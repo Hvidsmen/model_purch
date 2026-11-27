@@ -69,6 +69,7 @@
    if (index === 18 && root.dataset.showCatchup === 'false') cell.hidden = true;
    if (index === 16) cell.classList.add('motivation-execution');
    cell.dataset.managerPeriod = blockIndex;
+   if (blockIndex < node.values.length - 1 && index === (forecastColumns ? metricCount - 1 : 17)) cell.classList.add('manager-period-end');
    cell.classList.toggle('manager-period-hidden', hiddenPeriods.has(blockIndex));
    cell.textContent = value == null ? '—' : index < 5 || index === 12 || index === 16 ? percent.format(Number(value) * 100) + '%' : money.format(Number(value));
    if (index === 12 || index === 16) { if (value != null) cell.classList.add(Number(value) >= .8 ? 'percent-good' : 'percent-low'); }
@@ -94,7 +95,10 @@
  }
  root.querySelectorAll('.division-report-grid').forEach(row => {
   [...row.children].slice(1).forEach((cell, index) => {
-   cell.dataset.managerPeriod = row.classList.contains('report-period-header') ? index : Math.floor(index / metricCount);
+   const heading = row.classList.contains('report-period-header');
+   const period = heading ? index : Math.floor(index / metricCount);
+   cell.dataset.managerPeriod = period;
+   if (period < periodToggles.length && (heading || index % metricCount === (forecastColumns ? metricCount - 1 : 17))) cell.classList.add('manager-period-end');
   });
  });
  periodToggles.forEach(toggle => toggle.addEventListener('change', () => {

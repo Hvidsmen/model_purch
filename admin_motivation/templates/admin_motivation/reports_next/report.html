@@ -1,5 +1,5 @@
 {% extends 'admin_motivation/base.html' %}{% load static report_format tz %}{% block content %}
-<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=annual-catchup-20261128"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=matrix-page-scroll-20261124">
+<link rel="stylesheet" href="{% static 'admin_motivation/reports.css' %}?v=period-boundaries-20261128"><link rel="stylesheet" href="{% static 'admin_motivation/reports_next.css' %}?v=matrix-page-scroll-20261124">
 <link rel="stylesheet" href="{% static 'admin_motivation/reports_performance.css' %}?v=target-rows-aligned-20261125">
 {% if kind == 'overview' %}<link rel="stylesheet" href="{% static 'admin_motivation/shareholder_cards.css' %}">{% endif %}
 <section class="content native-report nr-page">
@@ -42,7 +42,7 @@
 <details class="nr-help nr-value-legend"><summary>Что означают показатели и обозначения</summary><p><b>0,00</b> — рассчитанная сумма равна нулю. <b>—</b> — показатель не определён или не применяется; причина указана в пояснении к цели или формуле.</p><p><b>Возможная премия</b> — на текущих отгрузках до проверки условий. <b>Премия по расчёту</b> — после проверки условий. <b>Годовая премия</b> — отдельная часть, без квартальных премий. Доплата за предыдущие кварталы не начисляется.</p></details>
 <details class="nr-metadata"><summary>Источник данных и параметры расчёта</summary><div class="nr-metadata-grid">{% for label,value in metadata %}<div><strong>{{ label }}</strong>{{ value }}</div>{% endfor %}</div></details>
 </section>{% endblock %}
-{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_matrix_header.js' %}?v=1" defer></script><script src="{% static 'admin_motivation/report_team_tabs.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=executive-parts-20261112" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=annual-catchup-20261128" defer></script>{% endif %}{% endblock %}
+{% block module_js %}{{ block.super }}<script src="{% static 'admin_motivation/report_matrix_header.js' %}?v=1" defer></script><script src="{% static 'admin_motivation/report_team_tabs.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/report_period_scroll.js' %}?v=team-mockup-20261103" defer></script><script src="{% static 'admin_motivation/reports_next.js' %}?v=executive-parts-20261112" defer></script>{% if kind == 'detail' and data %}<script src="{% static 'admin_motivation/manager_detail.js' %}?v=period-boundaries-20261128" defer></script>{% endif %}{% endblock %}
 
 
 
