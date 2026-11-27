@@ -1,12 +1,13 @@
 """One-sheet director coefficient export for the selected saved version."""
 from io import BytesIO
+from functools import lru_cache
 from django.core.exceptions import ValidationError
 from openpyxl import Workbook
 from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from ..models import GlobalCoeffVersion, SubdivisionDirectorCoeff
-from .sql_export import director_variation
+from .director_formula import resolve
 from .active_directors import coefficient_rows as active_director_rows
 from .subdivision_aliases import coefficient_rows as merged_rows
 
@@ -29,12 +30,23 @@ def director_coefficients_workbook(version, *, subdivision=None, employee=None):
         rows=[row for row in rows if row[1]==selected_key]
     pairs = {(subdivision,row.employee_id):row.employee for _,subdivision,_,row in rows}
     pairs = sorted(pairs.items(),key=lambda item:(item[0][0],item[1].full_name,item[1].employee_code,item[0][1]))
-    columns = 4+6*len(pairs)
-    if columns > 16384:
-        raise ValidationError('Слишком много директоров для одного листа Excel.')
     goods = {row.goods_id:row.goods for _,_,_,row in rows}
     goods = sorted(goods.values(),key=lambda good:(good.planning_group_sales,good.group,good.brand,good.pk))
     matrix = {(row.goods_id,subdivision,row.employee_id):row for _,subdivision,_,row in rows}
+    @lru_cache(maxsize=None)
+    def values_for(good,pair):
+        branch,employee_id=pair
+        row=matrix.get((good.pk,branch,employee_id))
+        return tuple(getattr(row,f'k{i}') for i in range(5))+(resolve(version,good,branch,row)[0],) if row else (None,)*6
+    # Equality includes every saved numeric rate, effective formula and absent row.
+    # Display rounding must never collapse genuinely different settings.
+    grouped={}
+    for pair,person in pairs:
+        signature=tuple(values_for(good,pair) for good in goods)
+        grouped.setdefault(signature,[]).append((pair,person))
+    blocks=list(grouped.values())
+    columns=4+6*len(blocks)
+    if columns>16384:raise ValidationError('Слишком много директоров для одного листа Excel.')
     book = Workbook()
     sheet = book.active
     sheet.title = 'Директора'
@@ -51,21 +63,22 @@ def director_coefficients_workbook(version, *, subdivision=None, employee=None):
     for column,label in enumerate(['№','Группа планов продаж','Группа ERP','Марка / бренд'],1):
         sheet.merge_cells(start_row=2,start_column=column,end_row=4,end_column=column)
         sheet.cell(2,column,label)
-    last_subdivision,branch_start = None,None
-    for index,((subdivision,employee_id),employee) in enumerate(pairs):
-        first = 5+6*index
-        if subdivision != last_subdivision:
-            if branch_start is not None:
-                sheet.merge_cells(start_row=2,start_column=branch_start,end_row=2,end_column=first-1)
-            sheet.cell(2,first,subdivision).data_type = 's'
-            branch_start,last_subdivision = first,subdivision
+    last_subdivision,branch_start=None,None
+    for index,members in enumerate(blocks):
+        first=5+6*index
+        branches=list(dict.fromkeys(pair[0] for pair,person in members))
+        branch_label=' / '.join(branches)
+        if branch_label!=last_subdivision:
+            if branch_start is not None:sheet.merge_cells(start_row=2,start_column=branch_start,end_row=2,end_column=first-1)
+            sheet.cell(2,first,branch_label).data_type='s'
+            branch_start,last_subdivision=first,branch_label
         sheet.merge_cells(start_row=3,start_column=first,end_row=3,end_column=first+5)
-        sheet.cell(3,first,employee.full_name).data_type = 's'
-        sheet.cell(3,first).comment = Comment('Код сотрудника: '+employee.employee_code,'Портал')
-        for offset,label in enumerate(['K0','K1','K2','K3','K4','Настройки формулы']):
-            sheet.cell(4,first+offset,label)
-    if branch_start is not None:
-        sheet.merge_cells(start_row=2,start_column=branch_start,end_row=2,end_column=columns)
+        names=[person.full_name+(' · '+pair[0] if len(branches)>1 else '') for pair,person in members]
+        sheet.cell(3,first,'\n'.join(names)).data_type='s'
+        sheet.cell(3,first).comment=Comment('Одинаковые K0–K4 и эффективные формулы по всем товарам.\n'+
+            '\n'.join(f'{pair[0]} · {person.full_name} · {person.employee_code}' for pair,person in members),'Портал')
+        for offset,label in enumerate(['K0','K1','K2','K3','K4','Настройки формулы']):sheet.cell(4,first+offset,label)
+    if branch_start is not None:sheet.merge_cells(start_row=2,start_column=branch_start,end_row=2,end_column=columns)
     line = Side(style='thin',color='DDE4EF')
     header_font = Font(name='Calibri',size=10,bold=True,color='263A56')
     for row in sheet.iter_rows(min_row=2,max_row=4,max_col=columns):
@@ -74,7 +87,7 @@ def director_coefficients_workbook(version, *, subdivision=None, employee=None):
             cell.font = header_font
             cell.alignment = Alignment(horizontal='center',vertical='center',wrap_text=True)
             cell.border = Border(bottom=line,right=line)
-    for row,height in [(2,27),(3,33),(4,25)]: sheet.row_dimensions[row].height = height
+    for row,height in [(2,27),(3,max(33,17*max((len(block) for block in blocks),default=1))),(4,25)]: sheet.row_dimensions[row].height = height
     fonts = {bold:Font(name='Calibri',size=10,color='263A56',bold=bold) for bold in (False,True)}
     body_border = Border(bottom=line)
     fills = {(band,odd):PatternFill('solid',fgColor=(('F5F1FF' if odd else 'FAF8FF') if band else ('F7F9FC' if odd else 'FFFFFF')))
@@ -83,13 +96,9 @@ def director_coefficients_workbook(version, *, subdivision=None, employee=None):
     numeric_alignment = Alignment(vertical='center',horizontal='right')
     for index,good in enumerate(goods,1):
         values = [index,good.planning_group_sales,good.group,good.brand]
-        for (subdivision,employee_id),employee in pairs:
-            row = matrix.get((good.pk,subdivision,employee_id))
-            if row is None:
-                values.extend([None]*6)
-            else:
-                formula = row.variation_calculate.variation_name if row.variation_calculate_id else version.fallback_variation or director_variation(good)
-                values.extend([*[getattr(row,f'k{i}') for i in range(5)],formula])
+        for members in blocks:
+            pair,person=members[0]
+            values.extend(values_for(good,pair))
         sheet.append(values)
         for column in range(1,columns+1):
             cell = sheet.cell(index+4,column)
@@ -99,7 +108,11 @@ def director_coefficients_workbook(version, *, subdivision=None, employee=None):
             cell.fill = fills[numeric,bool(index%2)]
             cell.border = body_border
             if numeric: cell.number_format = '0.00%'
-            elif column > 1 and cell.value is not None: cell.data_type = 's'
+            elif column > 1 and cell.value is not None:
+                cell.data_type = 's'
+                if column>4 and (column-5)%6==5:
+                    members=blocks[(column-5)//6];pair,person=members[0];row=matrix.get((good.pk,*pair))
+                    if row:cell.comment=Comment('\n'.join(f'{person.full_name} · {pair[0]}: '+resolve(version,good,pair[0],matrix[(good.pk,*pair)])[1] for pair,person in members),'Портал')
         sheet.row_dimensions[index+4].height = 29
     if not goods:
         sheet.merge_cells(start_row=5,start_column=1,end_row=5,end_column=columns)

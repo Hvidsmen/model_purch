@@ -43,7 +43,11 @@ def coefficient_matrix(version, subdivision=None, employee=None):
                 good.has_core_coefficients = any(cell is not None for group in goods[good] for cell in group)
                 row = directors.get(good.pk)
                 good.director_formula_id = row.variation_calculate_id if row else None
-                good.director_formula_label = row.variation_calculate.variation_name if row and row.variation_calculate_id else ''
+                from .director_formula import resolve,rule_for
+                branch=subdivision.subdivision_key if subdivision else ''
+                good.director_default_formula=resolve(version,good,branch)[0]
+                good.director_rule_formula=rule_for(version,good,branch).get('formula','')
+                good.director_formula_label=resolve(version,good,branch,row)[0] if row else ''
                 good.director_cells = [{'index': i, 'exists': row is not None, 'global_value': getattr(global_directors[good.pk], f'k{i}') if good.pk in global_directors else None, 'value': getattr(row, f'k{i}') if row else Decimal(0)} for i in range(5)]
     return matrix
 

@@ -18,7 +18,7 @@ class DirectorCoefficientExportTests(TestCase):
         self.formula = VariationCalculate.objects.create(variation_name='Export explicit')
         self.first_row = SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.sub,employee=self.first,
             goods=self.goods,k0=Decimal('.0016'),k1=Decimal('.0039'),k2=Decimal('.003'),k3=Decimal('.0025'),k4=Decimal('.002'),variation_calculate=self.formula)
-        self.second_row = SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.other_sub,employee=self.first,goods=self.goods)
+        self.second_row = SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.other_sub,employee=self.first,goods=self.goods,k1=Decimal(".0001"))
         self.third_row = SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.sub,employee=self.second,goods=self.goods)
         self.url = reverse('global_coeff_admin_motivation')
 
@@ -193,3 +193,33 @@ class DirectorCoefficientExportTests(TestCase):
         self.assertEqual(self.client.get(self.url,{'export':'directors_xlsx','version':self.version.pk}).status_code,403)
         self.client.logout()
         self.assertEqual(self.client.get(self.url,{'export':'directors_xlsx','version':self.version.pk}).status_code,302)
+
+    def test_identical_complete_settings_share_one_director_block(self):
+        self.second_row.k1=0;self.second_row.save()
+        book=self.book();sheet=book.active
+        self.assertEqual(sheet.max_column,16)
+        shared=[column for column in range(5,sheet.max_column+1,6) if '\n' in str(sheet.cell(3,column).value)]
+        self.assertEqual(len(shared),1)
+        header=sheet.cell(3,shared[0]).value
+        self.assertIn(self.first.full_name,header);self.assertIn(self.second.full_name,header)
+        self.assertIn('A',sheet.cell(2,shared[0]).value);self.assertIn('B',sheet.cell(2,shared[0]).value)
+        book.close()
+
+    def test_group_rule_formula_overrides_director_and_empty_local_rule_shadows_global(self):
+        self.version.planning_rules=[dict(subdivision='',kind='Директора',planning='1. RAC',formula='Марка(Бренд)',missing='auto')]
+        self.version.save()
+        book=self.book();values=list(self.values(book.active).values());book.close()
+        self.assertTrue(all(row[5]=='Марка(Бренд)' for row in values))
+        self.version.planning_rules.append(dict(subdivision='A',kind='Директора',planning='1. RAC',formula='',missing='auto'))
+        self.version.save()
+        book=self.book();values=self.values(book.active);book.close()
+        self.assertEqual(values[(('1. RAC','Group','Brand'),(self.first.full_name,'A'))][5],'Export explicit')
+        self.assertEqual(values[(('1. RAC','Group','Brand'),(self.first.full_name,'B'))][5],'Марка(Бренд)')
+
+    def test_different_effective_formulas_or_missing_goods_never_merge(self):
+        self.second_row.k1=0;self.second_row.variation_calculate=self.formula;self.second_row.save()
+        book=self.book();self.assertEqual(book.active.max_column,22);book.close()
+        self.second_row.variation_calculate=None;self.second_row.save()
+        sparse=Goods.objects.create(goods_key='Only B',planning_group_sales='1. RAC',group='Group',brand='Sparse')
+        SubdivisionDirectorCoeff.objects.create(version=self.version,subdivision=self.other_sub,employee=self.first,goods=sparse)
+        book=self.book();self.assertEqual(book.active.max_column,22);book.close()
