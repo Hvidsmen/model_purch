@@ -119,7 +119,7 @@ class DetailedCoefficientTests(TestCase):
     def test_comparison_endpoint_and_source_failure_do_not_fabricate_zero(self):
         self.confirm()
         url=reverse('motivation_closing_comparisons')
-        with patch('admin_motivation.closing_details_views.baseline',return_value=self.baseline()):
+        with patch('admin_motivation.services.closing_plan_fact.load',return_value={}), patch('admin_motivation.closing_details_views.baseline',return_value=self.baseline()):
             response=self.client.get(url,{'year':2025,'period':4})
             self.assertEqual(response.json()['rows'][str(self.branch.pk)]['after'],'130.00')
         with patch('admin_motivation.closing_details_views.baseline',side_effect=ValidationError('Нет расчёта')):
