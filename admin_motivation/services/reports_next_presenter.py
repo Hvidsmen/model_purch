@@ -166,6 +166,8 @@ def present(kind, data, ledger=None, period='all'):
     for item in result['type_totals']:
         result['team_overview_rows'].append({'label':item['kind'],'values':[cards.get(code,{}).get('kind_totals',{}).get(item['kind']) for code in codes],'total':item['total'],'detail':True})
     result['team_overview_rows'].append({'label':'В годовую премию · до условий выплаты','values':[cards.get(code,{}).get('annual_accrual') if code!='5' else None for code in codes],'total':result.get('annual_accrual')})
+    from .zero_premium_reasons import enrich as enrich_zero_reasons
+    enrich_zero_reasons(result,ledger)
     for section in result['team_sections']:
         section['premium_column_count']=len(codes)+3+(2 if result.get('forecast_100') else 0)
         if result['show_catchup'] and ledger.get('shareholder_forecast'):section['premium_column_count']+=2 if ledger.get('original_rules') else 1

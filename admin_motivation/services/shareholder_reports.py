@@ -155,6 +155,8 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
             potential[(row.get('Подразделение') or '—',row.get('АвторСделки') or '—',period_code(row['КварталМотивации']))]+=Decimal(str(row.get('PotentialCatchup'+currency) or 0))
         from .detail_summary_breakdown import catchup_by_author
         bonus_quarters=catchup_by_author(filtered,currency)
+        from .zero_premium_reasons import Reasons
+        zero_reasons=Reasons(run,kind,raw,selected,presentation_rows(dept,DEPARTMENT),data['coefficient_performance'],currency)
         summary=data['period_summary']
         for item in summary['rows']:
             for index,column in enumerate(summary['columns']):
@@ -165,6 +167,7 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
                 target.setlist('period',[code]);target.setlist('type',[kind]);target.setlist('author',[item['author']]);target.setlist('subdivision',[item['subdivision']])
                 bonus=item['remainder'] if original_rules and code=='5' else ZERO
                 rows.append({'subdivision':item['subdivision'],'author':item['author'],'unallocated':item.get('unallocated',False),
+                    'zero_reasons':zero_reasons.get(item['subdivision'],item['author'],run.configuration.get('fact_year',2026),code,amount),
                     'kind':kind,'period':column['label'],'code':code,'amount':amount,'bonus':bonus,'total':amount+bonus,'currency':currency,
                     'potential_bonus':potential[(item['subdivision'],item['author'],code)],
                     'bonus_quarters':bonus_quarters.get((item['subdivision'],item['author']),{}) if code=='5' else {},

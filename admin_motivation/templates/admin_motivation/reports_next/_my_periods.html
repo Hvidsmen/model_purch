@@ -4,7 +4,8 @@
 {% for card in presentation.period_cards %}
 <article class="nr-period"><div class="nr-period-head"><span>{% if card.label == "Год" %}Годовая премия{% else %}Премия за {{ card.label }}{% endif %}</span><span class="nr-status">Рассчитано</span></div>
 <strong>{{ card.amount|report_cash }} {{ ledger.currency }}</strong>
-{% for item in card.type_totals %}{% if item.total != None %}<div class="nr-period-line"><span>{{ item.kind }}</span><b>{{ item.total|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% endfor %}
+{% include 'admin_motivation/reports_next/_zero_premium_reasons.html' with reasons=card.zero_reasons %}
+{% for item in card.type_totals %}{% if item.total != None %}<div class="nr-period-line"><span>{{ item.kind }}</span><b>{{ item.total|report_cash }} {{ ledger.currency }}</b></div>{% if card.amount != 0 %}{% include 'admin_motivation/reports_next/_zero_premium_reasons.html' with reasons=item.zero_reasons %}{% endif %}{% endif %}{% endfor %}
 <div class="nr-period-line" title="Премия по текущим отгрузкам до условий выполнения плана"><span>Возможная премия</span><b>{{ card.possible|report_cash }} {{ ledger.currency }}</b></div>
 {% if shareholder_original_rules %}{% if card.code != '5' %}<div class="nr-period-line"><span>В годовую премию</span><b>{{ card.annual_accrual|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% if presentation.show_catchup %}<div class="nr-period-line"><span>Возможная доплата за кварталы</span><b>{{ card.potential_bonus|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% if card.code == '5' %}<div class="nr-period-line"><span>Доплата к выплате</span><b>{{ card.bonus|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% endif %}
 {% if not shareholder_report %}<div class="nr-period-line"><span>После распределения</span><b>{% if card.distributed != None %}{{ card.distributed|report_cash }} {{ ledger.currency }}{% else %}Не распределено{% endif %}</b></div>{% if presentation.show_catchup and card.distributed_bonus != None %}<div class="nr-period-line"><span>Из них доплата за кварталы</span><b>{{ card.distributed_bonus|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% endif %}
@@ -14,6 +15,7 @@
 {% empty %}<div class="nr-empty"><strong>Начислений не найдено</strong>Проверьте период и параметры личного доступа.</div>{% endfor %}
 {% if presentation.period_cards %}<article class="nr-period nr-summary-card" aria-label="Итого за выбранные периоды"><div class="nr-period-head"><span>Итого за выбранные периоды</span><span class="nr-status">Итого</span></div>
 <strong class="next-total">{{ presentation.total|report_cash }} {{ ledger.currency }}</strong>
+{% include 'admin_motivation/reports_next/_zero_premium_reasons.html' with reasons=presentation.zero_reasons %}
 {% for item in presentation.type_totals %}{% if item.total != None %}<div class="nr-period-line"><span>{{ item.kind }}</span><b>{{ item.total|report_cash }} {{ ledger.currency }}</b></div>{% endif %}{% endfor %}
 <div class="nr-period-line" title="За выбранные периоды до условий выполнения плана, без годовой доплаты"><span>Возможная премия</span><b>{{ presentation.possible|report_cash }} {{ ledger.currency }}</b></div>
 {% if shareholder_original_rules %}<div class="nr-period-line" title="Начислено за выбранные кварталы до годового условия выплаты; не входит в текущую выплату"><span>В годовую премию</span><b>{{ presentation.annual_accrual|report_cash }} {{ ledger.currency }}</b></div>{% endif %}
