@@ -7,7 +7,7 @@ from openpyxl.comments import Comment
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from ..models import GlobalCoeffVersion, SubdivisionDirectorCoeff
-from .director_formula import resolve
+from .director_formula import resolve,core_formulas
 from .active_directors import coefficient_rows as active_director_rows
 from .subdivision_aliases import coefficient_rows as merged_rows
 
@@ -33,11 +33,12 @@ def director_coefficients_workbook(version, *, subdivision=None, employee=None):
     goods = {row.goods_id:row.goods for _,_,_,row in rows}
     goods = sorted(goods.values(),key=lambda good:(good.planning_group_sales,good.group,good.brand,good.pk))
     matrix = {(row.goods_id,subdivision,row.employee_id):row for _,subdivision,_,row in rows}
+    inherited=core_formulas(version)
     @lru_cache(maxsize=None)
     def values_for(good,pair):
         branch,employee_id=pair
         row=matrix.get((good.pk,branch,employee_id))
-        return tuple(getattr(row,f'k{i}') for i in range(5))+(resolve(version,good,branch,row)[0],) if row else (None,)*6
+        return tuple(getattr(row,f'k{i}') for i in range(5))+(resolve(version,good,branch,row,inherited=inherited)[0],) if row else (None,)*6
     # Equality includes every saved numeric rate, effective formula and absent row.
     # Display rounding must never collapse genuinely different settings.
     grouped={}
@@ -112,7 +113,7 @@ def director_coefficients_workbook(version, *, subdivision=None, employee=None):
                 cell.data_type = 's'
                 if column>4 and (column-5)%6==5:
                     members=blocks[(column-5)//6];pair,person=members[0];row=matrix.get((good.pk,*pair))
-                    if row:cell.comment=Comment('\n'.join(f'{person.full_name} · {pair[0]}: '+resolve(version,good,pair[0],matrix[(good.pk,*pair)])[1] for pair,person in members),'Портал')
+                    if row:cell.comment=Comment('\n'.join(f'{person.full_name} · {pair[0]}: '+resolve(version,good,pair[0],matrix[(good.pk,*pair)],inherited=inherited)[1] for pair,person in members),'Портал')
         sheet.row_dimensions[index+4].height = 29
     if not goods:
         sheet.merge_cells(start_row=5,start_column=1,end_row=5,end_column=columns)
