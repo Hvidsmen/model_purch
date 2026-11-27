@@ -66,7 +66,10 @@ def impact(rows, general=1, kinds=None, people=None):
     for row in rows:
         value = effective(general, kinds, people, row['kind'], row['author'])
         before = Decimal(str(row['before']))
-        detail.append(dict(row, before=before.quantize(CENT, rounding=ROUND_HALF_UP), factor=value, after=(before*value).quantize(CENT, rounding=ROUND_HALF_UP)))
+        missing = not identity(row['author']) or identity(row['author']) in ('—', '-')
+        unallocated = row.get('author_status') == 'unallocated'
+        label = 'Нераспределённая премия' if unallocated else ('Автор не указан' if missing else row['author'])
+        detail.append(dict(row, author_label=label, can_edit_person=not missing and not unallocated and row['kind'] in PERSONAL, before=before.quantize(CENT, rounding=ROUND_HALF_UP), factor=value, after=(before*value).quantize(CENT, rounding=ROUND_HALF_UP)))
     result = total(detail)
     result['kinds'] = [dict(kind=kind, **total([r for r in detail if r['kind']==kind])) for kind in KINDS]
     result['payments'] = [dict(payment=payment, label=label, **total([r for r in detail if r['payment']==payment]))
@@ -87,7 +90,7 @@ def source_rows(execution, period, currency):
     variant = execution.parameters.get('variant', 'main')
     if variant == 'main' and period in (1,2,3) and period not in execution.parameters.get('premium_amount_quarters', []):
         raise ValidationError('Запустите основной расчёт с выбранным кварталом.')
-    key = f'closing-before-v1:{execution.pk}:{execution.completed_at}:{period}:{currency}'
+    key = f'closing-before-v2:{execution.pk}:{execution.completed_at}:{period}:{currency}'
     with reports_next.current_run(execution):
         cached = cache.get(key)
         if cached is not None:
@@ -108,6 +111,7 @@ def source_rows(execution, period, currency):
                         amount = row.get('remainder') if payment=='catchup' else row['values'][index]
                         if amount is not None:
                             result.append(dict(branch=row['subdivision'], kind=kind, author='' if row.get('unallocated') else row['author'],
+                                               author_status='unallocated' if row.get('unallocated') else 'employee',
                                                payment=payment, before=str(Decimal(str(amount)))))
         finally:
             without_correction.reset(token)

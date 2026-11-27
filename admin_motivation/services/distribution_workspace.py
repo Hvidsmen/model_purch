@@ -21,6 +21,7 @@ def registry(user, year, period, batches, grid=None, archived=False):
     for batch in batches:
         if batch.subdivision_id not in present:
             subdivisions.append(batch.subdivision);present.add(batch.subdivision_id)
+    from .closing_return import pending
     rows = []
     for branch in subdivisions:
         matching = by_branch.get(branch.pk, [])
@@ -30,15 +31,17 @@ def registry(user, year, period, batches, grid=None, archived=False):
             record = coefficients.get(branch.pk)
             stage = batch.source.get('workflow', {}).get('stage', 'sales') if batch else None
             label = 'Завершено' if batch and batch.state == 'completed' else 'Архив' if archived else 'Ребаланс директоров' if stage == 'directors' else 'Ребаланс политиков' if stage == 'policies' else 'Продажи' if batch else 'Готово к распределению' if record else 'Ожидает множителя'
+            awaiting = pending(record)
+            if awaiting and not batch:label = 'Возвращено гендиректору: подтвердите коэффициенты'
             values = {}
             for kind, prefix in [('Продажи', 'sales'), ('Политики', 'policies'), ('Директора','directors')]:
                 for currency in ('USD', 'RUB'):
                     values[prefix+'_'+currency.lower()] = sum((cash(f['amount']) for f in batch.funds if f['kind'] == kind), Decimal(0)) if batch and batch.currency == currency else None
             rows.append({'branch': branch, 'batch': batch, 'record': record,
                          'field': fields.get(branch.pk, {}).get('field'),
-                         'locked': bool(batch), 'stage_label': label,
-                         'can_start': bool(record and not batch), **values})
-    counts = {'waiting': sum(not row['record'] for row in rows),
+                         'locked': bool(batch), 'awaiting_confirmation':awaiting, 'stage_label': label,
+                         'can_start': bool(record and not batch and not awaiting), **values})
+    counts = {'waiting': sum(not row['record'] or row['awaiting_confirmation'] for row in rows),
               'working': sum(bool(row['batch'] and row['batch'].state == 'draft') for row in rows),
               'completed': sum(bool(row['batch'] and row['batch'].state == 'completed') for row in rows)}
     return rows, counts

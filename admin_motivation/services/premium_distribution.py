@@ -103,6 +103,8 @@ def create(user,execution,subdivision,period,currency):
         from ..models import PeriodMotivationCoefficient
         type(subdivision).all_objects.select_for_update().get(pk=subdivision.pk)
         coefficient=PeriodMotivationCoefficient.objects.select_for_update().filter(subdivision=subdivision,year=year,period=period).first()
+        from .closing_return import pending, attach_previous
+        if pending(coefficient):raise ValidationError('Гендиректор должен повторно подтвердить коэффициенты после возврата.')
         if not coefficient:raise ValidationError('Этап 1: гендиректор должен подтвердить общий множитель, в том числе 1,0.')
         funds,rows=read_source(execution,subdivision,period,currency,include_directors=True)
         batch=PremiumDistribution.objects.create(execution=execution,subdivision=subdivision,year=year,period=period,currency=currency,
@@ -115,7 +117,9 @@ def create(user,execution,subdivision,period,currency):
             from .distribution_shared import POLICY
             batch.source['workflow']['rebalance_policy']=POLICY
         from .distribution_stages import initialize
-        initialize(batch);batch.save()
+        initialize(batch)
+        attach_previous(batch,coefficient)
+        batch.save()
         event(batch,user,'created')
     return batch
 

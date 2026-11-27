@@ -28,8 +28,8 @@ class Settings(forms.Form):
 
 
 class Person(forms.Form):
-    kind = forms.ChoiceField(choices=[(k,k) for k in details.PERSONAL], label='Вид мотивации')
-    author = forms.CharField(max_length=255, label='Полное ФИО', widget=forms.TextInput(attrs={'list':'closing-authors','autocomplete':'off'}))
+    kind = forms.ChoiceField(choices=[(k,k) for k in details.PERSONAL], initial=details.PERSONAL[0], label='Вид мотивации')
+    author = forms.ChoiceField(label='Сотрудник', choices=[], error_messages={'invalid_choice':'Сотрудник не найден в выбранном подразделении и виде мотивации.'}, widget=forms.Select(attrs={'data-employee-select':''}))
     coefficient = forms.DecimalField(min_value=0, max_digits=12, decimal_places=4, label='Коэффициент')
 
 
@@ -123,6 +123,11 @@ def dialog(request, subdivision_id):
     except Exception:
         logging.getLogger(__name__).exception('CEO payout dialog source unavailable')
         source_error='Не удалось загрузить суммы расчёта. Настройки не сохранены; повторите позже.'
+    authors_by_kind={kind:sorted({r['author'] for r in source if details.identity(r['author']) not in ('', '—', '-') and r.get('author_status') != 'unallocated' and r['kind']==kind}
+                               | set(record.personal_coefficients.get(kind,{}) if record else {})) for kind in details.PERSONAL}
+    for person in people.forms:
+        kind=person.data.get(person.add_prefix('kind')) if person.is_bound else person.initial.get('kind',details.PERSONAL[0])
+        person.fields['author'].choices=[('','Выберите сотрудника'),*((name,name) for name in authors_by_kind.get(kind,[]))]
     if request.method=='POST' and form.is_valid() and people.is_valid():
         try:
             kinds,persons = settings(form,people)
@@ -145,6 +150,7 @@ def dialog(request, subdivision_id):
         return JsonResponse({'error':'Проверьте коэффициенты и ФИО.','fields':form.errors,'people':people.errors},status=400)
     if comparison is None and not source_error:
         comparison = details.impact(source,record.coefficient if record else 1,record.kind_coefficients if record else {},record.personal_coefficients if record else {})
+    from .services.closing_return import pending
     return render(request,'admin_motivation/distribution/closing_dialog.html',dict(branch=branch,year=year,period=period,currency=currency,
         form=form,people=people,comparison=comparison,source_error=source_error,saved=saved,locked=locked,
-        closed=period_closed(year,period),authors=sorted({r['author'] for r in source if r['author'] and r['kind'] in details.PERSONAL}),execution=execution))
+        closed=period_closed(year,period),authors_by_kind=authors_by_kind,execution=execution,awaiting_confirmation=not saved and pending(record)))
