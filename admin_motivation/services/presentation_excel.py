@@ -125,7 +125,7 @@ def workbook(kind, data, metadata, query=None, title=None):
                  section['amount'], section['bonus'], section['total'], section['possible'], None], 'grand')
 
     ws = sheet('По периодам', ['Подразделение', 'Сотрудник', 'Вид мотивации', 'Период',
-               'Валюта', display['premium_possible_label'] + ', ' + currency, 'Премия по расчёту', 'Годовая доплата', display['premium_total_label'], 'Пояснение'],
+               'Валюта премии', display['premium_possible_label'] + ', ' + currency, 'Премия по расчёту', 'Годовая доплата', display['premium_total_label'], 'Пояснение'],
                [26, 44, 22, 26, 12, 48, 24, 22, 24, 62],
                'Расшифровка сумм и нулевых начислений по периодам')
     for index, item in enumerate(data['rows']):
@@ -149,7 +149,7 @@ def workbook(kind, data, metadata, query=None, title=None):
         if quarters:
             ws = sheet('В годовую по кварталам', ['Подразделение', 'Сотрудник', 'Вид мотивации',
                        *[column['code'] + ' кв. · В годовую премию' for _, column in quarters],
-                       'Итого за выбранные кварталы', 'Валюта'],
+                       'Итого за выбранные кварталы', 'Валюта премии'],
                        [26, 44, 22, *([26] * len(quarters)), 30, 12],
                        'Годовая часть отгрузок квартала с годовым коэффициентом · До проверки годового условия выплаты')
             for section in display['team_sections']:

@@ -94,7 +94,7 @@ def report_page(request, kind):
             selected = values.get(parameter)
             selected = selected if isinstance(selected, list) else [selected]
             selected_parameters.append({'label': caption, 'value': ', '.join(str(item) for item in selected if item not in (None, '')) or 'Все'})
-        selected_parameters.append({'label': 'Валюта мотивации', 'value': data['currency']})
+        selected_parameters.append({'label': 'Валюта премии', 'value': data['currency']})
     from .models import MotivationExecution
     from .services.workflow import export_snapshot
     from .services.calculation_variants import main_runs

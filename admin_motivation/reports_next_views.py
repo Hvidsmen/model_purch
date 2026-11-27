@@ -95,7 +95,7 @@ def workbook(kind, data, metadata, query=None, title=None):
         from .services.reports_next_presenter import present
         display = present(kind, data, data, query.getlist('period') or ['all'] if query is not None else 'all')
         period_headers = [column['label'] + ' · без годовой доплаты' for column in display['period_columns']]
-        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта',
+        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Валюта премии',
                 *(period_headers if kind == 'registry' else []), 'Премия по расчёту',
                 'Годовая доплата за кварталы', 'Всего по расчёту',
                 *(period_headers if kind != 'registry' else []), 'Статус', 'Премия без учёта выполнения плана'])
@@ -107,11 +107,11 @@ def workbook(kind, data, metadata, query=None, title=None):
                     sum((item['possible'] for item in row['rows']), Decimal(0)) if all(item.get('possible') is not None for item in row['rows']) else None])
         if kind in ('team', 'registry'):
             sheet = book.create_sheet('Итого по видам')
-            append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта', 'Премия без учёта выполнения плана'])
+            append(['Вид мотивации', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Валюта премии', 'Премия без учёта выполнения плана'])
             for row in display['type_totals']:
                 append([row['kind'], row['amount'], row['bonus'], row['total'], data['currency'], row['possible']])
     else:
-        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Период', 'Валюта', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Статус'])
+        append(['Подразделение', 'Автор сделки', 'Вид мотивации', 'Период', 'Валюта премии', 'Премия по расчёту', 'Годовая доплата за кварталы', 'Всего по расчёту', 'Статус'])
         for row in data['rows']:
             append([row['subdivision'], row['author'], row['kind'], row['period'], row['currency'], row['amount'], row['bonus'], row['total'], 'Не распределено' if row['unallocated'] else 'Рассчитано; выплата не подтверждена'])
     if kind == 'mine' and query is not None:
@@ -124,7 +124,7 @@ def workbook(kind, data, metadata, query=None, title=None):
                 goal['plan'], goal['fact'], goal['ratio'], None if goal['first_quarter'] else goal['remaining'],
                 goal['reward_at_target'], goal['reward_reason'], goal['possible'], data['currency'], goal['calculated'], goal.get('basis_note', '')], percent_columns=(5,))
         sheet = book.create_sheet('Товарная детализация')
-        append(['Вид', 'Подразделение', 'Автор сделки', 'Группа планов', 'Группа ERP', 'Бренд', 'Период', 'Всего по расчёту', 'Валюта'])
+        append(['Вид', 'Подразделение', 'Автор сделки', 'Группа планов', 'Группа ERP', 'Бренд', 'Период', 'Всего по расчёту', 'Валюта премии'])
         def products(nodes, section, group, path=()):
             for node in nodes:
                 current = (*path, node['label'])
@@ -253,7 +253,7 @@ def report(request, kind):
         ('План расчёта DWH', selected.parameters.get('plan_version', '') if selected else ''),
         ('План сравнения' if kind == 'executive' else 'Загруженная копия плана расчёта', str(plan) if plan else 'Не загружена'), ('Период премии', reports.period_label(query)),
         ('Виды мотивации', ', '.join(types)),
-        ('Валюта', 'USD' if kind == 'executive' else query['currency']),
+        ('Валюта премии', 'USD' if kind == 'executive' else query['currency']),
         ('Порог выполнения для выплаты', selected.parameters.get('payout_threshold', 'Не сохранён') if selected else ''),
         ('Статус выплат', 'Данных о согласовании и фактической оплате нет. Показаны рассчитанные суммы.')]
     if query.get('search', '').strip() and kind in ('team', 'registry'):

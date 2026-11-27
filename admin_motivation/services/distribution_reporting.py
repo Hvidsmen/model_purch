@@ -69,6 +69,6 @@ def excel_sheet(book,rows):
             else:cell.number_format='#,##0.00'
             cells.append(cell)
         sheet.append(cells)
-    append(['Подразделение','Сотрудник','Вид мотивации','Период','Возможная премия','Премия по расчёту','После распределения','Доплата после распределения','Всего после распределения','Валюта','Версия распределения'])
+    append(['Подразделение','Сотрудник','Вид мотивации','Период','Возможная премия','Премия по расчёту','После распределения','Доплата после распределения','Всего после распределения','Валюта премии','Версия распределения'])
     for r in rows:
         append([r['subdivision'],r['author'],r['kind'],r['period'],r.get('possible'),r['amount'],r.get('distributed') if r.get('distributed') is not None else 'Не распределено',r.get('distributed_bonus'),r.get('distributed_total'),r['currency'],r.get('distribution_revision')])

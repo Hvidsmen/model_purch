@@ -245,7 +245,7 @@ def catchup_excel(output, ledger, run=None):
                 if cell.value==PILOT_BONUS_NOTE:cell.value=note
                 if cell.comment and cell.comment.text==PILOT_BONUS_NOTE:cell.comment=Comment(note,'Портал')
     sheet=book.create_sheet('Доплаты и годовая часть')
-    sheet.append(['Подразделение','Сотрудник','Вид мотивации','Период','Валюта',
+    sheet.append(['Подразделение','Сотрудник','Вид мотивации','Период','Валюта премии',
         'Возможная премия','Премия по расчёту','В годовую премию',
         'Возможная доплата за кварталы','Доплата к выплате','Всего к выплате'])
     for row in ledger['rows']:

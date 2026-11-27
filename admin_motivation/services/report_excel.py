@@ -120,7 +120,7 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
 
         if scope == 'all' or provenance:
             target = sheet('Параметры отчёта', ['Параметр', 'Значение'], [38, 95], 'A3')
-            settings = [('Валюта мотивации', currency), ('Годы данных', ', '.join(data['years']) or 'Нет данных'),
+            settings = [('Валюта премии', currency), ('Годы данных', ', '.join(data['years']) or 'Нет данных'),
                 ('Факт периода в итоге', 'Если полных строк «Год» нет, суммируются физические отгрузки выбранных кварталов. Накопительные окна выполнения не складываются; план и процент без полной годовой базы остаются неопределёнными.')]
             for _, parameter, caption, _, multiple in FILTERS['manager-detail']:
                 value = parameters.get(parameter)

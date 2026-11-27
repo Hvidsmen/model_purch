@@ -9,7 +9,7 @@
 <input type="search" data-product-search placeholder="Найти сотрудника" aria-label="Найти сотрудника"><div><button type="button" data-product-all>Выбрать всех</button> <button type="button" data-product-clear>Снять все</button></div>
 {% for option in authors %}<label{% if option.disabled %} hidden{% endif %}><input type="checkbox" name="author" value="{{ option.value }}"{% if option.disabled %} disabled{% endif %}{% if option.selected %} checked{% endif %}> {{ option.value }}</label>{% endfor %}
 <small>Выберите одного или нескольких сотрудников.</small></div></details></div>{% endif %}
-<label>Валюта<select name="currency"><option{% if query.currency == 'USD' %} selected{% endif %}>USD</option><option{% if query.currency == 'RUB' %} selected{% endif %}>RUB</option></select></label>
+<label>Валюта премии<select name="currency"><option{% if query.currency == 'USD' %} selected{% endif %}>USD</option><option{% if query.currency == 'RUB' %} selected{% endif %}>RUB</option></select></label>
 {% include 'admin_motivation/reports_next/_product_filters.html' %}
 <div class="nr-filter-actions"><button class="btn btn-primary">Показать</button><a href="?">Сбросить фильтры</a></div>
 </form></details>

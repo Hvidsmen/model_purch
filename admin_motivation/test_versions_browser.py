@@ -822,7 +822,7 @@ class GlobalVersionBrowserTests(StaticLiveServerTestCase):
             book.close()
             expect(self.page.locator('.report-filter-summary')).to_contain_text('Вид работника: Политики')
             expect(self.page.locator('.report-filter-summary')).to_contain_text('Подразделение: Все')
-            expect(self.page.locator('.report-filter-summary')).to_contain_text('Валюта мотивации: USD')
+            expect(self.page.locator('.report-filter-summary')).to_contain_text('Валюта премии: USD')
             summary = self.page.locator('.manager-period-summary')
             expect(summary).to_be_visible()
             expect(summary.locator('tbody tr')).to_have_count(3)
