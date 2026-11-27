@@ -32,3 +32,36 @@
  form.querySelectorAll('[data-next-select-all],[data-next-clear-all]').forEach(button => button.addEventListener('click', () => setTimeout(update, 0)));
  update();
 })();
+
+
+// Put the employee picker in the browser's top layer, outside clipping panels.
+(() => {
+ const details=document.querySelector('.nr-author-filter');
+ if (!details) return;
+ const menu=details.querySelector('.next-branch-options');
+ const caption=details.querySelector('summary');
+ const supported=typeof menu.showPopover==='function';
+ if (supported) menu.setAttribute('popover','manual');
+ const title=()=>{caption.title=caption.textContent.trim();};
+ new MutationObserver(title).observe(caption,{childList:true,characterData:true,subtree:true});title();
+ const position=()=>{
+  if (!details.open || !supported) return;
+  const rect=caption.getBoundingClientRect(),gap=6,pad=12;
+  const width=Math.min(360,window.innerWidth-pad*2);
+  const below=window.innerHeight-rect.bottom-pad-gap,above=rect.top-pad-gap;
+  const up=below<200 && above>below;
+  const available=Math.max(80,up?above:below);
+  menu.style.width=width+'px';menu.style.maxHeight=Math.min(340,available)+'px';
+  menu.style.left=Math.max(pad,Math.min(rect.left,window.innerWidth-width-pad))+'px';
+  menu.style.top=(up?Math.max(pad,rect.top-gap-menu.offsetHeight):rect.bottom+gap)+'px';
+ };
+ details.addEventListener('toggle',()=>{
+  if (!supported) return;
+  if (details.open) {menu.showPopover();position();}
+  else if (menu.matches(':popover-open')) menu.hidePopover();
+ });
+ window.addEventListener('resize',position);
+ window.addEventListener('scroll',position,true);
+ document.addEventListener('click',event=>{if (details.open&&!details.contains(event.target)) details.open=false;});
+ details.addEventListener('keydown',event=>{if(event.key==='Escape'){details.open=false;caption.focus();event.preventDefault();}});
+})();

@@ -1,11 +1,11 @@
 {% load static %}
 <details class="nr-filter-panel" open><summary>Изменить условия отчёта</summary>
-<form method="get" class="next-filter" id="native-report-filters">
+<form method="get" class="next-filter nr-shareholder-filters" id="native-report-filters">
 <label>Год<input name="year" value="2026" readonly aria-label="Год сохранённого расчёта"></label>
 <div class="nr-field">Периоды премии<details class="next-branches next-periods"><summary data-next-period-caption>{{ period_label }}</summary><div class="next-branch-options"><div><button type="button" data-period-all>Выбрать все</button> <button type="button" data-period-clear>Снять все</button></div>{% for choice in period_choices %}<label><input type="checkbox" name="period" value="{{ choice.value }}" data-caption="{{ choice.label }}"{% if choice.selected %} checked{% endif %}> {{ choice.label }}</label>{% endfor %}<small>Пустой выбор — все доступные периоды.</small></div></details></div>
 {% if kind != 'deals' %}<div class="nr-field">Виды мотивации<details class="next-branches next-types"><summary data-type-caption>{{ type_label }}</summary><div class="next-branch-options"><div><button type="button" data-type-all>Выбрать все</button> <button type="button" data-type-clear>Снять все</button></div>{% for choice in type_choices %}<label><input type="checkbox" name="type" value="{{ choice.value }}"{% if choice.selected %} checked{% endif %}> {{ choice.value }}</label>{% endfor %}<small>Пустой выбор — все доступные виды.</small></div></details></div>{% endif %}
 <div class="nr-field">Подразделения<details class="next-branches"><summary data-branch-caption>{{ branch_label }}</summary><div class="next-branch-options"><input type="search" data-next-branch-search placeholder="Найти подразделение" aria-label="Найти подразделение"><div><button type="button" data-next-select-all>Выбрать все</button> <button type="button" data-next-clear-all>Снять все</button></div>{% for branch in branches %}<label><input type="checkbox" name="subdivision" value="{{ branch.name }}"{% if branch.selected %} checked{% endif %}> {{ branch.name }}</label>{% endfor %}</div></details></div>
-{% if kind == 'mine' %}<div class="nr-field">Сотрудники<details class="next-branches next-products" data-empty-caption="Выберите сотрудников"><summary data-product-caption>{{ author_label }}</summary><div class="next-branch-options">
+{% if kind == 'mine' %}<div class="nr-field nr-author-field">Сотрудники<details class="next-branches next-products nr-author-filter" data-empty-caption="Выберите сотрудников"><summary data-product-caption>{{ author_label }}</summary><div class="next-branch-options">
 <input type="search" data-product-search placeholder="Найти сотрудника" aria-label="Найти сотрудника"><div><button type="button" data-product-all>Выбрать всех</button> <button type="button" data-product-clear>Снять все</button></div>
 {% for option in authors %}<label{% if option.disabled %} hidden{% endif %}><input type="checkbox" name="author" value="{{ option.value }}"{% if option.disabled %} disabled{% endif %}{% if option.selected %} checked{% endif %}> {{ option.value }}</label>{% endfor %}
 <small>Выберите одного или нескольких сотрудников.</small></div></details></div>{% endif %}
@@ -16,4 +16,4 @@
 <p class="nr-muted">Фильтры применяются к показу и Excel. Дата среза, кварталы расчёта и доли перераспределения зафиксированы в запуске.</p>
 
 {{ author_subdivisions|json_script:"shareholder-author-subdivisions" }}
-<script src="{% static 'admin_motivation/shareholder_author_filter.js' %}" defer></script>
+<script src="{% static 'admin_motivation/shareholder_author_filter.js' %}?v=author-popup-20261127" defer></script>
