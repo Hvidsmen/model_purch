@@ -171,7 +171,7 @@ def export(request,batch,snapshot,revision):
     sheet.append(['Ссылка на зафиксированный отчёт',url])
     sheet.append(['Расчёт',snapshot['source']['run_id'],'Общий множитель',snapshot['source'].get('workflow',{}).get('coefficient','1')])
     if batch.state in ('archived','deleted'):sheet.cell(1,9,'АРХИВ: распределение больше не применяется')
-    headers=['Подразделение','Год','Период','Вид мотивации','Тип выплаты','Сотрудник','По расчёту','После распределения','Изменение','Валюта','Комментарий','Вес продаж']
+    headers=['Подразделение','Год','Период','Вид мотивации','Тип выплаты','Сотрудник','По расчёту','После распределения','Изменение','Валюта премии','Комментарий','Вес продаж']
     sheet.append(headers)
     for row in snapshot['rows']:
         a=service.cash(row['original']); b=service.cash(row['amount'])
@@ -184,12 +184,12 @@ def export(request,batch,snapshot,revision):
     sheet.freeze_panes='G5';sheet.auto_filter.ref=f'A4:L{total_row-1}'
     for i in range(1,13):sheet.column_dimensions[get_column_letter(i)].width=32 if i in (1,6,11) else 22
     funds=book.create_sheet('Фонды')
-    funds.append(['Вид мотивации','Тип выплаты','Фонд','Распределено','Остаток','Валюта'])
+    funds.append(['Вид мотивации','Тип выплаты','Фонд','Распределено','Остаток','Валюта премии'])
     from .services.distribution_shared import enabled as shared_enabled,pools
     if shared_enabled(snapshot.get('source',{})):
         funds.cell(1,3,'Исходный фонд');funds.cell(1,4,'После распределения');funds.cell(1,5,'Исходный фонд минус распределено')
         common=book.create_sheet('Общий остаток')
-        common.append(['Тип выплаты','Исходная сумма','Распределено','Остаток','Валюта'])
+        common.append(['Тип выплаты','Исходная сумма','Распределено','Остаток','Валюта премии'])
         for pool in pools(snapshot['funds'],snapshot['rows']):common.append([pool['label'],service.cash(pool['amount']),pool['allocated'],pool['remaining'],snapshot['currency']])
     for f in service.balances(snapshot['funds'],snapshot['rows']):funds.append([f['kind'],f['label'],service.cash(f['amount']),f['allocated'],f['remaining'],snapshot['currency']])
     output=BytesIO();book.save(output);output.seek(0)

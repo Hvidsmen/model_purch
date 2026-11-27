@@ -1,8 +1,14 @@
-from base.access import ADMIN,DIRECTOR,FINANCIER,MOTIVATION_VIEWER,role_for
+from base.access import ADMIN,DIRECTOR,FINANCIER,MOTIVATION_VIEWER,BRANCH_DIRECTOR,DEPUTY_DIRECTOR,POLITICIAN,role_for
 
 
 def can_view(user):
-    return bool(user.is_authenticated and user.is_active and role_for(user,'motivation') in (ADMIN,DIRECTOR,FINANCIER,MOTIVATION_VIEWER))
+    if not user.is_authenticated or not user.is_active:return False
+    role=role_for(user,'motivation')
+    if role in (ADMIN,DIRECTOR,FINANCIER,MOTIVATION_VIEWER):return True
+    if role in (BRANCH_DIRECTOR,DEPUTY_DIRECTOR,POLITICIAN):
+        from base.report_access import politician_scope
+        return bool(politician_scope(user))
+    return False
 
 
 def can_start(user):

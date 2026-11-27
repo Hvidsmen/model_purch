@@ -48,9 +48,10 @@ class PoliticianAccessTests(TestCase):
         from admin_motivation.urls import urlpatterns
         with patch('admin_motivation.report_views.load_report') as read:
             for pattern in urlpatterns:
-                if not isinstance(pattern, URLPattern) or pattern.name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next'):
+                if not isinstance(pattern, URLPattern) or pattern.name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next', 'motivation_shareholders', 'motivation_shareholder_report', 'motivation_shareholder_status'):
                     continue
-                route = re.sub(r'<(?:[^:>]+:)?[^>]+>', 'subdivisions' if pattern.name == 'motivation_report' else '1', str(pattern.pattern))
+                replacement = '00000000-0000-0000-0000-000000000001' if pattern.name=='motivation_shareholder_archive' else 'subdivisions' if pattern.name=='motivation_report' else '1'
+                route = re.sub(r'<(?:[^:>]+:)?[^>]+>', replacement, str(pattern.pattern))
                 with self.subTest(route=route):
                     self.assertEqual(self.client.get('/admin_motivation' + route).status_code, 403)
                     self.assertEqual(self.client.post('/admin_motivation' + route).status_code, 403)

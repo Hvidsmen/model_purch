@@ -2,103 +2,71 @@ from decimal import Decimal as D
 from django.test import SimpleTestCase
 from django.template.loader import render_to_string
 from .services.premium_forecast import enrich
+from .services.reports_next_presenter import present
+from .test_quarter_totals import premium as ledger_row
 
 
-def premium(code='2',kind='Политики',branch='Д-Питер',possible='100',annual='25'):
-    return dict(code=code,kind=kind,subdivision=branch,possible=D(possible),annual_accrual=D(annual),total=D(0),bonus=D(999))
+def source(author='One',code='2',quarter='200',annual='50',kind='Политики'):
+    return {'Подразделение':'Д-Питер','АвторСделки':author,'kind':kind,'code':code,
+            'quarter':D(quarter) if quarter is not None else None,'annual':D(annual) if annual is not None else None,'forecast_scope':'Подразделение'}
 
 
-def base(code='2',kind='Политики',branch='Д-Питер',plan='200',fact='100'):
-    return dict(period=code+' квартал' if code!='5' else 'Год',kind=kind,subdivision=branch,plan=D(plan),fact=D(fact))
+def row(author='One',code='2',kind='Политики'):
+    result=ledger_row(code,kind,'10',author=author,branch='Д-Питер')
+    result.update(possible=D(99999),annual_accrual=D(9999))
+    return result
+
+
+def ledger(rows,forecasts):
+    return dict(shareholder_forecast=True,plan_forecast_available=True,plan_forecast_rows=forecasts,rows=rows,
+                total=sum((r['total'] for r in rows),D(0)),kinds=list(dict.fromkeys(r['kind'] for r in rows)),currency='USD')
 
 
 class PremiumForecastTests(SimpleTestCase):
-    def display(self,rows,bases):
-        display={'period_cards':[{'code':code} for code in dict.fromkeys(r['code'] for r in rows)]}
-        ledger=dict(shareholder_forecast=True,rows=rows,coefficient_plan_fact=bases)
-        enrich(display,ledger)
-        return display
-
-    def test_scales_quarter_and_actual_annual_share_without_bonus(self):
-        display=self.display([premium(annual='30')],[base()])
+    def test_actual_money_and_current_fact_cannot_change_plan_forecast(self):
+        data=ledger([row()],[source()]);data['coefficient_plan_fact']=[{'fact':0,'plan':999999}]
+        display=present('team',data,data,['2'])
         self.assertEqual(display['forecast_100']['quarter'],D(200))
-        self.assertEqual(display['forecast_100']['annual'],D(60))
-        self.assertEqual(display['period_cards'][0]['forecast_100']['annual'],D(60))
+        self.assertEqual(display['forecast_100']['annual'],D(50))
+        self.assertEqual(display['total'],D(10))
+        self.assertEqual(display['possible'],D(99999))
 
-    def test_each_branch_and_kind_uses_its_own_plan_base(self):
-        rows=[premium(),premium(kind='Продажи',annual='10'),premium(branch='Д-Ростов',annual='40')]
-        display=self.display(rows,[base(),base(kind='Продажи',plan='50'),base(branch='Д-Ростов',plan='300')])
-        self.assertEqual(display['forecast_100']['quarter'],D(550))
-        self.assertEqual(display['forecast_100']['annual'],D(175))
-        kinds={r['kind']:r for r in display['forecast_100']['kinds']}
-        self.assertEqual(kinds['Продажи']['quarter'],D(50))
-
-    def test_year_replaces_annual_contributions_in_total_never_counts_twice(self):
-        display=self.display([premium(),premium(code='5',possible='300')],[base(),base(code='5',plan='400')])
+    def test_year_replaces_annual_contributions_in_total(self):
+        data=ledger([row(),row(code='5')],[source(),source(code='5',quarter='0',annual='400')])
+        display=present('team',data,data,['2','5'])
         self.assertEqual(display['forecast_100']['quarter'],D(200))
-        self.assertEqual(display['forecast_100']['annual'],D(1200))
-        self.assertEqual(display['period_cards'][1]['forecast_100']['quarter'],0)
+        self.assertEqual(display['forecast_100']['annual'],D(400))
 
-    def test_zero_fact_missing_plan_first_quarter_and_ambiguous_year_are_unknown(self):
-        for rows,bases in [([premium()],[base(fact='0')]),([premium()],[base(plan='0')]),([premium()],[]),([premium()],[base(),base()]),([premium(code='1')],[base(code='1')])]:
-            display=self.display(rows,bases)
-            self.assertIsNone(display['forecast_100']['quarter'])
-            self.assertIsNone(display['forecast_100']['annual'])
-
-    def test_partial_unknown_is_not_reported_as_complete_total(self):
-        display=self.display([premium(),premium(kind='Продажи')],[base()])
+    def test_missing_snapshot_or_partial_unknown_remains_unknown(self):
+        data=ledger([row(),row(kind='Продажи')],[source(),source(kind='Продажи',quarter=None,annual=None)])
+        display=present('team',data,data,['2'])
         self.assertIsNone(display['forecast_100']['quarter'])
-        self.assertIsNone(display['forecast_100']['annual'])
         self.assertEqual(display['forecast_100']['kinds'][0]['quarter'],D(200))
+        data['plan_forecast_rows']=[];data['plan_forecast_available']=False
+        display=present('team',data,data,['2'])
+        self.assertIsNone(display['forecast_100']['annual'])
+        self.assertIn('Создайте новый акционерный расчёт',display['forecast_100_note'])
 
-    def test_zero_premium_is_known_and_ordinary_reports_are_unchanged(self):
-        display=self.display([premium(possible='0',annual='0')],[base()])
+    def test_first_quarter_forecast_and_zero_rates_are_supported(self):
+        data=ledger([row(code='1')],[source(code='1',quarter='0',annual='0')])
+        display=present('team',data,data,['1'])
         self.assertEqual(display['forecast_100']['quarter'],0)
         self.assertEqual(display['forecast_100']['annual'],0)
-        untouched={};enrich(untouched,{'rows':[premium()]})
-        self.assertEqual(untouched,{})
+        untouched={};enrich(untouched,{'rows':[]});self.assertEqual(untouched,{})
 
-    def test_summary_and_period_details_render_both_parts(self):
-        display=self.display([premium()],[base()])
-        for template in ('_team_summary.html','_team_calculation_details.html'):
-            html=render_to_string('admin_motivation/reports_next/'+template,dict(presentation=display,ledger={'currency':'USD'},shareholder_report=True))
-            self.assertIn('Квартальная часть',html)
-            self.assertIn('В годовую премию',html)
-            self.assertIn('200,00',html)
-            self.assertIn('50,00',html)
-
-    def test_team_presenter_keeps_paid_amounts_and_adds_estimate(self):
-        from .services.reports_next_presenter import present
-        from .test_quarter_totals import premium as ledger_row
-        row=ledger_row('2','Политики','10',branch='Д-Питер')
-        row.update(possible=D(100),annual_accrual=D(30))
-        ledger=dict(shareholder_forecast=True,rows=[row],total=D(10),kinds=['Политики'],currency='USD',coefficient_plan_fact=[base()])
-        display=present('team',ledger,ledger,['2'])
-        self.assertEqual(display['total'],D(10))
-        self.assertEqual(display['possible'],D(100))
-        self.assertEqual(display['forecast_100']['quarter'],D(200))
-        self.assertEqual(display['forecast_100']['annual'],D(60))
-
-    def test_employee_forecasts_reconcile_with_kind_and_all_pages_total(self):
-        from .services.reports_next_presenter import present
-        from .test_quarter_totals import premium as ledger_row
-        from django.core.paginator import Paginator
-        rows=[]
-        for author,amount in [('One',D(100)),('Two',D(50))]:
-            row=ledger_row('2','Политики','0',author=author,branch='Д-Питер')
-            row.update(possible=amount,annual_accrual=amount/D(4));rows.append(row)
-        ledger=dict(shareholder_forecast=True,rows=rows,total=D(0),kinds=['Политики'],currency='USD',coefficient_plan_fact=[base()])
-        display=present('team',ledger,ledger,['2'])
+    def test_employee_kind_and_period_totals_reconcile_and_render(self):
+        data=ledger([row(),row(author='Two')],[source(),source(author='Two',quarter='100',annual='25')])
+        display=present('team',data,data,['2'])
         section=display['team_sections'][0]
         self.assertEqual([r['forecast_100']['quarter'] for r in section['rows']],[D(200),D(100)])
         self.assertEqual(section['forecast_100']['quarter'],D(300))
-        self.assertEqual(section['forecast_100']['annual'],D(75))
-        self.assertEqual(section['period_summary_cells'][0]['forecast_100']['quarter'],D(300))
-        self.assertEqual(display['registry_rows'][0]['period_cells'][0]['forecast_100']['annual'],D(50))
-        section['page']=Paginator(section['rows'],1).page(1)
-        html=render_to_string('admin_motivation/reports_next/_team_tables.html',dict(presentation=display,ledger=ledger,kind='team',shareholder_report=True,shareholder_original_rules=True))
-        self.assertIn('При 100% плана · квартальная часть',html)
-        self.assertIn('При 100% плана · в годовую премию',html)
-        self.assertIn('300,00',html)
-        self.assertIn('75,00',html)
-        self.assertEqual(section['forecast_100']['quarter'],display['forecast_100']['quarter'])
+        self.assertEqual(section['period_summary_cells'][0]['forecast_100']['annual'],D(75))
+        for template in ('_team_summary.html','_team_calculation_details.html','_team_tables.html'):
+            html=render_to_string('admin_motivation/reports_next/'+template,dict(presentation=display,ledger=data,kind='team',shareholder_report=True))
+            self.assertIn('300,00',html);self.assertIn('75,00',html)
+
+    def test_no_plan_means_zero_forecast_even_with_actual_premium(self):
+        data=ledger([row()],[])
+        display=present('team',data,data,['2'])
+        self.assertEqual(display['forecast_100']['quarter'],0)
+        self.assertEqual(display['forecast_100']['annual'],0)

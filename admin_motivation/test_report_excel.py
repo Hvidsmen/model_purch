@@ -47,7 +47,7 @@ class ReportExcelTests(TestCase):
                     self.assertEqual(sheet.freeze_panes, 'B3')
                 if scope == 'all':
                     settings = list(book['Параметры отчёта'].values)
-                    self.assertIn(('Валюта мотивации', 'RUB'), settings)
+                    self.assertIn(('Валюта премии', 'RUB'), settings)
                     self.assertIn(('Автор сделки', 'Иванов'), settings)
                 book.close()
             finally:

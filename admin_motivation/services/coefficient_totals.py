@@ -32,7 +32,6 @@ def performance(rows,kind,periods,*,original_rules=True):
             for name in ('plan','fact'):
                 values[name]=(sum((item[name] for item in inputs),Decimal(0))
                               if all(q in quarters for q in coverage) and all(item[name] is not None for item in inputs) else None)
-            if code=='1' or (code=='total' and periods==['1']):values['plan']=values['fact']
             result.append({'subdivision':branch,'year':year,'kind':kind,
                            'coefficient_total':True,
                            'formula':'Общая база вида мотивации','scope_author':'Всё подразделение',

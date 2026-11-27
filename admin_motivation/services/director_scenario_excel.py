@@ -92,7 +92,7 @@ def workbook(snapshot):
         for cell in row:
             cell.value=Decimal(str(cell.value));cell.number_format='0.00%'
     parameters=[{'name':'Расчёт','value':f'№ {snapshot.pk} · {snapshot.created_at.isoformat()}'},
-        {'name':'Правило','value':data['rule']},{'name':'Валюта','value':'USD'},
+        {'name':'Правило','value':data['rule']},{'name':'Валюта премии','value':'USD'},
         {'name':'Коэффициенты 2026','value':f"{data['version']['title']} · ревизия {data['version']['revision']}"},
         {'name':'Роли','value':'Назначения действуют только внутри сравнения; действующий состав не изменён'},
         {'name':'Факт = план','value':'Оборот заменяется планом с сегментами O0–O4; условия выполнения проверяются заново'},

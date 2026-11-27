@@ -1,9 +1,9 @@
-"""Indicative 100%-of-plan premium at the current sales mix and effective rates."""
+"""Present plan-only estimates; never extrapolate current actual premiums."""
+from collections import defaultdict
 from decimal import Decimal,InvalidOperation
-from .reports_next import period_code
 
 ZERO=Decimal(0)
-NOTE='Оценка при прежней структуре продаж, скидках, ставках и поправках: начисление × план / факт по подразделению, виду и периоду. Годовая часть — до годового условия выплаты. Доплаты за прошлые кварталы не включены.'
+from .plan_premium_forecast import NOTE
 
 
 def number(value):
@@ -20,24 +20,17 @@ def total(values):
 
 def enrich(display,ledger):
     if not ledger.get('shareholder_forecast') or not ledger.get('rows'):return
-    bases={}
-    for row in ledger.get('coefficient_plan_fact',[]):
-        code=period_code(row.get('period',''))
-        if code not in ('1','2','3','4','5'):continue
-        key=(row.get('subdivision'),row.get('kind'),code)
-        # Distinct years or duplicate bases must never silently overwrite.
-        bases.setdefault(key,[]).append(row)
+    from .plan_premium_forecast import empty_plan_known
+    forecast_index=defaultdict(list)
+    for item in ledger.get('plan_forecast_rows',[]):
+        forecast_index[(item.get('Подразделение'),item.get('АвторСделки') or '—',item['kind'],item['code'])].append(item)
     items=[];by_source={}
     for row in ledger['rows']:
-        code=row['code'];base=bases.get((row['subdivision'],row['kind'],code),[])
-        factor=None
-        if len(base)==1 and code!='1':
-            plan,fact=number(base[0].get('plan')),number(base[0].get('fact'))
-            if plan is not None and plan>0 and fact is not None and fact>0:factor=plan/fact
-        possible=number(row.get('possible'));annual=number(row.get('annual_accrual'))
-        quarter=possible*factor if code!='5' and possible is not None and factor is not None else (ZERO if code=='5' else None)
-        annual=(possible*factor if possible is not None and factor is not None else None) if code=='5' else (annual*factor if annual is not None and factor is not None else None)
-        item=dict(kind=row['kind'],code=code,quarter=quarter,annual=annual)
+        selected=forecast_index.get((row['subdivision'],row['author'],row['kind'],row['code']),[])
+        if not selected and empty_plan_known(ledger,row['kind']):selected=[{'quarter':ZERO,'annual':ZERO}]
+        item=dict(kind=row['kind'],code=row['code'],
+                  quarter=ZERO if row['code']=='5' else total(r['quarter'] for r in selected),
+                  annual=total(r['annual'] for r in selected))
         items.append(item);by_source[id(row)]=item
     def summary(selected):
         selected=list(selected)
@@ -50,6 +43,13 @@ def enrich(display,ledger):
                            for kind in dict.fromkeys(r['kind'] for r in selected)])
     display['forecast_100']=summary(items)
     display['forecast_100_note']=NOTE
+    if not ledger.get('plan_forecast_available'):
+        display['forecast_100_note']+=' В этом снимке нет данных для нового прогноза. Создайте новый акционерный расчёт.'
+    elif ledger.get('currency')=='RUB' and not ledger.get('forecast_usd_rub'):
+        display['forecast_100_note']+=' Плановый курс USD/RUB не задан; прогноз в RUB недоступен.'
+    sources=sorted({r['forecast_scope'] for r in ledger.get('plan_forecast_rows',[])})
+    if sources:display['forecast_100_note']+=' Использована история: '+', '.join(sources)+'.'
+    if ledger.get('forecast_usd_rub'):display['forecast_100_note']+=' Плановый курс USD/RUB: '+str(ledger['forecast_usd_rub'])+'.'
     for card in display['period_cards']:
         card['forecast_100']=summary(row for row in items if row['code']==card['code'])
 

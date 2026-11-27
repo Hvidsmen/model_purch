@@ -15,6 +15,7 @@ class ExtendedForecastTests(SimpleTestCase):
             rows.append(row)
         detail=manager_detail_report(rows)
         ledger=dict(currency='USD',sections=[{},{}] if prefixed else [{}],rows=[dict(subdivision='A',author='Иванов',kind='Политики',code='2',possible=D(150),annual_accrual=D(45))],coefficient_plan_fact=[dict(subdivision='A',kind='Политики',period='2 квартал',plan=D(200),fact=D(100))])
+        ledger['plan_forecast_rows']=[{**r,'Подразделение':'A','kind':'Политики','code':'2','quarter':D(value),'annual':D(value)*D('.3'),'forecast_scope':'Товар'} for r,value in zip(rows,[200,100])]
         enrich(detail,ledger)
         return detail,ledger
 
@@ -39,7 +40,7 @@ class ExtendedForecastTests(SimpleTestCase):
         detail,ledger=self.data()
         # Start with a fresh tree: enrichment is a single presentation pass.
         raw=detail['_source_rows'];detail=manager_detail_report(raw)
-        ledger['coefficient_plan_fact'][0]['fact']=D(0)
+        ledger['plan_forecast_rows']=[]
         enrich(detail,ledger)
         self.assertEqual(detail['detail_totals'][0][-2:],[None,None])
 
@@ -54,8 +55,15 @@ class ExtendedForecastTests(SimpleTestCase):
         output=report_excel(detail,{},'detail');self.addCleanup(output.close)
         book=load_workbook(output);self.addCleanup(book.close)
         sheet=book['Расширенная мотивация']
-        self.assertEqual(sheet.max_column,45)
-        self.assertEqual(sheet.cell(3,22).value,300)
-        self.assertEqual(sheet.cell(3,23).value,90)
-        self.assertEqual(sheet.cell(3,44).value,300)
-        self.assertEqual(sheet.cell(3,45).value,90)
+        self.assertEqual(sheet.max_column,43)
+        self.assertEqual(sheet.cell(3,21).value,300)
+        self.assertEqual(sheet.cell(3,22).value,90)
+        self.assertEqual(sheet.cell(3,42).value,300)
+        self.assertEqual(sheet.cell(3,43).value,90)
+
+    def test_individual_section_with_multiple_ledger_kinds_keeps_forecast(self):
+        detail,ledger=self.data()
+        raw=detail['_source_rows'];detail=manager_detail_report(raw)
+        ledger['sections']=[{},{}]
+        enrich(detail,ledger)
+        self.assertEqual(detail['detail_totals'][0][-2:],[D(300),D(90)])

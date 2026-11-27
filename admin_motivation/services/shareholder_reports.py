@@ -27,14 +27,18 @@ def records(run,dataset):
             mode='separate' if run.scenario=='separate' and code in '123' and code else 'combined'
             if dataset in ('mapping','deals','policy_plan_shares','policy_rates','policy_defaults') or dataset.endswith('_cur'):mode='combined'
             if regional and row.get('Подразделение') in REGIONS:mode='combined'
-            if chunk.mode==mode:yield row
+            if chunk.mode==mode:
+                from .shareholder_scope import permits
+                if permits(row,dataset,run=run):yield row
 
 
 def options(run):
     from django.core.cache import cache
-    stored=run.metadata.get(OPTIONS_KEY) if run.state=='completed' else None
+    from .shareholder_scope import current
+    restricted=current.get() is not None
+    stored=run.metadata.get(OPTIONS_KEY) if run.state=='completed' and not restricted else None
     if isinstance(stored,dict) and isinstance(stored.get('author_subdivisions'),dict) and all(isinstance(stored.get(key),list) for key in OPTION_FIELDS):return stored
-    cache_key=f'shareholder-options-v2:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at else None
+    cache_key=f'shareholder-options-v2:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at and not restricted else None
     if cache_key:
         saved=cache.get(cache_key)
         if saved is not None:return saved
@@ -50,7 +54,7 @@ def options(run):
     result={field:sorted(value) for field,value in values.items()}
     result['author_subdivisions']={author:sorted(author_subdivisions[author]) for author in result['author']}
     if cache_key:cache.set(cache_key,result,3600)
-    if run.state=='completed':
+    if run.state=='completed' and not restricted:
         from ..models import ShareholderCalculation
         run.metadata={**run.metadata,OPTIONS_KEY:result}
         ShareholderCalculation.objects.filter(pk=run.pk,state='completed').update(metadata=run.metadata)
@@ -143,6 +147,11 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
         perf=filtered_performance(filtered,records(run,'perf_'+tag))
         contexts={(r['Подразделение'],str(r['Год']),r['КварталМотивации']) for r in filtered}
         dept=[row for row in records(run,'dept_'+tag) if (row['Подразделение'],str(row['Год']),row['КварталМотивации']) in contexts]
+        from .shareholder_scope import execution_basis,current
+        if current.get() is not None:
+            with execution_basis():basis=[r for r in records(run,'report_'+tag) if not query.getlist('subdivision') or r.get('Подразделение') in query.getlist('subdivision')]
+        else:basis=raw
+        data['coefficient_performance']=coefficient_totals(basis,kind,periods,original_rules=original_rules)
         data['motivation_performance']=perf;data['department_performance']=dept
         performance.extend(presentation_rows(perf,kind));department.extend(presentation_rows(dept,DEPARTMENT))
         sections.append({'kind':kind,'data':data})
@@ -154,6 +163,8 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
             potential[(row.get('Подразделение') or '—',row.get('АвторСделки') or '—',period_code(row['КварталМотивации']))]+=Decimal(str(row.get('PotentialCatchup'+currency) or 0))
         from .detail_summary_breakdown import catchup_by_author
         bonus_quarters=catchup_by_author(filtered,currency)
+        from .zero_premium_reasons import Reasons
+        zero_reasons=Reasons(run,kind,raw,selected,presentation_rows(dept,DEPARTMENT),data['coefficient_performance'],currency)
         summary=data['period_summary']
         for item in summary['rows']:
             for index,column in enumerate(summary['columns']):
@@ -164,13 +175,17 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
                 target.setlist('period',[code]);target.setlist('type',[kind]);target.setlist('author',[item['author']]);target.setlist('subdivision',[item['subdivision']])
                 bonus=item['remainder'] if original_rules and code=='5' else ZERO
                 rows.append({'subdivision':item['subdivision'],'author':item['author'],'unallocated':item.get('unallocated',False),
+                    'zero_reasons':zero_reasons.get(item['subdivision'],item['author'],run.configuration.get('fact_year',2026),code,amount),
                     'kind':kind,'period':column['label'],'code':code,'amount':amount,'bonus':bonus,'total':amount+bonus,'currency':currency,
                     'potential_bonus':potential[(item['subdivision'],item['author'],code)],
                     'bonus_quarters':bonus_quarters.get((item['subdivision'],item['author']),{}) if code=='5' else {},
                     'possible':item.get('possible_values',[None]*len(summary['columns']))[index],
                     'annual_accrual':annual[(item['subdivision'],item['author'],code)] if code in '1234' else None,
                     'detail_url':reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+target.urlencode()})
-    return {'shareholder_forecast':True,'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'coefficient_plan_fact':coefficient_performance,'department_plan_fact':department,'kinds':kinds,
+    from .plan_premium_forecast import load as load_forecast,VERSION as FORECAST_VERSION
+    forecast_rows=load_forecast(run,query,periods,kinds)
+    return {'plan_forecast_rows':forecast_rows,'plan_forecast_available':run.metadata.get('plan_forecast_version')==FORECAST_VERSION,
+        'forecast_usd_rub':run.configuration.get('forecast_usd_rub'),'shareholder_forecast':True,'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'coefficient_plan_fact':coefficient_performance,'department_plan_fact':department,'kinds':kinds,
         'has_unallocated':any(row['unallocated'] for row in rows),'total':sum((row['total'] for row in rows),ZERO),
         'currency':currency,'payout_threshold':Decimal(run.configuration['payout_threshold'])}
 

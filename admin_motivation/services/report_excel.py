@@ -19,6 +19,8 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
     book = Workbook(write_only=True)
     book.properties.title = 'Мотивация. Детально'
     book.properties.creator = 'Рабочий портал'
+    from .catchup_visibility import columns,has_year
+    show_catchup=has_year(data.get('periods',[]))
     currency = data['currency']
     edge = Side(style='thin', color='DCE3EC')
 
@@ -43,6 +45,8 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
         if len(headers) > 16384:
             raise ValidationError('Слишком много столбцов для Excel. Уточните годы отчёта.')
         target = book.create_sheet(name)
+        target._catchup_keep=columns(headers,show_catchup)
+        widths=[w for i,w in enumerate(widths) if i in target._catchup_keep]
         target.sheet_view.showGridLines = False
         target.freeze_panes = freeze
         target.sheet_properties.pageSetUpPr.fitToPage = True
@@ -55,7 +59,7 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
         target.row_dimensions[1].height = 30
         target.row_dimensions[2].height = 65
         target.append([cell(target, f'{name} · {currency}', heading=True)])
-        target.append([cell(target, title, heading=True) for title in headers])
+        target.append([cell(target, title, heading=True) for i,title in enumerate(headers) if i in target._catchup_keep])
         return target
 
     def append(target, values, kinds, *, index, total=False, indent=0):
@@ -64,7 +68,7 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
         target.row_dimensions[index].height = 22
         target.row_dimensions[index].outlineLevel = min(indent, 7)
         target.append([cell(target, value, kind=kind, total=total, indent=indent if column == 0 else 0)
-                       for column, (value, kind) in enumerate(zip(values, kinds))])
+                       for column, (value, kind) in enumerate(zip(values, kinds)) if column in target._catchup_keep])
 
     try:
         if scope in ('all', 'summary'):
@@ -91,7 +95,7 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
                 for row in group['authors']:
                     index += 1
                     append(target, summary_values(row,row['subdivision'],row['author']), kinds, index=index, indent=1)
-            target.auto_filter.ref = f'A2:{get_column_letter(len(headers))}{index}'
+            target.auto_filter.ref = f'A2:{get_column_letter(len(target._catchup_keep))}{index}'
 
         if scope in ('all', 'detail'):
             periods = [*data['periods'], 'Итого']
@@ -108,7 +112,9 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
                 index += 1
                 append(target, [label, *[value for block in blocks for value in block]], kinds,
                        index=index, total=total, indent=level)
-            if data.get('division_execution'):
+            if data.get('execution_rows'):
+                for execution in data['execution_rows']:write_row(execution['label'],execution['values'])
+            elif data.get('division_execution'):
                 write_row('% выполнения подразделений', data['division_execution'])
             write_row('Всего по расчёту' if provenance else 'Итого', data['detail_totals'], total=True)
             def write_nodes(nodes):
@@ -116,11 +122,11 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
                     write_row(node['label'], node['values'], level=node['level'])
                     write_nodes(node['children'])
             write_nodes(data['nodes'])
-            target.auto_filter.ref = f'A2:{get_column_letter(len(headers))}{index}'
+            target.auto_filter.ref = f'A2:{get_column_letter(len(target._catchup_keep))}{index}'
 
         if scope == 'all' or provenance:
             target = sheet('Параметры отчёта', ['Параметр', 'Значение'], [38, 95], 'A3')
-            settings = [('Валюта мотивации', currency), ('Годы данных', ', '.join(data['years']) or 'Нет данных'),
+            settings = [('Валюта премии', currency), ('Годы данных', ', '.join(data['years']) or 'Нет данных'),
                 ('Факт периода в итоге', 'Если полных строк «Год» нет, суммируются физические отгрузки выбранных кварталов. Накопительные окна выполнения не складываются; план и процент без полной годовой базы остаются неопределёнными.')]
             for _, parameter, caption, _, multiple in FILTERS['manager-detail']:
                 value = parameters.get(parameter)
@@ -130,11 +136,14 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
             settings += [('План и отгрузки', 'USD'), ('K0–K4', 'Σ(Ki × Oi) / Σ(Oi), вес — отгрузки соответствующего сегмента'),
                          ('Годовое выполнение', 'План и факт из строк «Год»; мотивация и остаток — по всем периодам')]
             settings.extend((label, str(value)) for label, value in provenance or [])
+            settings=[row for row in settings if show_catchup or 'доплат' not in str(row[0]).casefold()]
             for index, row in enumerate(settings, 3):
                 append(target, row, ['text', 'text'], index=index)
         if allocation_rows is not None:
             from .distribution_reporting import excel_sheet
             excel_sheet(book,allocation_rows)
+        from .plan_premium_forecast import excel_sheet as forecast_sheet
+        forecast_sheet(book,data.get('_forecast_audit',[]))
         output = TemporaryFile(mode='w+b')
         try:
             book.save(output)

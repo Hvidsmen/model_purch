@@ -1,7 +1,7 @@
 """Project the same indicative forecast onto the detailed product hierarchy."""
-from collections import defaultdict
 from decimal import Decimal
-from .premium_forecast import number,total
+from .premium_forecast import total
+from .plan_premium_forecast import empty_plan_known
 from .reports_next import period_code
 from .manager_detail import DIMENSIONS
 
@@ -9,32 +9,25 @@ ZERO=Decimal(0)
 
 
 def enrich(detail,ledger):
-    bases=defaultdict(list)
-    for row in ledger.get('coefficient_plan_fact',[]):
-        code=period_code(row.get('period',''))
-        if code in ('1','2','3','4','5'):bases[(row['subdivision'],row['kind'],code)].append(row)
-    owners={(r['subdivision'],r['author'],r['kind'],r['code']):r for r in ledger['rows']}
-    prepared=[];currency=ledger['currency'];field='СуммаМотивацииRUR' if currency=='RUB' else 'СуммаМотивацииUSD'
-    prefixed=len(ledger.get('sections',[]))>1
+    prepared=[]
+    identities={(r.get('Подразделение'),r.get('АвторСделки'),r.get('ТипКоэф')) for r in detail.get('_source_rows',[])}
+    def detail_branch(row):
+        branch=row.get('Подразделение');kind=row['kind'];author=row.get('АвторСделки')
+        for candidate in (branch,str(kind)+' · '+str(branch)):
+            if (candidate,author,kind) in identities:return candidate
+        return None
+    for original in ledger.get('plan_forecast_rows',[]):
+        row=dict(original);branch=detail_branch(row)
+        if branch is None:continue
+        row['Подразделение']=branch
+        row['_forecast']=(row['quarter'],row['annual']);row['_code']=row['code'];prepared.append(row)
+    represented={(*(r.get(k) for k in DIMENSIONS),r.get('kind'),r['_code']) for r in prepared}
     for original in detail.get('_source_rows',[]):
-        row=dict(original);code=period_code(row.get('КварталМотивации',''))
-        kind=row.get('ТипКоэф');branch=row.get('Подразделение') or '—'
-        if prefixed and branch.startswith(str(kind)+' · '):branch=branch[len(str(kind))+3:]
-        owner=owners.get((branch,row.get('АвторСделки') or '—',kind,code),{})
-        base=bases.get((branch,kind,code),[]);factor=None
-        if len(base)==1 and code!='1':
-            plan,fact=number(base[0].get('plan')),number(base[0].get('fact'))
-            if plan is not None and plan>0 and fact is not None and fact>0:factor=plan/fact
-        possible=number(row.get(field));quarter=None;annual=None
-        if factor is not None and possible is not None:
-            quarter=possible*factor if code!='5' else ZERO
-            if code=='5':annual=possible*factor
-            else:
-                owner_possible=number(owner.get('possible'));owner_annual=number(owner.get('annual_accrual'))
-                if owner_possible is not None and owner_annual is not None:
-                    if owner_possible:annual=possible*owner_annual/owner_possible*factor
-                    elif owner_annual==0:annual=ZERO
-        row['_forecast']=(quarter,annual);row['_code']=code;prepared.append(row)
+        code=period_code(original.get('КварталМотивации',''))
+        key=(*(original.get(k) for k in DIMENSIONS),original.get('ТипКоэф'),code)
+        if key not in represented:
+            prepared.append({**original,'_code':code,'_forecast':(ZERO,ZERO) if empty_plan_known(ledger,original.get('ТипКоэф')) else (None,None)})
+            represented.add(key)
     def values(rows):
         rows=list(rows)
         blocks=[]
@@ -56,5 +49,6 @@ def enrich(detail,ledger):
                 append(group['values'],scoped);walk(group.get('children',[]),scoped)
     append(detail['detail_totals'],prepared);walk(detail['nodes'],prepared)
     for block in detail.get('division_execution',[]):block.extend([None,None])
-    detail['headers'].extend([dict(label='Прогноз при 100% · квартальная часть',detail=False,title='Пропорциональная оценка при прежней структуре продаж, скидках и ставках'),dict(label='Прогноз при 100% · в годовую премию',detail=False,title='Оценка годового начисления до годового условия выплаты')])
+    detail['headers'].extend([dict(label='Прогноз при 100% · квартальная часть',detail=False,title='План × доли K0–K4 за 2025 год × ставки'),dict(label='Прогноз при 100% · в годовую премию',detail=False,title='Оценка годового начисления до годового условия выплаты')])
+    detail['_forecast_audit']=[r for r in ledger.get('plan_forecast_rows',[]) if detail_branch(r) is not None]
     detail['extended_forecast']=True

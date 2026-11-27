@@ -96,3 +96,8 @@
 #manager-detail-report .report-number{flex-wrap:wrap;align-content:center}
 #manager-detail-report .division-metric-toggle{max-width:100%;white-space:normal;overflow-wrap:anywhere;text-align:inherit}
 #manager-detail-report.manager-expanded-columns{min-width:calc(220px + (var(--report-blocks)*(var(--report-columns) - 2) + 2)*80px);--manager-label-width:220px}
+
+#manager-detail-report[data-show-catchup="false"] .division-report-grid{grid-template-columns:280px repeat(calc(var(--report-blocks)*(var(--report-columns) - 2) + 1),112px)}
+#manager-detail-report[data-show-catchup="false"] .report-period-header{grid-template-columns:280px repeat(calc(var(--report-blocks) - 1),calc((var(--report-columns) - 2)*112px)) calc((var(--report-columns) - 1)*112px)}
+
+#manager-detail-report .manager-period-end{border-right:3px solid #7861b3!important}

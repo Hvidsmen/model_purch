@@ -81,6 +81,7 @@ def period_motivation_summary(rows, currency='USD', pilot=False):
             {segment for scope_year, segment in buckets if scope_year == year and segment not in (1, 2, 3, 4, 'year')})
         if pilot:
             segments = [4, 'year']
+        segments = [segment for segment in segments if (year, segment) in buckets]
         for segment in segments:
             key = (year, segment)
             label = f'{segment} кв.' if isinstance(segment, int) else 'Год' if segment == 'year' else segment

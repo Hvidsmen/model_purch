@@ -29,12 +29,14 @@ def catchup_by_author(rows,currency):
 
 def enrich(detail,ledger,display):
     summary=detail['period_summary']
+    codes=list(dict.fromkeys(period_code(column['label']) for column in summary['columns']))
+    quarter_codes=[code for code in codes if code in ('1','2','3','4')]
     prefixed=len(ledger.get('sections',[]))>1
     def branch(row):return (row['kind']+' · ' if prefixed else '')+row['subdivision']
     def attach(node,rows,forecasts):
         rows=list(rows);forecasts=list(forecasts)
-        node['quarter_possible']=[dict(label='Год' if code=='5' else code+' кв.',value=total(r.get('possible') for r in rows if r['code']==code)) for code in '12345']
-        node['quarter_annual']=[dict(label=code+' кв.',value=total(r.get('annual_accrual') for r in rows if r['code']==code)) for code in '1234']
+        node['quarter_possible']=[dict(label='Год' if code=='5' else code+' кв.',value=total(r.get('possible') for r in rows if r['code']==code)) for code in codes if code in ('1','2','3','4','5')]
+        node['quarter_annual']=[dict(label=code+' кв.',value=total(r.get('annual_accrual') for r in rows if r['code']==code)) for code in quarter_codes]
         node['annual_accrual']=total(r.get('annual_accrual') for r in rows if r['code'] in '1234')
         annual_rows=[r for r in rows if r['code']=='5']
         node['quarter_catchup']=[dict(label=code+' кв.',value=total((r['bonus_quarters'].get(code,ZERO) if r.get('bonus_quarters') is not None else None) for r in annual_rows) if annual_rows else ZERO) for code in '1234']

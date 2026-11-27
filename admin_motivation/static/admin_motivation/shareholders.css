@@ -11,13 +11,13 @@
 .nr-shareholder-filters .next-branches[open]>summary:after{content:'⌃'}
 .nr-page .nr-shareholder-filters>label>input,.nr-page .nr-shareholder-filters>label>select{height:38px}
 .nr-shareholder-filters .nr-filter-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto;min-height:38px;white-space:nowrap}
-.nr-page .nr-author-filter>.next-branch-options{width:360px;min-width:0;max-width:calc(100vw - 24px);max-height:340px;padding:12px;border:1px solid #ddd7ee;border-radius:10px;box-shadow:0 12px 34px #26334b24;background:#fff;color:#334155;font-size:13px}
-.nr-page .nr-author-filter>.next-branch-options[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box}
-.nr-page .nr-author-filter .next-branch-options label{display:flex;flex-direction:row;align-items:flex-start;gap:10px;margin:0;padding:9px 7px;line-height:1.45;font-size:13px;color:#334155;border-radius:6px;cursor:pointer}
-.nr-page .nr-author-filter .next-branch-options label:hover{background:#f6f3ff}
-.nr-page .nr-author-filter input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;margin:2px 0 0;accent-color:#6551ae}
-.nr-author-filter .next-branch-options>div{display:flex;gap:8px;margin:0 0 8px}
-.nr-author-filter .next-branch-options>small{display:block;padding:8px 6px 0;color:#8993a6}
+.nr-page .nr-shareholder-filters .next-branches>.next-branch-options{width:360px;min-width:0;max-width:calc(100vw - 24px);max-height:340px;padding:12px;border:1px solid #ddd7ee;border-radius:10px;box-shadow:0 12px 34px #26334b24;background:#fff;color:#334155;font-size:13px}
+.nr-page .nr-shareholder-filters .next-branches>.next-branch-options[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box}
+.nr-page .nr-shareholder-filters .next-branches .next-branch-options label{display:flex;flex-direction:row;align-items:flex-start;gap:10px;margin:0;padding:9px 7px;line-height:1.45;font-size:13px;color:#334155;border-radius:6px;cursor:pointer}
+.nr-page .nr-shareholder-filters .next-branches .next-branch-options label:hover{background:#f6f3ff}
+.nr-page .nr-shareholder-filters .next-branches input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;margin:2px 0 0;accent-color:#6551ae}
+.nr-shareholder-filters .next-branches .next-branch-options>div{display:flex;gap:8px;margin:0 0 8px}
+.nr-shareholder-filters .next-branches .next-branch-options>small{display:block;padding:8px 6px 0;color:#8993a6}
 @media(max-width:600px){.nr-shareholder-filters>.nr-field,.nr-shareholder-filters>label,.nr-shareholder-filters>.nr-author-field{flex-basis:100%}.nr-shareholder-filters .nr-filter-actions{width:100%}}
 
 .content-wrapper .nr-page .nr-matrix[data-forecast-columns="2"] .nr-matrix-periods>strong{grid-column:span 6}

@@ -18,9 +18,9 @@ class CoefficientTotalTests(SimpleTestCase):
         rows=source_rows();before=deepcopy(rows)
         duplicate={**rows[0],'VariationCalculate':'Подразделение'}
         result=performance([*rows,duplicate],'Политики',list('12345'))
-        self.assertEqual([r['plan'] for r in result],list(map(D,[50,300,300,1000,1000,1000])))
+        self.assertEqual([r['plan'] for r in result],list(map(D,[100,300,300,1000,1000,1000])))
         self.assertEqual([r['fact'] for r in result],list(map(D,[50,150,150,500,500,500])))
-        self.assertEqual([r['ratio'] for r in result],[D(1),D('.5'),D('.5'),D('.5'),D('.5'),D('.5')])
+        self.assertEqual([r['ratio'] for r in result],[D('.5')]*6)
         self.assertEqual(rows,before)
 
     def test_same_product_from_two_employees_is_additive_and_branches_remain_separate(self):
@@ -38,7 +38,7 @@ class CoefficientTotalTests(SimpleTestCase):
 
     def test_total_counts_union_of_quarter_windows_and_recomputes_percentage(self):
         for periods,plan,fact in [(['1','2'],300,150),(['2','3'],600,300),
-                                  (['1','3'],400,200),(['4','5'],1000,500),(['5'],1000,500),(['1'],50,50)]:
+                                  (['1','3'],400,200),(['4','5'],1000,500),(['5'],1000,500),(['1'],100,50)]:
             with self.subTest(periods=periods):
                 total=performance(source_rows(),'Политики',periods)[-1]
                 self.assertEqual(total['period'],'Итого')
@@ -51,7 +51,7 @@ class CoefficientTotalReportTests(TestCase):
         fixtures.OriginalSnapshotTests.setUp(self)
         self.run.chunks.all().delete()
         rows=source_rows()
-        for tag in ['pol','sales']:
+        for tag in ['pol','sales','dir']:
             ShareholderSnapshot.objects.create(calculation=self.run,mode='combined',dataset='report_'+tag,
                                                sequence=0,payload=runner.serial(rows))
             ShareholderSnapshot.objects.create(calculation=self.run,mode='combined',dataset='eligibility_'+tag,
@@ -88,3 +88,23 @@ class CoefficientTotalReportTests(TestCase):
         data=reports.data_for(self.run,query,detailed=False)
         target=data['coefficient_plan_fact'][0]
         self.assertEqual((target['plan'],target['fact']),(D(75),D('37.5')))
+
+    def test_q1_real_targets_in_cards_and_excel_preserve_premiums(self):
+        query=QueryDict('type=Политики&type=Продажи&type=Директора&subdivision=Д-Питер&period=1')
+        data=reports.data_for(self.run,query,detailed=False)
+        display=present('team',data,data,['1'])
+        for section in display['team_sections']:
+            card=section['remaining_targets'][0]['display_targets'][0]
+            self.assertEqual((card['plan'],card['fact'],card['ratio'],card['remaining']),
+                             (D(100),D(50),D('.5'),D(50)))
+        # Eligibility and calculated money continue to use the existing Q1 rule.
+        for section in data['sections']:
+            self.assertEqual(section['data']['period_summary']['rows'][0]['values'][0],D(200))
+        self.assertEqual(data['total'],D(600))
+        from .services.presentation_excel import workbook
+        from openpyxl import load_workbook
+        output=workbook('team',data,[]);self.addCleanup(output.close)
+        book=load_workbook(output,read_only=True);self.addCleanup(book.close)
+        rows=[row for row in book['План-факт'].iter_rows(values_only=True) if row and row[0]=='Д-Питер']
+        self.assertTrue(rows)
+        self.assertTrue(all(row[-3:]==(100,50,.5) for row in rows))

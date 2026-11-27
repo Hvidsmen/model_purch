@@ -76,6 +76,7 @@ def read_upload(upload):
 
 
 def finish_report(data):
+    data['show_catchup']=any(str(p).strip().casefold()=='год' for p in data.get('periods',[]))
     rows=data.get('_source_rows',[])
     if rows and {r.get('ТипКоэф') for r in rows}=={KIND} and len({r.get('Подразделение') for r in rows})>1:
         data['curator_multiple']=True

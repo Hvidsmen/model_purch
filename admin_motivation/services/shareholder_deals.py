@@ -39,6 +39,8 @@ def records(run, kind):
                 mode = 'combined'
             if chunk.mode != mode:
                 continue
+            from .shareholder_scope import permits
+            if not permits(row,'deals_'+KINDS[kind],kind=kind,run=run):continue
             row['ДатаЗакрытияСделки'] = closed
             if row.get('ДатаОтгрузки'):
                 row['ДатаОтгрузки'] = date.fromisoformat(str(row['ДатаОтгрузки'])[:10])
@@ -57,9 +59,11 @@ def build(run, query, *, load=True):
         raise ValidationError('Недоступный вид мотивации.')
     selected = {key: query.getlist(key) for key in FILTER_COLUMNS}
     options = {key: set() for key in FILTER_COLUMNS}
-    options['type'].update(KINDS)
+    from .shareholder_scope import current
+    allowed_kinds=current.get().kinds if current.get() else list(KINDS)
+    options['type'].update(allowed_kinds)
     matched = []
-    for source_kind in ([kind] if kind else KINDS):
+    for source_kind in ([kind] if kind else allowed_kinds):
         for row in records(run, source_kind):
             if not values['StartDate'] <= row['ДатаЗакрытияСделки'] <= values['EndDate']:
                 continue
