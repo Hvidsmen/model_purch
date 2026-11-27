@@ -91,8 +91,9 @@
  matrixDetails?.addEventListener('change', () => {
   document.querySelectorAll('.nr-matrix[data-matrix-periods]').forEach(matrix => {
    const count = Number(matrix.dataset.matrixPeriods);
+   const forecast = Number(matrix.dataset.forecastColumns)||0;
    matrix.dataset.mode = matrixDetails.checked ? 'detail' : 'basic';
-   matrix.style.setProperty('--nr-matrix-metrics', count * (matrixDetails.checked ? 4 : 2) + (matrixDetails.checked ? 6 : 4));
+   matrix.style.setProperty('--nr-matrix-metrics', count * ((matrixDetails.checked ? 4 : 2)+forecast) + (matrixDetails.checked ? 6 : 4)+forecast);
   });
  });
  const preview = document.querySelector('.next-filter select[name=preview_user]');
