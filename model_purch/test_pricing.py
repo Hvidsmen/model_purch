@@ -226,7 +226,7 @@ class ProductPricingTests(TestCase):
         self.good.refresh_from_db()
         self.assertEqual(self.good.duty_rate, value)
         self.assertAlmostEqual(self.good.customs_payment_usd, 140 * .1 * (1 + value))
-        response = self.client.post(reverse('goods_groups'), {'name': 'Precise duty', 'duty_rate': str(value), 'container_volume': '65'})
+        response = self.client.post(reverse('goods_groups'), {'name': 'Precise duty', 'duty_rate': str(Decimal(str(value))*100), 'container_volume': '65'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(GoodsGroup.objects.get(name='Precise duty').duty_rate, value)
 
@@ -321,7 +321,7 @@ class ProductPricingTests(TestCase):
         user = User.objects.create_user('logistician')
         user.groups.add(Group.objects.get(name=LOGISTICIAN))
         self.client.force_login(user)
-        response = self.client.post(reverse('goods_groups'), {'name': 'Duty group', 'duty_rate': '0.0725', 'container_volume': '65'})
+        response = self.client.post(reverse('goods_groups'), {'name': 'Duty group', 'duty_rate': '7.25', 'container_volume': '65'})
         self.assertEqual(response.status_code, 302)
         self.assertEqual(GoodsGroup.objects.get(name='Duty group').duty_rate, .0725)
 

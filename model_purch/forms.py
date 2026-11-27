@@ -294,6 +294,20 @@ class ScenarioBulkExportForm(forms.Form):
 
 
 class GoodsGroupForm(forms.ModelForm):
+    duty_rate = forms.DecimalField(label='Пошлина, %', min_value=0, max_value=10000,
+        help_text='Введите 10 для пошлины 10%.',
+        widget=forms.NumberInput(attrs={'class':'form-control','min':'0','max':'10000','step':'any'}))
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if not self.is_bound and self.instance.pk:
+            from decimal import Decimal
+            self.initial['duty_rate'] = Decimal(str(self.instance.duty_rate)) * 100
+
+    def clean_duty_rate(self):
+        # UI uses percentage points; calculations and Excel store a fraction.
+        return float(self.cleaned_data['duty_rate'] / 100)
+
     class Meta:
         from .models import GoodsGroup
         model = GoodsGroup
