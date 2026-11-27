@@ -12,3 +12,5 @@
 .cd-dialog .cd-employee-popup [role=option]:hover,.cd-dialog .cd-employee-popup [role=option]:focus{background:#f1edff;outline:0}.cd-dialog .cd-employee-popup [aria-selected=true]{background:#f1edff;color:#5e43b5}
 
 .cd-dialog button.cd-person-link{padding:0;border:0;background:transparent;border-radius:2px;color:#6148be;text-decoration:underline;text-underline-offset:3px;font:inherit}.cd-dialog button.cd-person-link:disabled{color:inherit;text-decoration:none;cursor:default}
+
+.cd-person-cards{display:grid;gap:14px}.cd-person-card{min-width:0;border:1px solid #e1dbee;border-radius:10px;padding:16px;background:#fcfbff}.cd-person-card h3{margin:0 0 12px;font-size:16px;color:#493c78}.cd-person-card>button{margin-top:10px}.cd-person-card table{min-width:600px}.cd-person-card td:first-child{width:48%}

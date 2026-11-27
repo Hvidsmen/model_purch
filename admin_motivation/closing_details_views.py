@@ -28,9 +28,14 @@ class Settings(forms.Form):
 
 
 class Person(forms.Form):
-    kind = forms.ChoiceField(choices=[(k,k) for k in details.PERSONAL], initial=details.PERSONAL[0], label='Вид мотивации')
+    kind = forms.ChoiceField(choices=[(k,k) for k in details.PERSONAL], initial=details.PERSONAL[0], widget=forms.HiddenInput, label='Вид мотивации')
     author = forms.ChoiceField(label='Сотрудник', choices=[], error_messages={'invalid_choice':'Сотрудник не найден в выбранном подразделении и виде мотивации.'}, widget=forms.Select(attrs={'data-employee-select':''}))
     coefficient = forms.DecimalField(min_value=0, max_digits=12, decimal_places=4, label='Коэффициент')
+
+    def has_changed(self):
+        if self.is_bound and not self.initial and not self.data.get(self.add_prefix('author')) and not self.data.get(self.add_prefix('coefficient')):
+            return False
+        return super().has_changed()
 
 
 People = forms.formset_factory(Person, extra=1, can_delete=True, max_num=1000, validate_max=True)
@@ -157,7 +162,7 @@ def dialog(request, subdivision_id):
     def with_metrics(value,general,kinds,persons):
         usd=value if currency=='USD' else details.impact(usd_source,general,kinds,persons)
         return closing_detail_metrics.enrich(value,usd,metrics)
-    authors_by_kind={kind:sorted({r['author'] for r in source if details.identity(r['author']) not in ('', '—', '-') and r.get('author_status') != 'unallocated' and r['kind']==kind}
+    authors_by_kind={kind:sorted({r['author'] for r in source if details.identity(r['author']) not in ('', '—', '-', details.identity(kind)) and r.get('author_status') != 'unallocated' and r['kind']==kind}
                                | set(record.personal_coefficients.get(kind,{}) if record else {})) for kind in details.PERSONAL}
     for person in people.forms:
         kind=person.data.get(person.add_prefix('kind')) if person.is_bound else person.initial.get('kind',details.PERSONAL[0])
@@ -187,7 +192,8 @@ def dialog(request, subdivision_id):
         comparison = details.impact(source,record.coefficient if record else 1,record.kind_coefficients if record else {},record.personal_coefficients if record else {})
     if comparison is not None:
         comparison=with_metrics(comparison,*settings_for_comparison)
+    personal_cards=[{'kind':kind,'forms':[person for person in people.forms if person['kind'].value()==kind]} for kind in details.PERSONAL]
     from .services.closing_return import pending
     return render(request,'admin_motivation/distribution/closing_dialog.html',dict(branch=branch,year=year,period=period,currency=currency,
-        form=form,people=people,comparison=comparison,source_error=source_error,saved=saved,locked=locked,
+        form=form,people=people,personal_cards=personal_cards,comparison=comparison,source_error=source_error,saved=saved,locked=locked,
         closed=period_closed(year,period),authors_by_kind=authors_by_kind,execution=execution,metric_error=metric_error,awaiting_confirmation=not saved and pending(record)))

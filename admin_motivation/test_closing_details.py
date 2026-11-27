@@ -34,7 +34,7 @@ class ImpactTests(SimpleTestCase):
         self.assertEqual(result['after'],Decimal('2.01'))
         for value in ('NaN','Infinity','-1','1.00001'):
             with self.assertRaises(ValidationError):closing_details.factor(value)
-        for kinds,people in [({'Wrong':1},{}),({}, {'Продажи':{'A':1}}),({}, {'Политики':{'A':1,' a ':2}})]:
+        for kinds,people in [({'Wrong':1},{}),({}, {'Кураторы':{'A':1}}),({}, {'Политики':{'A':1,' a ':2}})]:
             with self.assertRaises(ValidationError):closing_details.normalize_settings(kinds,people)
 
 
@@ -142,13 +142,31 @@ class DetailedCoefficientTests(TestCase):
         result=closing_details.impact(rows)
         self.assertEqual(result['before'],Decimal('190'))
         self.assertEqual([r['author_label'] for r in result['rows']],['Policy','Автор не указан','Нераспределённая премия','Sales'])
-        self.assertEqual([r['can_edit_person'] for r in result['rows']],[True,False,False,False])
+        self.assertEqual([r['can_edit_person'] for r in result['rows']],[True,False,False,True])
         url=reverse('motivation_closing_details',args=[self.branch.pk])
         with patch('admin_motivation.closing_details_views.baseline',return_value=(rows,self.run)):
             response=self.client.get(url,{'year':2025,'period':4})
         self.assertEqual(response.context['authors_by_kind']['Политики'],['Policy'])
-        self.assertContains(response,'data-edit-person',count=1)
+        self.assertContains(response,'data-edit-person',count=2)
         self.assertContains(response,'data-author="Policy"')
+
+    def test_three_cards_and_sales_override_replaces_kind_coefficient(self):
+        rows,_=self.baseline()
+        rows += [dict(rows[0],kind='Продажи',author='Salesperson'),dict(rows[0],kind='Продажи',author='Продажи')]
+        url=reverse('motivation_closing_details',args=[self.branch.pk])
+        with patch('admin_motivation.closing_details_views.baseline',return_value=(rows,self.run)):
+            response=self.client.get(url,{'year':2025,'period':4})
+            self.assertEqual([card['kind'] for card in response.context['personal_cards']],['Политики','Продажи','Директора'])
+            self.assertEqual(response.context['authors_by_kind']['Продажи'],['Salesperson'])
+            post=dict(self.post(),action='preview',**{'people-0-kind':'Продажи','people-0-author':'Salesperson','people-0-coefficient':'1.3'})
+            preview=self.client.post(url,post)
+            self.assertEqual(preview.status_code,200)
+            sales=[row for row in preview.json()['comparison']['rows'] if row['kind']=='Продажи']
+            self.assertEqual(Decimal(sales[0]['after']),130)
+            self.assertEqual(Decimal(sales[1]['after']),80)
+            self.assertFalse(sales[1]['can_edit_person'])
+            post.update({'people-0-author':'','people-0-coefficient':''})
+            self.assertEqual(self.client.post(url,post).status_code,200)
 
     def test_employee_choices_are_scoped_and_blank_extra_row_is_ignored(self):
         url=reverse('motivation_closing_details',args=[self.branch.pk])
@@ -156,7 +174,7 @@ class DetailedCoefficientTests(TestCase):
         rows += [dict(rows[0],kind='Директора',author='Director'),dict(rows[0],branch='Other',author='Other')]
         with patch('admin_motivation.closing_details_views.baseline',return_value=(rows,self.run)):
             response=self.client.get(url,{'year':2025,'period':4})
-            self.assertEqual(response.context['authors_by_kind'],{'Политики':['Policy'],'Директора':['Director']})
+            self.assertEqual(response.context['authors_by_kind'],{'Политики':['Policy'],'Продажи':[],'Директора':['Director']})
             choices=response.context['people'].forms[0].fields['author'].choices
             self.assertEqual(choices,[('','Выберите сотрудника'),('Policy','Policy')])
             post=dict(self.post(),action='preview',**{'people-0-author':'','people-0-coefficient':''})

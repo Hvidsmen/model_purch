@@ -36,15 +36,15 @@
  });
  document.addEventListener('click',event=>{if(active&&!popup.contains(event.target)&&!active.button.contains(event.target))close();});
  window.addEventListener('resize',position);document.addEventListener('scroll',event=>{if(active&&!popup.contains(event.target))position();},true);
- new MutationObserver(initialize).observe(document.getElementById('closing-people'),{childList:true});
+ new MutationObserver(initialize).observe(document.getElementById('closing-people'),{childList:true,subtree:true});
  form.addEventListener('submit',event=>{for(const select of form.querySelectorAll('[data-employee-select]')){const row=select.closest('tr');if(!select.value&&row.querySelector('[name$="-coefficient"]').value&&!row.querySelector('[name$="-DELETE"]').checked){event.preventDefault();row.querySelector('[role=combobox]').click();document.querySelector('[data-preview-status]').textContent='Выберите сотрудника для персонального коэффициента.';break;}}});
  document.querySelector('[data-people-results]').addEventListener('click',event=>{
   const button=event.target.closest('[data-edit-person]');if(!button||button.matches(':disabled'))return;
   const kind=button.dataset.kind,author=button.dataset.author;
-  const rows=()=>[...document.querySelectorAll('#closing-people>tr')];
+  const rows=()=>[...document.querySelectorAll('#closing-people [data-person-row]')];
   let row=rows().find(row=>row.querySelector('[name$="-kind"]').value===kind&&row.querySelector('[name$="-author"]').value===author);
-  if(!row)row=rows().find(row=>!row.querySelector('[name$="-author"]').value&&!row.querySelector('[name$="-coefficient"]').value);
-  if(!row){const count=rows().length;document.querySelector('[data-add-person]').click();if(rows().length===count){document.querySelector('[data-preview-status]').textContent='Достигнут предел персональных коэффициентов.';return;}row=rows().at(-1);}
+  if(!row)row=rows().find(row=>row.querySelector('[name$="-kind"]').value===kind&&!row.querySelector('[name$="-author"]').value&&!row.querySelector('[name$="-coefficient"]').value);
+  if(!row){const count=rows().length;[...document.querySelectorAll('[data-add-person]')].find(button=>button.dataset.addPerson===kind).click();if(rows().length===count){document.querySelector('[data-preview-status]').textContent='Достигнут предел персональных коэффициентов.';return;}row=rows().filter(row=>row.querySelector('[name$="-kind"]').value===kind).at(-1);}
   initialize();close();const kindField=row.querySelector('[name$="-kind"]'),authorField=row.querySelector('[name$="-author"]'),input=row.querySelector('[name$="-coefficient"]');
   if(kindField.value!==kind){kindField.value=kind;kindField.dispatchEvent(new Event('change',{bubbles:true}));}
   authorField.value=author;authorField.dispatchEvent(new Event('change',{bubbles:true}));row.querySelector('[name$="-DELETE"]').checked=false;
