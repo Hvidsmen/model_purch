@@ -19,3 +19,8 @@
 .nr-author-filter .next-branch-options>div{display:flex;gap:8px;margin:0 0 8px}
 .nr-author-filter .next-branch-options>small{display:block;padding:8px 6px 0;color:#8993a6}
 @media(max-width:600px){.nr-shareholder-filters>.nr-field,.nr-shareholder-filters>label,.nr-shareholder-filters>.nr-author-field{flex-basis:100%}.nr-shareholder-filters .nr-filter-actions{width:100%}}
+
+.content-wrapper .nr-page .nr-matrix[data-forecast-columns="2"] .nr-matrix-periods>strong{grid-column:span 6}
+.content-wrapper .nr-page .nr-matrix[data-forecast-columns="2"] .nr-matrix-periods>.nr-matrix-final-head{grid-column:span 8}
+.content-wrapper .nr-page .nr-matrix[data-forecast-columns="2"][data-mode=basic] .nr-matrix-periods>strong{grid-column:span 4}
+.content-wrapper .nr-page .nr-matrix[data-forecast-columns="2"][data-mode=basic] .nr-matrix-periods>.nr-matrix-final-head{grid-column:span 6}

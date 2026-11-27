@@ -250,6 +250,9 @@ def personal_details(ledger, query, *, period_codes=None):
     multiple_curator_branches=len({s.get('branch') for s in personal if s['kind']=='Кураторы' and s.get('branch')})>1
     for section in personal:
         data, kind = section['data'], section['kind']
+        if ledger.get('shareholder_forecast') and not data.get('extended_forecast'):
+            from .extended_premium_forecast import enrich as enrich_matrix_forecast
+            enrich_matrix_forecast(data,ledger)
         for index, label in enumerate(data['periods']):
             block = data['detail_totals'][index]
             plan, fact, ratio = block[14:17]
@@ -276,10 +279,14 @@ def personal_details(ledger, query, *, period_codes=None):
                 threshold = ledger.get('payout_threshold')
                 result.append({'possible': block[13], 'remaining': max(plan - fact, ZERO) if plan is not None and plan > 0 and fact is not None and period_code(label) != '1' else None,
                     'ratio': ratio, 'calculated': block[17],
+                    'forecast_quarter':block[20] if data.get('extended_forecast') else None,
+                    'forecast_annual':block[21] if data.get('extended_forecast') else None,
                     'status': 'nr-matrix-good' if ratio is not None and ratio >= (threshold if threshold is not None else Decimal('.8')) else 'nr-matrix-low' if ratio is not None else ''})
             basis_index = max(range(len(data['periods'])), key=lambda index: period_code(data['periods'][index]))
             basis = result[basis_index]
-            return {'metrics': result, 'total_metrics': {**basis, 'possible': blocks[-1][13], 'calculated': blocks[-1][17]}, 'bonus': blocks[-1][18], 'total': blocks[-1][19]}
+            return {'metrics': result, 'total_metrics': {**basis, 'possible': blocks[-1][13], 'calculated': blocks[-1][17],
+                'forecast_quarter':blocks[-1][20] if data.get('extended_forecast') else None,
+                'forecast_annual':blocks[-1][21] if data.get('extended_forecast') else None}, 'bonus': blocks[-1][18], 'total': blocks[-1][19]}
         def matrix(node, branch, author, planning='', group=''):
             level = node['level']
             if level == 2:
@@ -329,7 +336,8 @@ def personal_details(ledger, query, *, period_codes=None):
                     'children': [matrix(node, branch['label'], author['label']) for node in author['children']],
                     'formula_groups': [matrix(node, branch['label'], author['label']) for node in author.get('formula_groups', [])]})
         sections.append({'kind': kind, 'periods': [display_period(label) for label in data['periods']], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
-                         'metric_columns': len(data['periods']) * 4 + 6, 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
+                         'forecast_columns':2 if data.get('extended_forecast') else 0,
+                         'metric_columns': len(data['periods']) * (6 if data.get('extended_forecast') else 4) + (8 if data.get('extended_forecast') else 6), 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
     # Premium components are additive; cumulative sales targets are not.
     latest = {}
     for goal in goals:
