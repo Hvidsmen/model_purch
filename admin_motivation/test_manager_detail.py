@@ -162,8 +162,8 @@ class ManagerDetailTests(TestCase):
                           СуммаМотивацииRURУчетПроцента=-1000, Остаток=0, ОстатокRUR=0)])
         data = manager_detail_report(rows)
         summary = data['period_summary']
-        self.assertEqual([column['label'] for column in summary['columns']], ['1 кв.', '2 кв.', '3 кв.', '4 кв.', 'Год'])
-        self.assertEqual(summary['rows'][0]['values'], [Decimal(90), Decimal(0), Decimal(-10), None, Decimal(90)])
+        self.assertEqual([column['label'] for column in summary['columns']], ['1 кв.', '2 кв.', '3 кв.', 'Год'])
+        self.assertEqual(summary['rows'][0]['values'], [Decimal(90), Decimal(0), Decimal(-10), Decimal(90)])
         for row, card in zip(summary['rows'], data['cards']):
             self.assertEqual(row['total'], card['total'])
             self.assertEqual(row['remainder'], card['bonus'])
@@ -174,7 +174,7 @@ class ManagerDetailTests(TestCase):
         self.assertIn('2026 · 1 кв.', [column['label'] for column in multiple['columns']])
         self.assertEqual(multiple['rows'][0]['total'], summary['rows'][0]['total'] + Decimal(90))
         empty = period_motivation_summary([])
-        self.assertEqual(empty['totals']['values'], [None] * 5)
+        self.assertEqual(empty['totals']['values'], [])
         self.assertEqual(empty['totals']['total'], Decimal(0))
 
     def test_branch_execution_aligns_periods_and_uses_annual_values_in_total(self):
