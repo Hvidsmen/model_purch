@@ -42,7 +42,12 @@ def read_director_blocks(upload):
         with ZipFile(BytesIO(raw)) as archive:
             if sum(item.file_size for item in archive.infolist()) > 30 * 1024 * 1024:
                 raise ValidationError('Файл слишком большой после распаковки.')
-        book = load_workbook(BytesIO(raw), read_only=True, data_only=False)
+        book = load_workbook(BytesIO(raw), read_only=False, data_only=False)
+        if 'Директора' in book.sheetnames:
+            from .export_matrix_import import is_matrix,director_sheet
+            sheet=book['Директора']
+            if sheet.max_row>5000 or sheet.max_column>16384 or sheet.max_row*sheet.max_column>2000000:raise ValidationError('Выгрузка слишком большая. Разделите файл.')
+            if is_matrix(sheet):return director_sheet(sheet)
         if 'Коэффициенты' not in book.sheetnames:
             raise ValidationError('В файле нужен лист «Коэффициенты».')
         sheet = book['Коэффициенты']
@@ -104,6 +109,9 @@ def read_director_blocks(upload):
 
 def import_director_coefficients(upload, version_id):
     blocks = read_director_blocks(upload)
+    if hasattr(blocks,'scoped'):
+        from .export_matrix_import import apply_directors
+        return apply_directors(blocks,version_id)
     with transaction.atomic():
         version = lock_editable(version_id)
         employees, goods = defaultdict(list), defaultdict(list)
@@ -281,7 +289,13 @@ def director_coverage(version,blocks=None):
     for employee,branch,count in SubdivisionDirectorCoeff.objects.filter(version=version).order_by().values_list('employee_id','subdivision__subdivision_key').annotate(count=Count('pk')):
         counts[employee,canonical(branch,aliases)]+=count
     mentioned=set();unmatched=[]
-    if blocks is not None:
+    if blocks is not None and hasattr(blocks,'scoped'):
+        unique={(m.get('code'),m['name']) for row in blocks.scoped for m in row['members']}
+        for code,name in unique:
+            matches=[e for e in employees if (e.employee_code==code if code else identity(e.full_name)==identity(name))]
+            if len(matches)==1:mentioned.add(matches[0].pk)
+            else:unmatched.append({'name':name,'ambiguous':len(matches)>1,'suggestions':[]})
+    elif blocks is not None:
         names=sorted({name for names,entries in blocks for name in names},key=identity)
         for name in names:
             matches=lookup.get(identity(name),[])
