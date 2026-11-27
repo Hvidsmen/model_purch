@@ -10,9 +10,10 @@ from . import shareholder_views
 from . import global_from_branches_views
 from . import curator_views
 
-from . import premium_distribution_views, sales_employee_views, closing_details_views, fao_views
+from . import premium_distribution_views, sales_employee_views, closing_details_views, fao_views, calculation_guide_views
 
 urlpatterns = [
+    path('calculation-guide/',calculation_guide_views.page,name='motivation_calculation_guide'),
     path('fao-review/',fao_views.page,name='motivation_fao_review'),
     path('versions/products/remove/',product_removal_views.page,name='motivation_product_removal'),
     path('versions/planning-groups/rename/',planning_group_rename_views.page,name='motivation_planning_group_rename'),

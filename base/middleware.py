@@ -35,10 +35,11 @@ class PortalAccessMiddleware:
             account_pages = {'index_base', 'portal_login', 'portal_logout', 'portal_windows_login'}
             personal = name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next', 'motivation_report_all_2026') or (name == 'motivation_report_next' and (view_kwargs.get('kind') in ('mine', 'team', 'detail', 'deals') or view_kwargs.get('kind') == 'registry' and role_for(request.user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN))) or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
             branch_tasks = role_for(request.user,'motivation') == BRANCH_DIRECTOR and name in {'motivation_distributions','motivation_distribution_detail','motivation_sales_employees'}
+            information = name=='motivation_calculation_guide' and request.method in ('GET','HEAD','OPTIONS')
             static = module == 'django.views.static' and request.path.startswith(settings.STATIC_URL)
             if personal:
                 request.personal_report_scope = politician_scope(request.user)
-            if not (name in account_pages or static or branch_tasks or (personal and request.method in ('GET', 'HEAD', 'OPTIONS') and request.personal_report_scope)):
+            if not (name in account_pages or information or static or branch_tasks or (personal and request.method in ('GET', 'HEAD', 'OPTIONS') and request.personal_report_scope)):
                 if '/api/' in request.path or 'application/json' in request.headers.get('Accept', ''):
                     return JsonResponse({'error': 'Доступны только отчёты в рамках назначенных подразделений и прав.'}, status=403)
                 return render(request, 'base/forbidden.html', status=403)
@@ -61,7 +62,7 @@ class PortalAccessMiddleware:
             name = match.url_name if match else None
             decisions = name in {'motivation_reviews', 'motivation_review'}
             if role == MODELER:
-                allowed = {'index_admin_motivation', 'global_coeff_admin_motivation', 'gb_act', 'sub_act',
+                allowed = {'motivation_calculation_guide','index_admin_motivation', 'global_coeff_admin_motivation', 'gb_act', 'sub_act',
                     'coeff_subdivisions_admin_motivation', 'motivation_discount_segments', 'motivation_coefficient_balancing',
                     'motivation_bulk_formula', 'motivation_editor_check', 'motivation_coefficient_edit_log', 'motivation_copy_group', 'motivation_coefficient_coverage', 'motivation_fallback_formula', 'motivation_coverage_repair', 'motivation_coverage_repair_all', 'motivation_director_coeff_import',
                     'motivation_global_template', 'motivation_subdivision_template', 'motivation_director_directory',
