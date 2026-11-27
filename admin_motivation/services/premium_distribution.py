@@ -104,6 +104,7 @@ def create(user,execution,subdivision,period,currency):
         batch=PremiumDistribution.objects.create(execution=execution,subdivision=subdivision,year=year,period=period,currency=currency,
             funds=funds,rows=rows,created_by=user,source={'run_id':str(execution.run_id),'parameters':execution.parameters,'export_snapshot':execution.export_snapshot})
         batch.source={**batch.source,'workflow':{'stage':'sales','coefficient':str(coefficient.coefficient),
+            'kind_coefficients':coefficient.kind_coefficients,'personal_coefficients':coefficient.personal_coefficients,
             'coefficient_revision':coefficient.revision,'confirmed_by':coefficient.confirmed_by_id,
             'confirmed_at':coefficient.confirmed_at.isoformat()}}
         from .distribution_stages import initialize

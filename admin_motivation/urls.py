@@ -10,7 +10,7 @@ from . import shareholder_views
 from . import global_from_branches_views
 from . import curator_views
 
-from . import premium_distribution_views, sales_employee_views
+from . import premium_distribution_views, sales_employee_views, closing_details_views
 
 urlpatterns = [
     path('versions/products/remove/',product_removal_views.page,name='motivation_product_removal'),
@@ -20,6 +20,8 @@ urlpatterns = [
     path('curator-coefficients/global/',curator_views.global_rates,name='motivation_curator_global_rates'),
     path('curator-coefficients/',curator_views.coefficient_workspace,name='motivation_curator_coefficients'),
     path('sales-employees/',sales_employee_views.directory,name='motivation_sales_employees'),
+    path('distributions/comparisons/',closing_details_views.comparisons,name='motivation_closing_comparisons'),
+    path('distributions/coefficients/<int:subdivision_id>/',closing_details_views.dialog,name='motivation_closing_details'),
     path('distributions/',premium_distribution_views.index,name='motivation_distributions'),
     path('distributions/<int:pk>/',premium_distribution_views.detail,name='motivation_distribution_detail'),
     path('curators/',curator_views.directory,name='motivation_curators'),

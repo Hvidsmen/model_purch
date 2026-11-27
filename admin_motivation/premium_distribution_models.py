@@ -69,6 +69,8 @@ class PeriodMotivationCoefficient(models.Model):
     year = models.PositiveIntegerField()
     period = models.PositiveSmallIntegerField(choices=PremiumDistribution._meta.get_field('period').choices)
     coefficient = models.DecimalField(max_digits=12, decimal_places=4, default=1)
+    kind_coefficients = models.JSONField(default=dict)
+    personal_coefficients = models.JSONField(default=dict)
     history = models.JSONField(default=list)
     revision = models.PositiveIntegerField(default=1)
     confirmed_by = models.ForeignKey('auth.User', null=True, on_delete=models.SET_NULL)

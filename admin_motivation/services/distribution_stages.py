@@ -149,11 +149,14 @@ def begin_legacy(user, pk, revision, coefficient, reason):
     before={'funds':deepcopy(batch.funds),'rows':deepcopy(batch.rows)}
     from decimal import ROUND_HALF_UP
     for row in batch.rows:
-        row['original']=str((cash(row['original'])*factor.coefficient).quantize(Decimal('.01'),rounding=ROUND_HALF_UP))
+        from .closing_details import effective
+        value=effective(factor.coefficient,factor.kind_coefficients,factor.personal_coefficients,row['kind'],row['author'])
+        row['original']=str((cash(row['original'])*value).quantize(Decimal('.01'),rounding=ROUND_HALF_UP))
         row['amount']=row['original'];row['comment']=''
     for fund in batch.funds:
         fund['amount']=str(sum((cash(row['original']) for row in batch.rows if (row['kind'],row['payment'])==(fund['kind'],fund['payment'])),Decimal(0)))
     batch.source={**batch.source,'before_stages':before,'workflow':{'stage':'sales','coefficient':str(factor.coefficient),
+        'kind_coefficients':factor.kind_coefficients,'personal_coefficients':factor.personal_coefficients,
         'coefficient_revision':factor.revision,'confirmed_by':user.pk,'confirmed_at':factor.confirmed_at.isoformat()}}
     initialize(batch);batch.revision+=1;batch.save();event(batch,user,'begin_stages',reason)
     return batch

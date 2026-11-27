@@ -4,6 +4,7 @@ from contextvars import ContextVar
 import re
 
 correction_mode=ContextVar('manager_correction_mode',default=None)
+without_correction=ContextVar('without_closing_correction',default=False)
 from datetime import date
 from calendar import monthrange
 from django.core.exceptions import PermissionDenied, ValidationError
@@ -21,7 +22,7 @@ def period_closed(year, period):
 
 
 @transaction.atomic
-def confirm(user, subdivision, year, period, coefficient, revision=0, *, legacy_distribution=None):
+def confirm(user, subdivision, year, period, coefficient, revision=0, *, legacy_distribution=None, kind_coefficients=None, personal_coefficients=None):
     if role_for(user,'motivation') not in (ADMIN,DIRECTOR):
         raise PermissionDenied
     if not period_closed(year,period):raise ValidationError('Период ещё не закрыт.')
@@ -39,18 +40,24 @@ def confirm(user, subdivision, year, period, coefficient, revision=0, *, legacy_
     row=PeriodMotivationCoefficient.objects.select_for_update().filter(subdivision=subdivision,year=year,period=period).first()
     if row and revision != row.revision or not row and revision != 0:
         raise ValidationError('Множитель изменился. Обновите страницу.')
-    entry={'coefficient':str(value),'actor':user.pk,'actor_label':user.get_full_name() or user.get_username(),'at':timezone.now().isoformat()}
+    from .closing_details import normalize_settings
+    kinds,people=normalize_settings(
+        kind_coefficients if kind_coefficients is not None else (row.kind_coefficients if row else {}),
+        personal_coefficients if personal_coefficients is not None else (row.personal_coefficients if row else {}))
+    entry={'kind_coefficients':kinds,'personal_coefficients':people,'coefficient':str(value),'actor':user.pk,'actor_label':user.get_full_name() or user.get_username(),'at':timezone.now().isoformat()}
     if row:
         row.history=[*row.history,entry]
-        row.revision+=1;row.coefficient=value;row.confirmed_by=user;row.save()
+        row.revision+=1;row.coefficient=value;row.kind_coefficients=kinds;row.personal_coefficients=people;row.confirmed_by=user;row.save()
     else:
-        row=PeriodMotivationCoefficient.objects.create(subdivision=subdivision,year=year,period=period,coefficient=value,confirmed_by=user,history=[entry])
+        row=PeriodMotivationCoefficient.objects.create(subdivision=subdivision,year=year,period=period,coefficient=value,kind_coefficients=kinds,personal_coefficients=people,confirmed_by=user,history=[entry])
     return row
 
 
 class ReportMultipliers:
-    def __init__(self, *, physical=False, mode=None, variant='main'):
+    def __init__(self, *, physical=False, mode=None, variant='main', kind=None):
         self.values=None
+        self.details={}
+        self.kind=kind
         self.physical=physical
         self.mode=mode if mode is not None else correction_mode.get()
         self.variant=variant
@@ -67,19 +74,26 @@ class ReportMultipliers:
             if sub==branch and code==period and effective<=end:return value
         return Decimal(1)
 
-    def multiplier(self, branch, year, code):
+    def multiplier(self, branch, year, code, kind=None, author=None):
         template=self.template(branch,year,code)
         confirmed=self.values.get((branch,year,code))
-        if self.mode=='period-unified-v1':return confirmed if confirmed is not None else template
+        if self.mode=='period-unified-v1':
+            if confirmed is not None:
+                from .closing_details import effective
+                kinds,people=self.details.get((branch,year,code),({},{}))
+                return effective(confirmed,kinds,people,kind,author,normalized=True)
+            return template
         if confirmed is not None:
             raise ValidationError('Этот запуск уже содержит прежнюю поправку руководителя. Сохраните задание расчёта и запустите его заново для применения единого коэффициента без повторного умножения.')
         return confirmed if confirmed is not None else Decimal(1)
 
     def apply(self, rows):
-        if not rows:return rows
+        if not rows or without_correction.get():return rows
         if self.values is None:
-            self.values={(branch.casefold(),str(year),str(period)):value for branch,year,period,value in
-                PeriodMotivationCoefficient.objects.values_list('subdivision__subdivision_key','year','period','coefficient')}
+            records=list(PeriodMotivationCoefficient.objects.values_list('subdivision__subdivision_key','year','period','coefficient','kind_coefficients','personal_coefficients'))
+            self.values={(branch.casefold(),str(year),str(period)):value for branch,year,period,value,_,_ in records}
+            from .closing_details import identity
+            self.details={(branch.casefold(),str(year),str(period)):(kinds,{kind:{identity(name):v for name,v in people.items()} for kind,people in persons.items()}) for branch,year,period,_,kinds,persons in records}
             from ..models import SubdivisionManagerCoeff, MotivationExecution
             if self.mode is None:
                 from .calculation_variants import main_runs
@@ -104,10 +118,11 @@ class ReportMultipliers:
                 result.append(row);continue
             branch=str((row.get('_source_subdivision') if self.physical else None) or row.get('Подразделение') or '').casefold();year=str(row.get('Год') or '')
             code=period_code(row.get('КварталМотивации'))
-            value=self.multiplier(branch,year,code)
+            kind=self.kind or row.get('ТипКоэф');author=row.get('АвторСделки')
+            value=self.multiplier(branch,year,code,kind,author)
             for field in (*MONEY_FIELDS,'PotentialCatchupUSD','PotentialCatchupRUB'):
                 if row.get(field) is not None:row[field]=Decimal(str(row[field]))*value
-            annual=self.multiplier(branch,year,'5')
+            annual=self.multiplier(branch,year,'5',kind,author)
             for field in ('AnnualUSD','AnnualRUB','AnnualAccrual'):
                 if row.get(field) is not None:row[field]=Decimal(str(row[field]))*annual
             for field in row:

@@ -383,7 +383,7 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
         from base.report_access import scoped_values, worker_scope
         values = scoped_values(kind, values, access_scope)
         access_scope = worker_scope(access_scope, kind, values)
-    multipliers = ReportMultipliers(physical=values.get('TypeCoeff_')=='Кураторы' or values.get('TypeCoeff')=='Кураторы',variant=calculation_variant)
+    multipliers = ReportMultipliers(physical=values.get('TypeCoeff_')=='Кураторы' or values.get('TypeCoeff')=='Кураторы',variant=calculation_variant,kind=values.get('TypeCoeff_') or values.get('TypeCoeff'))
     from .report_periods import pilot_enabled, PILOT_SQL
     if calculation_variant not in ('main', 'all_2026', 'separate_2026') or calculation_variant in ('all_2026', 'separate_2026') and (kind != 'manager-detail' or list(values.get('Years') or []) != ['2026']):
         raise ValidationError('Неизвестный источник дополнительного отчёта.')
