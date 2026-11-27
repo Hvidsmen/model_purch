@@ -157,3 +157,12 @@ class DetailedCoefficientTests(TestCase):
         by_kind={f['kind']:Decimal(f['amount']) for f in funds}
         self.assertEqual(by_kind['Политики'],65)
         self.assertEqual(by_kind['Продажи'],40)
+
+    def test_dialog_allows_own_portal_frame_without_changing_other_pages(self):
+        url=reverse('motivation_closing_details',args=[self.branch.pk])
+        with patch('admin_motivation.closing_details_views.baseline',return_value=self.baseline()):
+            response=self.client.get(url,{'year':2025,'period':4})
+            self.assertEqual(response.headers['X-Frame-Options'],'SAMEORIGIN')
+            post=self.client.post(url,dict(self.post(),action='preview'))
+            self.assertEqual(post.headers['X-Frame-Options'],'SAMEORIGIN')
+        self.assertEqual(self.client.get(reverse('motivation_distributions')).headers['X-Frame-Options'],'DENY')
