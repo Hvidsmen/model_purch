@@ -137,6 +137,7 @@ def execute(run,connector=None):
         metadata={'manager_correction_mode':'legacy' if any('#portal_manager_correction' in str(v).casefold() for v in definitions.values()) else 'period-unified-v1','rule':config.get('rule','shareholder-asof-2026-v1'),'prepared_run':str(ready[0]),'prepared_at':str(ready[1]),'prepared_rows':ready[2],
                   'procedure_hashes':{},'counts':{},'redistribution':'separate-original-subdivision-before-coefficients',
                   'turnover_basis':'Price - AmountUSDIt_ITW + BallsOuterUSD; signed; selected quarters through as_of',
+                  'closed_deals_version':'closed-deals-v1',
                   'quarter_rule':('Q1 always paid; Q2 eligibility Q1+Q2; Q3 Q3; Q4 and year Q1–Q4; annual contributions Q1–Q4; year-end catch-up' if enabled(run) else 'I–III separate if selected; IV and annual Moscow+TT combined')}
         if regions.enabled(run):
             metadata.update(regional_rule=regions.RULE,regional_gate_version=regions.GATE_VERSION,branches=list(regions.BRANCHES),regional_plan_basis='all 2026 through cutoff, after reassignment; per subdivision',regional_rate_source='approved portal versions frozen at creation')
@@ -165,6 +166,8 @@ def execute(run,connector=None):
                 source="SELECT * FROM #share_report WHERE LTRIM(RTRIM([ТипКоэф]))=N'"+kind+"'"
                 # Sequence keys are per dataset, so each kind has its own named dataset.
                 tag={'Политики':'pol','Продажи':'sales','Директора':'dir'}[kind]
+                from .shareholder_deals import snapshot_sql
+                save_query(run,cursor,mode,'deals_'+tag,snapshot_sql(kind))
                 eligibility_count=0
                 if enabled(run):
                     eligibility_count=save_query(run,cursor,mode,'eligibility_'+tag,"SELECT * FROM #share_eligibility WHERE LTRIM(RTRIM([ТипКоэф]))=N'"+kind+"'")

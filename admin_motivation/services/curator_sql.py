@@ -168,6 +168,8 @@ def shareholder_snapshots(run,cursor,definition,save_query):
         source="SELECT * FROM #share_report WHERE [ТипКоэф]=N'Кураторы'"
         report_count=save_query(run,cursor,'combined','report_cur',grouped_sql(source),kind='Кураторы')
         total+=report_count
+        from .shareholder_deals import snapshot_sql
+        save_query(run,cursor,'combined','deals_cur',snapshot_sql('Кураторы'))
         perf=performance_sql(source,coefficient_type='Директора').replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
         dept=department_sql(source).replace('DataWH.motivation.PlanFactAll2026','#share_plan_fact')
         if enabled(run):
