@@ -139,14 +139,14 @@ def index(request):
     options={str(row['branch'].pk):row['branch'].subdivision_name for row in registry_rows}
     if selected_branches:
         registry_rows=[row for row in registry_rows if str(row['branch'].pk) in selected_branches]
-        registry_counts={'waiting':sum(not row['record'] or row['awaiting_confirmation'] for row in registry_rows),
+        registry_counts={'waiting':sum(not row['record'] or row['awaiting_confirmation'] or row['fao_waiting'] for row in registry_rows),
             'working':sum(bool(row['batch'] and row['batch'].state=='draft') for row in registry_rows),
             'completed':sum(bool(row['batch'] and row['batch'].state=='completed') for row in registry_rows)}
     closing.update(branch_filter_options=[{'value':value,'label':label,'selected':value in selected_branches} for value,label in options.items()],
         selected_branches=selected_branches,branch_filter_caption=', '.join(options[value] for value in selected_branches if value in options) if 0<len(selected_branches)<=2 else f'Выбрано: {len(selected_branches)}' if selected_branches else 'Все подразделения',
         branch_filter_query=''.join('&branch_filter='+value for value in selected_branches))
     closing.update(registry_rows=registry_rows,registry_counts=registry_counts,selected_year=selected_year,selected_period=selected_period,skip_motivation_workflow=True)
-    return render(request,'admin_motivation/distribution/index.html',{**closing,'can_edit_distributions':can_edit,'is_admin':is_admin,'archived':archived,'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
+    return render(request,'admin_motivation/distribution/index.html',{**closing,'can_fao':role_for(request.user,'motivation') in (ADMIN,'Финансист'),'can_edit_distributions':can_edit,'is_admin':is_admin,'archived':archived,'coefficient_form':coefficient_form,'coefficients':coefficients[:200],'form':form,'batches':batches[:200],'sources':[(label,latest_calculation(variant)) for variant,label in [('main','Все кварталы и закрытие года')]]})
 
 
 def snapshot_for(batch,user,version):

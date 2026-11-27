@@ -102,6 +102,8 @@ def create(user,execution,subdivision,period,currency):
     with transaction.atomic():
         from ..models import PeriodMotivationCoefficient
         type(subdivision).all_objects.select_for_update().get(pk=subdivision.pk)
+        from .fao_review import ensure_ready
+        ensure_ready(subdivision,year,period,execution)
         coefficient=PeriodMotivationCoefficient.objects.select_for_update().filter(subdivision=subdivision,year=year,period=period).first()
         from .closing_return import pending, attach_previous
         if pending(coefficient):raise ValidationError('Гендиректор должен повторно подтвердить коэффициенты после возврата.')
@@ -130,6 +132,8 @@ def create(user,execution,subdivision,period,currency):
 def update(user,pk,revision,changes,*,action='save',addition=None,comment=''):
     batch=PremiumDistribution.objects.select_for_update().select_related('subdivision').get(pk=pk)
     authorize(user,batch.subdivision,write=True)
+    from .fao_review import ensure_ready
+    if batch.state=='draft':ensure_ready(batch.subdivision,batch.year,batch.period,batch.execution)
     if revision!=batch.revision:raise ValidationError('Распределение уже изменено. Обновите страницу перед сохранением.')
     if batch.source.get('workflow') and action!='reopen':
         from .distribution_stages import update as staged_update

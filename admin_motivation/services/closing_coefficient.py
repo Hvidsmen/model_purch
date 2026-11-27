@@ -32,6 +32,8 @@ def confirm(user, subdivision, year, period, coefficient, revision=0, *, legacy_
     except (InvalidOperation,ValueError,TypeError):raise ValidationError('Множитель: неотрицательное число, до четырёх знаков после запятой.')
     # Lock the shared branch before the coefficient and allocation to serialize creation.
     type(subdivision).all_objects.select_for_update().get(pk=subdivision.pk)
+    from .fao_review import ensure_ready
+    ensure_ready(subdivision,year,period)
     existing=PremiumDistribution.objects.filter(subdivision=subdivision,year=year,period=period,state__in=['draft','completed'])
     if legacy_distribution and legacy_distribution.subdivision_id==subdivision.pk and legacy_distribution.year==year and legacy_distribution.period==period and legacy_distribution.state=='draft' and not legacy_distribution.source.get('workflow'):
         existing=existing.exclude(pk=legacy_distribution.pk)

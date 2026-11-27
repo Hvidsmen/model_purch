@@ -269,6 +269,10 @@ def prepare(cursor, variant='main'):
     logging.getLogger(__name__).info('Calculation preparation scoped to fact year: %s; variant: %s', performance_marker in changed, variant)
     from .curator_sql import append_to_procedure
     changed=append_to_procedure(changed,variant)
+    from .fao_sql import sync as sync_fao,patch as patch_fao
+    sync_fao(cursor)
+    from ..models import FaoCorrection
+    if FaoCorrection.objects.filter(review__state='completed').exists():changed=patch_fao(changed,variant=variant)
     cursor.execute(changed)
 
 
