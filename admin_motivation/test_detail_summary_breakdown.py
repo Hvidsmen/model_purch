@@ -21,9 +21,9 @@ class DetailSummaryBreakdownTests(SimpleTestCase):
         detail,_,_=self.data()
         group=detail['period_summary']['groups'][0]
         for node in (detail['period_summary']['totals'],group,group['authors'][0]):
-            self.assertEqual(node['quarter_possible'][1]['value'],D(100))
-            self.assertIsNone(node['quarter_possible'][0]['value'])
-            self.assertEqual(node['quarter_annual'][1]['value'],D(25))
+            self.assertEqual(node['quarter_possible'][0]['value'],D(100))
+            self.assertEqual([line['label'] for line in node['quarter_possible']],['2 кв.'])
+            self.assertEqual(node['quarter_annual'][0]['value'],D(25))
             self.assertEqual(node['annual_accrual'],D(25))
             self.assertEqual(node['forecast_100'],dict(quarter=D(200),annual=D(50)))
             self.assertEqual(sum(x['value'] for x in node['quarter_catchup']),0)
@@ -56,3 +56,16 @@ class DetailSummaryBreakdownTests(SimpleTestCase):
         self.assertEqual(sheet.cell(3,headers.index('Возможная премия · 2 кв.')+1).value,100)
         self.assertEqual(sheet.cell(3,headers.index('В годовую премию · 2 кв.')+1).value,25)
         self.assertEqual(sheet.cell(3,headers.index('Прогноз при 100% · квартальная часть')+1).value,200)
+
+    def test_disclosures_only_show_visible_periods_and_keep_zero(self):
+        detail,ledger,display=self.data()
+        ledger['rows'][0]['possible']=D(0)
+        enrich(detail,ledger,display)
+        for node in [detail['period_summary']['totals'],detail['period_summary']['groups'][0],detail['period_summary']['groups'][0]['authors'][0]]:
+            self.assertEqual(node['quarter_possible'],[{'label':'2 кв.','value':D(0)}])
+            self.assertEqual([line['label'] for line in node['quarter_annual']],['2 кв.'])
+        detail['period_summary']['columns'].append({'label':'Год'})
+        ledger['rows'].append({**ledger['rows'][0],'code':'5','possible':D(20),'annual_accrual':None})
+        enrich(detail,ledger,display)
+        self.assertEqual(detail['period_summary']['totals']['quarter_possible'],[{'label':'2 кв.','value':D(0)},{'label':'Год','value':D(20)}])
+        self.assertEqual([line['label'] for line in detail['period_summary']['totals']['quarter_annual']],['2 кв.'])
