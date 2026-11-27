@@ -36,7 +36,8 @@ def registry(user, year, period, batches, grid=None, archived=False):
             values = {}
             for kind, prefix in [('Продажи', 'sales'), ('Политики', 'policies'), ('Директора','directors')]:
                 for currency in ('USD', 'RUB'):
-                    values[prefix+'_'+currency.lower()] = sum((cash(f['amount']) for f in batch.funds if f['kind'] == kind), Decimal(0)) if batch and batch.currency == currency else None
+                    source=batch.funds if batch and batch.currency==currency else batch.source.get('funds_by_currency',{}).get(currency) if batch else None
+                    values[prefix+'_'+currency.lower()] = sum((cash(f['amount']) for f in source if f['kind'] == kind), Decimal(0)) if source is not None else None
             rows.append({'branch': branch, 'batch': batch, 'record': record,
                          'field': fields.get(branch.pk, {}).get('field'),
                          'locked': bool(batch), 'awaiting_confirmation':awaiting, 'stage_label': label,

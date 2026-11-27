@@ -83,7 +83,13 @@ def comparisons(request):
     authorize(request.user)
     try:
         year,period,currency = selection(request.GET)
+        dual=request.GET.get('dual')=='1'
+        if dual:currency='USD'
         rows,execution = baseline(year,period,currency)
+        rub_rows=[]
+        if dual:
+            rub_rows,rub_execution=baseline(year,period,'RUB')
+            if rub_execution.pk!=execution.pk:raise ValidationError('Расчёт изменился. Обновите суммы.')
         from .services.closing_plan_fact import load, shares
         plan_fact_error=''
         try:
@@ -98,6 +104,7 @@ def comparisons(request):
             if usd_execution.pk!=execution.pk:
                 raise ValidationError('Расчёт изменился. Обновите суммы.')
         records = {r.subdivision.subdivision_key:r for r in PeriodMotivationCoefficient.objects.filter(year=year,period=period).select_related('subdivision')}
+        batches={b.subdivision_id:b for b in PremiumDistribution.objects.filter(year=year,period=period,state__in=['draft','completed'])} if dual else {}
         branches = Subdivision.objects.all()
         result = {}
         for branch in branches:
@@ -111,6 +118,14 @@ def comparisons(request):
                 [r for r in usd_rows if r['branch'].casefold()==branch.subdivision_key.casefold()],
                 record.coefficient if record else 1,record.kind_coefficients if record else {},record.personal_coefficients if record else {})
             result[str(branch.pk)].update(plan=values.get('plan'),fact=values.get('fact'),**shares(usd_comparison,values))
+            if dual:
+                from .services.closing_dual_currency import funds
+                rub=details.impact([r for r in rub_rows if r['branch'].casefold()==branch.subdivision_key.casefold()],
+                    record.coefficient if record else 1,record.kind_coefficients if record else {},record.personal_coefficients if record else {})
+                target=result[str(branch.pk)]
+                target.update({key+'_usd':comparison[key] for key in ('before','after','change')})
+                target.update({key+'_rub':rub[key] for key in ('before','after','change')})
+                target.update(funds(batches.get(branch.pk),{'USD':comparison,'RUB':rub},execution,record))
         return JsonResponse(dict(rows=result, currency=currency, execution=str(execution.run_id),plan_fact_currency='USD',plan_fact_error=plan_fact_error))
     except ValidationError as exc:
         return JsonResponse({'error':' '.join(exc.messages)}, status=400)
