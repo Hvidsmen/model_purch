@@ -1,0 +1,3 @@
+{% load report_format %}
+{% include 'admin_motivation/reports_next/_deal_rows_table.html' %}
+<nav class="nr-pagination" aria-label="Строки партнёра"><span>Страница {{ data.page }} из {{ data.pages }} · {{ data.totals.count|report_money }} строк</span><span>{% if data.page > 1 %}<a data-partner-page href="{{ data.previous_url }}">← Назад</a>{% endif %} {% if data.page < data.pages %}<a data-partner-page href="{{ data.next_url }}">Далее →</a>{% endif %} · <a href="{{ data.csv_url }}">Скачать страницу CSV</a></span></nav>

@@ -49,6 +49,8 @@ def records(run, kind):
 
 
 def build(run, query, *, load=True):
+    from .deal_partners import mode
+    view=mode(query)
     values = parameters('deals', query)
     kind = query.get('type')
     if kind and kind not in KINDS:
@@ -78,6 +80,8 @@ def build(run, query, *, load=True):
                             options=[dict(value=v, selected=v in selected[name]) for v in sorted(v for v in choices if v)]))
     if not load or not kind or not query.get('subdivision'):
         return None, filters
+    if query.get('_partner_rows')=='1':
+        matched=[r for r in matched if (r.get('Партнер') or '')==query.get('_partner','')]
     matched.sort(key=lambda r: (-r['ДатаЗакрытияСделки'].toordinal(), str(r.get('Номер') or ''),
                                 str(r.get('Модель') or ''), str(r.get('АвторСделки') or '')))
     amounts = {'shipments': 'СуммаОтгрузокUSD', 'quarterly': 'СуммаКвМотивацииUSD', 'annual': 'СуммаМотивацииUSDГод'}
@@ -88,6 +92,10 @@ def build(run, query, *, load=True):
             total[key] += row.get(column) or Decimal(0)
     summary = [dict(author=author, **total, possible=total['quarterly']+total['annual']) for author, total in sorted(authors.items())]
     totals = {key: sum((r[key] for r in summary), Decimal(0)) for key in ('count', *amounts, 'possible')}
+    if view=='partners' and query.get('_partner_rows')!='1':
+        from .deal_partners import paginate
+        data=paginate(matched,dict(summary=summary,totals=totals),query.get('page',1))
+        return prepare(data,query),filters
     page = Paginator(matched, 50).get_page(query.get('page', 1))
     data = dict(summary=summary, totals=totals, details=list(page), page=page.number,
                 pages=page.paginator.num_pages, offset=(page.number-1)*50)

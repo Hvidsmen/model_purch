@@ -31,6 +31,9 @@ def report(request, run):
             'html': render_to_string('admin_motivation/reports_next/_deal_filter_fields.html', {'filters': filters}, request=request)})
     if data is not None and query.get('export') == 'csv':
         return page_csv(data)
+    if query.get('_partner_rows')=='1':
+        from .services.deal_partners import response
+        return response(request,data,errors)
     if data is not None and query.get('export') == 'xlsx':
         from .shareholder_views import plain_excel, metadata
         rows = []
@@ -46,7 +49,7 @@ def report(request, run):
     navigation = []
     for key, title in shareholder_reports.TITLES.items():
         target = query.copy()
-        for field in ('run', 'export', 'page', 'start', 'end'):
+        for field in ('run', 'export', 'page', 'start', 'end', 'deal_view', '_partner', '_partner_rows'):
             target.pop(field, None)
         navigation.append(dict(title=title, active=key == 'deals', url=reverse(
             'motivation_shareholder_report', args=[run.pk, key]) + '?' + target.urlencode()))
