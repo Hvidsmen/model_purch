@@ -49,13 +49,25 @@ class MainQuarterTests(SimpleTestCase):
             self.assertFalse(enabled())
             self.assertEqual(main_patch(procedure()).count('WHERE 1=0 AND'),3)
 
-    def test_default_restores_only_fourth_quarter_and_year(self):
+    def test_default_includes_all_quarters_and_year(self):
         from tempfile import TemporaryDirectory
         from pathlib import Path
         from unittest.mock import patch
         from .services.main_quarter_mode import periods,all_subdivisions
         with TemporaryDirectory() as root,override_settings(BASE_DIR=Path(root),MOTIVATION_MAIN_ALL_QUARTERS=None),patch.dict('os.environ',{},clear=True):
-            self.assertEqual(periods(),('4','5'))
-            self.assertEqual(main_patch(procedure()).count('WHERE 1=0 AND'),3)
-            self.assertEqual(selected_periods(QueryDict('period=all')),['4','5'])
+            self.assertEqual(periods(),tuple('12345'))
+            self.assertNotIn('WHERE 1=0 AND',main_patch(procedure()))
+            self.assertEqual(selected_periods(QueryDict('period=all')),list('12345'))
+            self.assertNotIn('SUBSTRING',main_projection())
             self.assertTrue(all_subdivisions())
+
+    def test_scope_only_local_config_keeps_all_quarters_enabled(self):
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from unittest.mock import patch
+        from .services.main_quarter_mode import periods,all_subdivisions
+        with TemporaryDirectory() as root,override_settings(BASE_DIR=Path(root),MOTIVATION_MAIN_ALL_QUARTERS=None),patch.dict('os.environ',{},clear=True):
+            folder=Path(root)/'.local';folder.mkdir()
+            (folder/'motivation-main-periods.json').write_text('{"all_subdivisions":false}')
+            self.assertEqual(periods(),tuple('12345'))
+            self.assertFalse(all_subdivisions())
