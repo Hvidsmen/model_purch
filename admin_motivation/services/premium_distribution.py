@@ -107,8 +107,10 @@ def create(user,execution,subdivision,period,currency):
         if pending(coefficient):raise ValidationError('Гендиректор должен повторно подтвердить коэффициенты после возврата.')
         if not coefficient:raise ValidationError('Этап 1: гендиректор должен подтвердить общий множитель, в том числе 1,0.')
         funds,rows=read_source(execution,subdivision,period,currency,include_directors=True)
+        other_currency='RUB' if currency=='USD' else 'USD'
+        other_funds,_=read_source(execution,subdivision,period,other_currency,include_directors=True)
         batch=PremiumDistribution.objects.create(execution=execution,subdivision=subdivision,year=year,period=period,currency=currency,
-            funds=funds,rows=rows,created_by=user,source={'run_id':str(execution.run_id),'parameters':execution.parameters,'export_snapshot':execution.export_snapshot})
+            funds=funds,rows=rows,created_by=user,source={'run_id':str(execution.run_id),'parameters':execution.parameters,'export_snapshot':execution.export_snapshot,'funds_by_currency':{currency:funds,other_currency:other_funds}})
         batch.source={**batch.source,'workflow':{'stage':'sales','coefficient':str(coefficient.coefficient),
             'kind_coefficients':coefficient.kind_coefficients,'personal_coefficients':coefficient.personal_coefficients,
             'coefficient_revision':coefficient.revision,'confirmed_by':coefficient.confirmed_by_id,

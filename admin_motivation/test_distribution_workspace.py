@@ -26,7 +26,7 @@ class DistributionWorkspaceTests(TestCase):
         row=response.context['registry_rows'][0]
         self.assertEqual(row['batch'].pk,batch.pk)
         self.assertEqual(row['sales_usd'],100)
-        self.assertIsNone(row['sales_rub'])
+        self.assertEqual(row['sales_rub'],100)
         self.assertEqual(row['stage_label'],'Продажи')
         self.assertNotContains(response,'Распределить продажи</button>')
         self.assertContains(response,'Продолжить')
