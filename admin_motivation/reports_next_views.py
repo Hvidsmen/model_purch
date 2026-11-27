@@ -161,6 +161,7 @@ def workbook(kind, data, metadata, query=None, title=None):
                 matrix_nodes(section, group, row['children'])
         for section in personal['product_sections']:
             for group in section['groups']:
+                for execution in group.get('execution_rows',[]):matrix_row(section,group,execution,execution['label'],'База выполнения')
                 matrix_row(section, group, group, 'Всего по расчёту', 'Итог')
                 matrix_nodes(section, group, group['children'])
     notes = book.create_sheet('Параметры')

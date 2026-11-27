@@ -143,6 +143,7 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
         perf=filtered_performance(filtered,records(run,'perf_'+tag))
         contexts={(r['Подразделение'],str(r['Год']),r['КварталМотивации']) for r in filtered}
         dept=[row for row in records(run,'dept_'+tag) if (row['Подразделение'],str(row['Год']),row['КварталМотивации']) in contexts]
+        data['coefficient_performance']=coefficient_totals(raw,kind,periods,original_rules=original_rules)
         data['motivation_performance']=perf;data['department_performance']=dept
         performance.extend(presentation_rows(perf,kind));department.extend(presentation_rows(dept,DEPARTMENT))
         sections.append({'kind':kind,'data':data})

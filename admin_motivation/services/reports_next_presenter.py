@@ -341,6 +341,8 @@ def personal_details(ledger, query, *, period_codes=None):
                 groups.append({'branch': branch['label'], 'author': author['label'], **matrix_metrics(author['values']),
                     'children': [matrix(node, branch['label'], author['label']) for node in author['children']],
                     'formula_groups': [matrix(node, branch['label'], author['label']) for node in author.get('formula_groups', [])]})
+        from .personal_execution import rows as execution_rows
+        for group in groups:group['execution_rows']=execution_rows(ledger,data,kind,group['branch'])
         sections.append({'kind': kind, 'periods': [display_period(label) for label in data['periods']], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
                          'forecast_columns':2 if data.get('extended_forecast') else 0,
                          'metric_columns': len(data['periods']) * (6 if data.get('extended_forecast') else 4) + (8 if data.get('extended_forecast') else 6) - (0 if '5' in (period_codes if period_codes is not None else selected_periods(query)) else 1), 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
