@@ -11,7 +11,7 @@
 </nav>
 {% if archived %}<p class="nr-muted">Расчёты в архиве скрыты из основного списка. Их отчёты и Excel доступны по прежним ссылкам.</p>{% endif %}
 <div class="sh-table"><table class="nr-table"><thead><tr><th>Расчёт</th><th>Факт по дату</th><th>Порог авторов</th><th>Состояние</th><th>Создан</th>{% if can_start %}<th>Действия</th>{% endif %}</tr></thead><tbody>
-{% for run in runs %}<tr><td><a href="{% url 'motivation_shareholder_report' run.pk 'team' %}">{{ run.name }}</a><small>{{ run.get_scenario_display }}</small></td><td>{{ run.as_of|date:'d.m.Y' }}</td><td>{{ run.threshold_percent|floatformat:"-4" }}%</td><td>{{ run.stage }}</td><td>{{ run.created_at|date:'d.m.Y H:i' }}</td>
+{% for run in runs %}<tr><td><a href="{% url 'motivation_shareholder_report' run.pk entry_report %}">{{ run.name }}</a><small>{{ run.get_scenario_display }}</small></td><td>{{ run.as_of|date:'d.m.Y' }}</td><td>{{ run.threshold_percent|floatformat:"-4" }}%</td><td>{{ run.stage }}</td><td>{{ run.created_at|date:'d.m.Y H:i' }}</td>
 {% if can_start %}<td><form method="post" action="{% url 'motivation_shareholder_archive' run.pk %}">{% csrf_token %}<input type="hidden" name="archive" value="{% if archived %}1{% else %}0{% endif %}"><button class="btn btn-outline-primary" type="submit" name="action" value="{% if archived %}restore{% else %}archive{% endif %}" aria-label="{% if archived %}Вернуть из архива{% else %}В архив{% endif %}: {{ run.name }}">{% if archived %}Вернуть из архива{% else %}В архив{% endif %}</button></form></td>{% endif %}</tr>
 {% empty %}<tr><td colspan="{% if can_start %}6{% else %}5{% endif %}">{% if archived %}В архиве пока нет расчётов.{% else %}Нет действующих расчётов.{% endif %}</td></tr>{% endfor %}
 </tbody></table></div>

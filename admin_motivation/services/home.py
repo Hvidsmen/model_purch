@@ -18,6 +18,8 @@ def home_context(user):
         cards.append({'title': 'На проверке', 'description': 'Посмотреть замечания и решения по версии модели.', 'url': reverse('motivation_reviews'), 'primary': False})
     if role == ADMIN:
         cards.append({'title': 'Расчёты и задания', 'description': 'Запустить расчёт, проверить состояние и открыть результат.', 'url': reverse('motivation_calculations'), 'primary': False})
+    from .shareholder_access import can_view as can_shareholder
+    if can_shareholder(user):cards.append({'title':'Отчёты для акционеров','description':'Сохранённый расчёт премий в рамках ваших действующих прав.','url':reverse('motivation_shareholders'),'primary':False})
     descriptions = {
         ADMIN: 'Настройте модель, проверьте данные и запустите расчёт.',
         MODELER: 'Изменяйте модель в черновике, проверяйте результат и отправляйте на согласование.',

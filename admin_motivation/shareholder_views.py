@@ -12,6 +12,7 @@ from .models import ShareholderCalculation
 from .shareholder_forms import CalculationForm
 from .services import shareholder_reports as reports,shareholder_runner as runner
 from .services.shareholder_access import can_start,can_view
+from .services.shareholder_scope import scoped_request,current,query as scoped_query,report_kinds
 from .services.reports_next_presenter import present,personal_details,new_detail_labels
 
 
@@ -35,6 +36,7 @@ def metadata(run):
 
 
 @require_http_methods(['GET','POST'])
+@scoped_request
 def index(request):
     allowed(request)
     form=CalculationForm(request.POST if request.method=='POST' else None)
@@ -49,7 +51,7 @@ def index(request):
     archived=request.GET.get('archive')=='1'
     runs=ShareholderCalculation.objects.filter(is_archived=archived).only('id','name','as_of','scenario','threshold_percent','state','stage','created_at').order_by('-created_at','-pk')
     return render(request,'admin_motivation/reports_next/shareholder_index.html',{'form':form,'can_start':can_start(request.user),'skip_motivation_workflow':True,
-        'archived':archived,'runs':Paginator(runs,50).get_page(request.GET.get('page'))})
+        'entry_report':'team' if 'team' in report_kinds(request.user) else 'mine','archived':archived,'runs':Paginator(runs,50).get_page(request.GET.get('page'))})
 
 
 @require_POST
@@ -66,9 +68,10 @@ def archive(request,pk):
 
 
 @require_GET
+@scoped_request
 def status(request,pk):
     allowed(request);run=get_object_or_404(ShareholderCalculation.objects.only('state','stage','error'),pk=pk)
-    return JsonResponse({'state':run.state,'stage':run.stage,'error':run.error})
+    return JsonResponse({'state':run.state,'stage':run.stage,'error':run.error if current.get() is None else ''})
 
 
 def rewrite_links(value,run):
@@ -103,9 +106,12 @@ def plain_excel(title,headers,rows,meta,extra_sheets=()):
 
 
 @require_GET
+@scoped_request
 def report(request,pk,kind):
     allowed(request)
     if kind not in reports.TITLES:raise Http404
+    visible_reports=report_kinds(request.user)
+    if kind not in visible_reports:raise PermissionDenied
     run=get_object_or_404(ShareholderCalculation,pk=pk)
     if kind=='deals' and run.state=='completed' and run.metadata.get('closed_deals_version')=='closed-deals-v1':
         from .shareholder_deals_view import report as closed_deals
@@ -116,6 +122,7 @@ def report(request,pk,kind):
     if kind=='executive':query.pop('author',None);query.pop('search',None)
     for field in ('subdivision','author','planning','goods','brand','type','period'):
         query.setlist(field,[v for v in query.getlist(field) if v])
+    query=scoped_query(query)
     if not query.get('currency'):query['currency']='USD'
     try:periods,kinds=reports.selection(run,query)
     except ValidationError as error:return HttpResponseBadRequest(' '.join(error.messages))
@@ -128,6 +135,10 @@ def report(request,pk,kind):
         query.setlist('author',[author for author in query.getlist('author')
                                if author not in available['author'] or author in allowed_authors])
     title=reports.TITLES[kind];meta=metadata(run)
+    if current.get() is not None:
+        from .services.reports_next import available as main_catalog
+        title=main_catalog(request.user).get(kind,(title,''))[0]
+        if run.state=='failed':run.error='Расчёт не завершён. Обратитесь к администратору.'
     meta.extend((label,', '.join(query.getlist(field)) or 'Все доступные') for field,label in [('currency','Валюта премий'),('period','Периоды отчёта'),('type','Виды мотивации'),('subdivision','Отбор подразделений'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')])
     from .services.shareholder_original_rules import enabled,enrich
     from .services.shareholder_regions import enabled as regional_enabled
@@ -136,6 +147,7 @@ def report(request,pk,kind):
         'period_options':[{'code':code,'label':'Год' if code=='5' else code+' квартал','selected':code in periods} for code in [*map(str,run.quarters),'5']]}
     navigation=[]
     for key,label in reports.TITLES.items():
+        if key not in visible_reports:continue
         target=query.copy();target.pop('export',None);target.pop('audit',None);target.pop('page',None)
         if key=='executive':target.pop('author',None);target.pop('search',None)
         navigation.append({'title':label,'active':key==kind,'url':reverse('motivation_shareholder_report',args=[run.pk,key])+'?'+target.urlencode()})
@@ -144,7 +156,7 @@ def report(request,pk,kind):
         context['filters']=[{'key':key,'label':label,'options':[{'value':v,'selected':v in query.getlist(key)} for v in available[key]]} for key,label in [('subdivision','Подразделения'),('planning','Группа планов продаж'),('goods','Группа товаров'),('brand','Бренд')]]
         context['authors']=[{'value':v,'selected':v in query.getlist('author'),'disabled':v not in allowed_authors} for v in available['author']]
         context['author_subdivisions']=available['author_subdivisions']
-        context['type_options']=[{'value':v,'selected':v in kinds} for v in reports.KINDS]
+        context['type_options']=[{'value':v,'selected':v in kinds} for v in (current.get().kinds if current.get() else reports.KINDS)]
         context['needs_author']=kind=='mine' and not query.getlist('author')
         context['multiple_authors']=kind=='mine' and len(query.getlist('author'))>1
         def caption(values,all_caption):

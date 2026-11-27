@@ -27,14 +27,18 @@ def records(run,dataset):
             mode='separate' if run.scenario=='separate' and code in '123' and code else 'combined'
             if dataset in ('mapping','deals','policy_plan_shares','policy_rates','policy_defaults') or dataset.endswith('_cur'):mode='combined'
             if regional and row.get('Подразделение') in REGIONS:mode='combined'
-            if chunk.mode==mode:yield row
+            if chunk.mode==mode:
+                from .shareholder_scope import permits
+                if permits(row,dataset,run=run):yield row
 
 
 def options(run):
     from django.core.cache import cache
-    stored=run.metadata.get(OPTIONS_KEY) if run.state=='completed' else None
+    from .shareholder_scope import current
+    restricted=current.get() is not None
+    stored=run.metadata.get(OPTIONS_KEY) if run.state=='completed' and not restricted else None
     if isinstance(stored,dict) and isinstance(stored.get('author_subdivisions'),dict) and all(isinstance(stored.get(key),list) for key in OPTION_FIELDS):return stored
-    cache_key=f'shareholder-options-v2:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at else None
+    cache_key=f'shareholder-options-v2:{run.pk}:{run.completed_at.isoformat()}' if run.state=='completed' and run.completed_at and not restricted else None
     if cache_key:
         saved=cache.get(cache_key)
         if saved is not None:return saved
@@ -50,7 +54,7 @@ def options(run):
     result={field:sorted(value) for field,value in values.items()}
     result['author_subdivisions']={author:sorted(author_subdivisions[author]) for author in result['author']}
     if cache_key:cache.set(cache_key,result,3600)
-    if run.state=='completed':
+    if run.state=='completed' and not restricted:
         from ..models import ShareholderCalculation
         run.metadata={**run.metadata,OPTIONS_KEY:result}
         ShareholderCalculation.objects.filter(pk=run.pk,state='completed').update(metadata=run.metadata)
@@ -143,7 +147,11 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
         perf=filtered_performance(filtered,records(run,'perf_'+tag))
         contexts={(r['Подразделение'],str(r['Год']),r['КварталМотивации']) for r in filtered}
         dept=[row for row in records(run,'dept_'+tag) if (row['Подразделение'],str(row['Год']),row['КварталМотивации']) in contexts]
-        data['coefficient_performance']=coefficient_totals(raw,kind,periods,original_rules=original_rules)
+        from .shareholder_scope import execution_basis,current
+        if current.get() is not None:
+            with execution_basis():basis=[r for r in records(run,'report_'+tag) if not query.getlist('subdivision') or r.get('Подразделение') in query.getlist('subdivision')]
+        else:basis=raw
+        data['coefficient_performance']=coefficient_totals(basis,kind,periods,original_rules=original_rules)
         data['motivation_performance']=perf;data['department_performance']=dept
         performance.extend(presentation_rows(perf,kind));department.extend(presentation_rows(dept,DEPARTMENT))
         sections.append({'kind':kind,'data':data})

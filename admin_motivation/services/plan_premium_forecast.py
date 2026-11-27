@@ -117,6 +117,8 @@ def load(run,query,periods,kinds):
     for kind in kinds:
         for chunk in run.chunks.filter(dataset='forecast_plan_'+KINDS[kind]).only('mode','payload').order_by('mode','sequence'):
             for row in chunk.payload:
+                from .shareholder_scope import permits
+                if not permits(row,kind=kind,run=run):continue
                 if not matches(row,query) or search and search not in str(row.get('АвторСделки') or '').casefold():continue
                 for code in periods:
                     if code!='5' and str(row['Квартал'])!=code:continue

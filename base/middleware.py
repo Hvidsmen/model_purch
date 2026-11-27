@@ -34,6 +34,8 @@ class PortalAccessMiddleware:
             name = match.url_name if match else None
             account_pages = {'index_base', 'portal_login', 'portal_logout', 'portal_windows_login'}
             personal = name in ('index_admin_motivation', 'motivation_reports', 'motivation_reports_next', 'motivation_report_all_2026') or (name == 'motivation_report_next' and (view_kwargs.get('kind') in ('mine', 'team', 'detail', 'deals') or view_kwargs.get('kind') == 'registry' and role_for(request.user, 'motivation') in (BRANCH_DIRECTOR, DEPUTY_DIRECTOR, POLITICIAN))) or (name == 'motivation_report' and view_kwargs.get('kind') in report_kinds(request.user))
+            shareholder = role_for(request.user,'motivation') in (BRANCH_DIRECTOR,DEPUTY_DIRECTOR,POLITICIAN) and name in {'motivation_shareholders','motivation_shareholder_report','motivation_shareholder_status'}
+            personal = personal or shareholder
             branch_tasks = role_for(request.user,'motivation') == BRANCH_DIRECTOR and name in {'motivation_distributions','motivation_distribution_detail','motivation_sales_employees'}
             information = name=='motivation_calculation_guide' and request.method in ('GET','HEAD','OPTIONS')
             static = module == 'django.views.static' and request.path.startswith(settings.STATIC_URL)

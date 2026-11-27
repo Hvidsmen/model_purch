@@ -10,7 +10,8 @@ from .services.deal_presentation import COLUMNS, page_csv
 
 def report(request, run):
     # Caller has checked shareholder access and the completed snapshot version.
-    query = request.GET.copy()
+    from .services.shareholder_scope import query as scoped_query,report_kinds
+    query = scoped_query(request.GET)
     choices_only = query.pop('_choices', None) == ['1']
     for field in ('period', 'currency', 'year', 'execution'):
         query.pop(field, None)
@@ -48,6 +49,7 @@ def report(request, run):
         return FileResponse(output, as_attachment=True, filename=f'shareholder-deals-{run.pk}.xlsx')
     navigation = []
     for key, title in shareholder_reports.TITLES.items():
+        if key not in report_kinds(request.user):continue
         target = query.copy()
         for field in ('run', 'export', 'page', 'start', 'end', 'deal_view', '_partner', '_partner_rows'):
             target.pop(field, None)
