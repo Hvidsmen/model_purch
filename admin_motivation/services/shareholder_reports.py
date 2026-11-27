@@ -167,7 +167,7 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
                     'possible':item.get('possible_values',[None]*len(summary['columns']))[index],
                     'annual_accrual':annual[(item['subdivision'],item['author'],code)] if code in '1234' else None,
                     'detail_url':reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+target.urlencode()})
-    return {'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'coefficient_plan_fact':coefficient_performance,'department_plan_fact':department,'kinds':kinds,
+    return {'shareholder_forecast':True,'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'coefficient_plan_fact':coefficient_performance,'department_plan_fact':department,'kinds':kinds,
         'has_unallocated':any(row['unallocated'] for row in rows),'total':sum((row['total'] for row in rows),ZERO),
         'currency':currency,'payout_threshold':Decimal(run.configuration['payout_threshold'])}
 
