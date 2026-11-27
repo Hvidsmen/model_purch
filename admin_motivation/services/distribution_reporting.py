@@ -9,7 +9,7 @@ def apply(rows,execution,kind,values,periods,*,product_filtered=False):
     selected=[r for r in rows if r['kind']==kind]
     for row in selected:
         row.update(distributed=None,distributed_bonus=None,distributed_total=None)
-    if product_filtered or kind not in ('Продажи','Политики'):return
+    if product_filtered or kind not in ('Продажи','Политики','Директора'):return
     batches=PremiumDistribution.objects.filter(state='completed',year=int(execution.parameters['fact_year']),currency=values['Currency'],period__in=[int(p) for p in periods]).select_related('subdivision')
     branches=values.get('Subdivision') or [];authors=values.get('DealAuthor') or []
     if isinstance(authors,str):authors=[authors]
@@ -40,7 +40,7 @@ def apply(rows,execution,kind,values,periods,*,product_filtered=False):
 
 
 def total(rows):
-    eligible=[r for r in rows if r['kind'] in ('Продажи','Политики')]
+    eligible=[r for r in rows if r['kind'] in ('Продажи','Политики','Директора')]
     if not eligible or any(r.get('distributed_total') is None for r in eligible):return None
     return sum((r['distributed_total'] for r in eligible),Decimal(0))
 
@@ -54,7 +54,7 @@ def enrich(presentation,ledger):
             if members is None:
                 members=[r for r in rows if (key!='period_cards' or r['code']==group['code']) and (key=='period_cards' or r['kind']==group.get('kind'))]
             group['distributed']=total(members)
-            group['distributed_bonus']=sum((r.get('distributed_bonus') or Decimal(0) for r in members if r['kind'] in ('Продажи','Политики')),Decimal(0)) if group['distributed'] is not None else None
+            group['distributed_bonus']=sum((r.get('distributed_bonus') or Decimal(0) for r in members if r['kind'] in ('Продажи','Политики','Директора')),Decimal(0)) if group['distributed'] is not None else None
 
 
 def excel_sheet(book,rows):

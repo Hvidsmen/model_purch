@@ -165,6 +165,12 @@ def export(request,batch,snapshot,revision):
     for i in range(1,13):sheet.column_dimensions[get_column_letter(i)].width=32 if i in (1,6,11) else 22
     funds=book.create_sheet('Фонды')
     funds.append(['Вид мотивации','Тип выплаты','Фонд','Распределено','Остаток','Валюта'])
+    from .services.distribution_shared import enabled as shared_enabled,pools
+    if shared_enabled(snapshot.get('source',{})):
+        funds.cell(1,3,'Исходный фонд');funds.cell(1,4,'После распределения');funds.cell(1,5,'Исходный фонд минус распределено')
+        common=book.create_sheet('Общий остаток')
+        common.append(['Тип выплаты','Исходная сумма','Распределено','Остаток','Валюта'])
+        for pool in pools(snapshot['funds'],snapshot['rows']):common.append([pool['label'],service.cash(pool['amount']),pool['allocated'],pool['remaining'],snapshot['currency']])
     for f in service.balances(snapshot['funds'],snapshot['rows']):funds.append([f['kind'],f['label'],service.cash(f['amount']),f['allocated'],f['remaining'],snapshot['currency']])
     output=BytesIO();book.save(output);output.seek(0)
     return FileResponse(output,as_attachment=True,filename=f'premiums-{batch.year}-{batch.period}-v{revision}.xlsx')
@@ -177,6 +183,11 @@ def detail(request,pk):
     can_edit=role_for(request.user,'motivation') in (ADMIN,DIRECTOR,BRANCH_DIRECTOR)
     if request.method=='POST':
         try:
+            if request.POST.get('action')=='upgrade_shared':
+                from .services.distribution_shared import upgrade
+                upgrade(request.user,pk,int(request.POST.get('revision','0')))
+                messages.success(request,'Черновик обновлён: три вкладки, общий остаток по выплатам и лимит уменьшения 25%.')
+                return redirect('motivation_distribution_detail',pk=pk)
             if request.POST.get('action')=='begin_stages':
                 from .services.distribution_stages import begin_legacy
                 begin_legacy(request.user,pk,int(request.POST.get('revision','0')),request.POST.get('closing_coefficient','1'),request.POST.get('transition_reason',''))
@@ -185,12 +196,15 @@ def detail(request,pk):
             action=request.POST.get('action','save')
             creating=action=='add_new_person'
             if creating:action='save'
+            if action=='add_director':
+                if not request.POST.get('new_director'):raise ValidationError('Выберите директора подразделения.')
+                action='save'
             if action=='add_person':
                 if not request.POST.get('new_employee'):raise ValidationError('Выберите сотрудника для добавления.')
                 action='save'
-            changes={r['id']:{'amount':request.POST.get('amount_'+r['id'],''),'comment':request.POST.get('comment_'+r['id'],''),'weight':request.POST.get('weight_'+r['id'],r.get('weight','0')),'direct_amount':request.POST.get('sales_amounts')=='1'} for r in batch.rows}
+            changes={r['id']:{'amount':request.POST.get('amount_'+r['id'],r['amount'] if batch.source.get('workflow',{}).get('rebalance_policy')=='shared-payments-v1' else ''),'comment':request.POST.get('comment_'+r['id'],''),'weight':request.POST.get('weight_'+r['id'],r.get('weight','0')),'direct_amount':request.POST.get('sales_amounts')=='1'} for r in batch.rows}
             batch=service.update(request.user,pk,int(request.POST.get('revision','0')),changes,action=action,
-                addition={'direct_amount':request.POST.get('sales_amounts')=='1','employee':request.POST.get('new_employee','') if not creating else '', 'create':creating,'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':'0','kind':request.POST.get('new_kind',''),'payment':request.POST.get('new_payment','')},comment=request.POST.get('reason',''))
+                addition={'director':request.POST.get('new_director',''),'direct_amount':request.POST.get('sales_amounts')=='1','employee':request.POST.get('new_employee','') if not creating else '', 'create':creating,'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':'0','kind':request.POST.get('new_kind',''),'payment':request.POST.get('new_payment','')},comment=request.POST.get('reason',''))
             messages.success(request,'Распределение завершено. Excel и ссылка готовы для передачи финансистам.' if batch.state=='completed' else 'Изменения сохранены.')
             return redirect('motivation_distribution_detail',pk=pk)
         except (ValidationError,ValueError) as exc:
@@ -203,15 +217,17 @@ def detail(request,pk):
     except ValueError:raise Http404
     snapshot,revision=snapshot_for(batch,request.user,version)
     if request.GET.get('export')=='xlsx':return export(request,batch,snapshot,revision)
-    try:funds=service.balances(snapshot['funds'],snapshot['rows'])
+    from .services.distribution_shared import enabled as shared_enabled,pools,minimum
+    shared=shared_enabled(snapshot.get('source',{}))
+    try:funds=pools(snapshot['funds'],snapshot['rows']) if shared else service.balances(snapshot['funds'],snapshot['rows'])
     except ValidationError:funds=[]
     url=request.build_absolute_uri(reverse('motivation_distribution_detail',args=[pk]))+'?version='+str(revision)
     editable=can_edit and batch.state=='draft' and not version
     workflow=snapshot.get('source',{}).get('workflow') or {}
     stage=workflow.get('stage','legacy')
-    visible_kind={'sales':'Продажи','policies':'Политики'}.get(stage) if snapshot['state']=='draft' else None
+    visible_kind={'sales':'Продажи','policies':'Политики','directors':'Директора'}.get(stage) if snapshot['state']=='draft' else None
     visible_rows=[r for r in snapshot['rows'] if visible_kind is None or r['kind']==visible_kind]
-    if visible_kind:funds=[f for f in funds if f['kind']==visible_kind]
+    if visible_kind and not shared:funds=[f for f in funds if f['kind']==visible_kind]
     employees=service.eligible_employees(batch)
     if stage=='sales':
         payments={f['payment'] for f in snapshot['funds'] if f['kind']=='Продажи'}
@@ -220,7 +236,17 @@ def detail(request,pk):
             if row['kind']=='Продажи' and row.get('employee_id'):existing.setdefault(row['employee_id'],set()).add(row['payment'])
         employees=[employee for employee in employees if not payments.issubset(existing.get(employee.pk,set()))]
     display_rows=[{**r,'edit_amount':editable and ((r['kind']=='Политики' and stage=='policies') or (r['kind']=='Продажи' and stage=='sales') or stage=='legacy'),'edit_weight':editable and r['kind']=='Продажи' and stage=='sales'} for r in visible_rows]
-    return render(request,'admin_motivation/distribution/detail.html',{'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'person_input':{'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':'0','employee':request.POST.get('new_employee',''),'payment':request.POST.get('new_payment','')},'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
+    if shared:
+        from decimal import Decimal
+        for row in display_rows:
+            row['edit_amount']=editable and row['kind']==visible_kind and service.cash(row['original'])>=0
+            row['minimum']=minimum(row)
+            try:row['reduction']=(1-service.cash(row['amount'])/service.cash(row['original']))*100 if service.cash(row['original'])>0 else None
+            except ValidationError:row['reduction']=None
+        editable_ids={r['id'] for r in display_rows if r['edit_amount']}
+        for fund in funds:
+            fund['fixed_allocated']=sum((service.cash(r['amount']) for r in snapshot['rows'] if r['payment']==fund['payment'] and r['id'] not in editable_ids),Decimal(0))
+    return render(request,'admin_motivation/distribution/detail.html',{'skip_motivation_workflow':True,'shared_pool':shared,'can_upgrade_shared':editable and bool(workflow) and not shared,'directors':batch.subdivision.directors.filter(is_archived=False),'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'person_input':{'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':'0','employee':request.POST.get('new_employee',''),'payment':request.POST.get('new_payment','')},'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
         'can_reopen':not version and batch.state=='completed' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),
         'report_url':url,'mail_url':'mailto:?'+urlencode({'subject':f'Премии: {batch.subdivision} · {batch.year} · {batch.get_period_display()}', 'body':'Распределение премий завершено. Отчёт и Excel: '+url}),
         'employees':employees,'history':batch.events.select_related('actor'),'payments':service.PAYMENTS.items(),'kinds':service.KINDS})

@@ -29,9 +29,9 @@ def registry(user, year, period, batches, grid=None, archived=False):
         for batch in matching or [None]:
             record = coefficients.get(branch.pk)
             stage = batch.source.get('workflow', {}).get('stage', 'sales') if batch else None
-            label = 'Завершено' if batch and batch.state == 'completed' else 'Архив' if archived else 'Ребаланс политиков' if stage == 'policies' else 'Продажи' if batch else 'Готово к распределению' if record else 'Ожидает множителя'
+            label = 'Завершено' if batch and batch.state == 'completed' else 'Архив' if archived else 'Ребаланс директоров' if stage == 'directors' else 'Ребаланс политиков' if stage == 'policies' else 'Продажи' if batch else 'Готово к распределению' if record else 'Ожидает множителя'
             values = {}
-            for kind, prefix in [('Продажи', 'sales'), ('Политики', 'policies')]:
+            for kind, prefix in [('Продажи', 'sales'), ('Политики', 'policies'), ('Директора','directors')]:
                 for currency in ('USD', 'RUB'):
                     values[prefix+'_'+currency.lower()] = sum((cash(f['amount']) for f in batch.funds if f['kind'] == kind), Decimal(0)) if batch and batch.currency == currency else None
             rows.append({'branch': branch, 'batch': batch, 'record': record,

@@ -1,3 +1,8 @@
+{% if shared_pool %}<nav class="pd-actions" aria-label="Виды распределения">
+<button name="action" value="go_sales" class="btn {% if stage == 'sales' %}btn-primary{% else %}btn-outline-primary{% endif %}"{% if stage == 'sales' %} aria-current="page"{% endif %}>Продажи</button>
+<button name="action" value="go_policies" class="btn {% if stage == 'policies' %}btn-primary{% else %}btn-outline-primary{% endif %}"{% if stage == 'policies' %} aria-current="page"{% endif %}>Политики</button>
+<button name="action" value="go_directors" class="btn {% if stage == 'directors' %}btn-primary{% else %}btn-outline-primary{% endif %}"{% if stage == 'directors' %} aria-current="page"{% endif %}>Директора</button>
+</nav><p class="pd-source">При переключении изменения сохраняются. Остаток общий для трёх видов, но отдельный для каждой выплаты.</p>{% else %}
 <nav class="pd-actions" aria-label="Разделы распределения">
 {% if stage == 'sales' %}
 <button type="button" class="btn btn-primary" aria-current="page">Продажи</button>
@@ -8,3 +13,5 @@
 {% endif %}
 </nav>
 <p class="pd-source">При переходе введённые данные сохраняются. После изменения продаж зафиксируйте их повторно. Ребаланс политиков сохранится.</p>
+
+{% endif %}
