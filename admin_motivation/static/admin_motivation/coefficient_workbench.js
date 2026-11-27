@@ -1,8 +1,8 @@
 /* Spreadsheet navigation and read-only preflight. Both reuse the editor's undo/save path. */
 (() => {
  const initialize=()=>{
-  const table=document.getElementById('coefficient-table'),toolbar=document.getElementById('editor-toolbar'),open=document.getElementById('editor-paste-open');
-  if(!table||!open||!window.motivationEditor)return;
+  const table=document.getElementById('coefficient-table'),toolbar=document.getElementById('editor-toolbar');
+  if(!table||!document.getElementById('editor-sheet-dialog')||!window.motivationEditor)return;
   const editor=window.motivationEditor,by=id=>document.getElementById(id),dialog=by('editor-sheet-dialog');
   let anchor=null,last=null,selected=[],pending=[],mode='paste';
   const visibleRows=()=>[...table.querySelectorAll('.coefficient-row')].filter(row=>!row.hidden);
@@ -52,18 +52,23 @@
   });
   const context=()=>{if(!last||last.matches(':disabled')||last.closest('tr').hidden)throw Error('Сначала выберите доступную ячейку таблицы.');by('editor-sheet-context').textContent='Начало: '+text(last)+' · '+kind(last);};
   const show=()=>{try{context();pending=[];by('editor-sheet-apply').disabled=true;by('editor-sheet-error').hidden=true;by('editor-sheet-preview').replaceChildren();dialog.showModal();}catch(error){alert(error.message);}};
-  open.addEventListener('click',()=>{mode='paste';by('editor-sheet-data').value='';by('editor-sheet-data').disabled=false;show();});
   table.addEventListener('paste',event=>{
    if(!event.target.matches('.coeff-input:not(:disabled)'))return;
-   const data=event.clipboardData?.getData('text/plain')||'';if(!/[\t\r\n]/.test(data))return;
-   event.preventDefault();last=event.target;mode='paste';by('editor-sheet-data').disabled=false;by('editor-sheet-data').value=data;show();
+   const data=event.clipboardData?.getData('text/plain')||'';if(!data)return;
+   if(!data.trim()){event.preventDefault();return;}
+   event.preventDefault();last=event.target;mode='paste';by('editor-sheet-data').disabled=false;by('editor-sheet-data').value=data;by('editor-sheet-units').value='percent';
+   prepare();
+   if(pending.length){
+    const count=pending.length;editor.apply(pending,'Вставка Excel');pending=[];
+    by('editor-cell-selection').textContent=`Вставлено ячеек: ${count}. Правки можно отменить или сохранить.`;
+   }else by('editor-cell-selection').textContent='Вставка не применена: '+by('editor-sheet-error').textContent;
   });
   by('editor-fill').addEventListener('click',()=>{
    mode='fill';last=selected[0];by('editor-sheet-data').value=last?.value||'';by('editor-sheet-data').disabled=true;show();
   });
   const invalidate=()=>{pending=[];by('editor-sheet-apply').disabled=true;};
   by('editor-sheet-data').addEventListener('input',invalidate);by('editor-sheet-units').addEventListener('change',invalidate);
-  by('editor-sheet-check').addEventListener('click',()=>{
+  const prepare=()=>{
    pending=[];by('editor-sheet-error').hidden=true;by('editor-sheet-preview').replaceChildren();
    try{
     context();const targets=[];
@@ -91,7 +96,8 @@
     by('editor-sheet-context').textContent+=` · Изменится: ${pending.length}. Показаны первые 100, все правки доступны в «Изменения».`;
     by('editor-sheet-apply').disabled=false;
    }catch(error){pending=[];by('editor-sheet-error').textContent=error.message;by('editor-sheet-error').hidden=false;by('editor-sheet-apply').disabled=true;}
-  });
+  };
+  by('editor-sheet-check').addEventListener('click',prepare);
   by('editor-sheet-apply').addEventListener('click',()=>{
    if(!pending.length)return;
    if(pending.some(change=>change.input.value!==change.original||change.input.matches(':disabled'))){invalidate();by('editor-sheet-error').hidden=false;by('editor-sheet-error').textContent='Значения изменились после просмотра. Проверьте вставку снова.';return;}
