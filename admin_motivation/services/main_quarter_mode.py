@@ -12,12 +12,12 @@ def enabled():
     config=Path(settings.BASE_DIR)/'.local'/'motivation-main-periods.json'
     if config.is_file():
         try:
-            value=json.loads(config.read_text(encoding='utf-8-sig')).get('all_quarters',True)
+            value=json.loads(config.read_text(encoding='utf-8-sig')).get('all_quarters',False)
             if not isinstance(value,bool):raise ValueError
             return value
         except (ValueError,KeyError,OSError) as error:
             raise ImproperlyConfigured('motivation-main-periods.json: all_quarters должен быть true или false.') from error
-    return os.environ.get('MOTIVATION_MAIN_ALL_QUARTERS','1')=='1'
+    return os.environ.get('MOTIVATION_MAIN_ALL_QUARTERS','0')=='1'
 
 
 def periods():return tuple('12345') if enabled() else ('4','5')

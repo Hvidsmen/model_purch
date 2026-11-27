@@ -168,7 +168,8 @@ def calculations(request):
         else:
             job.next_run_label=job.run_at.astimezone(ZoneInfo('Europe/Moscow')).strftime('%d.%m.%Y %H:%M') if job.run_at>timezone.now() else 'Время прошло · проверьте историю'
         job.current_status = 'Проверка статуса…' if job.synced else 'Не синхронизировано'
-    return render(request, 'admin_motivation/calculations.html', {'preparation_form':preparation_form,'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions, main_only=True) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
+    from .services.main_quarter_mode import enabled as main_all_quarters
+    return render(request, 'admin_motivation/calculations.html', {'main_all_quarters':main_all_quarters(),'preparation_form':preparation_form,'skip_motivation_workflow': True, 'form': JobForm(plan_versions=plan_versions, main_only=True) if edited_job_id else form, 'jobs': jobs, 'report_subdivisions':Subdivision.objects.all(),'report_subdivision':request.GET.get('subdivision','')})
 
 
 @never_cache
