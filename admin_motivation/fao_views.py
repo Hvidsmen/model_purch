@@ -50,12 +50,14 @@ def page(request):
     service.authorize(request.user)
     today=timezone.localdate();data=request.POST if request.method=='POST' else request.GET
     selection=Selection(data if 'subdivision' in data else None,initial={'year':today.year,'quarter':(today.month-1)//3+1})
-    review=None;document=None;document_info=None;ready_error='';history=[];preview=None
+    review=None;document=None;document_info=None;ready_error='';history=[];preview=None;payment_closure=None
     search=DocumentSearch(request.POST if request.POST.get('action')=='lookup' else None)
     adjustment=None
     if selection.is_valid():
         branch,year,quarter=(selection.cleaned_data[k] for k in ('subdivision','year','quarter'))
         review=service.current(branch,year,quarter)
+        from .services.period_closure import closure
+        payment_closure=closure(branch,year,quarter)
         query={'subdivision':branch.pk,'year':year,'quarter':quarter}
         target=reverse('motivation_fao_review')+'?'+urlencode(query)
         if request.method=='POST':
@@ -122,4 +124,19 @@ def page(request):
         month=(review.quarter-1)*3+1
         adjustment.fields['correction_date'].widget.attrs.update(min=date(review.year,month,1).isoformat(),max=date(review.year,month+2,monthrange(review.year,month+2)[1]).isoformat())
     return render(request,'admin_motivation/fao_review.html',dict(selection=selection,review=review,search=search,adjustment=adjustment,
-        document_info=document_info,preview=preview,history=history,ready_error=ready_error,skip_motivation_workflow=True))
+        document_info=document_info,preview=preview,history=history,ready_error=ready_error,payment_closure=payment_closure,skip_motivation_workflow=True))
+
+
+@require_http_methods(['POST'])
+def paid(request,pk):
+    service.authorize(request.user)
+    from .models import PremiumDistribution
+    from .services.period_closure import mark_paid
+    get_object_or_404(PremiumDistribution,pk=pk)
+    try:
+        if request.POST.get('payments_made')!='yes':raise ValidationError('Подтвердите, что выплаты произведены.')
+        mark_paid(request.user,pk,int(request.POST.get('revision','0')))
+        messages.success(request,'Выплаты произведены. Период подразделения закрыт ФАО.')
+    except (ValidationError,ValueError) as exc:
+        messages.error(request,' '.join(exc.messages) if isinstance(exc,ValidationError) else 'Некорректная версия распределения.')
+    return redirect('motivation_distribution_detail',pk=pk)

@@ -71,3 +71,19 @@ class FaoCorrection(models.Model):
         return super().save(*args,**kwargs)
 
     def delete(self,*args,**kwargs):raise ValidationError('История корректировок не удаляется.')
+
+
+class FaoPaymentClosure(models.Model):
+    """Explicit accounting close; independent of calendar and allocation revisions."""
+    subdivision=models.ForeignKey('admin_motivation.Subdivision',on_delete=models.PROTECT)
+    year=models.PositiveIntegerField()
+    period=models.PositiveSmallIntegerField()
+    distribution=models.OneToOneField('admin_motivation.PremiumDistribution',on_delete=models.PROTECT)
+    distribution_revision=models.PositiveIntegerField()
+    actor=models.ForeignKey('auth.User',null=True,on_delete=models.SET_NULL)
+    actor_label=models.CharField(max_length=255)
+    closed_at=models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints=[models.UniqueConstraint(fields=['subdivision','year','period'],name='unique_fao_payment_closure'),
+            models.CheckConstraint(condition=models.Q(period__gte=1,period__lte=5),name='fao_payment_valid_period')]

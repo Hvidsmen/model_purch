@@ -70,7 +70,7 @@ class PortalAccessMiddleware:
                     'motivation_sales_plans', 'motivation_sales_plan', 'motivation_plan_summary', 'motivation_reports', 'motivation_report', 'motivation_reports_next', 'motivation_report_next', 'motivation_report_all_2026', 'motivation_report_integral_2026', 'motivation_report_director_scenarios'}
                 if not decisions and name not in allowed:
                     return render(request, 'base/forbidden.html', status=403)
-            if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and name not in {'motivation_report_integral_2026', 'motivation_report_director_scenarios'} and not (role == DIRECTOR and name in {'motivation_distributions','motivation_distribution_detail'}) and not (role == FINANCIER and name=='motivation_fao_review') and not motivation_viewer_read_request(request):
+            if role in (DIRECTOR, FINANCIER) and request.method not in ('GET', 'HEAD', 'OPTIONS') and not decisions and name not in {'motivation_report_integral_2026', 'motivation_report_director_scenarios'} and not (role == DIRECTOR and name in {'motivation_distributions','motivation_distribution_detail'}) and not (role == FINANCIER and name in {'motivation_fao_review','motivation_distribution_paid'}) and not motivation_viewer_read_request(request):
                 return JsonResponse({'error': 'Изменение модели недоступно. Решения принимаются на странице «На проверке».'}, status=403)
         if project == 'motivation' and role_for(request.user, 'motivation') == FINANCIER and not financier_read_request(request):
             if json_request:
