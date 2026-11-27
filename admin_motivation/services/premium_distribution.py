@@ -10,7 +10,7 @@ from base.access import role_for, ADMIN, DIRECTOR, BRANCH_DIRECTOR, FINANCIER
 from base.report_access import politician_scope
 from ..models import PremiumDistribution, PremiumDistributionEvent
 
-KINDS=('Продажи','Политики')
+KINDS=('Продажи','Политики','Директора')
 PAYMENTS={'quarter':'Квартальная премия','annual':'Годовая премия','catchup':'Доплата за кварталы'}
 
 
@@ -52,7 +52,7 @@ def event(batch,user,action,comment=''):
         snapshot={'funds':batch.funds,'rows':batch.rows,'state':batch.state,'currency':batch.currency,'source':batch.source})
 
 
-def read_source(execution,subdivision,period,currency):
+def read_source(execution,subdivision,period,currency,*,include_directors=False):
     from . import reports_next
     from .reports import load_report
     variant=execution.parameters.get('variant','main')
@@ -62,12 +62,16 @@ def read_source(execution,subdivision,period,currency):
     rows=[]; funds=[]
     # Shared DWH application lock prevents replacing results during the snapshot.
     with reports_next.current_run(execution):
-        for kind in KINDS:
+        for kind in (KINDS if include_directors else KINDS[:2]):
             data=load_report('manager-detail',{'TypeCoeff_':kind,'Subdivision':[subdivision.subdivision_key],
                 'DealAuthor':[],'gp_sales':[],'GPGoods':[],'Brend':[],'Years':[str(execution.parameters['fact_year'])],'Currency':currency},
                 premium_period=[str(period)],summary_only=True,calculation_variant=variant)
             summary=data['period_summary']
             index=next((i for i,col in enumerate(summary['columns']) if reports_next.period_code(col['label'])==str(period)),None)
+            if index is None and kind=='Директора' and not summary['rows']:
+                for payment in (['annual','catchup'] if period==5 else ['quarter']):
+                    funds.append({'kind':kind,'payment':payment,'amount':'0.00'})
+                continue
             if index is None:raise ValidationError('В расчёте отсутствует выбранный период. Снимок не создан.')
             payments=['annual','catchup'] if period==5 else ['quarter']
             for payment in payments:
@@ -100,13 +104,16 @@ def create(user,execution,subdivision,period,currency):
         type(subdivision).all_objects.select_for_update().get(pk=subdivision.pk)
         coefficient=PeriodMotivationCoefficient.objects.select_for_update().filter(subdivision=subdivision,year=year,period=period).first()
         if not coefficient:raise ValidationError('Этап 1: гендиректор должен подтвердить общий множитель, в том числе 1,0.')
-        funds,rows=read_source(execution,subdivision,period,currency)
+        funds,rows=read_source(execution,subdivision,period,currency,include_directors=True)
         batch=PremiumDistribution.objects.create(execution=execution,subdivision=subdivision,year=year,period=period,currency=currency,
             funds=funds,rows=rows,created_by=user,source={'run_id':str(execution.run_id),'parameters':execution.parameters,'export_snapshot':execution.export_snapshot})
         batch.source={**batch.source,'workflow':{'stage':'sales','coefficient':str(coefficient.coefficient),
             'kind_coefficients':coefficient.kind_coefficients,'personal_coefficients':coefficient.personal_coefficients,
             'coefficient_revision':coefficient.revision,'confirmed_by':coefficient.confirmed_by_id,
             'confirmed_at':coefficient.confirmed_at.isoformat()}}
+        if any(f['kind']=='Директора' for f in funds):
+            from .distribution_shared import POLICY
+            batch.source['workflow']['rebalance_policy']=POLICY
         from .distribution_stages import initialize
         initialize(batch);batch.save()
         event(batch,user,'created')

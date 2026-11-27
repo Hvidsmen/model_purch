@@ -17,7 +17,15 @@ def initialize(batch):
             previous=next((row for row in originals if row['kind']=='Продажи' and row['payment']==fund['payment'] and row['author'].casefold()==employee.full_name.casefold()),{})
             sales.append({'id':uuid.uuid4().hex,'employee_id':employee.pk,'author':employee.full_name,'kind':'Продажи',
                 'payment':fund['payment'],'original':previous.get('original','0.00'),'amount':'0.00','weight':'0','comment':''})
-    batch.rows=[*sales,*[row for row in originals if row['kind']=='Политики']]
+    batch.rows=[*sales,*[row for row in originals if row['kind']!='Продажи']]
+    from .distribution_shared import enabled
+    if enabled(batch.source):
+        from .premium_distribution import cash
+        for row in originals:
+            if row['kind']=='Продажи' and cash(row['original'])<0:
+                match=next((r for r in sales if ' '.join(r['author'].split()).casefold()==' '.join(row['author'].split()).casefold() and r['payment']==row['payment']),None)
+                if match is not None:match.update(original=row['original'],amount=row['original'])
+                else:batch.rows.append(row)
 
 
 def weight(value):
@@ -50,6 +58,8 @@ def allocate(funds,rows,*,require_complete=False):
 
 
 def update(batch,user,changes,action,addition,comment):
+    from .distribution_shared import enabled,update as shared_update
+    if enabled(batch.source):return shared_update(batch,user,changes,action,addition,comment)
     from .premium_distribution import cash,balances,eligible_employees,event
     if batch.state!='draft':raise ValidationError('Распределение завершено. Изменения закрыты.')
     workflow=deepcopy(batch.source['workflow']);stage=workflow['stage']
