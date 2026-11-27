@@ -141,6 +141,22 @@ def dialog(request, subdivision_id):
     except Exception:
         logging.getLogger(__name__).exception('CEO payout dialog source unavailable')
         source_error='Не удалось загрузить суммы расчёта. Настройки не сохранены; повторите позже.'
+    from .services import closing_detail_metrics
+    metric_error='';metrics={};usd_source=source
+    if not source_error:
+        try:
+            metrics=closing_detail_metrics.load(execution,period,branch.subdivision_key)
+            if currency!='USD':
+                raw_usd,usd_execution=baseline(year,period,'USD')
+                if usd_execution.pk!=execution.pk:raise ValidationError('Расчёт изменился. Обновите окно.')
+                usd_source=[r for r in raw_usd if r['branch'].casefold()==branch.subdivision_key.casefold()]
+        except Exception:
+            logging.getLogger(__name__).exception('CEO detail plan/fact unavailable')
+            metrics={};metric_error='План и факт недоступны; доли от факта не рассчитаны.'
+    settings_for_comparison=(record.coefficient if record else 1,record.kind_coefficients if record else {},record.personal_coefficients if record else {})
+    def with_metrics(value,general,kinds,persons):
+        usd=value if currency=='USD' else details.impact(usd_source,general,kinds,persons)
+        return closing_detail_metrics.enrich(value,usd,metrics)
     authors_by_kind={kind:sorted({r['author'] for r in source if details.identity(r['author']) not in ('', '—', '-') and r.get('author_status') != 'unallocated' and r['kind']==kind}
                                | set(record.personal_coefficients.get(kind,{}) if record else {})) for kind in details.PERSONAL}
     for person in people.forms:
@@ -154,10 +170,11 @@ def dialog(request, subdivision_id):
                 known.update(details.identity(name) for name in (record.personal_coefficients.get(kind,{}) if record else {}))
                 if not source_error and any(details.identity(name) not in known for name in members):
                     raise ValidationError('Сотрудник не найден в выбранном подразделении и виде мотивации. Выберите точное ФИО из расчёта.')
+            settings_for_comparison=(form.cleaned_data['coefficient'],kinds,persons)
             comparison = details.impact(source,form.cleaned_data['coefficient'],kinds,persons) if not source_error else None
             if request.POST.get('action')=='preview':
                 if source_error:raise ValidationError(source_error)
-                return JsonResponse({'comparison':comparison})
+                return JsonResponse({'comparison':with_metrics(comparison,form.cleaned_data['coefficient'],kinds,persons),'metric_error':metric_error})
             if source_error:raise ValidationError(source_error)
             if request.POST.get('action')!='save':raise ValidationError('Неизвестное действие.')
             confirm(request.user,branch,year,period,form.cleaned_data['coefficient'],form.cleaned_data['revision'],kind_coefficients=kinds,personal_coefficients=persons)
@@ -168,7 +185,9 @@ def dialog(request, subdivision_id):
         return JsonResponse({'error':'Проверьте коэффициенты и ФИО.','fields':form.errors,'people':people.errors},status=400)
     if comparison is None and not source_error:
         comparison = details.impact(source,record.coefficient if record else 1,record.kind_coefficients if record else {},record.personal_coefficients if record else {})
+    if comparison is not None:
+        comparison=with_metrics(comparison,*settings_for_comparison)
     from .services.closing_return import pending
     return render(request,'admin_motivation/distribution/closing_dialog.html',dict(branch=branch,year=year,period=period,currency=currency,
         form=form,people=people,comparison=comparison,source_error=source_error,saved=saved,locked=locked,
-        closed=period_closed(year,period),authors_by_kind=authors_by_kind,execution=execution,awaiting_confirmation=not saved and pending(record)))
+        closed=period_closed(year,period),authors_by_kind=authors_by_kind,execution=execution,metric_error=metric_error,awaiting_confirmation=not saved and pending(record)))

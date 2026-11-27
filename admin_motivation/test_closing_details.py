@@ -39,7 +39,10 @@ class ImpactTests(SimpleTestCase):
 
 
 class DetailedCoefficientTests(TestCase):
-    setUp=ClosingWorkflowTests.setUp
+    def setUp(self):
+        ClosingWorkflowTests.setUp(self)
+        metrics=patch('admin_motivation.services.closing_detail_metrics.load',return_value={})
+        metrics.start();self.addCleanup(metrics.stop)
 
     def confirm(self, period=4):
         return confirm(self.ceo,self.branch,2025,period,1,kind_coefficients={'Политики':'1.1','Продажи':'.8','Директора':'1.2'},personal_coefficients={'Политики':{'Policy':'1.3'},'Директора':{'Director':'1.5'}})
