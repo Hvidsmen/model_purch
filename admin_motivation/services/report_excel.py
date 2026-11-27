@@ -70,17 +70,27 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
         if scope in ('all', 'summary'):
             summary = data['period_summary']
             headers = ['Подразделение', 'Автор сделки', 'Возможная премия, всего', *[column['label'] for column in summary['columns']], 'Годовая доплата за кварталы' if provenance else 'Доплаты за квартал', 'Всего по расчёту' if provenance else 'Итого']
+            extra=[]
+            if data.get('quarter_breakdown'):
+                for field,label in [('quarter_possible','Возможная премия'),('quarter_annual','В годовую премию'),('quarter_catchup','Годовая доплата за кварталы')]:
+                    extra.extend((field,i,label+' · '+line['label']) for i,line in enumerate(summary['totals'][field]))
+                headers += [label for field,i,label in extra]+['В годовую премию, всего','Прогноз при 100% · квартальная часть','Прогноз при 100% · в годовую премию']
+            def summary_values(node,branch,author):
+                values=[branch,author,node['possible'],*node['values'],node['remainder'],node['total']]
+                if data.get('quarter_breakdown'):
+                    values += [node[field][i]['value'] for field,i,label in extra]+[node['annual_accrual'],node['forecast_100']['quarter'],node['forecast_100']['annual']]
+                return values
             target = sheet('Итого по мотивации', headers, [28, 42] + [18] * (len(headers) - 2), 'C3')
             kinds = ['text', 'text'] + ['money'] * (len(headers) - 2)
             totals = summary['totals']
-            append(target, ['Итого по компании', '', totals['possible'], *totals['values'], totals['remainder'], totals['total']], kinds, index=3, total=True)
+            append(target, summary_values(totals,'Итого по компании',''), kinds, index=3, total=True)
             index = 3
             for group in summary['groups']:
                 index += 1
-                append(target, [group['subdivision'], 'Итого по подразделению', group['possible'], *group['values'], group['remainder'], group['total']], kinds, index=index, total=True)
+                append(target, summary_values(group,group['subdivision'],'Итого по подразделению'), kinds, index=index, total=True)
                 for row in group['authors']:
                     index += 1
-                    append(target, [row['subdivision'], row['author'], row['possible'], *row['values'], row['remainder'], row['total']], kinds, index=index, indent=1)
+                    append(target, summary_values(row,row['subdivision'],row['author']), kinds, index=index, indent=1)
             target.auto_filter.ref = f'A2:{get_column_letter(len(headers))}{index}'
 
         if scope in ('all', 'detail'):

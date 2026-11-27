@@ -152,6 +152,8 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
         potential=defaultdict(lambda:ZERO)
         for row in filtered:
             potential[(row.get('Подразделение') or '—',row.get('АвторСделки') or '—',period_code(row['КварталМотивации']))]+=Decimal(str(row.get('PotentialCatchup'+currency) or 0))
+        from .detail_summary_breakdown import catchup_by_author
+        bonus_quarters=catchup_by_author(filtered,currency)
         summary=data['period_summary']
         for item in summary['rows']:
             for index,column in enumerate(summary['columns']):
@@ -164,6 +166,7 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
                 rows.append({'subdivision':item['subdivision'],'author':item['author'],'unallocated':item.get('unallocated',False),
                     'kind':kind,'period':column['label'],'code':code,'amount':amount,'bonus':bonus,'total':amount+bonus,'currency':currency,
                     'potential_bonus':potential[(item['subdivision'],item['author'],code)],
+                    'bonus_quarters':bonus_quarters.get((item['subdivision'],item['author']),{}) if code=='5' else {},
                     'possible':item.get('possible_values',[None]*len(summary['columns']))[index],
                     'annual_accrual':annual[(item['subdivision'],item['author'],code)] if code in '1234' else None,
                     'detail_url':reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+target.urlencode()})
