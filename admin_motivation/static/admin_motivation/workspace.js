@@ -156,7 +156,7 @@
             fields.forEach(field => field.classList.toggle('editor-changed', different(field)));
             rows.forEach(row=>{
                 const director=row.querySelector('[name^="director_formula="]'), label=row.querySelector('[data-director-formula-label]');
-                if(director&&label){label.hidden=!director.value;label.textContent='Директор: '+(director.selectedOptions[0]?.textContent||'По умолчанию');}
+                if(director&&label){const formula=director.dataset.ruleFormula||(director.value?director.selectedOptions[0]?.textContent:director.dataset.defaultFormula);label.hidden=!formula;label.textContent='Директор: '+(formula||'По умолчанию');}
                 const selects=[...row.querySelectorAll('[name^="formula_coeff="]')], trigger=row.querySelector('.select-var-calc');
                 if(trigger&&selects.length){
                     const values=new Set(selects.map(select=>select.value));
