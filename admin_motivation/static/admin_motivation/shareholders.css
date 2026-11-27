@@ -1,1 +1,21 @@
 .sh-page{max-width:100%;min-width:0}.sh-nav{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.sh-nav a{padding:10px 14px;border:1px solid #dad3ef;border-radius:8px;text-decoration:none}.sh-nav a[aria-current=page]{background:#6551ae;color:white}.sh-create,.sh-filters{padding:18px;background:#f8f7fc;border:1px solid #ded9ef;border-radius:10px;margin:20px 0}.sh-create>div{margin-bottom:14px}.sh-create label{display:block}.sh-create input:not([type=checkbox]),.sh-create select{max-width:100%;min-width:240px}.sh-filter-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}.sh-filter-grid label{display:flex;flex-direction:column;gap:5px}.sh-filter-grid select{width:100%;border:1px solid #cbd3e3;border-radius:5px;padding:6px;background:white}.sh-filters fieldset{margin:15px 0;border:0;padding:0}.sh-filters fieldset label{margin-right:18px}.sh-filters legend{font-size:14px}.sh-table{max-width:100%;overflow-x:auto}.sh-table td small{display:block}.sh-table th,.sh-table td{padding:10px}.sh-page a:focus-visible,.sh-page input:focus-visible,.sh-page select:focus-visible{outline:2px solid #6551ae;outline-offset:3px}
+
+/* Compact, aligned report filters; selected names never increase field height. */
+.nr-page .nr-shareholder-filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.nr-shareholder-filters>.nr-field,.nr-shareholder-filters>label{flex:1 1 145px;min-width:0}
+.nr-shareholder-filters>.nr-author-field{flex:1.6 1 230px}
+.nr-page .nr-shareholder-filters .next-branches{height:38px;min-height:38px;padding:0}
+.nr-shareholder-filters .next-branches>summary{display:block;position:relative;height:36px;line-height:36px;padding:0 28px 0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;list-style:none;cursor:pointer;color:#334155}
+.nr-shareholder-filters .next-branches>summary::-webkit-details-marker{display:none}
+.nr-shareholder-filters .next-branches>summary:after{content:'⌄';position:absolute;right:10px;top:0;color:#82749c}
+.nr-shareholder-filters .next-branches[open]>summary:after{content:'⌃'}
+.nr-page .nr-shareholder-filters>label>input,.nr-page .nr-shareholder-filters>label>select{height:38px}
+.nr-shareholder-filters .nr-filter-actions{display:flex;align-items:center;gap:12px;flex:0 0 auto;min-height:38px;white-space:nowrap}
+.nr-page .nr-author-filter>.next-branch-options{width:360px;min-width:0;max-width:calc(100vw - 24px);max-height:340px;padding:12px;border:1px solid #ddd7ee;border-radius:10px;box-shadow:0 12px 34px #26334b24;background:#fff;color:#334155;font-size:13px}
+.nr-page .nr-author-filter>.next-branch-options[popover]{position:fixed;inset:auto;margin:0;box-sizing:border-box}
+.nr-page .nr-author-filter .next-branch-options label{display:flex;flex-direction:row;align-items:flex-start;gap:10px;margin:0;padding:9px 7px;line-height:1.45;font-size:13px;color:#334155;border-radius:6px;cursor:pointer}
+.nr-page .nr-author-filter .next-branch-options label:hover{background:#f6f3ff}
+.nr-page .nr-author-filter input[type=checkbox]{width:16px;height:16px;flex:0 0 16px;margin:2px 0 0;accent-color:#6551ae}
+.nr-author-filter .next-branch-options>div{display:flex;gap:8px;margin:0 0 8px}
+.nr-author-filter .next-branch-options>small{display:block;padding:8px 6px 0;color:#8993a6}
+@media(max-width:600px){.nr-shareholder-filters>.nr-field,.nr-shareholder-filters>label,.nr-shareholder-filters>.nr-author-field{flex-basis:100%}.nr-shareholder-filters .nr-filter-actions{width:100%}}
