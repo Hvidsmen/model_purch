@@ -904,6 +904,7 @@
                     <button type="submit" class="btn btn-secondary" name="action_button" value="sync_references">Обновить справочники из DWH</button>
 
                     <a class="btn btn-secondary" href="{% url 'motivation_director_coeff_import' %}?version={{ selected_version.pk }}">Загрузить коэффициенты директоров</a>
+                    {% if portal_can_edit_motivation %}<a class="btn btn-secondary" href="{% url 'global_coeff_admin_motivation' %}?version={{ selected_version.pk }}&amp;core_import=1">Загрузить коэффициенты политиков и продаж</a>{% endif %}
                     <div class="file-upload-wrapper">
                         <label class="file-input-label" id="fileLabel">
                             <input type="file" name="myfile" id="fileInput" accept=".xlsx,.xls,.csv">
