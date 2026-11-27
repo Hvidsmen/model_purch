@@ -12,7 +12,9 @@
   [...data.kinds,...data.payments].forEach(item=>{const tr=document.createElement('tr');[item.kind||item.label,money(item.before),money(item.after),money(item.change),factor(item.coefficient)].forEach(v=>cell(tr,v));body.append(tr);});
   const people=document.querySelector('[data-people-results]');people.replaceChildren();
   const labels={quarter:'Квартальная премия',annual:'Годовая премия',catchup:'Доплата за кварталы'};
-  data.rows.forEach(item=>{const tr=document.createElement('tr');[item.kind,(item.author||'Не распределено')+' · '+labels[item.payment],money(item.before),factor(item.factor),money(item.after)].forEach(v=>cell(tr,v));people.append(tr);});
+  data.rows.forEach(item=>{const tr=document.createElement('tr');cell(tr,item.kind);const name=document.createElement('td');
+   if(item.can_edit_person){const button=document.createElement('button');button.type='button';button.className='cd-person-link';button.dataset.editPerson='';button.dataset.kind=item.kind;button.dataset.author=item.author;button.dataset.factor=item.factor;button.textContent=item.author_label;name.append(button);}else name.textContent=item.author_label;
+   name.append(document.createTextNode(' · '+labels[item.payment]));tr.append(name);[money(item.before),factor(item.factor),money(item.after)].forEach(v=>cell(tr,v));people.append(tr);});
  };
  const preview=()=>{
   clearTimeout(timer);controller?.abort();const current=++generation;

@@ -46,6 +46,15 @@ def index(request):
     is_admin=role_for(request.user,'motivation')==ADMIN
     archived=request.GET.get('archive')=='1'
     batches=PremiumDistribution.objects.select_related('subdivision','execution').filter(state='archived') if archived else PremiumDistribution.objects.select_related('subdivision','execution').filter(state__in=['draft','completed'])
+    if request.method=='POST' and request.POST.get('action')=='return_coefficients':
+        batch=get_object_or_404(PremiumDistribution,pk=request.POST.get('batch'))
+        try:
+            from .services.closing_return import return_to_ceo
+            return_to_ceo(request.user,batch.pk,int(request.POST.get('revision','0')),int(request.POST.get('coefficient_revision','0')),request.POST.get('reason',''))
+            messages.success(request,'Возвращено к коэффициентам. Прежнее распределение сохранено для сравнения и больше не применяется. После подтверждения директор должен распределить премии заново.')
+        except (ValidationError,ValueError) as exc:
+            messages.error(request,'; '.join(exc.messages) if isinstance(exc,ValidationError) else 'Некорректная версия.')
+        return redirect(reverse('motivation_distributions')+'?'+urlencode({'year':batch.year,'period':batch.period})+'#closing-coefficients')
     if request.method=='POST' and request.POST.get('action') in ('delete_draft','archive'):
         return_period={}
         try:
@@ -119,7 +128,7 @@ def index(request):
     options={str(row['branch'].pk):row['branch'].subdivision_name for row in registry_rows}
     if selected_branches:
         registry_rows=[row for row in registry_rows if str(row['branch'].pk) in selected_branches]
-        registry_counts={'waiting':sum(not row['record'] for row in registry_rows),
+        registry_counts={'waiting':sum(not row['record'] or row['awaiting_confirmation'] for row in registry_rows),
             'working':sum(bool(row['batch'] and row['batch'].state=='draft') for row in registry_rows),
             'completed':sum(bool(row['batch'] and row['batch'].state=='completed') for row in registry_rows)}
     closing.update(branch_filter_options=[{'value':value,'label':label,'selected':value in selected_branches} for value,label in options.items()],
@@ -246,7 +255,8 @@ def detail(request,pk):
         editable_ids={r['id'] for r in display_rows if r['edit_amount']}
         for fund in funds:
             fund['fixed_allocated']=sum((service.cash(r['amount']) for r in snapshot['rows'] if r['payment']==fund['payment'] and r['id'] not in editable_ids),Decimal(0))
-    return render(request,'admin_motivation/distribution/detail.html',{'skip_motivation_workflow':True,'shared_pool':shared,'can_upgrade_shared':editable and bool(workflow) and not shared,'directors':batch.subdivision.directors.filter(is_archived=False),'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'person_input':{'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':'0','employee':request.POST.get('new_employee',''),'payment':request.POST.get('new_payment','')},'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
+    previous_distribution=snapshot.get('source',{}).get('previous_distribution')
+    return render(request,'admin_motivation/distribution/detail.html',{'previous_distribution':previous_distribution,'skip_motivation_workflow':True,'shared_pool':shared,'can_upgrade_shared':editable and bool(workflow) and not shared,'directors':batch.subdivision.directors.filter(is_archived=False),'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'person_input':{'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':'0','employee':request.POST.get('new_employee',''),'payment':request.POST.get('new_payment','')},'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
         'can_reopen':not version and batch.state=='completed' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),
         'report_url':url,'mail_url':'mailto:?'+urlencode({'subject':f'Премии: {batch.subdivision} · {batch.year} · {batch.get_period_display()}', 'body':'Распределение премий завершено. Отчёт и Excel: '+url}),
         'employees':employees,'history':batch.events.select_related('actor'),'payments':service.PAYMENTS.items(),'kinds':service.KINDS})

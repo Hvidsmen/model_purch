@@ -133,6 +133,35 @@ class DetailedCoefficientTests(TestCase):
         self.assertContains(response,'Сотрудник не найден')
         self.assertFalse(PeriodMotivationCoefficient.objects.exists())
 
+    def test_employee_result_labels_keep_unassigned_amounts_and_edit_only_people(self):
+        rows,_=self.baseline()
+        rows += [dict(rows[0],author='—',before='20'),dict(rows[0],author='',author_status='unallocated',before='30'),dict(rows[0],kind='Продажи',author='Sales',before='40')]
+        result=closing_details.impact(rows)
+        self.assertEqual(result['before'],Decimal('190'))
+        self.assertEqual([r['author_label'] for r in result['rows']],['Policy','Автор не указан','Нераспределённая премия','Sales'])
+        self.assertEqual([r['can_edit_person'] for r in result['rows']],[True,False,False,False])
+        url=reverse('motivation_closing_details',args=[self.branch.pk])
+        with patch('admin_motivation.closing_details_views.baseline',return_value=(rows,self.run)):
+            response=self.client.get(url,{'year':2025,'period':4})
+        self.assertEqual(response.context['authors_by_kind']['Политики'],['Policy'])
+        self.assertContains(response,'data-edit-person',count=1)
+        self.assertContains(response,'data-author="Policy"')
+
+    def test_employee_choices_are_scoped_and_blank_extra_row_is_ignored(self):
+        url=reverse('motivation_closing_details',args=[self.branch.pk])
+        rows,_=self.baseline()
+        rows += [dict(rows[0],kind='Директора',author='Director'),dict(rows[0],branch='Other',author='Other')]
+        with patch('admin_motivation.closing_details_views.baseline',return_value=(rows,self.run)):
+            response=self.client.get(url,{'year':2025,'period':4})
+            self.assertEqual(response.context['authors_by_kind'],{'Политики':['Policy'],'Директора':['Director']})
+            choices=response.context['people'].forms[0].fields['author'].choices
+            self.assertEqual(choices,[('','Выберите сотрудника'),('Policy','Policy')])
+            post=dict(self.post(),action='preview',**{'people-0-author':'','people-0-coefficient':''})
+            preview=self.client.post(url,post)
+            self.assertEqual(preview.status_code,200)
+            post.update({'people-0-kind':'Директора','people-0-author':'Policy','people-0-coefficient':'1.2'})
+            self.assertEqual(self.client.post(url,post).status_code,400)
+
     def test_all_branch_baseline_uses_three_queries_and_validates_cached_run(self):
         from contextlib import nullcontext
         from django.core.cache import cache
