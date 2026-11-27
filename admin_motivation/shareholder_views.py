@@ -28,6 +28,7 @@ def metadata(run):
         ('Факт по дату включительно',str(run.as_of)),('Данные','Текущий подготовленный факт на момент запуска'),
         ('Подразделения','Москва + ТТ' if run.scenario=='combined' else 'I–III раздельно; IV и год Москва + ТТ'),
         ('Кварталы определения долей',', '.join(map(str,run.quarters))),('Порог авторов, %',str(run.threshold_percent)),
+        ('Плановый курс USD/RUB для прогноза',run.configuration.get('forecast_usd_rub') or 'Не задан'),
         ('План',run.configuration['plan_version']),('Квартальная доля, %',run.configuration['quarter_share']),
         ('Годовая доля, %',run.configuration['year_share']),('Порог выплаты',run.configuration['payout_threshold']),
         ('Подготовленный набор',run.metadata.get('prepared_run','')),('Расчёт завершён',str(run.completed_at))]

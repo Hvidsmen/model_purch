@@ -199,6 +199,8 @@ def workbook(kind, data, metadata, query=None, title=None):
         row(ws, [str(label), str(value)])
     from .distribution_reporting import excel_sheet
     excel_sheet(book,data['rows'])
+    from .plan_premium_forecast import excel_sheet as forecast_sheet
+    forecast_sheet(book,data.get('plan_forecast_rows',[]))
     output = TemporaryFile(suffix='.xlsx')
     try:
         book.save(output)

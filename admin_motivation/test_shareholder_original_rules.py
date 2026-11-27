@@ -140,7 +140,7 @@ class OriginalSnapshotTests(TestCase):
             def save(run,cur,mode,dataset,sql,*args,**kwargs):
                 run.refresh_from_db();self.assertEqual(run.state,'running');seen.append(dataset)
                 return 0 if missing and dataset.startswith('eligibility_') else 1
-            with patch.object(runner,'prepare_mapping',return_value=[]),patch.object(runner,'private_sql',return_value='SELECT test') as adapter,patch.object(runner,'save_query',side_effect=save):
+            with patch.object(runner,'prepare_mapping',return_value=[]),patch.object(runner,'private_sql',return_value='SELECT * INTO #plan_2024 FROM plans') as adapter,patch.object(runner,'save_query',side_effect=save):
                 if missing:
                     with self.assertRaisesMessage(ValidationError,'Не сохранено годовое условие'):runner.execute(self.run,lambda *args:(connection,cursor))
                 else:

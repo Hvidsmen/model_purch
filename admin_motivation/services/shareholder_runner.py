@@ -35,7 +35,8 @@ def create(configuration,user):
     return ShareholderCalculation.objects.create(name=configuration['name'],as_of=configuration['as_of'],scenario=configuration['scenario'],
         quarters=sorted(int(v) for v in configuration['quarters']),threshold_percent=configuration['threshold_percent'],source_job=job,created_by=user,
         configuration={**parameters,'rule':RULE,'source_job_key':str(job.key),
-            'regional_rule':regions.RULE,'regional_rates':regions.approved_rates(),'planning_group_rules':frozen()})
+            'regional_rule':regions.RULE,'regional_rates':regions.approved_rates(),'planning_group_rules':frozen(),
+            'forecast_usd_rub':str(configuration['forecast_usd_rub']) if configuration.get('forecast_usd_rub') is not None else None})
 
 
 def launch(run):
@@ -141,6 +142,10 @@ def execute(run,connector=None):
                   'quarter_rule':('Q1 always paid; Q2 eligibility Q1+Q2; Q3 Q3; Q4 and year Q1–Q4; annual contributions Q1–Q4; year-end catch-up' if enabled(run) else 'I–III separate if selected; IV and annual Moscow+TT combined')}
         if regions.enabled(run):
             metadata.update(regional_rule=regions.RULE,regional_gate_version=regions.GATE_VERSION,branches=list(regions.BRANCHES),regional_plan_basis='all 2026 through cutoff, after reassignment; per subdivision',regional_rate_source='approved portal versions frozen at creation')
+        from .plan_premium_forecast import HISTORY_SQL,VERSION as FORECAST_VERSION,plan_sql
+        progress(run,'Сохранение статистики ступеней скидки за 2025 год для прогноза')
+        save_query(run,cursor,'combined','forecast_history',HISTORY_SQL)
+        metadata['plan_forecast_version']=FORECAST_VERSION
         for mode,definition in definitions.items():
             batch=private_sql(definition,mode,run.pk,original_rules=enabled(run),regional_policy=regions.enabled(run),planning_groups=any(v['rules'] for v in run.configuration.get('planning_group_rules',[])))
             for name in temporary_tables(batch):
@@ -166,6 +171,7 @@ def execute(run,connector=None):
                 source="SELECT * FROM #share_report WHERE LTRIM(RTRIM([ТипКоэф]))=N'"+kind+"'"
                 # Sequence keys are per dataset, so each kind has its own named dataset.
                 tag={'Политики':'pol','Продажи':'sales','Директора':'dir'}[kind]
+                save_query(run,cursor,mode,'forecast_plan_'+tag,plan_sql(batch,kind))
                 from .shareholder_deals import snapshot_sql
                 save_query(run,cursor,mode,'deals_'+tag,snapshot_sql(kind))
                 eligibility_count=0

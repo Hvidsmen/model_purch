@@ -218,11 +218,13 @@ class WorkerSnapshotTests(TestCase):
         def save(run,cur,mode,dataset,sql,*args,**kwargs):
             run.refresh_from_db();self.assertEqual(run.state,'running');seen.append(dataset)
             return 1
-        with patch.object(runner,'prepare_mapping',return_value=[]),patch.object(runner,'private_sql',return_value='SELECT test'),patch.object(runner,'save_query',side_effect=save):
+        with patch.object(runner,'prepare_mapping',return_value=[]),patch.object(runner,'private_sql',return_value='SELECT * INTO #plan_2024 FROM plans'),patch.object(runner,'save_query',side_effect=save):
             runner.execute(self.run,lambda *args:(connection,cursor))
-        self.run.refresh_from_db();self.assertEqual(self.run.state,'completed');self.assertEqual(len(seen),17)
+        self.run.refresh_from_db();self.assertEqual(self.run.state,'completed');self.assertEqual(len(seen),21)
         self.assertTrue({'deals_pol','deals_sales','deals_dir'}.issubset(seen))
         self.assertEqual(self.run.metadata['closed_deals_version'],'closed-deals-v1')
+        self.assertTrue({'forecast_history','forecast_plan_pol','forecast_plan_sales','forecast_plan_dir'}.issubset(seen))
+        self.assertEqual(self.run.metadata['plan_forecast_version'],'plan-2025-segments-v1')
         self.assertEqual(self.run.metadata['prepared_run'],str(prepared));connection.close.assert_called_once()
         self.assertIn("@LockMode=N'Shared'",cursor.execute.call_args_list[0].args[0])
 
@@ -232,7 +234,7 @@ class WorkerSnapshotTests(TestCase):
         cursor.fetchone.side_effect=[(0,),(prepared,'2026-11-20',100),('compiled',),(prepared,)]
         cursor.description=[('SharePreparedRun',)];cursor.nextset.return_value=False
         self.run.state='running';self.run.save(update_fields=['state'])
-        with patch.object(runner,'prepare_mapping',return_value=[]),patch.object(runner,'private_sql',return_value='SELECT test'),patch.object(runner,'save_query',side_effect=[1,1,RuntimeError('disk')]):
+        with patch.object(runner,'prepare_mapping',return_value=[]),patch.object(runner,'private_sql',return_value='SELECT * INTO #plan_2024 FROM plans'),patch.object(runner,'save_query',side_effect=[1,1,RuntimeError('disk')]):
             with self.assertRaises(RuntimeError):runner.execute(self.run,lambda *args:(connection,cursor))
         self.run.refresh_from_db();self.assertEqual(self.run.state,'running');connection.close.assert_called_once()
 

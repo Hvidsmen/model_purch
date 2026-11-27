@@ -10,6 +10,7 @@ class CalculationForm(forms.Form):
     scenario=forms.ChoiceField(label='Сценарий',choices=[('combined','Москва + ТТ объединённо'),('separate','Москва и ТТ раздельно')])
     quarters=forms.MultipleChoiceField(label='Кварталы отчётов и долей авторов Москвы/ТТ',choices=[(str(q),f'{q} квартал') for q in range(1,5)],initial=list('1234'),widget=forms.CheckboxSelectMultiple)
     threshold_percent=forms.DecimalField(label='Перераспределять авторов с долей оборота ниже, %',initial=1,min_value=0,max_value=Decimal('99.9999'),decimal_places=4,max_digits=7)
+    forecast_usd_rub=forms.DecimalField(label='Плановый курс USD/RUB для прогноза премий',required=False,min_value=Decimal('0.000001'),max_digits=16,decimal_places=6,help_text='Без курса прогноз доступен только в USD. Курс сохраняется в расчёте.')
     source_job=forms.ModelChoiceField(label='Параметры существующего задания «Все кварталы 2026»',queryset=MotivationCalculationSchedule.objects.none())
 
     def __init__(self,*args,**kwargs):

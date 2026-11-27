@@ -135,6 +135,8 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
         if allocation_rows is not None:
             from .distribution_reporting import excel_sheet
             excel_sheet(book,allocation_rows)
+        from .plan_premium_forecast import excel_sheet as forecast_sheet
+        forecast_sheet(book,data.get('_forecast_audit',[]))
         output = TemporaryFile(mode='w+b')
         try:
             book.save(output)

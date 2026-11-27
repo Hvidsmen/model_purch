@@ -170,7 +170,10 @@ def data_for(run,query,*,detailed=True,defer_detail=False):
                     'possible':item.get('possible_values',[None]*len(summary['columns']))[index],
                     'annual_accrual':annual[(item['subdivision'],item['author'],code)] if code in '1234' else None,
                     'detail_url':reverse('motivation_shareholder_report',args=[run.pk,'detail'])+'?'+target.urlencode()})
-    return {'shareholder_forecast':True,'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'coefficient_plan_fact':coefficient_performance,'department_plan_fact':department,'kinds':kinds,
+    from .plan_premium_forecast import load as load_forecast,VERSION as FORECAST_VERSION
+    forecast_rows=load_forecast(run,query,periods,kinds)
+    return {'plan_forecast_rows':forecast_rows,'plan_forecast_available':run.metadata.get('plan_forecast_version')==FORECAST_VERSION,
+        'forecast_usd_rub':run.configuration.get('forecast_usd_rub'),'shareholder_forecast':True,'original_rules':original_rules,'rows':rows,'sections':sections,'plan_fact':performance,'coefficient_plan_fact':coefficient_performance,'department_plan_fact':department,'kinds':kinds,
         'has_unallocated':any(row['unallocated'] for row in rows),'total':sum((row['total'] for row in rows),ZERO),
         'currency':currency,'payout_threshold':Decimal(run.configuration['payout_threshold'])}
 
