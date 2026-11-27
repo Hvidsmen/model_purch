@@ -112,7 +112,9 @@ def report_excel(data, parameters, scope='all', *, provenance=None,allocation_ro
                 index += 1
                 append(target, [label, *[value for block in blocks for value in block]], kinds,
                        index=index, total=total, indent=level)
-            if data.get('division_execution'):
+            if data.get('execution_rows'):
+                for execution in data['execution_rows']:write_row(execution['label'],execution['values'])
+            elif data.get('division_execution'):
                 write_row('% выполнения подразделений', data['division_execution'])
             write_row('Всего по расчёту' if provenance else 'Итого', data['detail_totals'], total=True)
             def write_nodes(nodes):

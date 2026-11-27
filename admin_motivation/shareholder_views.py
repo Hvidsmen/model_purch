@@ -190,6 +190,8 @@ def report(request,pk,kind):
                 enrich_detail_summary(detail,data,display)
                 from .services.extended_premium_forecast import enrich as enrich_extended_forecast
                 enrich_extended_forecast(detail,data)
+                from .services.detail_execution import enrich as enrich_execution
+                enrich_execution(detail,data)
                 detail['excel_urls']={name:'?'+dict_query(query,export='xlsx',table=name).urlencode() for name in ('all','summary','detail')}
                 context['data']=detail
             macro=reports.macro_rows(data,periods);context['macro_rows']=macro
