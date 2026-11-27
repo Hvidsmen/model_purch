@@ -31,9 +31,13 @@ class Adjustment(forms.Form):
     review=forms.IntegerField(widget=forms.HiddenInput)
     revision=forms.IntegerField(min_value=1,widget=forms.HiddenInput)
     document=forms.IntegerField(widget=forms.HiddenInput)
-    new_amount=forms.DecimalField(max_digits=20,decimal_places=2,required=False,label='Новая сумма документа, USD')
+    new_amount=forms.CharField(required=False,label='Новая сумма документа, USD',widget=forms.TextInput(attrs={'inputmode':'decimal','placeholder':'0,00'}))
     correction_date=forms.DateField(label='Дата корректировки',widget=forms.DateInput(attrs={'type':'date'},format='%Y-%m-%d'))
     excluded=forms.BooleanField(required=False,label='Исключить из ОЗС — обнулить факт и премию корректировкой')
+
+    def clean_new_amount(self):
+        value=self.cleaned_data.get('new_amount','')
+        return service.cash(value) if value else None
 
     def clean(self):
         data=super().clean()

@@ -158,7 +158,7 @@ class FaoWorkflowTests(TestCase):
             with patch('admin_motivation.fao_views.lookup',return_value=document):
                 response=self.client.post(url,dict(selection,action='lookup',number='123',document_date='2026-05-01'))
             self.assertContains(response,'Исходная сумма, USD')
-            body=dict(selection,action='preview',review=review.pk,revision=review.revision,document=document.pk,new_amount='80',correction_date='2026-08-01')
+            body=dict(selection,action='preview',review=review.pk,revision=review.revision,document=document.pk,new_amount='80,00',correction_date='2026-08-01')
             preview=self.client.post(url,body)
             self.assertEqual(preview.context['preview']['delta'],-20)
             self.assertEqual(FaoCorrection.objects.count(),0)
