@@ -6,6 +6,7 @@ from django.core.exceptions import PermissionDenied, ValidationError
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.http import require_http_methods
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from base.access import role_for, ADMIN, DIRECTOR
 from .models import Subdivision, PeriodMotivationCoefficient, PremiumDistribution
 from .services import closing_details as details
@@ -95,6 +96,7 @@ def comparisons(request):
         return JsonResponse({'error':'Не удалось загрузить суммы к выплате. Проверьте доступность последнего расчёта.'}, status=503)
 
 
+@xframe_options_sameorigin
 @require_http_methods(['GET','POST'])
 def dialog(request, subdivision_id):
     authorize(request.user)
