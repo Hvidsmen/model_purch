@@ -6,7 +6,7 @@
  const boxes = [...document.querySelectorAll('.bulk-good')];
  const dialog = el('review');
  let pending = [], selection = '';
- const names = {policies:'Политики',sales:'Продажи',directors:'Директор'};
+ const names = {policies:'Политики',sales:'Продажи',directors:'Директор',curators:'Кураторы'};
  const count = () => { el('count').textContent = `Выбрано: ${boxes.filter(box => box.checked).length}`; };
  const number = (text, percentage = false) => {
   const value = text.trim().replace(',', '.').replace('−','-');
