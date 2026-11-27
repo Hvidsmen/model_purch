@@ -8,7 +8,7 @@ from .pilot_formula import mask_sql,closing
 
 FORMULAS=('Группа планов продаж','Группа товаров','Марка(Бренд)','Подразделение','Подразделение(Глобально)')
 KINDS=('Политики','Продажи','Директора','Кураторы')
-METHODS=(('auto','Текущий автоматический подбор'),('minimum','Минимум внутри группы'),('fixed','Заданные K0–K4'),('error','Не рассчитывать без точной ставки'))
+METHODS=(('auto','Минимум по всем'),('minimum','Минимум внутри группы'),('fixed','Заданные K0–K4'),('error','Не рассчитывать без точной ставки'))
 TABLE='motivation.PortalPlanningGroupRules'
 TABLE_SQL='''IF OBJECT_ID(N'motivation.PortalPlanningGroupRules',N'U') IS NULL
 CREATE TABLE motivation.PortalPlanningGroupRules(Date_ date NOT NULL,Subdivision nvarchar(255) NOT NULL,
