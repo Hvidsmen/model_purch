@@ -183,6 +183,8 @@ def report(request,pk,kind):
                 detail=new_detail_labels(combine_reports(data['sections'],data['currency']))
                 from .services.detail_summary_breakdown import enrich as enrich_detail_summary
                 enrich_detail_summary(detail,data,display)
+                from .services.extended_premium_forecast import enrich as enrich_extended_forecast
+                enrich_extended_forecast(detail,data)
                 detail['excel_urls']={name:'?'+dict_query(query,export='xlsx',table=name).urlencode() for name in ('all','summary','detail')}
                 context['data']=detail
             macro=reports.macro_rows(data,periods);context['macro_rows']=macro

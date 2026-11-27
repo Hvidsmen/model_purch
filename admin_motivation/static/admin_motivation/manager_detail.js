@@ -1,6 +1,8 @@
 (() => {
  const root = document.getElementById('manager-detail-report');
  if (!root) return;
+ const metricCount=Number(root.dataset.metricCount)||20;
+ const forecastColumns=Number(root.dataset.forecastColumns)||0;
  const viewport = document.getElementById('manager-detail-scroll');
  const topScroll = document.getElementById('manager-detail-scroll-top');
  const syncScrollSize = () => {
@@ -63,7 +65,7 @@
   const label = document.createElement('span'); label.className = 'native-label'; label.textContent = node.unallocated ? 'Не распределено по сотрудникам' : node.label; row.appendChild(label);
   node.values.forEach((block, blockIndex) => block.forEach((value, index) => {
    const cell = document.createElement('span'); cell.className = 'report-number';
-   if (index >= 18 && blockIndex < node.values.length - 1) cell.classList.add('manager-period-bonus');
+   if (index >= 18 && index < 20 && blockIndex < node.values.length - 1) cell.classList.add('manager-period-bonus');
    if (index === 16) cell.classList.add('motivation-execution');
    cell.dataset.managerPeriod = blockIndex;
    cell.classList.toggle('manager-period-hidden', hiddenPeriods.has(blockIndex));
@@ -91,7 +93,7 @@
  }
  root.querySelectorAll('.division-report-grid').forEach(row => {
   [...row.children].slice(1).forEach((cell, index) => {
-   cell.dataset.managerPeriod = row.classList.contains('report-period-header') ? index : Math.floor(index / 20);
+   cell.dataset.managerPeriod = row.classList.contains('report-period-header') ? index : Math.floor(index / metricCount);
   });
  });
  periodToggles.forEach(toggle => toggle.addEventListener('change', () => {
@@ -113,7 +115,7 @@
  document.getElementById('manager-detail-expand').addEventListener('click', () => expandTree());
  document.getElementById('manager-detail-collapse').addEventListener('click', () => target.querySelectorAll('details').forEach(element => element.open = false));
  const updateColumns = () => {
-  root.style.setProperty('--report-columns', 6 + (expanded['period-input'] ? 2 : 0) + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
+  root.style.setProperty('--report-columns', 6 + forecastColumns + (expanded['period-input'] ? 2 : 0) + (extra.checked ? 5 : 0) + (expanded.segments ? 5 : 0) + (expanded.motivation ? 2 : 0));
   root.classList.toggle('manager-expanded-columns', extra.checked || Object.values(expanded).some(Boolean));
  };
  root.addEventListener('click', event => {
