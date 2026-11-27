@@ -55,11 +55,11 @@ class ExtendedForecastTests(SimpleTestCase):
         output=report_excel(detail,{},'detail');self.addCleanup(output.close)
         book=load_workbook(output);self.addCleanup(book.close)
         sheet=book['Расширенная мотивация']
-        self.assertEqual(sheet.max_column,45)
-        self.assertEqual(sheet.cell(3,22).value,300)
-        self.assertEqual(sheet.cell(3,23).value,90)
-        self.assertEqual(sheet.cell(3,44).value,300)
-        self.assertEqual(sheet.cell(3,45).value,90)
+        self.assertEqual(sheet.max_column,43)
+        self.assertEqual(sheet.cell(3,21).value,300)
+        self.assertEqual(sheet.cell(3,22).value,90)
+        self.assertEqual(sheet.cell(3,42).value,300)
+        self.assertEqual(sheet.cell(3,43).value,90)
 
     def test_individual_section_with_multiple_ledger_kinds_keeps_forecast(self):
         detail,ledger=self.data()

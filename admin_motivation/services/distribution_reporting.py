@@ -60,10 +60,13 @@ def enrich(presentation,ledger):
 def excel_sheet(book,rows):
     from openpyxl.cell import WriteOnlyCell
     if not any('distributed_total' in r for r in rows):return
+    from .catchup_visibility import has_year
+    show_catchup=has_year(r.get('code') or r.get('period') for r in rows)
     sheet=book.create_sheet('После распределения')
     def append(values):
         cells=[]
-        for value in values:
+        for index,value in enumerate(values):
+            if index==7 and not show_catchup:continue
             cell=WriteOnlyCell(sheet,value=value)
             if isinstance(value,str):cell.data_type='s'
             else:cell.number_format='#,##0.00'

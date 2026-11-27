@@ -77,6 +77,8 @@ def present(kind, data, ledger=None, period='all'):
     codes = sorted({row['code'] for row in ledger['rows'] if row['code']})
     result['period_totals'] = [sum((row['amount'] for row in ledger['rows'] if row['code'] == code), ZERO) for code in codes]
     result['period_columns'] = [{'code': code, 'label': 'Годовая премия' if code == '5' else f'Премия за {code} кв.'} for code in codes]
+    selected_codes=period if isinstance(period,(list,tuple)) else [period]
+    result['show_catchup']='5' in (codes if 'all' in selected_codes else selected_codes)
     result['quarters_only']=bool(codes) and all(code in ('1','2','3','4') for code in codes)
     result['premium_total_label']='Итого квартальных премий' if result['quarters_only'] else 'Итого премий за выбранные периоды'
     result['premium_possible_label']='Квартальные премии без учёта выполнения плана' if result['quarters_only'] else 'Премии выбранных периодов без учёта выполнения плана'
@@ -164,6 +166,10 @@ def present(kind, data, ledger=None, period='all'):
     for item in result['type_totals']:
         result['team_overview_rows'].append({'label':item['kind'],'values':[cards.get(code,{}).get('kind_totals',{}).get(item['kind']) for code in codes],'total':item['total'],'detail':True})
     result['team_overview_rows'].append({'label':'В годовую премию · до условий выплаты','values':[cards.get(code,{}).get('annual_accrual') if code!='5' else None for code in codes],'total':result.get('annual_accrual')})
+    for section in result['team_sections']:
+        section['premium_column_count']=len(codes)+3+(2 if result.get('forecast_100') else 0)
+        if result['show_catchup'] and ledger.get('shareholder_forecast'):section['premium_column_count']+=2 if ledger.get('original_rules') else 1
+        if not ledger.get('shareholder_forecast') and section['kind'] not in ('Директора','Кураторы'):section['premium_column_count']+=1
     if any('distributed_total' in row for row in ledger['rows']):
         from .distribution_reporting import enrich
         enrich(result,ledger)
@@ -337,7 +343,7 @@ def personal_details(ledger, query, *, period_codes=None):
                     'formula_groups': [matrix(node, branch['label'], author['label']) for node in author.get('formula_groups', [])]})
         sections.append({'kind': kind, 'periods': [display_period(label) for label in data['periods']], 'groups': groups, 'global_scope': data.get('global_subdivision_mode', False),
                          'forecast_columns':2 if data.get('extended_forecast') else 0,
-                         'metric_columns': len(data['periods']) * (6 if data.get('extended_forecast') else 4) + (8 if data.get('extended_forecast') else 6), 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
+                         'metric_columns': len(data['periods']) * (6 if data.get('extended_forecast') else 4) + (8 if data.get('extended_forecast') else 6) - (0 if '5' in (period_codes if period_codes is not None else selected_periods(query)) else 1), 'division': matrix_metrics(data['division_execution']) if data.get('division_execution') else None})
     # Premium components are additive; cumulative sales targets are not.
     latest = {}
     for goal in goals:

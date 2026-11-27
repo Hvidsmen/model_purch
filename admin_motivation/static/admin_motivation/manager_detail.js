@@ -66,6 +66,7 @@
   node.values.forEach((block, blockIndex) => block.forEach((value, index) => {
    const cell = document.createElement('span'); cell.className = 'report-number';
    if (index >= 18 && index < 20 && blockIndex < node.values.length - 1) cell.classList.add('manager-period-bonus');
+   if (index === 18 && root.dataset.showCatchup === 'false') cell.hidden = true;
    if (index === 16) cell.classList.add('motivation-execution');
    cell.dataset.managerPeriod = blockIndex;
    cell.classList.toggle('manager-period-hidden', hiddenPeriods.has(blockIndex));

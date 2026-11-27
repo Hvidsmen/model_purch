@@ -70,9 +70,15 @@ def workbook(kind, data, metadata, query=None, title=None):
     book = Workbook(write_only=True)
     sheet = book.create_sheet('Премии')
     sheet.freeze_panes = 'B3'
+    from .services.catchup_visibility import columns,has_year
+    show_catchup=has_year(reports.selected_periods(query)) if query is not None else any(row.get('code')=='5' for row in data.get('rows',[]))
     def append(values, percent_columns=()):
+        if not show_catchup and len(values)>2 and all(isinstance(v,str) for v in values) and any('доплат' in v.casefold() for v in values):
+            sheet._catchup_keep=columns(values,False)
+        keep=getattr(sheet,'_catchup_keep',None)
         cells = []
         for position, value in enumerate(values):
+            if keep is not None and position not in keep:continue
             cell = WriteOnlyCell(sheet, value=ILLEGAL_CHARACTERS_RE.sub('', value)[:32767] if isinstance(value, str) else value)
             if isinstance(value, str):
                 cell.data_type = 's'
@@ -161,6 +167,7 @@ def workbook(kind, data, metadata, query=None, title=None):
     from .services.reports import PILOT_BONUS_NOTE
     metadata = [*metadata, ('Доплата за кварталы', PILOT_BONUS_NOTE)]
     for label, value in metadata:
+        if not show_catchup and 'доплат' in str(label).casefold():continue
         cells = [WriteOnlyCell(notes, value=ILLEGAL_CHARACTERS_RE.sub('', str(item))[:32767]) for item in (label, value)]
         for cell in cells:
             cell.data_type = 's'

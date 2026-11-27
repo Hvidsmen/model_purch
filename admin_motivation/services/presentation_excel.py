@@ -19,6 +19,8 @@ ZERO = Decimal(0)
 def workbook(kind, data, metadata, query=None, title=None):
     selected = query.getlist('period') or ['all'] if query is not None else 'all'
     display = present(kind, data, data, selected)
+    from .catchup_visibility import columns
+    show_catchup=display['show_catchup']
     currency = data['currency']
     heading = title or ('Премии команды' if kind == 'team' else 'Реестр рассчитанных премий')
     book = Workbook(write_only=True)
@@ -30,7 +32,9 @@ def workbook(kind, data, metadata, query=None, title=None):
         dark = style in ('title', 'header', 'grand')
         fill = NAVY if style in ('header', 'grand') else PALE if style == 'subtotal' else 'F7F8FC' if style == 'alternate' else None
         cells = []
+        keep=getattr(sheet,'_catchup_keep',None) if len(values)==getattr(sheet,'_catchup_header_size',0) else None
         for index, value in enumerate(values):
+            if keep is not None and index not in keep:continue
             cell = WriteOnlyCell(sheet, value=text(value))
             if isinstance(value, str):
                 cell.data_type = 's'
@@ -53,6 +57,9 @@ def workbook(kind, data, metadata, query=None, title=None):
 
     def sheet(name, headers, widths, subtitle, *, freeze_panes='C6'):
         ws = book.create_sheet(name)
+        ws._catchup_header_size=len(headers)
+        ws._catchup_keep=columns(headers,show_catchup)
+        widths=[w for i,w in enumerate(widths) if i in ws._catchup_keep]
         ws.sheet_view.showGridLines = False
         ws.sheet_view.zoomScale = 90
         ws.freeze_panes = freeze_panes
@@ -120,7 +127,7 @@ def workbook(kind, data, metadata, query=None, title=None):
                      'Не распределено' if employee['unallocated'] else 'Рассчитано; выплата не подтверждена'],
                 'alternate' if index % 2 else 'body')
         last = ws._portal_row
-        ws.auto_filter.ref = 'A5:' + get_column_letter(len(period_headers) + 8) + str(max(5, last))
+        ws.auto_filter.ref = 'A5:' + get_column_letter(len(ws._catchup_keep)) + str(max(5, last))
         row(ws, ['ИТОГО · ' + section['kind'], None, *section['period_totals'],
                  section['amount'], section['bonus'], section['total'], section['possible'], None], 'grand')
 
@@ -142,7 +149,7 @@ def workbook(kind, data, metadata, query=None, title=None):
             note = 'Не распределено. ' + note
         row(ws, [item['subdivision'], item['author'], item['kind'], item['period'], item['currency'],
                  possible, item['amount'], item['bonus'], item['total'], note], 'alternate' if index % 2 else 'body')
-    ws.auto_filter.ref = 'A5:J' + str(max(5, ws._portal_row))
+    ws.auto_filter.ref = 'A5:'+get_column_letter(len(ws._catchup_keep)) + str(max(5, ws._portal_row))
 
     if display.get('has_annual_accrual'):
         quarters = [(index, column) for index, column in enumerate(display['period_columns']) if column['code'] != '5']
@@ -196,6 +203,7 @@ def workbook(kind, data, metadata, query=None, title=None):
                              ('author', 'Сотрудники'), ('period', 'Периоды')]:
             filters.append((caption, ', '.join(query.getlist(key)) or 'Все доступные'))
     for label, value in [*metadata, *filters, ('Доплата за кварталы', PILOT_BONUS_NOTE)]:
+        if not show_catchup and 'доплат' in str(label).casefold():continue
         row(ws, [str(label), str(value)])
     from .distribution_reporting import excel_sheet
     excel_sheet(book,data['rows'])
