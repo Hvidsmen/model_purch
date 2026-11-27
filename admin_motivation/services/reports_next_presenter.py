@@ -154,6 +154,8 @@ def present(kind, data, ledger=None, period='all'):
     result['team_target_rows']=layout(result)
     from .annual_accrual import enrich
     enrich(result, ledger)
+    from .premium_forecast import enrich as enrich_forecast
+    enrich_forecast(result,ledger)
     cards={card['code']:card for card in result['period_cards']}
     result['team_overview_rows']=[
         {'label':'Возможная премия','values':[cards.get(code,{}).get('possible') for code in codes],'total':result['possible']},

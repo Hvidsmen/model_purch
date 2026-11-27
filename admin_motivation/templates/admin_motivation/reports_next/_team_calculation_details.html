@@ -12,6 +12,7 @@
 <div class="nr-period-amount">{{ card.total|report_cash }}</div>
 <div class="nr-period-secondary"><div><span class="nr-period-eyebrow">Возможная премия</span><strong>{{ card.possible|report_cash }} {{ ledger.currency }}</strong></div>{% if card.code != '5' %}<div><span class="nr-period-eyebrow">В годовую премию</span><strong>{{ card.annual_accrual|report_cash }} {{ ledger.currency }}</strong></div>{% endif %}</div>
 {% if shareholder_original_rules %}<div class="nr-period-secondary"><div><span class="nr-period-eyebrow">Возможная доплата за кварталы</span><strong>{{ card.potential_bonus|report_cash }} {{ ledger.currency }}</strong></div>{% if card.code == '5' %}<div><span class="nr-period-eyebrow">Из итога: доплата к выплате</span><strong>{{ card.bonus|report_cash }} {{ ledger.currency }}</strong></div>{% endif %}</div>{% endif %}
+{% if card.forecast_100 %}<div class="nr-period-secondary"><div><span class="nr-period-eyebrow">Прогноз при 100% плана</span>{% include 'admin_motivation/reports_next/_forecast_100.html' with forecast=card.forecast_100 %}</div></div>{% endif %}
 <details><summary>По видам мотивации</summary><div class="nr-period-types">{% for item in card.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.total|report_cash }} {{ ledger.currency }}</b></div>{% endfor %}</div></details>
 {% for row in presentation.department_performance_matrix.rows %}{% for cell in row.cells %}{% if forloop.counter == period_index %}{% include 'admin_motivation/reports_next/_team_plan_card.html' with performance=cell %}{% endif %}{% endfor %}{% endfor %}
 </article>{% endwith %}{% endfor %}
@@ -19,10 +20,12 @@
 <article class="nr-team-period-card nr-period-total">
 <h3>Итого за выбранные периоды</h3><span class="nr-period-eyebrow">Всего по расчёту · {{ ledger.currency }}</span><div class="nr-period-amount">{{ presentation.total|report_cash }}</div>
 <div class="nr-period-secondary"><div><span class="nr-period-eyebrow">Возможная премия</span><strong>{{ presentation.possible|report_cash }} {{ ledger.currency }}</strong></div><div><span class="nr-period-eyebrow">В годовую премию</span><strong>{{ presentation.annual_accrual|report_cash }} {{ ledger.currency }}</strong></div></div>
+{% if presentation.forecast_100 %}<div class="nr-period-secondary"><div><span class="nr-period-eyebrow">Прогноз при 100% плана</span>{% include 'admin_motivation/reports_next/_forecast_100.html' with forecast=presentation.forecast_100 %}</div></div>{% endif %}
 <details><summary>По видам мотивации</summary><div class="nr-period-types">{% for item in presentation.type_totals %}<div><span>{{ item.kind }}</span><b>{{ item.total|report_cash }} {{ ledger.currency }}</b></div>{% endfor %}</div></details>
 {% for row in presentation.department_performance_matrix.rows %}{% include 'admin_motivation/reports_next/_team_plan_card.html' with performance=row.total %}{% endfor %}
 </article>
 </div>
+{% if presentation.forecast_100 %}<p class="nr-muted">{{ presentation.forecast_100_note }}</p>{% endif %}
 <p class="nr-muted">Возможная премия — до проверки выполнения плана. В годовую премию показано начисление до годового условия выплаты, отдельно от квартальной премии. План-факт — по всему подразделению, включая ДПП, независимо от отбора сотрудников и товаров. Накопительные план и факт квартала и года в «Итого» повторно не складываются. «—» — нет данных.</p>
 </div></details>
 {% endif %}
