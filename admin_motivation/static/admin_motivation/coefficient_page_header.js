@@ -4,6 +4,13 @@
  const viewport=table.closest('.table-wrapper');if(!viewport)return;
  viewport.classList.add('coefficient-page-scroll');
  const head=table.tHead;
+ const toolbar=document.querySelector('.editor-toolbar');
+ function topOffset(){
+  if(!toolbar)return 0;
+  const css=getComputedStyle(toolbar),bounds=toolbar.getBoundingClientRect();
+  const stuck=['sticky','fixed'].includes(css.position)&&bounds.top<=Math.max(0,parseFloat(css.top)||0)+1;
+  return stuck&&bounds.bottom>0?bounds.bottom+8:0;
+ }
  const floating=document.createElement('div');floating.className='coefficient-page-floating';floating.hidden=true;floating.setAttribute('aria-hidden','true');viewport.after(floating);
  const properties=['display','boxSizing','font','lineHeight','color','backgroundColor','padding','borderTop','borderRight','borderBottom','borderLeft','whiteSpace','textAlign','verticalAlign','textTransform','letterSpacing'];
  let copy,pinned=[],dirty=true,pending=false;
@@ -31,10 +38,11 @@
  function update(){
   pending=false;
   const frame=viewport.getBoundingClientRect(),rect=table.getBoundingClientRect(),header=head.getBoundingClientRect();
-  const active=header.top<0&&rect.bottom>0&&header.height>0&&frame.width>0;
+  const offset=topOffset();
+  const active=header.top<offset&&rect.bottom>offset&&header.height>0&&frame.width>0;
   floating.hidden=!active;if(!active)return;
   if(dirty)rebuild(rect);
-  Object.assign(floating.style,{left:frame.left+'px',top:Math.min(0,rect.bottom-header.height)+'px',width:viewport.clientWidth+'px',height:header.height+'px'});
+  Object.assign(floating.style,{left:frame.left+'px',top:Math.min(offset,rect.bottom-header.height)+'px',width:viewport.clientWidth+'px',height:header.height+'px'});
   copy.style.transform='translateX('+(-viewport.scrollLeft)+'px)';
   pinned.forEach(({source,target})=>{
    target.style.transform='none';target.style.position='relative';target.style.zIndex='5';
@@ -45,7 +53,7 @@
  window.addEventListener('scroll',()=>schedule(),{capture:true,passive:true});
  window.addEventListener('resize',()=>schedule(true));
  document.addEventListener('change',()=>schedule(true));document.addEventListener('toggle',()=>schedule(true),true);
- const observer=new ResizeObserver(()=>schedule(true));observer.observe(table);observer.observe(viewport);
+ const observer=new ResizeObserver(()=>schedule(true));observer.observe(table);observer.observe(viewport);if(toolbar)observer.observe(toolbar);
  new MutationObserver(()=>schedule(true)).observe(table,{subtree:true,childList:true,attributes:true,attributeFilter:['style','class','colspan','hidden']});
  floating.addEventListener('wheel',event=>{const dx=event.deltaX||(event.shiftKey?event.deltaY:0);if(dx){event.preventDefault();viewport.scrollLeft+=dx;schedule();}},{passive:false});
  document.fonts?.ready.then(()=>schedule(true));schedule(true);
