@@ -106,6 +106,9 @@ def report(request,pk,kind):
     allowed(request)
     if kind not in reports.TITLES:raise Http404
     run=get_object_or_404(ShareholderCalculation,pk=pk)
+    if kind=='deals' and run.state=='completed' and run.metadata.get('closed_deals_version')=='closed-deals-v1':
+        from .shareholder_deals_view import report as closed_deals
+        return closed_deals(request,run)
     query=request.GET.copy();query['year']='2026'
     if kind=='deals':query.pop('type',None)
     if request.GET.get('export'):query.pop('page',None)
@@ -156,6 +159,7 @@ def report(request,pk,kind):
             context['product_filter_fields'].append({'name':'author','label':'Сотрудники','caption':caption(query.getlist('author'),'Все сотрудники'),'options':context['authors']})
 
         if kind=='deals':
+            context['legacy_deals']=True
             from decimal import Decimal
             rows=list(reports.audit_rows(run,query))
             context.update(deals_page=Paginator(rows,50).get_page(query.get('page',1)),

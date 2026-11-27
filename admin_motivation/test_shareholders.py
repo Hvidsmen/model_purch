@@ -220,7 +220,9 @@ class WorkerSnapshotTests(TestCase):
             return 1
         with patch.object(runner,'prepare_mapping',return_value=[]),patch.object(runner,'private_sql',return_value='SELECT test'),patch.object(runner,'save_query',side_effect=save):
             runner.execute(self.run,lambda *args:(connection,cursor))
-        self.run.refresh_from_db();self.assertEqual(self.run.state,'completed');self.assertEqual(len(seen),14)
+        self.run.refresh_from_db();self.assertEqual(self.run.state,'completed');self.assertEqual(len(seen),17)
+        self.assertTrue({'deals_pol','deals_sales','deals_dir'}.issubset(seen))
+        self.assertEqual(self.run.metadata['closed_deals_version'],'closed-deals-v1')
         self.assertEqual(self.run.metadata['prepared_run'],str(prepared));connection.close.assert_called_once()
         self.assertIn("@LockMode=N'Shared'",cursor.execute.call_args_list[0].args[0])
 

@@ -1,3 +1,4 @@
+{% if legacy_deals %}<p class="nr-note">Этот запуск содержит только журнал перераспределения. Создайте новый расчёт, чтобы увидеть полный отчёт по сделкам: коэффициенты, скидки, квартальную и годовую мотивацию. Старый снимок сохранён без изменений.</p>{% endif %}
 {% load report_format %}
 <div class="nr-kpis"><article><span>Оборот, USD</span><strong>{{ deals_usd|report_cash }}</strong></article><article><span>Оборот, RUB</span><strong>{{ deals_rub|report_cash }}</strong></article><article><span>Строк после распределения</span><strong>{{ deals_page.paginator.count }}</strong></article></div>
 <p class="nr-note">Сделки сохранённого расчёта по дату среза включительно. Показаны исходный автор, получатель и доля перераспределения. Части одной сделки показаны отдельными строками; суммы учитывают эти доли. Оборот не означает премию к выплате.</p>
