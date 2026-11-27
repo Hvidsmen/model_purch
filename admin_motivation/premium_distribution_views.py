@@ -4,7 +4,7 @@ from django import forms
 from django.contrib import messages
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.db import IntegrityError
-from django.http import FileResponse, Http404
+from django.http import FileResponse, Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
@@ -46,6 +46,17 @@ def index(request):
     is_admin=role_for(request.user,'motivation')==ADMIN
     archived=request.GET.get('archive')=='1'
     batches=PremiumDistribution.objects.select_related('subdivision','execution').filter(state='archived') if archived else PremiumDistribution.objects.select_related('subdivision','execution').filter(state__in=['draft','completed'])
+    if request.method=='POST' and request.POST.get('action')=='confirm_row':
+        if role_for(request.user,'motivation') not in (ADMIN,DIRECTOR):raise PermissionDenied
+        row_form=CoefficientForm(request.POST)
+        if not row_form.is_valid():
+            return JsonResponse({'error':'Проверьте множитель и период.','fields':row_form.errors},status=400)
+        try:
+            from .services.closing_coefficient import confirm
+            record=confirm(request.user,**row_form.cleaned_data)
+            return JsonResponse({'revision':record.revision,'subdivision':record.subdivision_id})
+        except ValidationError as exc:
+            return JsonResponse({'error':' '.join(exc.messages)},status=400)
     if request.method=='POST' and request.POST.get('action')=='return_coefficients':
         batch=get_object_or_404(PremiumDistribution,pk=request.POST.get('batch'))
         try:
