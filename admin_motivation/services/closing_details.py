@@ -3,7 +3,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from django.core.exceptions import ValidationError
 
 KINDS = ('Продажи', 'Политики', 'Директора')
-PERSONAL = ('Политики', 'Директора')
+PERSONAL = ('Политики', 'Продажи', 'Директора')
 CENT = Decimal('.01')
 
 
@@ -69,7 +69,7 @@ def impact(rows, general=1, kinds=None, people=None):
         missing = not identity(row['author']) or identity(row['author']) in ('—', '-')
         unallocated = row.get('author_status') == 'unallocated'
         label = 'Нераспределённая премия' if unallocated else ('Автор не указан' if missing else row['author'])
-        detail.append(dict(row, author_label=label, can_edit_person=not missing and not unallocated and row['kind'] in PERSONAL, before=before.quantize(CENT, rounding=ROUND_HALF_UP), factor=value, after=(before*value).quantize(CENT, rounding=ROUND_HALF_UP)))
+        detail.append(dict(row, author_label=label, can_edit_person=not missing and not unallocated and identity(row['author']) != identity(row['kind']) and row['kind'] in PERSONAL, before=before.quantize(CENT, rounding=ROUND_HALF_UP), factor=value, after=(before*value).quantize(CENT, rounding=ROUND_HALF_UP)))
     result = total(detail)
     result['kinds'] = [dict(kind=kind, **total([r for r in detail if r['kind']==kind])) for kind in KINDS]
     result['payments'] = [dict(payment=payment, label=label, **total([r for r in detail if r['payment']==payment]))
