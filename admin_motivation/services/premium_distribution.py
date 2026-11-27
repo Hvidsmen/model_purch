@@ -130,8 +130,13 @@ def create(user,execution,subdivision,period,currency):
 
 @transaction.atomic
 def update(user,pk,revision,changes,*,action='save',addition=None,comment=''):
+    from ..models import Subdivision
+    branch_id=PremiumDistribution.objects.values_list('subdivision_id',flat=True).get(pk=pk)
+    Subdivision.all_objects.select_for_update().get(pk=branch_id)
     batch=PremiumDistribution.objects.select_for_update().select_related('subdivision').get(pk=pk)
     authorize(user,batch.subdivision,write=True)
+    from .period_closure import ensure_open
+    ensure_open(batch.subdivision,batch.year,batch.period)
     from .fao_review import ensure_ready
     if batch.state=='draft':ensure_ready(batch.subdivision,batch.year,batch.period,batch.execution)
     if revision!=batch.revision:raise ValidationError('Распределение уже изменено. Обновите страницу перед сохранением.')
@@ -193,6 +198,8 @@ def retire(user, pk, revision, action, reason):
     Subdivision.all_objects.select_for_update().get(pk=branch_id)
     batch=PremiumDistribution.objects.select_for_update().select_related('subdivision').get(pk=pk)
     authorize(user,batch.subdivision,write=True)
+    from .period_closure import ensure_open
+    ensure_open(batch.subdivision,batch.year,batch.period)
     if action not in ('delete_draft','archive'):raise ValidationError('Неизвестное действие.')
     if action=='archive' and role_for(user,'motivation')!=ADMIN:raise PermissionDenied
     if batch.revision!=revision:raise ValidationError('Распределение изменилось. Обновите страницу.')

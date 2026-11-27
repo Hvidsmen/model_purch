@@ -23,6 +23,8 @@ def records(year,period,selected=None):
     branches=list(source)
     values={r.subdivision_id:r for r in PeriodMotivationCoefficient.objects.select_related('confirmed_by').filter(year=year,period=period)}
     locked=set(PremiumDistribution.objects.filter(year=year,period=period,state__in=['draft','completed']).values_list('subdivision_id',flat=True))
+    from ..models import FaoPaymentClosure
+    locked.update(FaoPaymentClosure.objects.filter(year=year,period__in={period,5}).values_list('subdivision_id',flat=True))
     from .fao_review import readiness
     locked.update(pk for pk,ready in readiness(branches,year,period).items() if not ready)
     return branches,values,locked

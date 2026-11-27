@@ -15,6 +15,7 @@ from . import premium_distribution_views, sales_employee_views, closing_details_
 urlpatterns = [
     path('calculation-guide/',calculation_guide_views.page,name='motivation_calculation_guide'),
     path('fao-review/',fao_views.page,name='motivation_fao_review'),
+    path('distributions/<int:pk>/paid/',fao_views.paid,name='motivation_distribution_paid'),
     path('versions/products/remove/',product_removal_views.page,name='motivation_product_removal'),
     path('versions/planning-groups/rename/',planning_group_rename_views.page,name='motivation_planning_group_rename'),
     path('coefficients/from-subdivisions/',global_from_branches_views.page,name='motivation_global_from_subdivisions'),

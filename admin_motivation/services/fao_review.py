@@ -38,6 +38,8 @@ def vector(year=None):
 
 
 def ensure_ready(branch,year,period,execution=None):
+    from .period_closure import ensure_open
+    ensure_open(branch,year,period)
     review=current(branch,year,period)
     if not review:
         if required(year,period):raise ValidationError('Сначала завершите проверку ОЗС ФАО подразделения.')
@@ -63,8 +65,8 @@ def validate_date(value,review):
     # The correction belongs to this review's open accounting quarter.
     if (value.year,(value.month-1)//3+1)!=(review.year,review.quarter):
         raise ValidationError('Дата корректировки должна относиться к открытому кварталу проверки.')
-    end=date(value.year,review.quarter*3,monthrange(value.year,review.quarter*3)[1])
-    if end<timezone.localdate():raise ValidationError('Дата корректировки находится в закрытом периоде.')
+    from .period_closure import ensure_open
+    ensure_open(review.subdivision,review.year,review.quarter)
     if PeriodMotivationCoefficient.objects.filter(subdivision=review.subdivision,year=value.year,period=review.quarter).exists():
         # Opening review invalidates the confirmation; history ending in return
         # means the period is explicitly reopened for this correction cycle.
@@ -92,11 +94,12 @@ def invalidate(user,branch,year,period):
 def begin(user,branch,year,quarter,reason):
     authorize(user)
     if quarter not in (1,2,3,4) or not 2000<=year<=2100:raise ValidationError('Выберите год и квартал.')
-    if date(year,quarter*3,monthrange(year,quarter*3)[1])<timezone.localdate():raise ValidationError('Нельзя открыть корректировку в закрытом квартале.')
     today=timezone.localdate()
-    if (year,quarter)!=(today.year,(today.month-1)//3+1):raise ValidationError('Коррекция открывается только в текущем открытом квартале.')
+    if (year,quarter)>(today.year,(today.month-1)//3+1):raise ValidationError('Нельзя открыть корректировку в будущем квартале.')
     if not str(reason).strip() or len(reason)>2000:raise ValidationError('Укажите причину открытия, до 2000 знаков.')
     Subdivision.all_objects.select_for_update().get(pk=branch.pk)
+    from .period_closure import ensure_open
+    ensure_open(branch,year,quarter)
     if FaoReview.objects.filter(subdivision=branch,state='open').exists():raise ValidationError('Корректировка подразделения уже открыта.')
     review=FaoReview.objects.create(subdivision=branch,year=year,quarter=quarter,reason=reason.strip(),opened_by=user,opened_label=(user.get_full_name() or user.get_username())[:255])
     invalidate(user,branch,year,quarter)

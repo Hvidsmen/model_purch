@@ -25,6 +25,8 @@ def return_to_ceo(user, pk, revision, coefficient_revision, reason):
     branch_id = PremiumDistribution.objects.values_list('subdivision_id', flat=True).get(pk=pk)
     Subdivision.all_objects.select_for_update().get(pk=branch_id)
     batch = PremiumDistribution.objects.select_for_update().get(pk=pk)
+    from .period_closure import ensure_open
+    ensure_open(batch.subdivision,batch.year,batch.period)
     record = PeriodMotivationCoefficient.objects.select_for_update().filter(subdivision_id=branch_id, year=batch.year, period=batch.period).first()
     if batch.revision != revision or not record or record.revision != coefficient_revision:
         raise ValidationError('Распределение или коэффициенты изменились. Обновите страницу.')

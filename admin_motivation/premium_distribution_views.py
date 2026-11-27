@@ -9,7 +9,7 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
-from base.access import role_for, ADMIN, DIRECTOR, BRANCH_DIRECTOR
+from base.access import role_for, ADMIN, DIRECTOR, BRANCH_DIRECTOR, FINANCIER
 from .models import PremiumDistribution, MotivationExecution, Subdivision, PeriodMotivationCoefficient
 from .services import premium_distribution as service
 
@@ -152,7 +152,7 @@ def index(request):
 def snapshot_for(batch,user,version):
     service.authorize(user,batch.subdivision)
     if version:
-        e=get_object_or_404(batch.events,revision=version,action='complete')
+        e=get_object_or_404(batch.events,revision=version,action__in=['complete','payments_made'])
         return e.snapshot,e.revision
     return {'rows':batch.rows,'funds':batch.funds,'state':batch.state,'currency':batch.currency,'source':batch.source},batch.revision
 
@@ -242,7 +242,9 @@ def detail(request,pk):
     try:funds=pools(snapshot['funds'],snapshot['rows']) if shared else service.balances(snapshot['funds'],snapshot['rows'])
     except ValidationError:funds=[]
     url=request.build_absolute_uri(reverse('motivation_distribution_detail',args=[pk]))+'?version='+str(revision)
-    editable=can_edit and batch.state=='draft' and not version
+    from .services.period_closure import closure
+    payment_closure=closure(batch.subdivision,batch.year,batch.period)
+    editable=can_edit and batch.state=='draft' and not version and not payment_closure
     workflow=snapshot.get('source',{}).get('workflow') or {}
     stage=workflow.get('stage','legacy')
     visible_kind={'sales':'Продажи','policies':'Политики','directors':'Директора'}.get(stage) if snapshot['state']=='draft' else None
@@ -268,6 +270,7 @@ def detail(request,pk):
             fund['fixed_allocated']=sum((service.cash(r['amount']) for r in snapshot['rows'] if r['payment']==fund['payment'] and r['id'] not in editable_ids),Decimal(0))
     previous_distribution=snapshot.get('source',{}).get('previous_distribution')
     return render(request,'admin_motivation/distribution/detail.html',{'previous_distribution':previous_distribution,'skip_motivation_workflow':True,'shared_pool':shared,'can_upgrade_shared':editable and bool(workflow) and not shared,'directors':batch.subdivision.directors.filter(is_archived=False),'can_begin_stages':editable and stage=='legacy' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),'workflow':workflow,'stage':stage,'person_input':{'full_name':request.POST.get('new_full_name',''),'personnel_number':request.POST.get('new_personnel_number',''),'weight':'0','employee':request.POST.get('new_employee',''),'payment':request.POST.get('new_payment','')},'display_rows':display_rows,'batch':batch,'snapshot':snapshot,'revision':revision,'funds':funds,'editable':editable,
-        'can_reopen':not version and batch.state=='completed' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),
+        'payment_closure':payment_closure,'can_mark_paid':(not version or version==batch.revision) and not payment_closure and batch.state=='completed' and role_for(request.user,'motivation') in (ADMIN,FINANCIER),
+        'can_reopen':not version and not payment_closure and batch.state=='completed' and role_for(request.user,'motivation') in (ADMIN,DIRECTOR),
         'report_url':url,'mail_url':'mailto:?'+urlencode({'subject':f'Премии: {batch.subdivision} · {batch.year} · {batch.get_period_display()}', 'body':'Распределение премий завершено. Отчёт и Excel: '+url}),
         'employees':employees,'history':batch.events.select_related('actor'),'payments':service.PAYMENTS.items(),'kinds':service.KINDS})
