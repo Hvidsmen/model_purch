@@ -17,6 +17,8 @@ def prepare(data, query):
     for page_key, number in [('previous_url', data['page']-1), ('next_url', data['page']+1)]:
         target = query.copy(); target['page']=number; target['run']='1'; target.pop('export',None)
         data[page_key] = '?' + target.urlencode()
+    from .deal_partners import decorate
+    decorate(data, query)
     return data
 
 
@@ -24,6 +26,13 @@ def page_csv(data):
     response = HttpResponse(content_type='text/csv; charset=utf-8')
     response['Content-Disposition']='attachment; filename="closed-deals-page.csv"'
     response.write('\ufeff'); writer = csv.writer(response, delimiter=';')
+    if data.get('deal_view') == 'partners':
+        writer.writerow(['Партнёр','Строк сделок','Отгрузки, USD','Квартальная мотивация, USD','Годовая мотивация, USD','Всего возможная мотивация, USD'])
+        for row in data['partner_groups']:
+            name=row.get('partner') or 'Без партнёра'
+            if name.lstrip().startswith(('=','+','-','@')):name="'"+name
+            writer.writerow([name,row['count'],row['shipments'],row['quarterly'],row['annual'],row['possible']])
+        return response
     writer.writerow(['№', *[title for _,title,_ in COLUMNS]])
     for row in data['display_rows']:
         values = [cell['value'] for cell in row['cells']]

@@ -371,7 +371,7 @@ def manager_currency_sql(sql, currency):
     return sql
 
 
-def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False, annual_accrual_snapshot=False, period_authors_only=False, compact_summary=False):
+def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, premium_period=None, summary_only=False, calculation_variant='main', include_performance=False, annual_accrual_snapshot=False, period_authors_only=False, compact_summary=False, deal_view='table', deal_partner=None):
     if kind == 'manager':
         values = {'GPGoods': [], 'Brend': [], **values}
     from functools import partial
@@ -447,11 +447,21 @@ def load_report(kind, values, page=1, scope='subdivisions', access_scope=None, p
                    "ELSE LEFT(LTRIM([КварталМотивации]),1) END IN (" + ','.join('?' for _ in periods) + ')')
             args.extend(periods)
         if kind == 'deals':
+            if deal_partner is not None:
+                sql="SELECT * FROM ("+sql+") AS partner_source WHERE COALESCE([Партнер],N'')=?"
+                args=[*args,deal_partner]
             from .deal_amounts import QUARTERLY_SQL, ANNUAL_SQL, POSSIBLE_SQL, detail_projection
             source = '(' + sql + ') AS report_source'
             sums = f'SUM([СуммаОтгрузокUSD]) AS shipments, SUM({QUARTERLY_SQL}) AS quarterly, SUM({ANNUAL_SQL}) AS annual, SUM({POSSIBLE_SQL}) AS possible'
             summary = read_rows(cursor, 'SELECT [АвторСделки] AS author,COUNT_BIG(*) AS count,'+sums+' FROM '+source+' GROUP BY [АвторСделки] ORDER BY [АвторСделки]', args)
             totals = {key: total(summary, key) for key in ['count','shipments','quarterly','annual','possible']}
+            if deal_view == 'partners':
+                key="COALESCE([Партнер],N'')"
+                count_rows=read_rows(cursor,'SELECT COUNT_BIG(*) AS count FROM (SELECT '+key+' AS partner FROM '+source+' GROUP BY '+key+') AS partners',args)
+                partner_count=int(count_rows[0]['count'])
+                pages=max(1,(partner_count+49)//50);page=min(max(1,page),pages)
+                groups=read_rows(cursor,'SELECT '+key+' AS partner,COUNT_BIG(*) AS count,'+sums+' FROM '+source+' GROUP BY '+key+' ORDER BY '+key+' OFFSET ? ROWS FETCH NEXT 50 ROWS ONLY',[*args,(page-1)*50],50)
+                return dict(summary=summary,totals=totals,details=[],deal_view='partners',partner_groups=groups,partner_count=partner_count,page=page,pages=pages,offset=(page-1)*50)
             count = int(totals['count'])
             pages = max(1, (count+49)//50)
             page = min(max(1, page), pages)

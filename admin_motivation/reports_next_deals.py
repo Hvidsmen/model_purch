@@ -23,6 +23,7 @@ def report(request):
         raise PermissionDenied
     query = scoped_query(request.GET, scope, 'deals') if scope else request.GET.copy()
     choices_only = query.pop('_choices', None) == ['1']
+    partner_rows=query.get('_partner_rows')=='1'
     query.pop('execution', None)
     for field in ('type', 'subdivision'):
         if query.getlist(field):
@@ -34,10 +35,13 @@ def report(request):
     selected = main_runs().filter(state='completed').order_by('-completed_at', '-started_at', '-pk').first()
     data, errors, filters, values = None, [], [], {}
     try:
+        from .services.deal_partners import mode
+        view=mode(query)
         values = parameters('deals', query, trusted_identity=bool(scope))
         if scope:
             values = scoped_values('deals', values, scope)
-        filters = choices('deals', values, refresh=query.get('refresh_choices') == '1', **({'access_scope': scope} if scope else {}))
+        if not partner_rows:
+            filters = choices('deals', values, refresh=query.get('refresh_choices') == '1', **({'access_scope': scope} if scope else {}))
         if not choices_only and (query.get('run') == '1' or query.get('export') == 'csv'):
             from .services.execution_tracking import latest_for_report
             selected = latest_for_report(selected, persist=role_for(request.user, 'motivation') == ADMIN)
@@ -47,8 +51,11 @@ def report(request):
                 page = 1
             if not selected:
                 raise ValidationError('Нет подтверждённых завершённых расчётов.')
+            if partner_rows and query.get('_deal_execution') and query['_deal_execution'] != str(selected.run_id):
+                raise ValidationError('Расчёт обновился. Обновите отчёт перед раскрытием партнёра.')
+            query['_deal_execution']=str(selected.run_id)
             with current_run(selected):
-                data = load_report('deals', values, page=page, **({'access_scope': scope} if scope else {}))
+                data = load_report('deals', values, page=page, **({'access_scope': scope} if scope else {}), **({'deal_partner':query.get('_partner','')} if partner_rows else {'deal_view':'partners'} if view=='partners' else {}))
             prepare(data, query)
             if query.get('export') == 'csv':
                 return page_csv(data)
@@ -61,6 +68,9 @@ def report(request):
     except Exception:
         logging.getLogger(__name__).exception('New closed-deals report failed')
         errors = ['Не удалось получить данные отчёта. Проверьте доступ к DataWH и журнал сервера.']
+    if partner_rows:
+        from .services.deal_partners import response
+        return response(request,data,errors)
     if not filters:
         filters = [{'name': name, 'label': caption, 'multiple': multiple, 'options': []} for name, _, caption, _, multiple in FILTERS['deals']]
     if scope:
