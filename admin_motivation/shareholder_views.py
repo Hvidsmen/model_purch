@@ -181,6 +181,8 @@ def report(request,pk,kind):
             if kind=='detail':
                 from .services.manager_detail import combine_reports
                 detail=new_detail_labels(combine_reports(data['sections'],data['currency']))
+                from .services.detail_summary_breakdown import enrich as enrich_detail_summary
+                enrich_detail_summary(detail,data,display)
                 detail['excel_urls']={name:'?'+dict_query(query,export='xlsx',table=name).urlencode() for name in ('all','summary','detail')}
                 context['data']=detail
             macro=reports.macro_rows(data,periods);context['macro_rows']=macro

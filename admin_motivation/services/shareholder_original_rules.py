@@ -102,6 +102,7 @@ def attach(rows, eligibility, *, curator=False):
             raise ValidationError('Противоречивые годовые условия выплаты в снимке.')
         gates[key] = eligible
     gaps = defaultdict(lambda: [ZERO, ZERO])
+    quarter_gaps = defaultdict(lambda: defaultdict(lambda: [ZERO, ZERO]))
     for row in rows:
         code = period_code(row.get('КварталМотивации'))
         if code not in ('1', '2', '3', '4'):
@@ -113,6 +114,7 @@ def attach(rows, eligibility, *, curator=False):
             value = max(Decimal(str(row.get(possible) or 0)) - Decimal(str(row.get(paid) or 0)), ZERO)
             row['PotentialCatchup' + suffix] = value
             gaps[key][index] += value
+            quarter_gaps[key][code][index] += value
     seen = set()
     for row in rows:
         key = identity(row, curator=curator)
@@ -127,6 +129,7 @@ def attach(rows, eligibility, *, curator=False):
             seen.add(key)
             for index, (suffix, remainder) in enumerate((('USD', 'Остаток'), ('RUB', 'ОстатокRUR'))):
                 row['PotentialCatchup' + suffix] = gaps[key][index]
+                row['CatchupQuarters' + suffix] = {code: values[index] for code, values in quarter_gaps[key].items()}
                 row[remainder] = gaps[key][index] if gates[key] else ZERO
     if any(any(values) and key not in seen for key, values in gaps.items()):
         raise ValidationError('Нет годовой строки для невыплаченной квартальной премии.')
